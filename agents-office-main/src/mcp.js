@@ -15,22 +15,41 @@ import { applyAgentTools, profileShared } from './profile.js';
 
 // agent → tools they'd plausibly be driving (falls back to any connector in the dept's dock)
 export const AGENT_MCP = {
-  // marketing
-  mlead: ['meta', 'clarity', 'notion'], ada: ['meta', 'clarity'], newt: ['beehiiv', 'loops'], gfx: ['canva'], iggy: ['canva', 'clarity'], riley: ['meta', 'beehiiv', 'clarity', 'notion'],
-  vid: ['hyperframes', 'canva'],
-  // emails
-  elead: ['gmail', 'notion'], cmail: ['gmail'], imail: ['gmail', 'notion'], vmail: ['gmail'], kmail: ['gmail'],
-  // sales
-  enzo: ['fullenrich'], lexi: ['notion', 'gmail'], ilm: ['gmail', 'imessage', 'fullenrich'], pros: ['apollo', 'gmail'],
-  piper: ['notion', 'gmail'], folo: ['gmail', 'imessage'],
-  // operations
-  olead: ['notion', 'gmail', 'pandadoc'], scout: ['notion'], legal: ['pandadoc', 'gmail'], comply: ['notion', 'gmail'], report: ['gmail', 'notion'], dash: ['notion'],
-  // finance
-  alead: ['xero', 'gmail'],
-  invo: ['xero', 'stripe'], apay: ['xero'], recon: ['stripe', 'xero'],
-  // delivery
-  dlead: ['notion', 'gmail'], pco: ['notion'], qa: ['notion'], crep: ['pandadoc', 'notion'], cass: ['canva', 'notion'],
-  dasst: ['canva'], ona: ['gmail', 'notion'],
+  elead: ["notion", "googlecalendar", "slack"],
+  imail: ["notion", "slack", "googlecalendar"],
+  report: ["notion", "clarity"],
+  dash: ["clarity", "notion"],
+  comply: ["notion", "gmail"],
+  pros: ["territool", "apollo", "chrome"],
+  enzo: ["fullenrich", "apollo"],
+  ilm: ["gmail", "googlecalendar"],
+  riley: ["chrome", "notion"],
+  scout: ["chrome", "notion"],
+  vmail: ["playwright", "chrome"],
+  olead: ["gmail", "googlecalendar", "pandadoc"],
+  piper: ["pandadoc", "notion"],
+  folo: ["gmail", "imessage"],
+  ona: ["imessage", "gmail"],
+  legal: ["pandadoc", "notion"],
+  cmail: ["gmail", "slack"],
+  gfx: ["canva", "notion"],
+  dasst: ["canva", "webflow"],
+  alead: ["canva", "higgsfield"],
+  invo: ["notion", "clarity"],
+  dlead: ["webflow", "playwright"],
+  pco: ["notion", "googlecalendar"],
+  qa: ["playwright", "chrome"],
+  crep: ["webflow", "playwright"],
+  cass: ["stripe", "notion"],
+  apay: ["webflow", "chrome"],
+  kmail: ["notion", "googledrive"],
+  mlead: ["meta", "notion"],
+  newt: ["beehiiv", "loops"],
+  ada: ["meta"],
+  iggy: ["meta", "canva"],
+  vid: ["hyperframes"],
+  lexi: ["notion", "googlecalendar"],
+  recon: ["clarity", "meta"],
 };
 applyAgentTools(AGENT_MCP); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
 

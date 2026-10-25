@@ -22,7 +22,7 @@ O plantel é lido por esta ordem, o último ganha: `office.agents.json` → `<c�
 
 Fixo, e o escritório ignora alterações: `id`, `department`, `lead`. Há **seis departamentos e 35 lugares** e é esse o escritório. Não acrescentes nem removas agentes, departamentos ou grupos. Quando o proprietário quer um novo tipo de agente, **renomeia um lugar** no departamento certo. Quando quer menos, deixa o lugar como está; um agente parado não custa nada.
 
-Chaves dos departamentos: `emails` (5 lugares) · `sales` (6) · `marketing` (7) · `ops` (6) · `fin` (4) · `delivery` (7). Todos os departamentos têm um líder (E-mails, Vendas, Marketing, Operações, Contabilidade, Entregas) e o líder continua a ser o líder.
+Chaves dos departamentos: `emails` (5 lugares) · `sales` (6) · `marketing` (7) · `ops` (6) · `fin` (4) · `delivery` (7). Cada sala tem um líder (ORBITA Director, Lead Hunter, Sales Closer, Creative Architect, Systems Engineer, Growth Publisher) e o líder continua a ser o líder.
 
 Depois de editar: corre `npm run check` (valida o plantel e mostra todos os problemas) e diz ao proprietário para reiniciar o escritório (`npm start`). Nomes, funções e descrições atualizam-se no próximo carregamento da página.
 
@@ -83,14 +83,14 @@ Mais duas coisas que o escritório escreve no cérebro sozinho. Ambas são fiche
 
 ## Rotinas: tarefas no relógio do escritório
 
-Quando o proprietário diz «todas as segundas…», «cada manhã…», «segundo um horário», «automaticamente às…», «faz X acontecer a cada…», isso é uma **rotina**: uma tarefa que o escritório dispara sozinho a essa hora e corre sem ninguém escrever. **Nesta versão: só E-mails, Contabilidade e Vendas** (`emails`, `fin`, `sales`). Uma rotina para qualquer outro departamento é recusada pelo escritório; diz ao proprietário que chega numa versão posterior em vez de a escrever.
+Quando o proprietário diz «todas as segundas…», «cada manhã…», «segundo um horário», «automaticamente às…», «faz X acontecer a cada…», isso é uma **rotina**: uma tarefa que o escritório dispara sozinho a essa hora e corre sem ninguém escrever. **Nesta versão: só Comando, Prospeção e Vendas** (`emails`, `sales`, `ops`). Uma rotina para qualquer outro departamento é recusada pelo escritório; diz ao proprietário que chega numa versão posterior em vez de a escrever.
 
 **Onde:** `<cérebro>/Órbita/routines.json` (`<cérebro>` como acima). Cria-o com `{"routines": []}` se não existir. Nunca escrevas rotinas em mais nenhum sítio.
 
 ```json
-{ "id": "lembretes-atrasos", "dept": "fin", "agent": "invo",
-  "title": "Listar as faturas em atraso e preparar os lembretes",
-  "text": "Lista as faturas em atraso e prepara os lembretes. Xero em leitura, rascunhos no Gmail.",
+{ "id": "propostas-paradas", "dept": "ops", "agent": "folo",
+  "title": "Listar as propostas sem resposta e preparar os seguimentos",
+  "text": "Lista as propostas sem resposta há mais de 14 dias e prepara um seguimento para cada. Gmail em leitura, rascunhos no Gmail.",
   "when": { "kind": "weekly", "days": [1], "at": "09:00" },
   "needsOk": true, "paused": false }
 ```

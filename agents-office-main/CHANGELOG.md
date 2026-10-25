@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0 — 25 out 2026 · Órbita
+
+- **Seis salas, um fluxo de trabalho real.** O escritório passa a ser a Órbita a operar de ponta a ponta: **ORBITA COMMAND** (o Director coordena as seis salas, distribui trabalho, deteta atrasos e agentes parados e mantém o painel central), **ORBITA PROSPECT** (o Lead Hunter encontra empresas sem site, diagnostica a presença digital, pontua e deduplica), **ORBITA SALES** (o Sales Closer aborda, responde a objeções, propõe, segue e agenda), **ORBITA DESIGN LAB** (o Creative Architect lê o briefing e entrega estrutura, identidade e design system), **ORBITA ENGINEERING** (o Systems Engineer constrói, integra, testa e publica) e **ORBITA MEDIA** (o Growth Publisher publica, mede e alimenta a prospeção com conteúdo).
+- **Cada agente tem função, tarefas, ferramentas e resultado.** Os 35 lugares ganharam nome, descrição de funções e ferramentas próprias (`office.agents.json`), uma fila de tarefas com estado (`src/tasks.js`), eventos de atividade e um ficheiro de resultado por agente (`FILE_GEN`). A animação mostra o estado; não substitui a execução.
+- **Aprovação humana obrigatória.** Tudo o que sai da máquina — contactos, propostas, publicações, pagamentos, alterações — fica à espera do OK do proprietário, com o pedido escrito agente a agente.
+- **Nada se perde na tradução.** Chaves internas mantidas (`emails`, `sales`, `ops`, `fin`, `delivery`, `marketing`); rótulos em português; rotinas aceites em Comando, Prospeção e Vendas; entrevista de configuração e competências seguem o mesmo plantel.
+
 ## 3.2.1-beta.2 — 19 Sep 2026
 
 - **Licence.** LICENSE now opens with the Required Notices (Copyright 2026 Sahni.ai; Agents Office is a Sahni.ai product) and Sahni.ai's additional terms: the name and mark stay, no renaming or rebranding, no wiring it into or bundling it with another product, agent system or workforce, and anything else needs written permission. The PolyForm Noncommercial 1.0.0 text below them is unchanged. README says the same in plain English. No change to the office itself.
