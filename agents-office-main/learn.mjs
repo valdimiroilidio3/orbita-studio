@@ -10,11 +10,11 @@ import path from 'node:path';
 export const dir = brainPath => path.join(brainPath, 'Órbita', 'feedback');
 const file = (brainPath, id) => path.join(dir(brainPath), id + '.md');
 const MAX_RULES = 15; // the most recent standing rules an agent carries into a task
-const HEAD = (a) => `# Corrections for ${a.name} (${a.id})\n\n` +
-  'Every time the owner sends this agent\'s work back, the correction lands here. Lines under\n' +
-  '"Standing rules" are read by this agent before every task and chat turn. Edit freely: reword a\n' +
-  'rule, delete a line to unlearn it, move a one-off up to make it a rule. When a rule is really a\n' +
-  'process, put it in a skill (SKILLS.md).\n\n## Standing rules\n\n## One-offs\n';
+const HEAD = (a) => `# Correções para ${a.name} (${a.id})\n\n` +
+  'Sempre que o proprietário devolve o trabalho deste agente\'devolve o trabalho, a correção aterra aqui. Linhas abaixo de\n' +
+  '"Standing rules" são lidas por este agente antes de cada tarefa e de cada conversa. Edita à vontade: reescreve uma\n' +
+  'regra, apaga uma linha para a desaprender, sobe uma pontual para a tornar regra. Quando uma regra é na verdade um\n' +
+  'processo, pertence a uma competência (SKILLS.md).\n\n## Standing rules\n\n## One-offs\n';
 
 /** Read the file → { rules: [...], oneOffs: [...] } (each a line without the leading "- "). */
 export function read(brainPath, id) {
@@ -53,10 +53,10 @@ export function record(brainPath, agent, task, feedback, verdict) {
 
 /** Ask Claude whether a correction is a one-off or a standing rule. `ask(system, user)` → text. */
 export async function classify(ask, agent, task, feedback) {
-  const system = 'You sort an owner\'s feedback on an AI agent\'s work. Return ONLY a JSON object, no prose, no code fences.';
+  const system = 'Classificas o comentário\'do proprietário sobre um agente de IA\'deste agente. Devolve APENAS um objeto JSON, sem prosa, sem blocos de código.';
   const user = `Agent: ${agent.name} — ${agent.role}. ${agent.does}\nTask: ${task?.title || ''}\nOwner's feedback: "${feedback}"\n\n` +
-    'Is this a ONE-OFF (about this task, this client, this draft only) or a STANDING RULE (a preference the owner will want applied to every future piece of this kind of work)?\n' +
-    'Signals of a standing rule: "always", "never", "from now on", "we don\'t", a format or tone preference, a red line. Signals of a one-off: a fact about this client, a change to this draft only, "this time", "here".\n' +
+    'Isto é uma PONTUAL (sobre esta tarefa, este cliente, este rascunho) ou uma REGRA PERMANENTE (uma preferência que o proprietário vai querer em todo o trabalho futuro deste tipo)?\n' +
+    'Sinais de uma regra permanente: "always", "never", "from now on", "we don\'t", uma preferência de formato ou tom, uma linha vermelha. Sinais de uma pontual: um facto sobre este cliente, uma alteração só a este rascunho, "this time", "here".\n' +
     'Return: {"standing": true|false, "rule": "<if standing: the preference as ONE short imperative sentence, general, no client or project names; else empty string>"}';
   try {
     const j = JSON.parse((await ask(system, user, { maxTokens: 200, timeout: 60000 })).replace(/```json|```/g, '').trim());
@@ -68,6 +68,6 @@ export async function classify(ask, agent, task, feedback) {
 export function promptText(brainPath, agent) {
   const { rules } = read(brainPath, agent.id); if (!rules.length) return '';
   const recent = rules.slice(-MAX_RULES).map(r => '- ' + r.replace(/^\d{4}-\d{2}-\d{2}\s*·\s*/, '').replace(/\s*←\s*".*$/, ''));
-  return 'LESSONS — what the owner corrected before. Apply every one of these, every time, without being asked:\n' + recent.join('\n');
+  return 'LIÇÕES — o que o proprietário corrigiu antes. Aplica todas, sempre, sem que te peçam:\n' + recent.join('\n');
 }
 export const count = (brainPath, id) => read(brainPath, id).rules.length;

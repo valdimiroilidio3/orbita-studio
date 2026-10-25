@@ -26,14 +26,14 @@ export function defaults() {
 export function validate(doc, base = defaults()) {
   const problems = [];
   const list = Array.isArray(doc) ? doc : Array.isArray(doc?.agents) ? doc.agents : null;
-  if (!list) return { agents: base, problems: ['the file must be {"agents": [...]}'] };
+  if (!list) return { agents: base, problems: ['o ficheiro tem de ser {"agents": [...]}'] };
   const out = base.map(a => ({ ...a, tools: [...a.tools] }));
   const seen = new Set();
   for (const e of list) {
-    if (!e || typeof e !== 'object' || !e.id) { problems.push('an entry has no "id" — skipped'); continue; }
+    if (!e || typeof e !== 'object' || !e.id) { problems.push('uma entrada não tem "id" — skipped'); continue; }
     const a = out.find(x => x.id === e.id);
-    if (!a) { problems.push(`"${e.id}" is not one of the 35 seats — skipped (new agents are not supported; rename a seat instead)`); continue; }
-    if (seen.has(e.id)) problems.push(`"${e.id}" appears twice — the later entry wins`);
+    if (!a) { problems.push(`"${e.id}" não é um dos 35 lugares — ignorado (não se acrescentam agentes; renomeia um lugar)`); continue; }
+    if (seen.has(e.id)) problems.push(`"${e.id}" aparece duas vezes — a última entrada ganha`);
     seen.add(e.id);
     if (e.department !== undefined && e.department !== a.department) problems.push(`"${e.id}": department cannot change (${a.department} → ${e.department}) — ignored`);
     if (e.lead !== undefined && !!e.lead !== a.lead) problems.push(`"${e.id}": lead cannot change — ignored`);
@@ -41,7 +41,7 @@ export function validate(doc, base = defaults()) {
     if (e.name !== undefined) { const n = String(e.name).trim(); if (!n) problems.push(`"${e.id}": empty name — kept "${a.name}"`); else a.name = n.slice(0, 32).toUpperCase(); }
     if (e.role !== undefined) a.role = String(e.role).trim().slice(0, 80);
     if (e.does !== undefined) a.does = String(e.does).trim().slice(0, 400);
-    if (e.tools !== undefined) { if (!Array.isArray(e.tools)) problems.push(`"${e.id}": tools must be a list — ignored`); else a.tools = e.tools.map(String).map(s => s.trim()).filter(Boolean).slice(0, 12); }
+    if (e.tools !== undefined) { if (!Array.isArray(e.tools)) problems.push(`"${e.id}": tools tem de ser uma lista — ignorado`); else a.tools = e.tools.map(String).map(s => s.trim()).filter(Boolean).slice(0, 12); }
     if (e.model !== undefined) { // V3.6: sonnet · opus · fable, or empty for the office default
       const m = String(e.model || '').toLowerCase().trim();
       if (!m) a.model = ''; else if (MODELS.includes(m)) a.model = m; else problems.push(`"${e.id}": model must be sonnet, opus or fable (got "${e.model}") — kept ${a.model || 'the office default'}`);
@@ -52,7 +52,7 @@ export function validate(doc, base = defaults()) {
     }
     if (e.brief !== undefined) { // a string, or a list of lines
       const b = (Array.isArray(e.brief) ? e.brief.map(String).join('\n') : String(e.brief)).trim();
-      if (b.length > BRIEF_MAX) problems.push(`"${e.id}": brief is over ${BRIEF_MAX} characters — trimmed (put the long version in a skill)`);
+      if (b.length > BRIEF_MAX) problems.push(`"${e.id}": brief is over ${BRIEF_MAX} caracteres — cortado (põe a versão longa numa competência)`);
       a.brief = b.slice(0, BRIEF_MAX);
     }
   }
@@ -66,7 +66,7 @@ export function loadRoster(brainPath = loadConfig().brainPath) {
   for (const p of sources) {
     const doc = read(p); if (!doc) continue;
     const rel = label(p);
-    if (doc.__error) { problems.push(`${rel}: not valid JSON (${doc.__error.split('\n')[0]}) — ignored`); continue; }
+    if (doc.__error) { problems.push(`${rel}: não é JSON válido (${doc.__error.split('\n')[0]}) — ignored`); continue; }
     const r = validate(doc, agents); agents = r.agents; problems.push(...r.problems.map(x => `${rel}: ${x}`));
   }
   const customised = agents.filter((a, i) => { const d = defaults()[i]; return a.name !== d.name || a.role !== d.role || a.does !== d.does || a.brief; }).length;

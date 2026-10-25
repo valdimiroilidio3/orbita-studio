@@ -1,4 +1,4 @@
-# Northgate Studio — Cérebro da IA
+# Órbita Studio — Cérebro da IA
 
 Esta pasta é o cérebro da empresa: as notas que os agentes leem antes de agir e onde escrevem quando terminam.
 Lê primeiro `00-Meta/index.md` e depois o MOC (mapa de conteúdo) do departamento que a tua tarefa toca.

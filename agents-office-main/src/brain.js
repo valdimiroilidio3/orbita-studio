@@ -137,7 +137,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     const a = agentOf(agentId); if (!a) return;
     const n = pickFor(a.dept);
     const r = getR()[agentId];
-    if (!quiet) glint(n, r && r.seat, `${a.name} read ${n.id}`);
+    if (!quiet) glint(n, r && r.seat, `${a.name} leu ${n.id}`);
     state.lastRead = { note: n.id, agent: a.name, ts: Date.now() };
     state.reads.set(n.id, { agent: a.name, ts: Date.now() });
     updateStrip();
@@ -175,7 +175,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   function readNote(agentId, name) {
     const a = agentOf(agentId); const i = byId.get(name);
     if (!a) return;
-    if (i != null && onFloor(nodes[i])) { const r = getR()[agentId]; glint(nodes[i], r && r.seat, `${a.name} read ${name}`); }
+    if (i != null && onFloor(nodes[i])) { const r = getR()[agentId]; glint(nodes[i], r && r.seat, `${a.name} leu ${name}`); }
     state.lastRead = { note: name, agent: a.name, ts: Date.now() }; state.reads.set(name, { agent: a.name, ts: Date.now() });
     updateStrip();
   }
@@ -219,7 +219,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     if (!strip) return;
     strip.querySelector('.tb-count').textContent = state.notes.toLocaleString('en-NZ');
     const lr = strip.querySelector('.tb-last');
-    lr.innerHTML = state.lastRead ? `Last read <b>${esc(state.lastRead.note)}</b> by ${esc(state.lastRead.agent)} · ${timeStr(state.lastRead.ts)}` : `${BRAIN.links.length} wiki links · nothing read yet`;
+    lr.innerHTML = state.lastRead ? `Última leitura <b>${esc(state.lastRead.note)}</b> por ${esc(state.lastRead.agent)} · ${timeStr(state.lastRead.ts)}` : `${BRAIN.links.length} ligações wiki · ainda nada lido`;
     strip.querySelector('.tb-new').textContent = state.newToday ? `+${state.newToday} nota${state.newToday > 1 ? 's' : ''} hoje` : '';
   }
   updateStrip();

@@ -64,7 +64,7 @@ export function initCalendar(ctx) {
   const av = (id) => { const a = agentOf(id); const c = a ? DEPTS[a.dept].chip : '#ccc'; return `<i class="cv-av" style="border-color:${c};background:${c}55" title="${esc(a ? a.name : id)}">${esc(a ? a.name[0] : '?')}</i>`; };
   function cardHTML(ev) {
     const chip = DEPTS[ev.dept].chip, a = agentOf(ev.agent);
-    const time = ev.kind === 'routine' ? (ev.hourly ? describe(ev.r.when).replace(/ · from .*$/, '') : hm(ev.at)) : ev.kind === 'done' ? `concluída ${hm(ev.at)}` : ev.kind === 'sched' ? `${hm(ev.at)} · scheduled` : ev.kind === 'doing' ? 'in progress' : ev.kind === 'waiting' ? 'à espera do teu OK' : 'in the backlog';
+    const time = ev.kind === 'routine' ? (ev.hourly ? describe(ev.r.when).replace(/ · from .*$/, '') : hm(ev.at)) : ev.kind === 'done' ? `concluída ${hm(ev.at)}` : ev.kind === 'sched' ? `${hm(ev.at)} · agendada` : ev.kind === 'doing' ? 'em curso' : ev.kind === 'waiting' ? 'à espera do teu OK' : 'na fila';
     const id = ev.t ? `t:${ev.t.id}` : `r:${ev.r.id}:${ev.at}`;
     return `<div class="cv-ev ${ev.kind}${ev.t?.team?.members?.length ? ' team' : ''}" data-ev="${id}" style="--chip:${chip}" title="${esc(ev.title)} · ${esc(a ? a.name : '')}">
       <div class="cv-ev-t">${ev.kind === 'routine' ? '<span class="cv-rt">⏱</span>' : ev.kind === 'done' ? '<span class="cv-tick">✓</span>' : ev.kind === 'sched' ? '<span class="cv-rt">◷</span>' : ev.t?.team?.members?.length ? '<span class="cv-rt">⚑</span>' : ''}${esc(ev.title)}</div>
@@ -89,7 +89,7 @@ export function initCalendar(ctx) {
         <div class="cv-num">${view === 'week' ? `<span>${DOW[dow]}</span>` : ''}${d.getDate() === 1 && view === 'month' ? `<span>${MONTHS[d.getMonth()].slice(0, 3)}</span>` : ''}<b>${pad(d.getDate())}</b></div></div>`;
     }
     E.grid.innerHTML = html;
-    E.stats.innerHTML = `<span><b>${nRt}</b> routine ${nRt === 1 ? 'run' : 'runs'}</span><span><b>${nSched}</b> scheduled</span><span><b>${nDone}</b> CONCLUÍDO</span>`;
+    E.stats.innerHTML = `<span><b>${nRt}</b> rotina${nRt === 1 ? '' : 's'}</span><span><b>${nSched}</b> agendadas</span><span><b>${nDone}</b> CONCLUÍDO</span>`;
     renderRail(); renderChips();
   }
   function renderRail() {
@@ -107,7 +107,7 @@ export function initCalendar(ctx) {
       (onlyRoutine ? `<button class="cv-chip only on" data-tog="only">SÓ ESTA ROTINA ✕</button>` : '');
   }
 
-  /* ---------- the popovers: a day (create), an event (details), "n more" (the whole day) ---------- */
+  /* ---------- the popovers: a day (create), an event (details), "mais" (the whole day) ---------- */
   function place(el, anchorEl) { // beside the cell, kept on screen
     const r = anchorEl.getBoundingClientRect(), W = el.offsetWidth || 360, H = el.offsetHeight || 300;
     let x = r.right + 10, y = r.top; if (x + W > innerWidth - 12) x = r.left - W - 10; if (x < 12) x = Math.max(12, Math.min(innerWidth - W - 12, r.left));
@@ -131,7 +131,7 @@ export function initCalendar(ctx) {
     const hint = () => {
       if (past) return;
       const k = P.dept.value; lastDept = k;
-      if (repeat) { const w = fromPicker(P.cad.value, P.time.value, dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · first run ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Claude names the agent' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
+      if (repeat) { const w = fromPicker(P.cad.value, P.time.value, dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · primeira execução ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Claude names the agent' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
       else { P.hint.innerHTML = `Tarefa para <b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${esc(P.time.value)}</b>${isLive() ? ' · o Claude nomeia o agente agora e corre depois' : ''}`; P.go.disabled = false; }
     };
     P.rep.addEventListener('click', () => { repeat = !repeat; P.rep.classList.toggle('on', repeat); P.cad.hidden = !repeat; P.ok.hidden = !repeat; if (repeat) { const dow = (d.getDay() + 6) % 7; P.cad.value = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][dow]; } hint(); });
@@ -162,7 +162,7 @@ export function initCalendar(ctx) {
       popKind = 'event';
       E.pop.innerHTML = `<div class="cv-pop-h"><span class="lab">${t.state === 'scheduled' ? 'TAREFA AGENDADA' : t.state.toUpperCase()}</span><span class="sp"></span><button class="cv-x" data-act="close">✕</button></div>
         <div class="cv-pop-t">${esc(t.title)}</div>
-        <div class="cv-pop-m">${av(t.agent)} ${esc(a ? a.name : '')} · ${esc(DEPTS[t.dept].name)}${t.state === 'scheduled' ? ` · runs ${esc(untilText(t.dueAt))} (${hm(t.dueAt)})` : ''}${t.modelUsed ? ' · ' + esc(modelName(t.modelUsed)) : ''}</div>
+        <div class="cv-pop-m">${av(t.agent)} ${esc(a ? a.name : '')} · ${esc(DEPTS[t.dept].name)}${t.state === 'scheduled' ? ` · ${esc(untilText(t.dueAt))} (${hm(t.dueAt)})` : ''}${t.modelUsed ? ' · ' + esc(modelName(t.modelUsed)) : ''}</div>
         ${t.text && t.text !== t.title ? `<div class="cv-pop-p">${esc(t.text)}</div>` : ''}
         <div class="cv-row"><button class="cv-btn" data-act="open">ABRIR O AGENTE</button>${t.state === 'scheduled' ? '<button class="cv-btn warn" data-act="cancel">CANCELAR</button>' : ''}</div>`;
       E.pop.hidden = false; place(E.pop, el);
@@ -177,7 +177,7 @@ export function initCalendar(ctx) {
       <div class="cv-pop-t">${esc(r.title)}</div>
       <div class="cv-pop-m">${av(r.agent)} ${esc(a ? a.name : r.agent)} · ${esc(r.desc || describe(r.when))}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}${r.paused ? ' · <span class="cv-paused">EM PAUSA</span>' : ''}</div>
       <div class="cv-pop-p">Esta execução: ${esc(new Date(at).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }))}${r.nextAt ? ` · next ${esc(untilText(r.nextAt))}` : ''}${r.lastAt ? ` · last ran ${esc(new Date(r.lastAt).toLocaleDateString([], { day: 'numeric', month: 'short' }))}` : ''}</div>
-      <div class="cv-row"><button class="cv-btn" data-act="run">EXECUTAR AGORA</button><button class="cv-btn" data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RESUME' : 'PAUSE'}</button><button class="cv-btn" data-act="only">SÓ ISTO</button><span class="sp"></span><button class="cv-btn warn" data-act="delete">APAGAR</button></div>`;
+      <div class="cv-row"><button class="cv-btn" data-act="run">EXECUTAR AGORA</button><button class="cv-btn" data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RETOMAR' : 'PAUSAR'}</button><button class="cv-btn" data-act="only">SÓ ISTO</button><span class="sp"></span><button class="cv-btn warn" data-act="delete">APAGAR</button></div>`;
     E.pop.hidden = false; place(E.pop, el);
     E.pop.querySelectorAll('.cv-btn').forEach(b => b.addEventListener('click', async () => {
       const act = b.dataset.act;

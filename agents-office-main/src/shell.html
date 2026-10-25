@@ -47,7 +47,7 @@
     background: #040406; border: 1px solid #2a2a33; overflow: hidden; box-shadow: 0 10px 26px rgba(21,20,20,.18); transition: border-color .3s var(--ease), transform .3s var(--ease); }
   #sahniMark::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .35; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.08) 0 1px, transparent 1px 3px); }
   #sahniMark:hover { border-color: #2B6BEB; transform: translateY(-1px); }
-  #sahniMark .by { font-family: var(--ui); font-size: 8px; letter-spacing: .2em; font-weight: 700; color: #8a8a94; }
+  #sahniMark .by { margin-right: 5px; font-family: var(--ui); font-size: 8px; letter-spacing: .2em; font-weight: 700; color: #8a8a94; }
   #sahniMark .wm { font-size: 14px; }
   body.railLeft #sahniMark { left: calc(min(400px, 92vw) + 18px); bottom: auto; top: 64px; } /* a department in focus docks its chat rail on the left and the licence line sits centred: the mark moves to the top-left of the scene, under the bar (OVERVIEW has moved right) */
   body.calOpen #sahniMark, body.brainOpen #sahniMark { display: none; } /* the overlays carry their own headers; the licence line still rides over them */
@@ -1054,7 +1054,7 @@
   <div id="topconn"></div>
   <span class="sp"></span>
   <div id="topmodels"></div>
-  <button id="topCal" title="o calendário — tarefas e rotinas nos seus dias (P)">◷ CALENDAR</button>
+  <button id="topCal" title="o calendário — tarefas e rotinas nos seus dias (P)">◷ CALENDÁRIO</button>
   <span id="topAppr" style="display:none">⚠ <span>0</span></span>
   <span id="clock">—</span>
 </div>
@@ -1097,7 +1097,7 @@
   </div>
   </div>
 </div>
-<button id="overviewBtn">◂ OVERVIEW</button>
+<button id="overviewBtn">◂ VISÃO GERAL</button>
 <!-- V3.6: the full-screen Brain graph (G · click the pod · the panel strip) -->
 <div id="brainOv">
   <canvas id="bvCv"></canvas>
@@ -1114,7 +1114,7 @@
     <div class="cv-seg"><button data-v="week">SEMANA</button><button data-v="month" class="on">MÊS</button></div>
     <div class="cv-nav"><button id="cvPrev" title="anterior (←)">‹</button><div id="cvTitle"></div><button id="cvNext" title="seguinte (→)">›</button><button id="cvToday" title="hoje (T)">HOJE</button></div>
     <div class="cv-sp"></div>
-    <div class="cv-keys"><b>←</b> <b>→</b> move · <b>W</b> <b>M</b> view · <b>T</b> today · <b>Esc</b> FECHAR</div>
+    <div class="cv-keys"><b>←</b> <b>→</b> mover · <b>W</b> <b>M</b> vista · <b>T</b> hoje · <b>Esc</b> FECHAR</div>
     <button id="cvClose" title="fechar (Esc · P)">✕</button>
   </div>
   <div class="cv-tools"><input id="cvSearch" placeholder="Pesquisar tarefas e rotinas…" autocomplete="off" spellcheck="false"><div id="cvChips"></div><div class="cv-sp"></div><div class="cv-stats" id="cvStats"></div></div>

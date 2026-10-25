@@ -29,7 +29,7 @@ function clock(h, m, ap) { // 8 → 08:00 · 8pm → 20:00 · 12am → 00:00 · 
   if (h > 23 || m > 59) return null;
   return hhmm(h, m);
 }
-// one time in the sentence: "at 8", "at 8:30am", "8am", "08:00", "at noon", "in the morning"
+// one time in the sentence: "at 8", "às 8h30", "8am", "08:00", "ao meio-dia", "de manhã"
 const T_RE = /\b(?:at\s+)?(\d{1,2})(?::(\d{2}))\s*(am|pm|a\.m\.|p\.m\.)?\b|\bat\s+(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)?\b|\b(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)\b/i;
 const T_PT = /(?:^|[^\w])(?:as|às|pelas|pela)\s*(\d{1,2})(?:[:h](\d{2}))?\s*h?|\b(\d{1,2})\s*h\s*(\d{2})?\b/i;
 function findTimePt(s) {
@@ -300,7 +300,7 @@ export function occurrences(when, from, to, limit = 400) {
   while (t && t <= to && out.length < limit) { out.push(t); t = nextRun(when, t); }
   return out;
 }
-/** "in 2 min" · "at 08:00" · "Mon 09:00" · "Fri 16:00" — the countdown the cards show. */
+/** "daqui a 2 min" · "às 08:00" · "Mon 09:00" · "Fri 16:00" — the countdown the cards show. */
 export function untilText(ts, now = Date.now()) {
   if (!ts) return '—';
   const ms = ts - now;

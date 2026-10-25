@@ -3,18 +3,18 @@
 // (department dropdown + input, the office names the agent as you type) over a live feed of
 // every task, newest change first, with status chips as filters. The flying tickets are gone:
 // new work and handoffs simply appear in the feed (and a 📋 pops over the desk). Each status
-// carries its own honest meta — backlog: how long it has waited · in progress: a real progress
+// carries its own honest meta — backlog: how long it has waited · em curso: a real progress
 // bar · waiting: minutes waiting for AJ's tick · done: the time it finished. Company-wide
 // Kanban still lives on B. DOING / NEXT / DONE rows stay on every pod card.
 // Session-only theatre — nothing persists (AJ's call: gauge interest first).
 // V3.5 (AJ, 9 Sep 2026): ROUTINES — tasks on the office's own clock, Emails / Accounting / Sales
-// only this release. Set one in the bar ("every weekday at 8am, …" or the REPEAT picker), by
+// only this release. Set one in the bar ("todos os dias úteis às 8h, …" or the REPEAT picker), by
 // telling an agent in chat, or in <brain>/Órbita/routines.json. Live: the server keeps the
 // clock, fires and runs them page or no page; this page polls and shows the card move
 // SCHEDULED → BACKLOG → IN PROGRESS → (WAITING ON APPROVAL) → DONE. A draft that needs the owner's
 // OK makes the agent stand and wave; APPROVE sends it, REJECT + a note reworks it. Demo (file://):
 // session-only routines fired by this tick.
-// V3.2 (16 Sep 2026): AGENT TEAMS — TEAM in the bar (or "as a team" in the sentence) sends the task
+// V3.2 (16 Sep 2026): AGENT TEAMS — TEAM in the bar (or "em equipa" in the sentence) sends the task
 // to the department lead, who splits it into pieces; the pieces appear as cards on the teammates'
 // desks (↳), all IN PROGRESS at once, each teammate's finished piece lands in their own chat and
 // walks back to the lead (📋), notes they leave each other pop as 💬, and the lead's card finishes
@@ -32,40 +32,40 @@ const SEGMENTS = ['roofing', 'HVAC', 'dental', 'logistics', 'fitness', 'property
 // generic-business task pool per agent (AJ: generic business, not TerriTool-flavoured)
 const POOL = {
   elead: ['Rever a caixa de entrada da noite, encaminhar 40 e-mails', 'Rever o tom de 6 respostas a clientes', 'Resumo semanal da caixa de entrada para o AJ', 'Atualizar os modelos de resposta', 'Escalar 2 conversas ao AJ'],
-  cmail: ['Reply to the {co} scope question', 'Send the kickoff summary to {co}', 'Responder a 9 e-mails de clientes da noite', 'Escrever o aviso de aumento de preços', 'Chase {co} for the brief sign-off'],
+  cmail: ['Responder ao {co} scope question', 'Enviar o resumo de arranque a {co}', 'Responder a 9 e-mails de clientes da noite', 'Escrever o aviso de aumento de preços', 'Chase {co} para a aprovação do briefing'],
   imail: ['Triar 14 e-mails internos', 'Fazer circular os números da semana', 'Responder à equipa sobre o plano do 3.º trimestre', 'Resumir a conversa de 40 mensagens', 'Marcar a revisão com o cliente no calendário'],
   vmail: ['Resumir a revisão do SLA do fornecedor', 'Responder ao fornecedor de SMS sobre o nível do plano', 'Pedir orçamento ao fornecedor de impressão', 'Pressionar o fornecedor de alojamento sobre o relatório de avaria', 'Confirmar a data de renovação do fornecedor'],
   kmail: ['Responder à dúvida da fatura do designer', 'Enviar o briefing ao redator', 'Confirmar as horas do freelancer nesta semana', 'Pressionar o programador pelo orçamento', 'Responder ao freelancer de vídeo sobre o prazo'],
   lexi:  ['Rever o enriquecimento da noite antes de os comerciais verem', "Build today's call lists", 'Chase {n} deals quiet past 14 days', 'Preparar a revisão semanal do pipeline', 'Afilar o ICP com o Prospetor'],
   enzo:  ['Enrich {n} overnight signups', 'Verificar telemóveis no lote AU', 'Preencher a dimensão da empresa em 12 leads', 'Pontuar o lote da manhã para o Líder de Vendas', 'Repetir 3 enriquecimentos falhados'],
-  ilm:   ['Qualify {n} inbound leads from the website', 'Encaminhar 6 leads quentes para os comerciais', 'Reply to {co} within the hour', 'Book a discovery call with {co}', 'Limpar a fila de entrada, 12 duplicados'],
-  pros:  ['Mine {n} {segment} companies for outbound', 'Pontuar 40 potenciais clientes face ao ICP', "Build tomorrow's cold-call list", 'Cruzar novos contactos com os clientes atuais', 'Verificar telemóveis no novo lote'],
-  piper: ['Proposta para o potencial cliente de 40 licenças', 'Atualizar o modelo de proposta do plano Growth', 'Pricing options for {co}', 'Proposal follow-up pack for {co}', 'Sign-online link for the {co} proposal'],
-  folo:  ['Follow up {n} quotes sent last week', 'Reativar 8 leads frios', 'Registar os resultados das chamadas no CRM', 'Enviar o lembrete de 14 dias aos negócios parados', 'Book a demo for {co}'],
-  mlead: ["Review the week's content before it ships", 'Passar 50 $/dia para o anúncio vencedor', 'Definir a programação de reels da próxima semana', 'Resumo semanal de marketing para o AJ', 'Brief Research on the {segment} angle'],
+  ilm:   ['Qualify {n} leads recebidos pelo site', 'Encaminhar 6 leads quentes para os comerciais', 'Reply to {co} dentro da hora', 'Marcar uma chamada de apresentação com {co}', 'Limpar a fila de entrada, 12 duplicados'],
+  pros:  ['Mine {n} {segment} empresas para prospeção', 'Pontuar 40 potenciais clientes face ao ICP', "Build tomorrow's cold-call list", 'Cruzar novos contactos com os clientes atuais', 'Verificar telemóveis no novo lote'],
+  piper: ['Proposta para o potencial cliente de 40 licenças', 'Atualizar o modelo de proposta do plano Growth', 'Opções de preço para {co}', 'Pacote de seguimento da proposta para {co}', 'Ligação de assinatura online para a {co} proposal'],
+  folo:  ['Fazer seguimento de {n} orçamentos enviados na semana passada', 'Reativar 8 leads frios', 'Registar os resultados das chamadas no CRM', 'Enviar o lembrete de 14 dias aos negócios parados', 'Marcar uma demo para {co}'],
+  mlead: ["Rever o conteúdo da semana antes de sair", 'Passar 50 $/dia para o anúncio vencedor', 'Definir a programação de reels da próxima semana', 'Resumo semanal de marketing para o AJ', 'Investigação breve sobre o {segment} angle'],
   riley: ['Morning scan: 49 sources', 'Varrimento semanal de preços da concorrência', 'Extrair 3 estatísticas para a newsletter', 'Nota de tendência para o Líder de Vendase', 'Ler 6 avaliações de clientes à procura de ângulos'],
   newt:  ['Escrever a newsletter de setembro', 'Testar A/B das linhas de assunto do número 32', 'Log issue 31 numbers', 'Reconstruir a sequência de boas-vindas, e-mail 2', 'Limpar 40 subscritores com devolução'],
-  gfx:   ['Conjunto de cartões de citação para a página de preços', 'Story + square exports, brand kit', 'Thumbnail for the "10am rule" reel', 'Carousel cover, 3 options', 'Resize the ad creative to 4:5'],
-  ada:   ['Renovar o conjunto de anúncios saturado', 'Launch 4 variants of "cold call anxiety"', 'Pull the daily spend report', 'Shift $50/day into the winner', 'Exclude existing customers from targeting'],
-  iggy:  ['Escrever o gancho do carrossel', 'Registar o desempenho dos ganchos no manual', 'Agendar 3 publicações para a semana', 'Responder a 14 mensagens diretas', 'Cut the caption on the "10am rule" reel'],
-  vid:   ['Render the "10am rule" reel, captions on', 'Cut a 15 s teaser from the demo', 'Re-render ad variants in 4:5', 'Caption pass on the webinar clip', 'Colour + captions on the founder reel', 'Render the 45 s demo cut'],
-  olead: ["Review the week's contracts and flags", 'Chase {n} open vendor renewals', 'Prioritise Intel’s findings', 'Resumo semanal de operações para o AJ', 'Preparar as secções do relatório para a direção'],
+  gfx:   ['Conjunto de cartões de citação para a página de preços', 'Story + square exports, brand kit', 'Thumbnail for the "10am rule" reel', 'Carousel cover, 3 options', 'Redimensionar o criativo do anúncio para 4:5'],
+  ada:   ['Renovar o conjunto de anúncios saturado', 'Lançar 4 variantes de "cold call anxiety"', 'Extrair o relatório de gasto diário', 'Passar 50 $/dia para o vencedor', 'Excluir clientes atuais do direcionamento'],
+  iggy:  ['Escrever o gancho do carrossel', 'Registar o desempenho dos ganchos no manual', 'Agendar 3 publicações para a semana', 'Responder a 14 mensagens diretas', 'Recortar a legenda do "10am rule" reel'],
+  vid:   ['Render the "10am rule" reel, com legendas', 'Fazer um teaser de 15 s a partir da demo', 'Re-renderizar as variantes do anúncio em 4:5', 'Passagem de legendas no clipe do webinar', 'Correção de cor e legendas no reel do fundador', 'Renderizar o corte de 45 s da demo'],
+  olead: ["Rever os contratos e sinais da semana", 'Chase {n} open vendor renewals', 'Prioritise Intel’s findings', 'Resumo semanal de operações para o AJ', 'Preparar as secções do relatório para a direção'],
   scout: ['Comparação da página de preços do concorrente', 'Varrimento de avaliações G2 dos 3 principais rivais', 'Memorando de oportunidade: subida de preços do rival', 'Atualizar o mapa de mercado, 3.º trimestre', 'Vigiar a página de lançamento do rival'],
   legal: ['Rever o contrato alterado, 2 cláusulas', 'Contrato do designer', 'Revisão anual da política de privacidade', 'Redline the {co} terms', 'Verificar a cláusula de fixação de preço'],
   comply:['Página de regulamentação AU mudou, a comparar', 'Auditoria do texto de consentimento nos formulários', 'Verificação de retenção de dados, 3 sistemas', 'Lista de conformidade trimestral', 'Revisão do banner de cookies'],
   report:['Relatório semanal para a direção, 6 secções', 'Consolidação mensal de KPI', 'Relatório de coortes de churn para o Cérebro', 'Relatório de SLA de entregas', 'Resumo da atividade dos comerciais'],
   dash:  ['Atualizar o painel de vendas', 'Adicionar o bloco de entregas dentro do prazo', 'Corrigir o gráfico de receita, período errado', 'Criar a vista de tempos de resposta da caixa de entrada', 'Verificação semanal da saúde dos painéis'],
-  alead: ["Review the week's cash position", 'Aprovar o lote de pagamentos a freelancers', 'Preparar o pacote de fecho do mês', 'Revisão de valores do fornecedor', 'Previsão de tesouraria, próximas 8 semanas'],
-  invo:  ['Issue {n} invoices for the week', 'Cobrar 3 faturas em atraso', 'Credit note for {co}', 'Invoice {co} $840', 'Reminder 2 of 3 to {co}'],
+  alead: ["Rever a posição de tesouraria da semana", 'Aprovar o lote de pagamentos a freelancers', 'Preparar o pacote de fecho do mês', 'Revisão de valores do fornecedor', 'Previsão de tesouraria, próximas 8 semanas'],
+  invo:  ['Issue {n} faturas da semana', 'Cobrar 3 faturas em atraso', 'Nota de crédito para {co}', 'Invoice {co} $840', 'Lembrete 2 de 3 para {co}'],
   apay:  ["Match today's card charges", 'Auditar a fatura de freelancer n.º 218 face ao contrato', 'Agendar os pagamentos a freelancers', 'Flag a subscription overlap', 'Verificar o nível do plano do fornecedor de SMS'],
   recon: ['Reconciliar 14 pagamentos, 2 assinalados', 'Reconciliação bancária de fecho do mês', 'Associar pagamentos Stripe às faturas', 'Limpar 2 taxas não conciliadas', 'Conciliar o extrato do cartão'],
-  dlead: ['Rever 12 projetos em curso quanto a risco', 'Resumo semanal de entregas para o AJ', 'Re-plan the {co} timeline', 'Approve the {co} handover', 'Staff the {co} project'],
-  pco:   ['Update the {co} project plan', 'Mover 3 marcos após a alteração de âmbito', 'Cobrar 2 aprovações de clientes em atraso', 'Schedule the {co} review', 'Registar as horas desta semana por projeto'],
-  qa:    ['QA the {co} website handover', 'Check the {co} report pack for errors', 'Testar o início de sessão do portal do cliente', 'Rever o conjunto de recursos segundo as regras de marca', 'Teste de regressão no formulário de reserva'],
-  crep:  ['September status report for {co}', 'Pacote de relatórios mensal, 14 clientes', 'Add the results section to the {co} report', 'Send the {co} report, 2 flags', 'Chart the {co} lead numbers'],
-  cass:  ['Sync the {co} assets to the portal', 'Organise the {co} asset library', 'Exportar o conjunto de logótipos, 4 formatos', 'Archive the finished {co} files', 'Etiquetar 60 recursos por campanha'],
-  dasst: ['Draft the {co} social templates', 'Resize the {co} banners, 6 sizes', 'Mock up the {co} landing page', 'Prepare the {co} brand sheet', 'Design the {co} report cover'],
-  ona:   ['Kickoff call prep for {co}', 'Onboarding checklist for {co}', 'Set up the {co} client portal', 'Walk {co} through the first report', 'Day-7 check-in with {co}'],
+  dlead: ['Rever 12 projetos em curso quanto a risco', 'Resumo semanal de entregas para o AJ', 'Refazer o {co} timeline', 'Aprovar a {co} handover', 'Atribuir pessoal ao {co} project'],
+  pco:   ['Atualizar o {co} project plan', 'Mover 3 marcos após a alteração de âmbito', 'Cobrar 2 aprovações de clientes em atraso', 'Agendar a {co} review', 'Registar as horas desta semana por projeto'],
+  qa:    ['Fazer o controlo de qualidade de {co} website handover', 'Verificar o {co} pacote de relatórios quanto a erros', 'Testar o início de sessão do portal do cliente', 'Rever o conjunto de recursos segundo as regras de marca', 'Teste de regressão no formulário de reserva'],
+  crep:  ['Relatório de estado de setembro para {co}', 'Pacote de relatórios mensal, 14 clientes', 'Acrescentar a secção de resultados ao {co} report', 'Enviar o {co} report, 2 flags', 'Fazer o gráfico de {co} lead numbers'],
+  cass:  ['Sincronizar os {co} recursos para o portal', 'Organizar a {co} asset library', 'Exportar o conjunto de logótipos, 4 formatos', 'Arquivar os ficheiros {co} files', 'Etiquetar 60 recursos por campanha'],
+  dasst: ['Escrever o {co} social templates', 'Resize the {co} banners, 6 sizes', 'Fazer a maqueta da {co} landing page', 'Preparar a {co} brand sheet', 'Desenhar a {co} report cover'],
+  ona:   ['Preparação da chamada de arranque para {co}', 'Lista de integração para {co}', 'Configurar o {co} client portal', 'Walk {co} o primeiro relatório', 'Contacto do dia 7 com {co}'],
 };
 
 // keywords that route a typed task to the right agent inside the chosen department
@@ -93,22 +93,22 @@ const KEYS = {
 // handoff chains — one piece of work passing desk to desk (the multi-agent story)
 const CHAINS = [
   [['mlead', 'Definir a programação de reels da próxima semana'], ['riley', 'Investigar ângulos para a programação'], ['iggy', 'Escrever os ganchos da programação']],
-  [['legal', 'Review the amended {co} MSA'], ['olead', 'Decide on the {co} clause, escalate if needed']],
+  [['legal', 'Rever o {co} MSA'], ['olead', 'Decidir sobre o {co} cláusula, escalar se preciso']],
   [['riley', 'Investigar ângulos de gancho para o próximo reel'], ['iggy', 'Escrever o guião do reel a partir da investigação'], ['vid', 'Cortar e renderizar o reel, com legendas']],
-  [['gfx', 'Creative for the new {segment} ad set'], ['ada', 'Launch the {segment} ad set, 4 variants']],
-  [['pros', 'Build a {segment} prospect list'], ['ilm', 'Qualify the {segment} list, route the hot ones'], ['lexi', 'Rever os leads encaminhados com os comerciais']],
+  [['gfx', 'Criativo para o novo {segment} ad set'], ['ada', 'Lançar o {segment} ad set, 4 variants']],
+  [['pros', 'Build a {segment} prospect list'], ['ilm', 'Qualificar a {segment} lista, encaminhar os quentes'], ['lexi', 'Rever os leads encaminhados com os comerciais']],
   [['enzo', 'Enriquecer os registos da noite'], ['ilm', 'Encaminhar o lote enriquecido para os comerciais']],
-  [['ilm', 'Qualified lead: {co} wants a quote'], ['piper', 'Proposal for {co}'], ['legal', 'Check the {co} terms']],
-  [['piper', 'Proposal accepted by {co}'], ['ona', 'Onboard {co}: kickoff call'], ['pco', 'Set up the {co} project plan']],
-  [['cmail', 'Scope change request from {co}'], ['pco', 'Re-plan the {co} milestones'], ['crep', 'Update the {co} status report']],
-  [['dasst', 'Draft the {co} asset set'], ['qa', 'QA the {co} asset set'], ['cass', 'Publish the {co} assets to the portal']],
+  [['ilm', 'Qualified lead: {co} quer um orçamento'], ['piper', 'Proposta para {co}'], ['legal', 'Verificar o {co} terms']],
+  [['piper', 'Proposta aceite por {co}'], ['ona', 'Onboard {co}: kickoff call'], ['pco', 'Configurar o {co} project plan']],
+  [['cmail', 'Pedido de alteração de âmbito de {co}'], ['pco', 'Refazer o {co} milestones'], ['crep', 'Atualizar o {co} status report']],
+  [['dasst', 'Escrever o {co} asset set'], ['qa', 'Fazer o controlo de qualidade de {co} asset set'], ['cass', 'Publish the {co} recursos para o portal']],
   [['scout', 'Alteração de preços do rival detetada, memorando'], ['piper', 'Atualizar a tabela de preços da proposta']],
-  [['invo', "Issue this week's invoices"], ['recon', 'Associar pagamentos às novas faturas']],
+  [['invo', "Emitir as's invoices"], ['recon', 'Associar pagamentos às novas faturas']],
   [['report', 'Consolidação mensal de KPI'], ['dash', 'Atualizar o painel de KPI'], ['alead', 'Incluir os KPI no pacote de fecho do mês']],
   [['vmail', 'Vendor quote received for {co}'], ['apay', 'Verificar o orçamento do fornecedor']],
   [['kmail', 'Dúvida sobre fatura de freelancer, do designer'], ['apay', 'Auditar a fatura do freelancer face ao contrato']],
   [['imail', 'A equipa pede os números do 3.º trimestre'], ['dash', 'Atualizar o painel do 3.º trimestre']],
-  [['crep', 'September report ready for {co}'], ['cmail', 'Send the {co} report with a summary']],
+  [['crep', 'Relatório de setembro pronto para {co}'], ['cmail', 'Enviar o {co} relatório com um resumo']],
 ];
 
 applyTasks({ POOL, KEYS, CHAINS, SEGMENTS, AGENTS }); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
@@ -119,13 +119,13 @@ function timeStr(ts) {
 }
 function span(ms) { // "4 min" · "1 h 12 m" · "3 h"
   const m = Math.max(0, Math.round(ms / 60000));
-  if (m < 1) return 'just now';
+  if (m < 1) return 'agora mesmo';
   if (m < 60) return m + ' min';
   const h = Math.floor(m / 60), r = m % 60;
   return r ? `${h} h ${r} m` : `${h} h`;
 }
 const agentOf = id => AGENTS.find(a => a.id === id);
-const STATE_LABEL = { next: 'Backlog', doing: 'em curso', waiting: 'Waiting', done: 'Done', sched: 'Scheduled', scheduled: 'Scheduled' }; // scheduled (V3.2.1): a task with a date, not yet fired
+const STATE_LABEL = { next: 'Em fila', doing: 'Em curso', waiting: 'À espera', done: 'Concluída', sched: 'Agendada', scheduled: 'Agendada' }; // scheduled (V3.2.1): a task with a date, not yet fired
 
 export function initTasks(ctx) {
   const { R, deptRT, spawnEmote, chatPush, chatHist, feedPush, zoomToApproval, enterFocus, openAgent,
@@ -214,14 +214,14 @@ export function initTasks(ctx) {
     if (t.piece) { // V3.2 (16 Sep): a teammate's piece — in their own chat, then it walks back to the lead
       const L = agentOf(t.leadId), parent = tasks.find(x => x.id === t.parent);
       chatPush(t.agent, { who: 'file', icon: t.error ? '⚠' : '📄', name: slug(t.title) + '.md', meta: `a minha parte · passada a ${L ? L.name : 'the lead'} · ${timeStr(t.doneAt)} · clica para ver`, content: t.result });
-      if (!t.error) chatPush(t.agent, { who: 'agent', text: `A minha parte de «${parent ? parent.title : t.title}» está pronta e entregue a ${L ? L.name : 'the lead'}${t.used && t.used.length ? `. Used ${t.used.join(', ')}` : ''}.` });
+      if (!t.error) chatPush(t.agent, { who: 'agent', text: `A minha parte de «${parent ? parent.title : t.title}» está pronta e entregue a ${L ? L.name : 'the lead'}${t.used && t.used.length ? `. Usei ${t.used.join(', ')}` : ''}.` });
       feedPush(R[t.agent], '📄', `Parte concluída → ${L ? L.name : 'lead'}: ${t.title}`);
       if (L && R[L.id]) { spawnEmote(R[L.id], '📋'); feedPush(R[L.id], '📋', `Parte recebida de ${a.name}: ${t.title}`); }
       return;
     }
     chatPush(t.agent, { who: 'file', icon: t.error ? '⚠' : '📄', name: (t.note || slug(t.title)) + '.md',
       meta: `${t.error ? 'could not complete' : t.approved ? 'enviado após o teu OK · guardado no teu cérebro' : 'entregue · guardado no teu cérebro'} · ${timeStr(t.doneAt)} · clica para ver`, content: t.result });
-    if (!t.error) chatPush(t.agent, { who: 'agent', text: `Concluído — «${t.title}»${t.routine ? ` (routine, ${t.when}${t.late ? ', ran late' : ''})` : ''} está pronto acima${t.team?.members?.length ? ` — the team was ${membersText(t)} and me` : ''}${t.read && t.read.length ? ` (I read ${t.read.slice(0, 3).join(', ')})` : ''}${t.used && t.used.length ? `. Used ${t.used.join(', ')}` : ''}. Say "revise: …" and I'll change it.` });
+    if (!t.error) chatPush(t.agent, { who: 'agent', text: `Concluído — «${t.title}»${t.routine ? ` (rotina, ${t.when}${t.late ? ', correu tarde' : ''})` : ''} está pronto acima${t.team?.members?.length ? ` — a equipa foi ${membersText(t)} e eu` : ''}${t.read && t.read.length ? ` (li ${t.read.slice(0, 3).join(', ')})` : ''}${t.used && t.used.length ? `. Usei ${t.used.join(', ')}` : ''}. Say "revise: …" and altero-a.` });
     feedPush(R[t.agent], '📄', `Delivered: ${t.title}`);
     if (brain && t.read) for (const n of t.read.slice(0, 2)) brain.readNote(t.agent, n);
   }
@@ -337,7 +337,7 @@ export function initTasks(ctx) {
   const routineIntent = text => repeat ? { when: fromPicker(P_.cad.value, P_.at.value), text, picker: true } : parseWhen(text);
   // V3.2 (16 Sep) Agent Teams: the TEAM toggle — the department lead splits the task across its desks, they work at once, the lead writes the final
   let teamOn = false, teamsCfg = { enabled: true, max: 4 };
-  const teamIntent = text => /\b(as a team|team up|team this|get the (whole )?team|the (whole )?team (on|to|should|can)|with the team|(spawn|use|get) (\d+|two|three|four|five|a few|some) teammates?|\d+ teammates|split (it|this|the work) (up|across|between)|teammates|team:|whole department)\b/i.test(text);
+  const teamIntent = text => /\b(em equipa|team up|team this|get the (whole )?team|the (whole )?team (on|to|should|can)|with the team|(spawn|use|get) (\d+|two|three|four|five|a few|some) teammates?|\d+ teammates|split (it|this|the work) (up|across|between)|teammates|team:|whole department)\b/i.test(text);
   const asTeam = text => teamsCfg.enabled && (teamOn || teamIntent(text));
   const leadOf = k => AGENTS.find(x => x.dept === k && x.lead) || AGENTS.filter(x => x.dept === k)[0];
   P_.team.addEventListener('click', () => { teamOn = !teamOn; P_.team.classList.toggle('on', teamOn); updateHint(); if (teamOn) P_.input.focus(); });
@@ -376,7 +376,7 @@ export function initTasks(ctx) {
     if (rt) { // a routine in the making: say the schedule back before Add is pressed
       if (!RT_DEPTS.includes(dept)) { P_.hint.innerHTML = `<span class="tp-amber">${esc(rtRefuse(dept))}</span>`; P_.hint.className = 'tp-hint on'; return; }
       const { agent: ra } = route(dept, rt.text || text);
-      const need = rt.needsDay ? 'which day? say "todas as segundas …"' : rt.needsTime ? 'what time? add "at 8am"' : null;
+      const need = rt.needsDay ? 'que dia? diz "todas as segundas …"' : rt.needsTime ? 'que horas? acrescenta "às 8h"' : null;
       P_.hint.innerHTML = `<span class="tp-av" style="border-color:${DEPTS[ra.dept].chip};background:${DEPTS[ra.dept].chip}55">⏱</span>Routine · <b>${esc(describe(rt.when) || 'every week')}</b>` +
         (need ? ` · <span class="tp-amber">${need}</span>` : live ? ' · o Claude nomeia o agente quando primes Adicionar' : ` · vai para <b>${ra.name}</b>`) + (rt.guessed ? ` · "${esc(rt.guessWord)}" taken as ${rt.when.at}` : '');
       P_.hint.innerHTML += pickBit('routine');
@@ -433,7 +433,7 @@ export function initTasks(ctx) {
           team: st.team ? { lead: st.team.lead, members: [] } : undefined });
         resetModel(); resetTeam();
         touch(t, 'added'); spawnEmote(R[t.agent], st.team ? '⚑' : '📋');
-        say(st.team ? `Added — <b>${agentOf(t.agent).name}</b> ficou com ela e está a dividi-la pela equipa` : `Added — <b>${agentOf(t.agent).name}</b> has it${st.why ? ' · ' + esc(st.why) : ''}`);
+        say(st.team ? `Added — <b>${agentOf(t.agent).name}</b> ficou com ela e está a dividi-la pela equipa` : `Added — <b>${agentOf(t.agent).name}</b> ficou com ela${st.why ? ' · ' + esc(st.why) : ''}`);
         setTimeout(() => { if (!P_.input.value) P_.hint.classList.remove('on'); }, 7000);
       } catch (e) {
         say(`O Claude não conseguiu assumi-la (${esc(e.message)}). Ficou no quadro.`, 'err');
@@ -454,7 +454,7 @@ export function initTasks(ctx) {
     if (t) { const mdl = chosenModel(); t.modelUsed = mdl || officeModel; t.modelFrom = mdl ? 'task' : 'office'; const ef = effortUsedFor(t.modelUsed); t.effortUsed = ef.effort || ''; t.effortFrom = ef.from; }
     resetModel();
     P_.input.value = ''; updateHint();
-    if (t) { say(`Added — <b>${a.name}</b> has it.`); setTimeout(updateHint, 2600); P_.input.blur(); }
+    if (t) { say(`Added — <b>${a.name}</b> ficou com ela.`); setTimeout(updateHint, 2600); P_.input.blur(); }
     else say(`<b>${a.name}</b> já tem cinco em fila — deixa uma terminar primeiro.`);
   }
   /* ---------- V3.2 (16 Sep) demo teams: the same moves on a timer ---------- */
@@ -473,8 +473,8 @@ export function initTasks(ctx) {
   async function submitRoutine(rt, raw) {
     const k = dept;
     if (!RT_DEPTS.includes(k)) { say(`<span class="tp-amber">${esc(rtRefuse(k))}</span>`, 'err'); return; }
-    if (rt.needsDay) { say('Which day? Say "todas as segundas …" or "Seg e Qui …".', 'err'); return; }
-    if (rt.needsTime) { say('What time? Add "at 8am" or "at 17:30", or press REPEAT and pick one.', 'err'); return; }
+    if (rt.needsDay) { say('Que dia? Diz "todas as segundas …" or "Seg e Qui …".', 'err'); return; }
+    if (rt.needsTime) { say('Que horas? Acrescenta "às 8h" or "às 17:30", ou carrega em REPETIR e escolhe uma.', 'err'); return; }
     const text = (rt.text || raw).trim().replace(/[.!]+$/, '');
     if (!text) { say('O que deve acontecer? A frase tem uma hora mas não tem tarefa.', 'err'); return; }
     if (live) {
@@ -495,7 +495,7 @@ export function initTasks(ctx) {
     const { agent: a } = route(k, text);
     const r = addRoutine(k, a.id, text, rt.when, rt.picker ? P_.okc.checked : guessOk(text));
     r.model = chosenModel() || undefined; r.effort = effortSend(); resetModel();
-    P_.input.value = ''; say(`Rotina criada — <b>${a.name}</b> · ${esc(r.desc)} · próxima ${esc(untilText(r.nextAt))}${r.needsOk ? ' · espera pelo teu OK' : ' · read-only'}`);
+    P_.input.value = ''; say(`Rotina criada — <b>${a.name}</b> · ${esc(r.desc)} · próxima ${esc(untilText(r.nextAt))}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}`);
     spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `Nova rotina: ${r.title} (${r.desc})`); filter = 'sched'; render(true); P_.input.blur(); setTimeout(updateHint, 5000);
   }
   function guessOk(text) { const t = text.toLowerCase(); return /\b(send|reply|chase|nudge|remind|post|publish|pay|book|draft|message|email)\b/.test(t) || !/\b(list|summari[sz]e|triage|tell me|what|report|match|reconcile|qualify|review|check|read|find|flag|count)\b/.test(t); }
@@ -511,7 +511,7 @@ export function initTasks(ctx) {
     if (t) { t.routine = r.id; t.when = r.desc; t.needsOk = r.needsOk; t.modelUsed = r.model || officeModel; t.modelFrom = r.model ? 'routine' : 'office'; spawnEmote(R[r.agent], '⏱'); feedPush(R[r.agent], '⏱', `Routine${manual ? ' (executar agora)' : ''}: ${r.title}`); }
     r.lastAt = Date.now(); r.runs++; r.nextAt = nextRun(r.when);
   }
-  async function rtAct(rid, act) { // RUN NOW · PAUSE · RESUME · DELETE — from a SCHEDULED row, a board card or the rail strip
+  async function rtAct(rid, act) { // RUN NOW · PAUSAR · RETOMAR · DELETE — from a SCHEDULED row, a board card or the rail strip
     const r = routines.find(x => x.id === rid); if (!r) return;
     if (live) {
       if (act === 'delete') await fetch(`${API}/routines/${rid}`, { method: 'APAGAR' }).catch(() => {});
@@ -534,7 +534,7 @@ export function initTasks(ctx) {
       s.textContent = '⏱ ' + n;
     }
   }
-  function railFor(id) { // C2: the ROUTINES strip in the agent's rail — click to open, RUN NOW / PAUSE / DELETE per routine
+  function railFor(id) { // C2: the ROUTINES strip in the agent's rail — click to open, RUN NOW / PAUSAR / DELETE per routine
     railAgent = id;
     const el = document.getElementById('mRt'); if (!el) return;
     const mine = agentRoutines(id).sort(byNext);
@@ -542,8 +542,8 @@ export function initTasks(ctx) {
     const n = nextOf(mine);
     el.className = 'mrt' + (railExp ? ' exp' : '');
     el.innerHTML = `<div class="mrt-h"><span>⏱ ${mine.length} routine${mine.length > 1 ? 's' : ''}${n ? ' · next <b>' + esc(untilText(n.nextAt)) + '</b>' : ' · all paused'}</span><span class="car">▸</span></div>
-      <div class="mrt-l">${mine.map(r => `<div class="mrt-r" data-rid="${r.id}"><span>${esc(r.title)}</span><small>${esc(r.desc)} · ${modelName(r.model || officeModel)} · ${r.paused ? 'paused' : 'next ' + esc(untilText(r.nextAt))} · ${r.needsOk ? 'espera pelo teu OK' : 'read-only'}</small>
-        <div class="tp-act"><button class="run" data-act="run">EXECUTAR AGORA</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RESUME' : 'PAUSE'}</button><button data-act="delete">APAGAR</button></div></div>`).join('')}</div>`;
+      <div class="mrt-l">${mine.map(r => `<div class="mrt-r" data-rid="${r.id}"><span>${esc(r.title)}</span><small>${esc(r.desc)} · ${modelName(r.model || officeModel)} · ${r.paused ? 'paused' : 'next ' + esc(untilText(r.nextAt))} · ${r.needsOk ? 'espera pelo teu OK' : 'só leitura'}</small>
+        <div class="tp-act"><button class="run" data-act="run">EXECUTAR AGORA</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RETOMAR' : 'PAUSAR'}</button><button data-act="delete">APAGAR</button></div></div>`).join('')}</div>`;
     el.querySelector('.mrt-h').addEventListener('click', () => { railExp = !railExp; el.classList.toggle('exp', railExp); });
     el.querySelectorAll('.tp-act button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); rtAct(b.closest('[data-rid]').dataset.rid, b.dataset.act); }));
   }
@@ -624,7 +624,7 @@ export function initTasks(ctx) {
     }
   }
   function askApproval(t) { // D1: the draft lands in the chat with APPROVE / REJECT and the agent stands and waves
-    chatPush(t.agent, { who: 'file', icon: '📝', name: slug(t.title) + '.md', meta: `draft · waiting for your OK · ${timeStr(t.changedAt)} · clica para ver`, content: t.draft || t.result });
+    chatPush(t.agent, { who: 'file', icon: '📝', name: slug(t.title) + '.md', meta: `draft · à espera do teu OK · ${timeStr(t.changedAt)} · clica para ver`, content: t.draft || t.result });
     chatPush(t.agent, { who: 'appr', text: t.ask || `«${t.title}» está pronto — aprova para enviar, rejeita para me dizeres o que mudar.`, pending: true, live: true });
     feedPush(R[t.agent], '⏸', `À espera do teu OK: ${t.title}`);
     if (setStuck) setStuck(t.agent, t.ask, t.sid);
@@ -673,7 +673,7 @@ export function initTasks(ctx) {
       live = true; setOfficeModel(h.model); setOfficeEffort(h.effort);
       if (h.teams) { teamsCfg = { enabled: h.teams.enabled !== false, max: h.teams.max || 4 }; P_.team.hidden = !teamsCfg.enabled; }
       const mode = panel.querySelector('.tp-mode');
-      if (mode) { mode.hidden = false; mode.textContent = 'LIVE · ' + (h.backend === 'anthropic-sdk' ? 'API CLAUDE' : 'CLAUDE'); mode.classList.add('live'); mode.title = `${h.name} · ${h.backend} · ${modelName(h.model)} by default · brain: ${h.brain}`; }
+      if (mode) { mode.hidden = false; mode.textContent = 'AO VIVO · ' + (h.backend === 'anthropic-sdk' ? 'API CLAUDE' : 'CLAUDE'); mode.classList.add('live'); mode.title = `${h.name} · ${h.backend} · ${modelName(h.model)} por omissão · brain: ${h.brain}`; }
       if (brain) { try { brain.setGraph(await (await fetch(API + '/brain')).json()); } catch {} }
       const list = await (await fetch(API + '/tasks')).json();
       for (const st of list) {
@@ -683,7 +683,7 @@ export function initTasks(ctx) {
             doneAt: st.doneAt, changedAt: st.doneAt, addedAt: st.addedAt, result: st.result, read: st.read, note: st.note, tools: st.tools || [], used: st.used || [], error: !!st.error, last: 'done' });
           if (st.team) syncTeam(t, st, true);
           deliver(t);
-        } else reconcile(st); // next, doing (the server may be running it), waiting for your OK, scheduled for a date — pick it up again
+        } else reconcile(st); // next, doing (the server may be running it), à espera do teu OK, scheduled for a date — pick it up again
       }
       dirty = true;
       if (onLive) onLive(h);
@@ -717,13 +717,13 @@ export function initTasks(ctx) {
     const who = (f && f !== 'brain') ? a.name : `${a.name} · ${DEPTS[t.dept].short}`;
     switch (t.state) {
       case 'next': {
-        const src = t.piece ? `parte da equipa de ${agentOf(t.leadId)?.name || 'o líder'}` : t.routine ? `routine · ${t.when}${t.late ? ' · <span class="tp-late">late · was due ' + timeStr(t.due) + '</span>' : ''}` : t.by === 'you' ? (t.live ? 'adicionado por ti · em direto' : 'added by you') : t.last === 'handoff' && t.from ? `de ${agentOf(t.from).name}` : t.revised ? 'sent back to revise' : 'a partir do Cérebro';
+        const src = t.piece ? `parte da equipa de ${agentOf(t.leadId)?.name || 'o líder'}` : t.routine ? `rotina · ${t.when}${t.late ? ' · <span class="tp-late">atrasada · era devida a ' + timeStr(t.due) + '</span>' : ''}` : t.by === 'you' ? (t.live ? 'adicionado por ti · em direto' : 'adicionada por ti') : t.last === 'handoff' && t.from ? `de ${agentOf(t.from).name}` : t.revised ? 'devolvida para revisão' : 'a partir do Cérebro';
         const w = now - t.addedAt;
         return `${who} · ${w < 60000 ? 'just added' : 'waiting ' + span(w)} · ${src}${teamBit(t)}${modelBit(t)}`;
       }
       case 'doing': return `${who}${t.live ? (t.approved === undefined && t.draftAt ? ' · a enviar com Claude' : t.team?.members?.length ? ' · a liderar a equipa com Claude' : ' · a trabalhar com Claude') : t.agent === 'vid' ? ' · rendering' : t.teamHold ? ' · à espera das partes' : ''}${t.routine ? ' · routine' : ''}${teamBit(t)}${modelBit(t)}`;
       case 'waiting': return `<span class="tp-amber">à espera há ${span(now - t.changedAt)} do teu OK</span> · ${who}${t.routine ? ' · rascunho de rotina' : ''}${teamBit(t)}${modelBit(t)}`;
-      case 'scheduled': return `${who} · runs ${esc(untilText(t.dueAt))} · ${new Date(t.dueAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr(t.dueAt)}${t.needsOk ? ' · espera pelo teu OK' : ''}${teamBit(t)}${modelBit(t)}`;
+      case 'scheduled': return `${who} · corre ${esc(untilText(t.dueAt))} · ${new Date(t.dueAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr(t.dueAt)}${t.needsOk ? ' · espera pelo teu OK' : ''}${teamBit(t)}${modelBit(t)}`;
       case 'done': return `${who} · concluída ${timeStr(t.doneAt)}${t.approved ? (t.live ? ' · enviado após o teu OK' : ' · aprovado') : ''}${t.late ? ' · <span class="tp-late">atrasada</span>' : ''}${teamBit(t)}${modelBit(t)}${t.live ? (t.error ? ' · <span class="tp-amber">falhou</span>' : ' · <span class="tp-res">resultado pronto →</span>') : ''}`;
     }
     return who;
@@ -740,9 +740,9 @@ export function initTasks(ctx) {
     const a = agentOf(r.agent);
     return `<div class="tp-row sched${r.paused ? ' paused' : ''}" data-id="r:${r.id}" data-rid="${r.id}" data-dept="${r.dept}" data-agent="${r.agent}">
       <span class="tp-st sched">⏱</span>
-      <div class="tp-body"><div class="tp-t">${esc(r.title)}</div><div class="tp-m">${esc(r.desc)} · ${a.name} · ${modelName(r.model || officeModel)}${r.needsOk ? ' · espera pelo teu OK' : ' · read-only'}${r.lastAt ? ' · last ' + timeStr(r.lastAt) + (r.lastLate ? ' <span class="tp-late">late</span>' : '') : ''}</div>
-      <div class="tp-act"><button class="run" data-act="run">EXECUTAR AGORA</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RESUME' : 'PAUSE'}</button><button data-act="delete">APAGAR</button></div></div>
-      <span class="tp-ago" data-rago="${r.id}">${r.paused ? 'PAUSED' : esc(untilText(r.nextAt))}</span></div>`;
+      <div class="tp-body"><div class="tp-t">${esc(r.title)}</div><div class="tp-m">${esc(r.desc)} · ${a.name} · ${modelName(r.model || officeModel)}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}${r.lastAt ? ' · last ' + timeStr(r.lastAt) + (r.lastLate ? ' <span class="tp-late">late</span>' : '') : ''}</div>
+      <div class="tp-act"><button class="run" data-act="run">EXECUTAR AGORA</button><button data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RETOMAR' : 'PAUSAR'}</button><button data-act="delete">APAGAR</button></div></div>
+      <span class="tp-ago" data-rago="${r.id}">${r.paused ? 'PAUSARD' : esc(untilText(r.nextAt))}</span></div>`;
   }
   function renderNext() { // C1: the next-up strip under the chips
     const n = nextOf(scopedRoutines());
@@ -798,7 +798,7 @@ export function initTasks(ctx) {
       const el = P_.rows.querySelector(`[data-ago="${t.id}"]`);
       if (el) el.textContent = span(now - t.changedAt);
     }
-    for (const r of routines) { const el = P_.rows.querySelector(`[data-rago="${r.id}"]`); if (el) el.textContent = r.paused ? 'PAUSED' : untilText(r.nextAt, now); }
+    for (const r of routines) { const el = P_.rows.querySelector(`[data-rago="${r.id}"]`); if (el) el.textContent = r.paused ? 'PAUSARD' : untilText(r.nextAt, now); }
     renderNext();
     // waiting / backlog metas carry a duration too — cheap to re-render those lines
     P_.rows.querySelectorAll('.tp-row.waiting .tp-m, .tp-row.next .tp-m').forEach(m => {
@@ -822,7 +822,7 @@ export function initTasks(ctx) {
     else if (t.state === 'waiting') meta = `${av}<span>${a.name}</span><span class="tk-chip">WAITING ${span(Date.now() - t.changedAt).toUpperCase()}</span>`;
     else if (t.state === 'doing') meta = `${av}<span>${a.name}</span><span class="tk-pct" data-pct="${t.id}">${t.agent === 'vid' ? 'RENDER · ' : ''}${pct}%</span>`;
     else if (t.state === 'scheduled') meta = `${av}<span>${a.name}</span><span class="tk-pct">${esc(untilText(t.dueAt).toUpperCase())}</span>`;
-    else meta = `${av}<span>${a.name}</span><span class="tk-pct">${span(Date.now() - t.addedAt).toUpperCase()} IN BACKLOG</span>`;
+    else meta = `${av}<span>${a.name}</span><span class="tk-pct">${span(Date.now() - t.addedAt).toUpperCase()} NA FILA</span>`;
     return `<div class="tk ${t.state === 'scheduled' ? 'sched scheduled' : t.state}${t.revised ? ' rev' : ''}" data-id="${t.id}" data-dept="${t.dept}">
       <div class="tk-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : t.piece ? '↳ ' : ''}${esc(t.title)}</div><div class="tk-m">${meta}</div>
       ${t.state === 'doing' ? `<div class="tk-bar"><i data-bar="${t.id}" style="width:${pct}%"></i></div>` : ''}</div>`;
@@ -837,7 +837,7 @@ export function initTasks(ctx) {
   function cardHTMLr(r) { // C1: a SCHEDULED card on the company board
     const a = agentOf(r.agent), chip = DEPTS[r.dept].chip;
     return `<div class="tk sched${r.paused ? ' paused' : ''}" data-rid="${r.id}" data-dept="${r.dept}"><div class="tk-t">⏱ ${esc(r.title)}</div>
-      <div class="tk-m"><span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span><span>${a.name} · ${modelName(r.model || officeModel).toUpperCase()}</span><span class="tk-pct">${r.paused ? 'PAUSED' : esc(untilText(r.nextAt).toUpperCase())}</span></div></div>`;
+      <div class="tk-m"><span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span><span>${a.name} · ${modelName(r.model || officeModel).toUpperCase()}</span><span class="tk-pct">${r.paused ? 'PAUSARD' : esc(untilText(r.nextAt).toUpperCase())}</span></div></div>`;
   }
   const COLS = [['sched', 'SCHEDULED'], ['next', 'EM ESPERA'], ['doing', 'EM CURSO'], ['waiting', 'À ESPERA DE APROVAÇÃO'], ['done', 'CONCLUÍDO']];
   function companyHTML() {
@@ -894,22 +894,22 @@ export function initTasks(ctx) {
 
   /* ---------- chat intake still works: "adicionar tarefa: …" in any agent's rail ---------- */
   function handleChat(agentId, text) {
-    if (!live) { // demo: "every weekday at 8am, …" · "routines" (live: the server handles these, so fall through)
+    if (!live) { // demo: "todos os dias úteis às 8h, …" · "routines" (live: the server handles these, so fall through)
       const k0 = R[agentId].a.dept, a0 = R[agentId].a;
       if (/^\s*(routines?|schedule|timetable)\s*\??\s*$/i.test(text)) {
         if (!RT_DEPTS.includes(k0)) return rtRefuse(k0);
         const mine = deptRoutines(k0).sort(byNext);
-        return mine.length ? `${RT_NAMES[k0]} routines:\n` + mine.map(r => `• ${r.title} — ${r.desc} · ${agentOf(r.agent).name}${r.paused ? ' · PAUSED' : ''}`).join('\n') : `Ainda nada no horário de ${RT_NAMES[k0]}. Dá-me uma com uma hora dentro — «todos os dias úteis às 8h, …».`;
+        return mine.length ? `${RT_NAMES[k0]} routines:\n` + mine.map(r => `• ${r.title} — ${r.desc} · ${agentOf(r.agent).name}${r.paused ? ' · PAUSARD' : ''}`).join('\n') : `Ainda nada no horário de ${RT_NAMES[k0]}. Dá-me uma com uma hora dentro — «todos os dias úteis às 8h, …».`;
       }
       const p = parseWhen(text);
       if (p) {
         if (!RT_DEPTS.includes(k0)) return rtRefuse(k0);
-        if (p.needsDay) return 'Which day? Say it again with the day: "todas as segundas às 9h, …".';
-        if (p.needsTime) return 'What time? Say it again with the time, e.g. "every weekday at 8am, …".';
+        if (p.needsDay) return 'Que dia? Diz outra vez com o dia: "todas as segundas às 9h, …".';
+        if (p.needsTime) return 'Que horas? Diz outra vez com a hora, p. ex. "todos os dias úteis às 8h, …".';
         if (!p.text) return 'Tenho a hora mas não a tarefa. Diz outra vez com o que deve acontecer.';
         const to = a0.lead ? route(k0, p.text).agent.id : agentId;
         const r = addRoutine(k0, to, p.text, p.when, guessOk(p.text));
-        return `Done. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${to === agentId ? 'Já tenho' : agentOf(to).name + ' has it'}. ${r.needsOk ? 'Tudo o que sai espera pelo teu OK primeiro.' : 'Só lê, por isso não fica à tua espera.'} Next run ${untilText(r.nextAt)}. Say "routines" to see the list.`;
+        return `Pronto. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${to === agentId ? 'Já tenho' : agentOf(to).name + ' ficou com ela'}. ${r.needsOk ? 'Tudo o que sai espera pelo teu OK primeiro.' : 'Só lê, por isso não fica à tua espera.'} Próxima execução ${untilText(r.nextAt)}. Say "routines" para veres a lista.`;
       }
     }
     const m = text.match(/^\s*(?:add\s+(?:a\s+)?(?:new\s+)?task|new\s+task|task|todo)\s*[:\-–—]?\s*(.+)$/i);
@@ -922,14 +922,14 @@ export function initTasks(ctx) {
       const t = addTask(to, title, 'you');
       if (!t) return `${agentOf(to).name} já tem cinco em fila — deixa uma terminar primeiro, ou dá-a a outra pessoa em ${DEPTS[k].short}.`;
       const busy = agentTasks(to, 'doing').length > 0;
-      const who = to === agentId ? "I've got it" : `${agentOf(to).name} has it`;
+      const who = to === agentId ? "I'já a tenho" : `${agentOf(to).name} ficou com ela`;
       return `Adicionada à fila de ${DEPTS[k].short} — ${who}, ${busy ? 'up next after the current job' : 'starting now'}. Está no painel de tarefas à direita.`;
     }
     if (/\b(board|what'?s next|next up|what are (you|we) (all )?(doing|working))\b/i.test(text)) {
       const list = st => byState(k, st).slice(0, 3).map(t => `• ${t.title} (${agentOf(t.agent).name})`).join('\n');
       const doing = list('doing'), next = list('next'), waiting = list('waiting');
       return `${DEPTS[k].name} neste momento:\n\nEM CURSO\n${doing || '—'}\n\nEM ESPERA\n${next || '—'}` +
-        (waiting ? `\n\nWAITING ON YOU\n${waiting}` : '') + `\n\nConcluídas hoje: ${doneCount[k]}. Diz «adicionar tarefa: …» para pôr algo na lista.`;
+        (waiting ? `\n\nÀ TUA ESPERA\n${waiting}` : '') + `\n\nConcluídas hoje: ${doneCount[k]}. Diz «adicionar tarefa: …» para pôr algo na lista.`;
     }
     return null;
   }

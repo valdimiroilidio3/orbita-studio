@@ -502,7 +502,7 @@ addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // typing in the bar, the big editor or a menu never fires a hotkey
   if (e.key === 'Escape') { if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else zoomOut(); }
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
-  else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar has its own keys (← → W M T)
+  else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar ficou com elas own keys (← → W M T)
   else if (e.key === 'g' || e.key === 'G') brain.toggle(); // V3.6: the full-screen Brain graph
   else if (e.key === 'b' || e.key === 'B') { if (tasks) tasks.toggle(); } // V3: the company-wide board
   else if (e.key === '+' || e.key === '=') zoomStep(1.5);
@@ -626,7 +626,7 @@ function renderChat(id) {
         ${m.mock ? `<div class="a-mock">${m.mock}</div>` : ''}
         ${m.pending
           ? '<div class="a-btns"><button class="a-yes">APROVAR</button><button class="a-no">REJEITAR</button></div>'
-          : `<div class="a-done">${m.approved ? '✓ Approved' : '✗ Rejected'} by AJ</div>`}
+          : `<div class="a-done">${m.approved ? '✓ Aprovado' : '✗ Rejeitado'} por AJ</div>`}
       </div>`;
     return '';
   }).join('');
@@ -837,7 +837,7 @@ function sendChat(text) {
     }
     const rv = tasks && tasks.isLive() && text.match(/^\s*revise\s*[:\-–]\s*(.+)$/i); // LIVE: "revise: …" re-runs the last deliverable
     if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'Já vou — a rever agora. Aparece aqui quando estiver pronto.' }); return; }
-    const tr = tasks && tasks.handleChat(id, text); // "adicionar tarefa: …" / "what's on the board"
+    const tr = tasks && tasks.handleChat(id, text); // "adicionar tarefa: …" / "o que está no quadro"
     if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
     if (tasks && tasks.isLive()) { // LIVE: a real conversation with the agent, grounded in the brain
       chatPush(id, { who: 'work', i: '…', text: `${r.a.name} está a pensar` });
@@ -881,26 +881,26 @@ function mockupFor(id) {
       <div class="d-title">Design contractor</div>
       <div class="d-line"><span>Invoiced</span><b>14 hrs × $110 = $1,540</b></div>
       <div class="d-line"><span>Valor do contrato</span><b>$85/hr (signed 12 Mar)</b></div>
-      <div class="d-line"><span>Variance</span><b>+$350 ⚠</b></div>
+      <div class="d-line"><span>Variação</span><b>+$350 ⚠</b></div>
       <div class="d-line"><span>Scope</span><b>corresponde ao briefing ✓</b></div>
-      <div class="d-p">Hours and scope check out — only the rate is off, and there's no signed variation covering it. Recommend holding payment and querying the rate before it's paid.</div></div>`;
+      <div class="d-p">As horas e o âmbito batem certo — só o valor está errado, e não's nenhuma alteração assinada que o cubra. Recomendo segurar o pagamento e questionar o valor antes de's paid.</div></div>`;
     case 'piper': return `<div class="mk mk-doc">
       <div class="d-brand">ÓRBITA — PROPOSTA</div>
       <div class="d-title">Ridgeline Property Group</div>
       <div class="d-line"><span>Seats</span><b>12</b></div>
       <div class="d-line"><span>Plan</span><b>Growth</b></div>
       <div class="d-line"><span>Price</span><b>$1,080/mo · 12-mo lock</b></div>
-      <div class="d-p">Proof point: Auckland roofing co — 0 → 40 tracked calls/week in 14 days. Sign-online link included.</div></div>`;
+      <div class="d-p">Proof point: Auckland roofing co — 0 → 40 chamadas registadas/semana em 14 dias. Ligação de assinatura online incluída.</div></div>`;
     case 'bill': return `<div class="mk mk-doc">
       <div class="d-brand">REFUND VERIFICATION</div>
       <div class="d-title">Harbour City Roofing — $680</div>
       <div class="d-line"><span>Reason</span><b>double payment, two cards</b></div>
       <div class="d-line"><span>Txn #1 / #2</span><b>verified ✓ / duplicate ✓</b></div>
       <div class="d-line"><span>Account</span><b>14 months, good standing</b></div>
-      <div class="d-p">Legit case. Above my $500 limit — releases the moment you approve.</div></div>`;
+      <div class="d-p">Caso legítimo. Acima do meu limite de 500 $ — liberta assim que aprovares.</div></div>`;
     case 'iggy': return `<div class="mk-phone">
       <div class="ph-handle"></div>
-      <div class="ph-hook">“calls before 10am are a trap”</div>
+      <div class="ph-hook">“chamadas antes das 10h são uma armadilha”</div>
       <div class="ph-sub">connect rates nearly double 10:00–11:30am — across 40,000 dials</div>
       <div class="ph-ui"><span>♥ 2.4k</span><span>💬 118</span><span>↗ share</span></div></div>`;
     case 'ada': return `<div class="mk mk-ad">
@@ -910,11 +910,11 @@ function mockupFor(id) {
       <div class="ad-foot"><span class="ad-hl">Começa a avaliação gratuita</span><span class="ad-cta">REGISTAR</span></div>
       <div class="ad-stat">CPA 29 $ · melhor desempenho · a escalar para 180 $/dia</div></div>`;
     case 'newt': return `<div class="mk mk-mail">
-      <div class="ml-lab">SUBJECT A</div><div class="ml-sub">calls before 10am are a trap</div>
+      <div class="ml-lab">SUBJECT A</div><div class="ml-sub">chamadas antes das 10h são uma armadilha</div>
       <div class="ml-lab">SUBJECT B</div><div class="ml-sub">we looked at 40,000 calls — call at this time</div>
-      <div class="ml-body">  before 10am ...... 11% connect
+      <div class="ml-body">  antes das 10h ...... 11% de atendimento
   10:00–11:30 ...... 21% connect
-  after 4pm ........ 9% connect
+  depois das 16h ........ 9% de atendimento
 
 → 3,400 subscribers · CTA: reply "10AM"</div></div>`;
     case 'scout': return `<div class="mk mk-doc">
@@ -923,14 +923,14 @@ function mockupFor(id) {
       <div class="d-line"><span>Window</span><b>2–3 weeks</b></div>
       <div class="d-line"><span>Play</span><b>comparison page + retargeting</b></div>
       <div class="d-line"><span>Briefed</span><b>META ADS · PROPOSALS</b></div>
-      <div class="d-p">Their G2 reviews already flag value-for-money. Talk-track: 12-month price lock.</div></div>`;
+      <div class="d-p">As avaliações deles no G2 já apontam falta de relação qualidade-preço. Argumento: preço fixo por 12 meses.</div></div>`;
     case 'enzo': return `<div class="mk mk-doc">
       <div class="d-brand">PURCHASE ORDER</div>
       <div class="d-title">FullEnrich — 500 credits</div>
       <div class="d-line"><span>Cost</span><b>$250 ($0.50/credit)</b></div>
       <div class="d-line"><span>Saldo atual</span><b>38 credits — out tomorrow</b></div>
       <div class="d-line"><span>Taxa de consumo</span><b>~90/week</b></div>
-      <div class="d-p">Same card as last month. Without credits, enrichment stops and the Sales Lead runs dry.</div></div>`;
+      <div class="d-p">O mesmo cartão do mês passado. Sem créditos, o enriquecimento pára e o Líder de Vendas fica a seco.</div></div>`;
     default: {
       // generic: render the agent's own deliverable in a document frame
       if (!FILE_GEN[id]) return '';
@@ -977,8 +977,8 @@ function resolveApproval(id, approved) {
   if (tasks) tasks.onResolve(id, approved);
   chatPush(id, {
     who: 'agent',
-    text: approved ? '✓ Approved — actioning it now. I\'ll log the result in my activity.'
-                   : '✗ Understood — parked. I\'ll adjust and come back with a better version.',
+    text: approved ? '✓ Aprovado — altero já e registo o resultado na minha atividade.'
+                   : '✗ Entendido — em espera. Ajusto e volto com uma versão melhor.',
   });
   syncApprovals();
 }
@@ -1360,8 +1360,8 @@ function applyRoster(agents) {
     r.v1 = r.v1 || {};
     r.v1.role = a.role || r.v1.role || ''; r.v1.tagline = a.does || r.v1.tagline || '';
     r.v1.greeting = `${a.does || 'Sou ' + a.name + '.'} Dá-me uma tarefa na barra à direita, ou pergunta-me algo aqui.` +
-      (a.interviewer && a.setUp === false ? ` Nothing in this department is yours yet: say "set up" and I will ask you five questions about how it works here, then write it down for the team.` : '');
-    r.v1.chips = a.interviewer && a.setUp === false ? ['set up', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'] : ['Em que estás a trabalhar?', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'];
+      (a.interviewer && a.setUp === false ? ` Este departamento ainda não tem nada teu: diz "configurar" e faço-te cinco perguntas sobre como funciona aqui, e depois escrevo-o para a equipa.` : '');
+    r.v1.chips = a.interviewer && a.setUp === false ? ['configurar', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'] : ['Em que estás a trabalhar?', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'];
     if (chatHist[a.id] && chatHist[a.id][0] && chatHist[a.id][0].who === 'agent') chatHist[a.id][0].text = r.v1.greeting;
     if (modalOpen === a.id) openAgentRail(a.id, modalTab, false);
   }

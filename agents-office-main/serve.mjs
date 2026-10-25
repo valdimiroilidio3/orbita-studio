@@ -62,8 +62,8 @@ const NOTES_DIR = path.join(BRAIN, 'Órbita');
 const CLI_CWD = path.join(os.tmpdir(), 'agents-office-cli'); // an empty cwd: no CLAUDE.md, no repo context
 const version = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 const RUN_TIMEOUT = Math.max(60, +cfg.timeout || 300) * 1000; // agents with tools take longer than a plain draft
-{ const m = normModel(cfg.model); if (cfg.model && !m) console.warn(`config: model must be sonnet, opus or fable (got "${cfg.model}") — using ${DEFAULT_MODEL}`); cfg.model = m || DEFAULT_MODEL; } // V3.6: three models, by name
-{ const e = normEffort(cfg.effort); if (cfg.effort && !e) console.warn(`config: effort must be low, medium, high, xhigh or max (got "${cfg.effort}") — using the model's own`); cfg.effort = e || ''; } // V3.6.1: the office's effort, empty = the model's own
+{ const m = normModel(cfg.model); if (cfg.model && !m) console.warn(`config: o modelo tem de ser sonnet, opus ou fable (recebi "${cfg.model}") — a usar ${DEFAULT_MODEL}`); cfg.model = m || DEFAULT_MODEL; } // V3.6: three models, by name
+{ const e = normEffort(cfg.effort); if (cfg.effort && !e) console.warn(`config: o esforço tem de ser low, medium, high, xhigh ou max (recebi "${cfg.effort}") — a usar o do modelo`); cfg.effort = e || ''; } // V3.6.1: the office's effort, empty = the model's own
 mcp.configure(cfg);
 const TEAMS = teams.settings(cfg); // V3.2 (16 Sep): { enabled, max }
 const roster = loadRoster(BRAIN);
@@ -136,7 +136,7 @@ async function askX(system, user, { maxTokens = 4000, tools = true, timeout = RU
   return new Promise((resolve, reject) => {
     const p = spawn('claude', args, { cwd: CLI_CWD, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '', text = '', used = [], gotResult = false, usageOut = null, modelUsed = null;
-    const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error(`Claude took longer than ${timeout / 1000} s`)); }, timeout);
+    const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error(`O Claude demorou mais de ${timeout / 1000} s`)); }, timeout);
     const feed = line => {
       if (!line.trim()) return;
       let j; try { j = JSON.parse(line); } catch { return; }
@@ -201,20 +201,29 @@ function contextText(index, names) {
 }
 
 /* ---------- the roster, as Claude sees it ---------- */
-const persona = a => `${a.name}${a.lead ? ' (lead)' : ''} · ${a.role} · ${a.does}`;
-function rosterText(dept) { return AGENTS.filter(a => a.department === dept).map(a => { const sk = skills.names(a); return `- ${a.id} · ${persona(a)}${sk.length ? ' · skills: ' + sk.join(', ') : ''}`; }).join('\n'); }
+const persona = a => `${a.name}${a.lead ? ' (líder)' : ''} · ${a.role} · ${a.does}`;
+function rosterText(dept) { return AGENTS.filter(a => a.department === dept).map(a => { const sk = skills.names(a); return `- ${a.id} · ${persona(a)}${sk.length ? ' · competências: ' + sk.join(', ') : ''}`; }).join('\n'); }
 // what an agent is told about itself: the job, the owner's standing instructions, the skills it follows
 function agentBrief(a) {
   const lessons = learn.promptText(BRAIN, a);
-  return (a.brief ? `\nSTANDING INSTRUCTIONS FROM THE OWNER\n${a.brief}\n` : '') + (skills.promptText(a) ? `\n${skills.promptText(a)}\n` : '') + (lessons ? `\n${lessons}\n` : '');
+  return (a.brief ? `
+INSTRUÇÕES PERMANENTES DO PROPRIETÁRIO
+${a.brief}
+` : '') + (skills.promptText(a) ? `\n${skills.promptText(a)}\n` : '') + (lessons ? `\n${lessons}\n` : '');
 }
 const toolKeys = names => [...new Set(names.map(n => /^mcp__/.test(n) ? mcp.keyOf(n) : n === 'WebSearch' || n === 'WebFetch' ? 'web' : null).filter(Boolean))];
 async function route(dept, text) {
   const d = DEPTS[dept]; refreshSkills();
-  const system = `You are the router for ${cfg.name}, a business whose departments are run by AI agents. ` +
-    'Pick the single best agent for the owner\'s request — an agent whose skills match the request is the right one — and return ONLY a JSON object — no prose, no code fences.';
-  const user = `Department: ${d.name}\nAgents (id · name · role · what they do):\n${rosterText(dept)}\n\nOwner's request: "${text}"\n\n` +
-    'Return: {"agent":"<id from the list>","title":"<clean imperative task title, max 70 characters>","plan":["<step>","<step>","<step>"],"eta_minutes":<integer>,"why":"<one short sentence>","needs_ok":<true if doing this involves sending, posting, paying, deleting or changing anything outside this machine; false if it only reads and reports>}';
+  const system = `És o encaminhador de ${cfg.name}, um negócio cujos departamentos são geridos por agentes de IA.` +
+    'Escolhe o único melhor agente para o pedido do proprietário — um agente cujas competências correspondem ao pedido é o certo — e devolve APENAS um objeto JSON — sem prosa, sem blocos de código.';
+  const user = `Departamento: ${d.name}
+Agentes (id · nome · função · o que fazem):
+${rosterText(dept)}
+
+Pedido do proprietário: "${text}"
+
+` +
+    'Devolve: {"agent":"<id da lista>","title":"<título de tarefa imperativo e limpo, máx. 70 caracteres>","plan":["<passo>","<passo>","<passo>"],"eta_minutes":<inteiro>,"why":"<uma frase curta>","needs_ok":<true se isto implicar enviar, publicar, pagar, apagar ou alterar algo fora desta máquina; false se só ler e relatar>}';
   const j = parseJSON(await ask(system, user, { maxTokens: 800, timeout: 150000, model: 'sonnet' })); // routing is a one-line JSON job: always Sonnet
   const valid = AGENTS.find(a => a.id === j.agent && a.department === dept);
   const agent = valid ? valid.id : (AGENTS.find(a => a.department === dept && a.lead) || AGENTS.find(a => a.department === dept)).id;
@@ -224,14 +233,17 @@ async function route(dept, text) {
 // the system prompt every agent run starts from: who it is, its brief, skills and lessons, its tools, the company, the notes for this task
 function agentSystem(a, index, read, { extra = '', words = 260 } = {}) {
   const d = DEPTS[a.department];
-  return `You are ${a.name}, ${a.role || 'an agent'}, in the ${d.name} department of ${cfg.name}. ${a.does}\n${agentBrief(a)}` + (extra ? `\n${extra}\n` : '') +
+  return `És ${a.name}, ${a.role || 'um agente'}, no departamento ${d.name} de ${cfg.name}. ${a.does}\n${agentBrief(a)}` + (extra ? `\n${extra}\n` : '') +
     'Escreve o próprio trabalho final, não uma descrição do que farias. Texto simples: um título curto e depois secções curtas ou tópicos. ' +
-    `At most ${words} words unless a skill or the owner\'s instructions set a different shape — those win. No preamble, no sign-off. Ground it in the company notes below; where a fact is missing, make a reasonable assumption and mark it (assumed). ` +
-    'If you used a tool, say so in one line at the end ("Usado: Gmail — procurei a conversa com o cliente").\n\n' +
-    `${mcp.promptText(a.tools)}\n\nCOMPANY NOTES\n${businessContext(index)}\n\nNOTES YOU READ FOR THIS TASK\n${contextText(index, read)}`;
+    `No máximo ${words} palavras, salvo se uma competência ou as instruções do proprietário definirem outra forma — essas ganham. Sem preâmbulo, sem despedida. Fundamenta no contexto da empresa abaixo; onde faltar um facto, assume algo razoável e marca (assumido).` +
+    'Se usaste uma ferramenta, di-lo numa linha no fim ("Usado: Gmail — procurei a conversa com o cliente").\n\n' +
+    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}\n\nNOTAS QUE LESTE PARA ESTA TAREFA\n${contextText(index, read)}`;
 }
-const modeLineFor = (mode, task) => mode === 'draft' ? '\nPrepare everything, but send, post, pay or change NOTHING outside this machine: the owner reads this first and approves it. End with one line saying exactly what will go out when approved (or that nothing needs to).'
-  : mode === 'approve' ? `\nThe owner has APPROVED the draft below. Carry out the outbound step now, exactly as drafted, with your tools (send, post, update). If a tool you need is not connected, say so and show what you would have sent. Then report in one short section: what went out, to whom, and anything that did not.\nApproved draft:\n${task.draft || task.result}` : '';
+const modeLineFor = (mode, task) => mode === 'draft' ? '\nPrepara tudo, mas envia, publica, paga ou altera NADA fora desta máquina: o proprietário lê isto primeiro e aprova. Termina com uma linha a dizer exatamente o que vai sair quando for aprovado (ou que nada tem de sair).'
+  : mode === 'approve' ? `
+O proprietário APROVOU o rascunho abaixo. Faz agora o passo de saída, exatamente como está escrito, com as tuas ferramentas (enviar, publicar, atualizar). Se te faltar uma ferramenta, di-lo e mostra o que terias enviado. Depois relata numa secção curta: o que saiu, para quem e o que não saiu.
+Rascunho aprovado:
+${task.draft || task.result}` : '';
 const pickFor = (task, a) => { // model + effort: four places, one precedence (task > routine > agent > office)
   const pick = modelFor({ task: task.model, routine: task.routineModel, agent: a.model, office: cfg.model });
   const eff = effortFor({ task: task.effort, routine: task.routineEffort, agent: a.effort, office: cfg.effort, model: pick.model });
@@ -250,11 +262,11 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const index = vaultIndex();
   const read = relevantNotes(index, a.department, task.title + ' ' + task.text);
   const system = agentSystem(a, index, read);
-  const routineLine = task.routine ? `\nThis is a routine (${task.when}): it runs on the office's own clock and the owner is not at the keyboard. It is now ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}${task.late ? `; this run is late, it was due ${new Date(task.due).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. Do the work for now.`
-    : task.dueAt ? `\nThis task was scheduled in advance for ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} and is running now; the owner is not at the keyboard${task.late ? ' and this run is late' : ''}. Do the work for now.` : '';
+  const routineLine = task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}${task.late ? `; this run is late, it was due ${new Date(task.due).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. Faz o trabalho agora.`
+    : task.dueAt ? `\nEsta tarefa foi agendada para ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} e está a correr agora; o proprietário não está ao teclado${task.late ? ' e esta execução está atrasada' : ''}. Faz o trabalho agora.` : '';
   const modeLine = modeLineFor(mode, task);
-  const user = `Task: ${task.title}\nOwner's request: ${task.text}` + (task.plan?.length ? `\nAgreed plan: ${task.plan.join(' → ')}` : '') + routineLine + modeLine +
-    (feedback && mode !== 'approve' ? `\n\nThe owner reviewed your previous version and asked for changes: "${feedback}"\nPrevious version:\n${task.result}` : '');
+  const user = `Tarefa: ${task.title}\nPedido do proprietário: ${task.text}` + (task.plan?.length ? `\nPlano acordado: ${task.plan.join(' → ')}` : '') + routineLine + modeLine +
+    (feedback && mode !== 'approve' ? `\n\nO proprietário reviu a tua versão anterior e pediu alterações: "${feedback}"\nVersão anterior:\n${task.result}` : '');
   const { pick, eff } = pickFor(task, a);
   const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort });
   if (!text) throw new Error('O Claude não devolveu nada');
@@ -262,9 +274,9 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
 }
 
 /* ---------- V3.2 (16 Sep) Agent Teams: the lead plans, the desks work at once, the lead writes the final ---------- */
-const nameOf = id => id === 'lead' ? 'the lead' : (AGENTS.find(a => a.id === id)?.name || id);
-const routineLineFor = task => task.routine ? `\nThis is a routine (${task.when}): it runs on the office's own clock and the owner is not at the keyboard. It is now ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Do the work for now.`
-  : task.dueAt ? `\nThis task was scheduled in advance for ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} and is running now; the owner is not at the keyboard. Do the work for now.` : '';
+const nameOf = id => id === 'lead' ? 'o líder' : (AGENTS.find(a => a.id === id)?.name || id);
+const routineLineFor = task => task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Faz o trabalho agora.`
+  : task.dueAt ? `\nEsta tarefa foi agendada para ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} e está a correr agora; o proprietário não está ao teclado. Faz o trabalho agora.` : '';
 async function runTeam(task, mode) {
   const lead = AGENTS.find(x => x.id === task.agent), dept = lead.department;
   refreshSkills();
@@ -278,7 +290,7 @@ async function runTeam(task, mode) {
   catch (e) { plan = { pieces: [{ agent: lead.id, title: task.title, text: task.text }], why: '', solo: true, error: e.message }; }
   task.team = { ...(task.team || {}), lead: lead.id, max, pieces: plan.pieces.map(p => ({ ...p, state: 'next' })), messages: [], why: plan.why, solo: plan.solo, plannedAt: Date.now() };
   persist(task);
-  console.log(`  ⚑ ${task.id} team of ${plan.pieces.length}: ${plan.pieces.map(p => p.agent).join(' + ')}${plan.why ? ' — ' + plan.why : ''}`);
+  console.log(`  ⚑ ${task.id} equipa de ${plan.pieces.length}: ${plan.pieces.map(p => p.agent).join(' + ')}${plan.why ? ' — ' + plan.why : ''}`);
   // 2. the pieces — one Claude process per desk, at the same time (at most `max` in flight)
   const ids = task.team.pieces.map(p => p.agent);
   await teams.pool(task.team.pieces, max, async piece => {
@@ -287,7 +299,7 @@ async function runTeam(task, mode) {
     try {
       const read = relevantNotes(index, dept, piece.title + ' ' + piece.text, 3);
       const system = agentSystem(a, index, read, { extra: teams.teamSection({ me: a, lead, pieces: task.team.pieces, nameOf }), words: 220 });
-      const user = `Task (the whole request, for context): ${task.title}\nOwner's request: ${task.text}\n\nYOUR PIECE: ${piece.title}\n${piece.text}` + routineLineFor(task) + (mode === 'draft' ? modeLineFor('draft', task) : '');
+      const user = `Tarefa (o pedido completo, para contexto): ${task.title}\nPedido do proprietário: ${task.text}\n\nA TUA PARTE: ${piece.title}\n${piece.text}` + routineLineFor(task) + (mode === 'draft' ? modeLineFor('draft', task) : '');
       const { pick, eff } = pickFor(task, a);
       const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort });
       const { body, messages } = teams.parseMessages(text, ids);
@@ -305,7 +317,7 @@ async function runTeamLead(task, feedback, mode) {
   refreshSkills();
   const index = vaultIndex();
   const read = relevantNotes(index, lead.department, task.title + ' ' + task.text);
-  const system = agentSystem(lead, index, read, { extra: `TEAM\nYou lead this team. The pieces below were done by your teammates (one of them may be yours). You write the finished deliverable from them.`, words: 450 });
+  const system = agentSystem(lead, index, read, { extra: `EQUIPA\nTu lideras esta equipa. As partes abaixo foram feitas pelos teus colegas (uma pode ser a tua). Escreves o trabalho final a partir delas.`, words: 450 });
   const user = teams.synthPrompt({ task, pieces: tm.pieces || [], messages: tm.messages || [], nameOf, feedback: mode === 'approve' ? null : feedback }) + routineLineFor(task) + modeLineFor(mode, task);
   const { pick, eff } = pickFor(task, lead);
   const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort, maxTokens: 6000 });
@@ -330,11 +342,12 @@ async function chat(agentId, text, history) {
   const index = vaultIndex();
   const read = relevantNotes(index, a.department, text, 3);
   const mine = load().filter(t => t.agent === agentId).slice(-6).map(t => `- [${t.state}] ${t.title}`).join('\n');
-  const system = `You are ${a.name}, ${a.role || 'an agent'}, in the ${d.name} department of ${cfg.name}. ${a.does}\n${agentBrief(a)}` +
+  const system = `${a.name}, ${a.role || 'um agente'}, no departamento ${d.name} de ${cfg.name}. ${a.does}
+${agentBrief(a)}` +
     'Estás a falar com o proprietário. Responde como este agente, na primeira pessoa, de forma breve (menos de 120 palavras, salvo se pedirem detalhe), simples, sem exageros. ' +
-    'Use the company notes; say when something is not in them. If the owner asks you to look something up, use your tools. Nothing outbound is sent without the owner\'s explicit say-so.\n\n' +
-    `${mcp.promptText(a.tools)}\n\nCOMPANY NOTES\n${businessContext(index)}\n\nRELEVANT NOTES\n${contextText(index, read)}\n\nYOUR RECENT TASKS\n${mine || '—'}`;
-  const convo = (history || []).slice(-8).map(m => `${m.who === 'user' ? 'Owner' : a.name}: ${m.text}`).join('\n');
+    'Usa as notas da empresa; di-lo quando algo não estiver nelas. Se o proprietário te pedir para procurar algo, usa as tuas ferramentas. Nada sai para fora sem o\' OK explícito do proprietário.\n\n' +
+    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}\n\nNOTAS RELEVANTES\n${contextText(index, read)}\n\nAS TUAS TAREFAS RECENTES\n${mine || '—'}`;
+  const convo = (history || []).slice(-8).map(m => `${m.who === 'user' ? 'Proprietário' : a.name}: ${m.text}`).join('\n');
   const { text: reply, tools } = await askX(system, (convo ? convo + '\n' : '') + `Owner: ${text}\n${a.name}:`, { maxTokens: 1200, model: modelFor({ agent: a.model, office: cfg.model }).model, effort: effortFor({ agent: a.effort, office: cfg.effort, model: modelFor({ agent: a.model, office: cfg.model }).model }).effort });
   return { reply, read, tools: toolKeys(tools), used: mcp.namesOf(tools) };
 }
@@ -368,7 +381,7 @@ async function runServerTask(id, { feedback, approve } = {}) {
   task.state = 'doing'; task.startedAt = Date.now(); delete task.ask; save(list);
   try {
     const out = await run(task, feedback, approve ? 'approve' : task.needsOk ? 'draft' : 'routine');
-    if (approve) { task.result = (task.draft || task.result) + '\n\n---\nAFTER YOUR OK\n' + out.result; task.approved = true; task.approvedAt = Date.now(); }
+    if (approve) { task.result = (task.draft || task.result) + '\n\n---\nDEPOIS DO TEU OK\n' + out.result; task.approved = true; task.approvedAt = Date.now(); }
     else task.result = out.result;
     Object.assign(task, { read: out.read, tools: [...new Set([...(task.tools || []), ...out.tools])], used: [...new Set([...(task.used || []), ...out.used])], skills: out.skills, error: false, modelUsed: out.modelUsed, modelFrom: out.modelFrom, modelId: out.modelId, effortUsed: out.effortUsed, effortFrom: out.effortFrom, ...(out.team ? { team: out.team } : {}) });
     if (task.needsOk && !approve) { task.state = 'waiting'; task.draft = out.result; task.waitingAt = Date.now(); task.ask = routines.askLine(task); }
@@ -403,9 +416,9 @@ async function makeRoutine({ dept, text, when, agent, needsOk, model, effort }) 
   let taskText = String(text || '').trim(), w = when, parsed = null;
   if (!w) {
     parsed = parseWhen(taskText);
-    if (!parsed) return { error: 'No schedule in that sentence. Say when: "every weekday at 8am, …", "Segundas às 9h, …", "de hora a hora, 9h-17h, …".', noSchedule: true };
-    if (parsed.needsDay) return { error: 'Which day? Say "todas as segundas …" or "Seg e Qui …".', needsDay: true };
-    if (parsed.needsTime) return { error: 'What time? Say "… às 8h" or "… at 17:30".', needsTime: true };
+    if (!parsed) return { error: 'Não há horário nessa frase. Diz quando: "every weekday at 8am, …", "Segundas às 9h, …", "de hora a hora, 9h-17h, …".', noSchedule: true };
+    if (parsed.needsDay) return { error: 'Que dia? Diz "todas as segundas …" or "Seg e Qui …".', needsDay: true };
+    if (parsed.needsTime) return { error: 'Que horas? Diz "… às 8h" or "… at 17:30".', needsTime: true };
     w = parsed.when; taskText = parsed.text;
   }
   if (!validWhen(w)) return { error: 'Esse horário está incompleto.' };
@@ -429,21 +442,21 @@ async function routinesChat(a, text) {
     const list = loadRoutines(); const words = cmd[2].replace(/\s+(routine|one)$/i, ''); const r = routines.matchRoutine(list, dept, words);
     if (!r) return { reply: (list.some(x => x.dept === dept) ? 'Qual deles? ' : '') + routines.listText(list, dept, AGENTS) };
     const verb = cmd[1].toLowerCase();
-    if (verb === 'run') { const task = fire(r, { by: 'you' }); return { reply: `Running "${r.title}" now — ${r.agent === a.id ? 'Já tenho' : agentName(r.agent) + ' has it'}. It lands in the panel${r.needsOk ? ' e espera pelo teu OK antes de algo sair' : ''}.`, task }; }
-    if (/pause|stop/.test(verb)) { editRoutine(r.id, { paused: true }); return { reply: `Paused "${r.title}". It stays on the timetable; say "resume ${r.title.toLowerCase()}" to start it again.` }; }
-    if (/resume|start|unpause/.test(verb)) { const n = editRoutine(r.id, { paused: false }); return { reply: `"${r.title}" is back on — next ${untilText(n.nextAt)}.` }; }
-    if (/delete|remove/.test(verb)) { removeRoutine(r.id); return { reply: `Deleted "${r.title}". It is off the timetable.` }; }
+    if (verb === 'run') { const task = fire(r, { by: 'you' }); return { reply: `A correr "${r.title}" agora — ${r.agent === a.id ? 'Já tenho' : agentName(r.agent) + ' ficou com ela'}. Aparece no painel${r.needsOk ? ' e espera pelo teu OK antes de algo sair' : ''}.`, task }; }
+    if (/pause|stop/.test(verb)) { editRoutine(r.id, { paused: true }); return { reply: `Em pausa "${r.title}". Fica no horário; diz "resume ${r.title.toLowerCase()}" para a reiniciar.` }; }
+    if (/resume|start|unpause/.test(verb)) { const n = editRoutine(r.id, { paused: false }); return { reply: `"${r.title}" está de volta — próxima ${untilText(n.nextAt)}.` }; }
+    if (/delete|remove/.test(verb)) { removeRoutine(r.id); return { reply: `Apagada "${r.title}". Saiu do horário.` }; }
   }
   const p = parseWhen(t);
   if (!p) return null;
   if (!allowed) return { reply: routines.refusal(dept) };
-  if (p.needsDay) return { reply: 'Which day? Say it again with the day: "todas as segundas às 9h, …".' };
-  if (p.needsTime) return { reply: `What time? Say it again with the time, e.g. "every weekday at 8am, ${p.text ? p.text.slice(0, 60) : '…'}".` };
+  if (p.needsDay) return { reply: 'Que dia? Diz outra vez com o dia: "todas as segundas às 9h, …".' };
+  if (p.needsTime) return { reply: `Que horas? Diz outra vez com a hora, p. ex. "every weekday at 8am, ${p.text ? p.text.slice(0, 60) : '…'}".` };
   if (!p.text) return { reply: 'Tenho a hora mas não a tarefa. Diz outra vez com o que deve acontecer.' };
   const made = await makeRoutine({ dept, text: p.text, when: p.when, agent: a.lead ? undefined : a.id });
   if (made.error) return { reply: made.error };
-  const r = made.routine, who = r.agent === a.id ? 'Já tenho' : `${agentName(r.agent)} has it`;
-  return { reply: `Done. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${who}.${made.guessed ? ` I took "${made.guessed}" as ${r.when.at}; say a time to change it.` : ''} ${r.needsOk ? 'Anything to send waits for your OK first.' : 'It only reads, so it will not wait for you.'} Next run ${untilText(r.nextAt)}. Say "routines" to see the list, "pause ${r.title.toLowerCase()}" to stop it.`, routine: r };
+  const r = made.routine, who = r.agent === a.id ? 'Já tenho' : `${agentName(r.agent)} ficou com ela`;
+  return { reply: `Pronto. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${who}.${made.guessed ? ` I took "${made.guessed}" as ${r.when.at}; say a time to change it.` : ''} ${r.needsOk ? 'Tudo o que for para enviar espera primeiro pelo teu OK.' : 'Só lê, por isso não fica à tua espera.'} Próxima execução ${untilText(r.nextAt)}. Diz "routines" para veres a lista, "pause ${r.title.toLowerCase()}" para a parar.`, routine: r };
 }
 
 /* ---------- http ---------- */
@@ -451,7 +464,7 @@ const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'appli
 const body = req => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; }); req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } }); });
 
 await rebuildGraph();
-const discovering = mcp.discover().then(l => { console.log(`  connectors: ${l.filter(s => s.status === 'connected').length} connected of ${l.length} (claude mcp list)`); return l; });
+const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list)`); return l; });
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
 const server = http.createServer(async (req, res) => {
@@ -500,11 +513,11 @@ const server = http.createServer(async (req, res) => {
       if (!DEPTS[dept] || dept === 'brain') return json(res, 400, { error: 'unknown department' });
       if (!text || !String(text).trim()) return json(res, 400, { error: 'empty task' });
       const dueAt = at ? (typeof at === 'number' ? at : Date.parse(at)) : null; // V3.2.1: a task for a date
-      if (at && !(dueAt > 0)) return json(res, 400, { error: 'at must be a time (ms or ISO)' });
+      if (at && !(dueAt > 0)) return json(res, 400, { error: 'at tem de ser uma hora (ms ou ISO)' });
       if (dueAt && dueAt < Date.now() - 60000) return json(res, 400, { error: 'essa hora já passou — escolhe uma que ainda esteja à frente' });
       const r = await route(dept, String(text).trim());
       const asTeam = TEAMS.enabled && (team === true || teams.intent(text)); // V3.2 (16 Sep): TEAM in the bar, or "as a team" in the sentence → the lead owns it and splits it
-      const task = { id: nid(), dept, agent: asTeam ? leadOf(dept).id : r.agent, title: r.title, text: String(text).trim(), plan: r.plan, eta: r.eta, why: asTeam ? `team — ${leadOf(dept).name} splits it across the desks` : r.why, state: 'next', addedAt: Date.now(), by: 'you', model: normModel(model) || undefined, effort: normEffort(effort) || undefined, // model/effort: set on this task (beats routine, agent, office)
+      const task = { id: nid(), dept, agent: asTeam ? leadOf(dept).id : r.agent, title: r.title, text: String(text).trim(), plan: r.plan, eta: r.eta, why: asTeam ? `equipa — ${leadOf(dept).name} divide-a pelas secretárias` : r.why, state: 'next', addedAt: Date.now(), by: 'you', model: normModel(model) || undefined, effort: normEffort(effort) || undefined, // model/effort: set on this task (beats routine, agent, office)
         team: asTeam ? { lead: leadOf(dept).id, asked: team === true ? 'you' : 'text' } : undefined };
       if (dueAt) { task.state = 'scheduled'; task.dueAt = dueAt; task.needsOk = r.needsOk; } // waits for its minute; needsOk decides whether it then waits for the OK
       const list = load(); list.push(task); save(list);
@@ -518,9 +531,9 @@ const server = http.createServer(async (req, res) => {
       if (task.state !== 'waiting') return json(res, 400, { error: 'esta tarefa não está à espera do teu OK' });
       const { feedback } = m[2] === 'reject' ? await body(req) : {};
       const note = String(feedback || '').trim();
-      console.log(`${m[2] === 'approve' ? '✅' : '↩'} ${task.id} ${m[2] === 'approve' ? 'approved — ' + agentName(task.agent) + ' is sending' : 'sent back: ' + note.slice(0, 80)}`);
+      console.log(`${m[2] === 'approve' ? '✅' : '↩'} ${task.id} ${m[2] === 'approve' ? 'aprovada — ' + agentName(task.agent) + ' está a enviar' : 'devolvida: ' + note.slice(0, 80)}`);
       enqueue(() => runServerTask(task.id, m[2] === 'approve' ? { approve: true } : { feedback: note || 'Não é isto. Refazer.' }))
-        .then(t => { if (m[2] === 'reject' && note && t && !t.error) { const a = AGENTS.find(x => x.id === t.agent); return learn.classify(ask, a, t, note).then(v => { const r = learn.record(BRAIN, a, t, note, v); console.log(`  ↳ ${a.name} ${r.standing ? 'learned a rule' : 'noted a one-off'}: ${r.line.slice(0, 100)}`); }); } })
+        .then(t => { if (m[2] === 'reject' && note && t && !t.error) { const a = AGENTS.find(x => x.id === t.agent); return learn.classify(ask, a, t, note).then(v => { const r = learn.record(BRAIN, a, t, note, v); console.log(`  ↳ ${a.name} ${r.standing ? 'aprendeu uma regra' : 'registou uma pontual'}: ${r.line.slice(0, 100)}`); }); } })
         .catch(e => console.warn('approval:', e.message));
       return json(res, 200, { ok: true, id: task.id, state: 'doing' });
     }
@@ -542,7 +555,7 @@ const server = http.createServer(async (req, res) => {
       json(res, 200, task);
       if (feedback && !task.error) { // learn from the correction, after the reply is out the door
         const a = AGENTS.find(x => x.id === task.agent);
-        learn.classify(ask, a, task, feedback).then(v => { const r = learn.record(BRAIN, a, task, feedback, v); console.log(`  ↳ ${a.name} ${r.standing ? 'learned a rule' : 'noted a one-off'}: ${r.line.slice(0, 100)}`); })
+        learn.classify(ask, a, task, feedback).then(v => { const r = learn.record(BRAIN, a, task, feedback, v); console.log(`  ↳ ${a.name} ${r.standing ? 'aprendeu uma regra' : 'registou uma pontual'}: ${r.line.slice(0, 100)}`); })
           .catch(e => console.warn('learn:', e.message));
       }
       return;
@@ -560,12 +573,12 @@ const server = http.createServer(async (req, res) => {
         refreshSkills();
         const o = await onboard.handle(String(text).trim(), { dept: a.department, deptName: DEPTS[a.department].name, lead: a, agents: AGENTS.filter(x => x.department === a.department),
           connected: mcp.summary().servers?.filter(x => x.status === 'connected').map(x => x.name || x.key) || [], brainPath: BRAIN, dataDir: DATA, ask, business: cfg.name, afterWrite: refreshSkills });
-        if (o) { if (o.wrote) console.log(`★ ${a.name} set up ${DEPTS[a.department].name}: ${o.wrote.briefs.length} briefs${o.wrote.skill ? ', skill ' + o.wrote.skill.name : ''}`); return json(res, 200, { reply: o.reply, read: [], tools: [], interview: !o.wrote, setup: setupMap() }); }
+        if (o) { if (o.wrote) console.log(`★ ${a.name} configurou ${DEPTS[a.department].name}: ${o.wrote.briefs.length} briefings${o.wrote.skill ? ', competência ' + o.wrote.skill.name : ''}`); return json(res, 200, { reply: o.reply, read: [], tools: [], interview: !o.wrote, setup: setupMap() }); }
       }
       const r = await chat(agent, String(text).trim(), history);
       return json(res, 200, { ...r, interview: false });
     }
-    json(res, 404, { error: 'not found' });
+    json(res, 404, { error: 'não encontrado' });
   } catch (e) { console.error(e); json(res, 500, { error: e.message }); }
 });
 server.listen(cfg.port, () => {

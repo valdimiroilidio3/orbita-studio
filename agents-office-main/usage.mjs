@@ -41,9 +41,9 @@ export async function fetchUsage() {
     const r = await fetch(ENDPOINT, { headers: { Authorization: 'Bearer ' + token, 'anthropic-beta': 'oauth-2025-04-20', Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return { ok: false, reason: `Claude's usage endpoint answered ${r.status}` };
     const u = parseUsage(await r.json());
-    if (!u) return { ok: false, reason: "Claude's usage endpoint answered in a shape the office does not know" };
+    if (!u) return { ok: false, reason: "Claude'do medidor de utilização respondeu numa forma que o escritório não conhece" };
     return { ok: true, source: 'claude', ...u };
-  } catch (e) { return { ok: false, reason: e.name === 'TimeoutError' ? "Claude's usage endpoint timed out" : e.message }; }
+  } catch (e) { return { ok: false, reason: e.name === 'TimeoutError' ? "Claude'do medidor de utilização expirou" : e.message }; }
 }
 
 /* ---------- the office's own count (underneath): tokens this five-hour window ---------- */

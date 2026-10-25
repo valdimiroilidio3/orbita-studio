@@ -115,7 +115,7 @@ export function initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_
 
   /* ---------- LinkedIn on the big screens ---------- */
   // HERO.linkedin = the owner's feed column (identity removed at capture); HERO.linkedinJobs = a public LinkedIn Jobs results page.
-  // Each is painted into a 16:10 canvas under a browser bar and LinkedIn's own top bar, scrolled, and put on one keeper's monitor.
+  // Each is painted into a 16:10 canvas under a browser bar and LinkedIn'própria barra superior, com scroll, e posta no monitor de um deles's monitor.
   const LI_QUERIES = ['warehouse temps auckland', 'forklift operators sydney', 'site managers christchurch', 'payroll officer melbourne'];
   const liScreens = [];
   function liScreen(seat, src, opts) {
@@ -164,8 +164,8 @@ export function initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_
   linkedInOn(true); // the feed runs on that screen from the start, so it is there whenever someone looks
 
   /* ---------- the speech bubbles over the other departments ---------- */
-  // Everyone says "They streamlined their operations"; one person says "Uau, isso foi rápido".
-  const BUBBLE_MAIN = 'They streamlined their operations', BUBBLE_ONE = 'Uau, isso foi rápido';
+  // Everyone says "Simplificaram as operações"; one person says "Uau, isso foi rápido".
+  const BUBBLE_MAIN = 'Simplificaram as operações', BUBBLE_ONE = 'Uau, isso foi rápido';
   const bubbleTexes = {};
   function bubbleTex(text) {
     if (bubbleTexes[text]) return bubbleTexes[text];

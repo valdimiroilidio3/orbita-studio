@@ -554,7 +554,7 @@ export function makeNeuralBrain() {
     g.add(core);
   }
 
-  /* thought flashes: every few seconds a random cluster blooms bright — "having an idea" */
+  /* thought flashes: every few seconds a random cluster blooms bright — "having uma ideia" */
   let flash = null, nextFlashAt = 2200;
   const sweepCol = new THREE.Color('#FFFFFF');
   const tmpCol = new THREE.Color();

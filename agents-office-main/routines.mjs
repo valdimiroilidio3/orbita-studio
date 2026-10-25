@@ -39,16 +39,16 @@ export function validate(r, agents, existing = []) {
   const a = agents.find(x => x.id === r.agent);
   out.dept = r.dept || (a && a.department);
   if (!ALLOWED.includes(out.dept)) problems.push(`${r.id || r.title || 'routine'}: ${refusal(out.dept)}`);
-  if (!a) problems.push(`${r.id || r.title || 'routine'}: no agent called "${r.agent}"`);
+  if (!a) problems.push(`${r.id || r.title || 'routine'}: nenhum agente chamado "${r.agent}"`);
   else if (a.department !== out.dept) problems.push(`${r.id || r.title || 'routine'}: ${a.name} está em ${NAMES[a.department] || a.department}, não em ${NAMES[out.dept] || out.dept}`);
   out.agent = r.agent;
   out.text = String(r.text || '').trim();
   if (!out.text) problems.push(`${r.id || 'routine'}: no task text`);
   out.title = String(r.title || out.text).trim().slice(0, 90);
   out.id = String(r.id || slug(out.title) || 'routine');
-  if (existing.some(x => x.id === out.id)) problems.push(`${out.id}: two routines share this id`);
+  if (existing.some(x => x.id === out.id)) problems.push(`${out.id}: duas rotinas partilham este id`);
   out.when = r.when;
-  if (!valid(out.when)) problems.push(`${out.id}: the schedule is not complete (${JSON.stringify(r.when || null)}) — see src/when.js`);
+  if (!valid(out.when)) problems.push(`${out.id}: o horário não está completo (${JSON.stringify(r.when || null)}) — ver src/when.js`);
   out.needsOk = r.needsOk !== false;
   out.paused = r.paused === true;
   if (Array.isArray(r.plan)) out.plan = r.plan.slice(0, 4).map(String);
@@ -56,8 +56,8 @@ export function validate(r, agents, existing = []) {
     out.team = true; const lead = agents.find(x => x.department === out.dept && x.lead);
     if (lead && a && !a.lead) out.agent = lead.id; // moved to the lead quietly: a problem would drop the routine
   }
-  if (r.model !== undefined && r.model !== '' && r.model !== null) { const m = String(r.model).toLowerCase().trim(); if (['sonnet', 'opus', 'fable'].includes(m)) out.model = m; else problems.push(`${out.id}: model must be sonnet, opus or fable (got "${r.model}")`); }
-  if (r.effort !== undefined && r.effort !== '' && r.effort !== null) { const e = String(r.effort).toLowerCase().trim(); if (['low', 'medium', 'high', 'xhigh', 'max'].includes(e)) out.effort = e; else problems.push(`${out.id}: effort must be low, medium, high, xhigh or max (got "${r.effort}")`); }
+  if (r.model !== undefined && r.model !== '' && r.model !== null) { const m = String(r.model).toLowerCase().trim(); if (['sonnet', 'opus', 'fable'].includes(m)) out.model = m; else problems.push(`${out.id}: o modelo tem de ser sonnet, opus ou fable (recebi "${r.model}")`); }
+  if (r.effort !== undefined && r.effort !== '' && r.effort !== null) { const e = String(r.effort).toLowerCase().trim(); if (['low', 'medium', 'high', 'xhigh', 'max'].includes(e)) out.effort = e; else problems.push(`${out.id}: o esforço tem de ser low, medium, high, xhigh ou max (recebi "${r.effort}")`); }
   return { routine: out, problems };
 }
 
@@ -129,7 +129,7 @@ export function guessNeedsOk(text) {
 
 /** The one-line question the agent asks when a routine's draft is waiting. */
 export function askLine(task) {
-  return `"${task.title}" is done and waiting for your OK — approve to send it, reject to tell me what to change.`;
+  return `"${task.title}" está pronta e à espera do teu OK — aprova para enviar, rejeita para me dizeres o que mudar.`;
 }
 
 /** The "routines" list a lead reads back in chat. */
@@ -138,7 +138,7 @@ export function listText(list, dept, agents) {
   if (!mine.length) return `Ainda nada no horário de ${NAMES[dept]}. Dá-me uma com uma hora dentro — «todos os dias úteis às 8h, …» — e ponho-a lá.`;
   const name = id => agents.find(a => a.id === id)?.name || id;
   return `Rotinas de ${NAMES[dept]}:\n` + mine.map(r => `• ${r.title} — ${r.desc} · ${name(r.agent)}${r.paused ? ' · EM PAUSA' : ''}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}`).join('\n') +
-    `\n\nSay "pause …", "resume …", "corre … agora" or "delete …" with a few words from the name.`;
+    `\n\nSay "pause …", "resume …", "corre … agora" or "delete …" com algumas palavras do nome.`;
 }
 
 /** Match "pause the monday one" / "run inbox triage now" to a routine in the department by word overlap. */

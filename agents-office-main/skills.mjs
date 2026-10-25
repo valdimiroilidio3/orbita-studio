@@ -58,12 +58,12 @@ function readOne(where, entry, agents, problems) {
   if (!body) { problems.push(`${label}: empty — skipped`); return null; }
   const list = v => v === undefined ? [] : Array.isArray(v) ? v : String(v).split(',').map(s => s.trim()).filter(Boolean);
   const ids = new Set(agents.map(a => a.id));
-  const bound = list(meta.agents).map(s => s.toLowerCase()).filter(id => { if (ids.has(id)) return true; problems.push(`${label}: "${id}" is not an agent id — ignored (ids are in office.agents.json)`); return false; });
-  const depts = list(meta.departments).map(s => s.toLowerCase()).filter(k => { if (DEPT_KEYS.includes(k)) return true; problems.push(`${label}: "${k}" is not a department — ignored (${DEPT_KEYS.join(', ')})`); return false; });
+  const bound = list(meta.agents).map(s => s.toLowerCase()).filter(id => { if (ids.has(id)) return true; problems.push(`${label}: "${id}" não é um id de agente — ignorado (os ids estão em office.agents.json)`); return false; });
+  const depts = list(meta.departments).map(s => s.toLowerCase()).filter(k => { if (DEPT_KEYS.includes(k)) return true; problems.push(`${label}: "${k}" não é um departamento — ignorado (${DEPT_KEYS.join(', ')})`); return false; });
   for (const k of Object.keys(meta)) if (!['name', 'description', 'agents', 'departments'].includes(k)) problems.push(`${label}: unknown field "${k}" — ignored`);
-  if ((list(meta.agents).length || list(meta.departments).length) && !bound.length && !depts.length) { problems.push(`${label}: none of its agents or departments exist — skipped (a skill with no valid binding would go to all 33)`); return null; }
+  if ((list(meta.agents).length || list(meta.departments).length) && !bound.length && !depts.length) { problems.push(`${label}: nenhum dos seus agentes ou departamentos existe — ignorada (uma competência sem ligação válida iria para os 33)`); return null; }
   let text = body.length > LIMITS.body ? body.slice(0, LIMITS.body) + '\n[… trimmed]' : body;
-  if (body.length > LIMITS.body) problems.push(`${label}: over ${LIMITS.body} characters — trimmed; move detail into files beside it`);
+  if (body.length > LIMITS.body) problems.push(`${label}: over ${LIMITS.body} caracteres — cortado; passa o detalhe para os ficheiros ao lado`);
   const files = [];
   if (dir) {
     let used = 0;
@@ -72,7 +72,7 @@ function readOne(where, entry, agents, problems) {
       const fp = path.join(dir, f); if (!fs.statSync(fp).isFile()) continue;
       if (!TEXT.test(f)) { files.push({ name: f, text: null }); continue; }
       let t = fs.readFileSync(fp, 'utf8').trim();
-      if (used >= LIMITS.files) { files.push({ name: f, text: null }); problems.push(`${entry.name}/${f}: skill files over ${LIMITS.files} characters — listed by name only`); continue; }
+      if (used >= LIMITS.files) { files.push({ name: f, text: null }); problems.push(`${entry.name}/${f}: ficheiros de competência acima de ${LIMITS.files} caracteres — listado apenas pelo nome`); continue; }
       if (t.length > LIMITS.perFile) { t = t.slice(0, LIMITS.perFile) + '\n[… trimmed]'; problems.push(`${entry.name}/${f}: over ${LIMITS.perFile} characters — trimmed`); }
       used += t.length; files.push({ name: f, text: t });
     }
@@ -87,7 +87,7 @@ export function loadSkills(brainPath, agents) {
   for (const where of [SHIPPED, brainDir(brainPath)]) {
     if (!fs.existsSync(where)) continue;
     let ents; try { ents = fs.readdirSync(where, { withFileTypes: true }); } catch { continue; }
-    for (const e of ents) { if (e.name.startsWith('.')) continue; const s = readOne(where, e, agents, problems); if (s) { if (byName.has(s.name) && byName.get(s.name).source === s.source) problems.push(`"${s.name}" appears twice in ${s.source === 'shipped' ? 'skills/' : 'the brain'} — the later one wins`); byName.set(s.name, s); } }
+    for (const e of ents) { if (e.name.startsWith('.')) continue; const s = readOne(where, e, agents, problems); if (s) { if (byName.has(s.name) && byName.get(s.name).source === s.source) problems.push(`"${s.name}" aparece duas vezes em ${s.source === 'shipped' ? 'skills/' : 'the brain'} — a última ganha`); byName.set(s.name, s); } }
   }
   const skills = [...byName.values()];
   const forAgent = a => skills.filter(s => s.everyone || s.agents.includes(a.id) || s.departments.includes(a.department));
@@ -98,9 +98,9 @@ export function loadSkills(brainPath, agents) {
     /** The block that goes into an agent's system prompt. */
     promptText(a) {
       const mine = forAgent(a); if (!mine.length) return '';
-      return 'SKILLS — how the owner wants this kind of work done. When a task matches a skill, follow it exactly: its steps, its format, its wording rules. Say which skill you followed in one line at the end ("Skill: proposal").\n\n' +
+      return 'COMPETÊNCIAS — como o proprietário quer este tipo de trabalho feito. Quando uma tarefa corresponde a uma competência, segue-a exatamente: os passos, o formato, as regras de redação. Diz qual seguiste numa linha no fim ("Skill: proposal").\n\n' +
         mine.map(s => `### ${s.name}${s.description ? ' — ' + s.description : ''}\n${s.text}` +
-          s.files.map(f => f.text === null ? `\n\n(attached file: ${f.name} — not readable here)` : `\n\n--- ${f.name} ---\n${f.text}`).join('')).join('\n\n');
+          s.files.map(f => f.text === null ? `\n\n(attached file: ${f.name} — não é legível aqui)` : `\n\n--- ${f.name} ---\n${f.text}`).join('')).join('\n\n');
     },
     summary: () => ({ count: skills.length, shipped: skills.filter(s => s.source === 'shipped').length, brain: skills.filter(s => s.source === 'brain').length, problems,
       skills: skills.map(s => ({ name: s.name, description: s.description, agents: s.agents, departments: s.departments, everyone: s.everyone, files: s.files.map(f => f.name), source: s.source, path: s.path })) }),

@@ -1,206 +1,218 @@
-# Teaching the agents how you work
+# Ensinar aos agentes como trabalhas
 
-Out of the box an agent knows three things: its one-line job description, your notes, and a
-house rule to hand over a finished deliverable. That gets you a competent generic answer. It does
-not get you *your* proposal, *your* client reply, *your* weekly report. For that you tell the
-agent how the work is done, and there are two ways to do it.
+De fábrica, um agente sabe três coisas: a sua descrição de funções numa linha, as tuas notas e uma
+regra da casa para entregar um trabalho acabado. Isso dá-te uma resposta genérica competente. Não
+te dá *a tua* proposta, *a tua* resposta a um cliente, *o teu* relatório semanal. Para isso dizes
+ao agente como se faz o trabalho, e há duas maneiras de o fazer.
 
-| | A brief | A skill |
+| | Um briefing | Uma competência |
 |---|---|---|
-| What it is | A few standing sentences on one agent | A folder: how one kind of work is done, plus templates and examples |
-| Lives in | `office.agents.local.json`, or `<brain>/Agents Office/agents.json` | `<brain>/Agents Office/skills/<name>/` |
-| Read when | Every task and chat turn for that agent | Every task and chat turn for the agents it is bound to |
-| Good for | Tone, red lines, who to escalate to, a preferred tool | A repeatable job with steps, a shape, rules and a template |
-| Size | Up to 2,000 characters | SKILL.md up to 6,000 characters, plus up to 8,000 in files beside it |
+| O que é | Algumas frases permanentes sobre um agente | Uma pasta: como se faz um tipo de trabalho, mais modelos e exemplos |
+| Onde vive | `office.agents.local.json`, ou `<cérebro>/Órbita/agents.json` | `<cérebro>/Órbita/skills/<nome>/` |
+| Lido quando | Em cada tarefa e cada conversa desse agente | Em cada tarefa e cada conversa dos agentes a que está ligada |
+| Serve para | Tom, linhas vermelhas, a quem escalar, uma ferramenta preferida | Um trabalho repetível com passos, uma forma, regras e um modelo |
+| Tamanho | Até 2 000 caracteres | SKILL.md até 6 000 caracteres, mais até 8 000 nos ficheiros ao lado |
 
-Use a brief when it fits in a paragraph. Use a skill when you would hand a new hire a document.
-Both can be written by hand or by Claude Code in this folder (see the end of this page).
+Usa um briefing quando cabe num parágrafo. Usa uma competência quando entregarias um documento a
+alguém que acabou de chegar. Ambos podem ser escritos à mão ou pelo Claude Code nesta pasta (ver o
+fim desta página).
 
-## Briefs
+## Briefings
 
-Add a `brief` to any agent. It is read before every task and every chat turn.
+Acrescenta um `brief` a qualquer agente. É lido antes de cada tarefa e de cada conversa.
 
 ```json
 { "agents": [
   { "id": "piper",
-    "brief": "Every proposal has three options and we recommend the middle one. Prices ex GST, per month. Never discount: a cheaper option is a smaller scope. If a client asks for something the offer ladder does not have, quote it as (price to confirm) and flag it to me." }
+    "brief": "Todas as propostas têm três opções e recomendamos a do meio. Preços sem GST, por mês. Nunca dar desconto: uma opção mais barata é um âmbito menor. Se o cliente pedir algo que a escada de ofertas não tem, cota-o como (preço a confirmar) e assinala-mo." }
 ] }
 ```
 
-A brief can be a list of lines instead of one string. Briefs are re-read before every task, so
-there is nothing to restart.
+Um briefing pode ser uma lista de linhas em vez de uma só string. Os briefings são relidos antes de
+cada tarefa, por isso não há nada a reiniciar.
 
-## Skills
+## Competências
 
-A skill is a folder with a `SKILL.md` and anything the agent needs beside it. It is the same shape
-as a Claude Code skill, so if you have written one of those you already know this.
+Uma competência é uma pasta com um `SKILL.md` e tudo o que o agente precise ao lado. Tem a mesma
+forma de uma competência do Claude Code, por isso se já escreveste uma, já sabes isto.
 
 ```
-<brain>/Agents Office/skills/
-  proposal/
-    SKILL.md          ← what, when, the steps, the rules
-    template.md       ← the shape of the finished thing
-    example.md        ← one real one you were happy with
+<cérebro>/Órbita/skills/
+  proposta/
+    SKILL.md          ← o quê, quando, os passos, as regras
+    template.md       ← a forma da coisa acabada
+    example.md        ← um exemplo real de que gostaste
 ```
 
-`SKILL.md` starts with a front-matter block, then the instructions in plain Markdown:
+O `SKILL.md` começa com um bloco de front matter, depois as instruções em Markdown simples:
 
 ```markdown
 ---
-name: proposal
-description: How we write a client proposal
+name: proposta
+description: Como escrevemos uma proposta a um cliente
 agents: [piper]
 ---
-# Writing a proposal
+# Escrever uma proposta
 
-Use this for any request that ends in a document a client says yes or no to.
+Usa isto para qualquer pedido que termine num documento a que o cliente diz sim ou não.
 
-## Before you write
-1. Find the client in `30-Customers`. If they are not there, say so at the top.
-2. Take packages and prices from `10-Business/offer-ladder.md`. Never invent a price.
+## Antes de escrever
+1. Encontra o cliente em `30-Clientes`. Se não estiver lá, di-lo no topo.
+2. Tira pacotes e preços de `10-Negocio/escada-de-ofertas.md`. Nunca inventes um preço.
 
-## The shape
-Follow `template.md` beside this file, section for section.
+## A forma
+Segue o `template.md` ao lado deste ficheiro, secção a secção.
 
-## Rules
-- Three options, always. Recommend the middle one.
-- One page. If it will not fit, cut the background, not the scope.
+## Regras
+- Três opções, sempre. Recomenda a do meio.
+- Uma página. Se não couber, corta no enquadramento, não no âmbito.
 ```
 
-**Binding.** `agents: [piper]` binds it to one or more agents by id (the ids are in
-`office.agents.json`). `departments: [emails]` binds it to every agent in a department. Neither
-means every agent gets it, which is right for a house style and wrong for almost anything else.
-A skill whose agents or departments are all misspelt is skipped, and `npm run check` says so.
+**Ligação.** `agents: [piper]` liga-a a um ou mais agentes por id (os ids estão em
+`office.agents.json`). `departments: [emails]` liga-a a todos os agentes de um departamento. Nenhum
+dos dois significa que todos os agentes a recebem, o que está certo para um estilo da casa e errado
+para quase tudo o resto. Uma competência cujos agentes ou departamentos estejam todos mal escritos
+é ignorada, e o `npm run check` di-lo.
 
-**Files beside SKILL.md.** Agents have no file tools, so every readable file in the folder
-(`.md`, `.txt`, `.csv`, `.json`, `.yaml`, `.html`) is placed in front of the agent with the skill.
-Other files are listed by name only. Keep the folder to what the agent needs: a template, one or
-two examples, a checklist. Not the whole archive.
+**Ficheiros ao lado do SKILL.md.** Os agentes não têm ferramentas de ficheiros, por isso todos os
+ficheiros legíveis na pasta (`.md`, `.txt`, `.csv`, `.json`, `.yaml`, `.html`) são colocados à
+frente do agente com a competência. Os outros ficheiros são listados apenas pelo nome. Mantém a
+pasta no que o agente precisa: um modelo, um ou dois exemplos, uma lista de verificação. Não o
+arquivo inteiro.
 
-**Where.** Your skills go in `<brain>/Agents Office/skills/` (the brain is the folder named in
-`office.config.json`). They live with your notes, they are backed up with your notes, and
-`git pull` never touches them. The repo's own `skills/` folder holds three examples for the
-sample studio; a skill of the same name in your brain replaces the shipped one.
+**Onde.** As tuas competências vão para `<cérebro>/Órbita/skills/` (o cérebro é a pasta indicada em
+`office.config.json`). Vivem com as tuas notas, são guardadas com as tuas notas, e um `git pull`
+nunca lhes toca. A pasta `skills/` do repositório guarda três exemplos para o estúdio de
+demonstração; uma competência com o mesmo nome no teu cérebro substitui a incluída.
 
-**When it takes effect.** Immediately. Skills are re-read from disk before every task and chat
-turn. `npm run check` validates them; http://localhost:4520/api/skills shows what is loaded and
-who has what.
+**Quando entra em vigor.** Imediatamente. As competências são relidas do disco antes de cada tarefa
+e de cada conversa. O `npm run check` valida-as; http://localhost:4520/api/skills mostra o que está
+carregado e quem tem o quê.
 
-## Let the lead interview you
+## Deixa o líder entrevistar-te
 
-The fastest way to a first brief and skill is to have the department lead ask. Click a lead (the
-starred desk in each pod; where a department has no lead, its first agent does this), and say
-**set up**. Five questions, one at a time:
+A via mais rápida para um primeiro briefing e competência é o líder do departamento perguntar-te.
+Clica num líder (a secretária com estrela em cada grupo; onde um departamento não tem líder, o seu
+primeiro agente faz isto) e diz **configurar**. Cinco perguntas, uma de cada vez:
 
-1. What does this department do here, in your words? What comes in, what goes out, for whom?
-2. The one job you do most often, start to finish.
-3. What a good result looks like. Paste one you were happy with, or describe the sections.
-4. What must never happen. Red lines, things that always wait for you.
-5. Which tools and people are involved.
+1. O que faz este departamento aqui, nas tuas palavras? O que entra, o que sai, para quem?
+2. O trabalho que fazes mais vezes, do princípio ao fim.
+3. Como é um bom resultado. Cola um de que gostaste, ou descreve as secções.
+4. O que nunca pode acontecer. Linhas vermelhas, coisas que esperam sempre por ti.
+5. Que ferramentas e pessoas estão envolvidas.
 
-Answer in plain words. "skip" skips a question, "done" finishes early, "cancel" throws the
-answers away. Nothing is written until the last answer. Then the lead writes:
+Responde por palavras simples. «saltar» salta uma pergunta, «terminar» acaba mais cedo, «cancelar»
+deita fora as respostas. Nada é escrito até à última resposta. Depois o líder escreve:
 
-- a **brief** for each agent on its team that the answers touched, into
-  `<brain>/Agents Office/agents.json`, merged with whatever is already there;
-- one **skill** for the job you described, into `<brain>/Agents Office/skills/<name>/`, with a
-  `template.md` if you gave it a shape;
+- um **briefing** para cada agente da sua equipa que as respostas tocaram, em
+  `<cérebro>/Órbita/agents.json`, juntando ao que já lá está;
+- uma **competência** para o trabalho que descreveste, em `<cérebro>/Órbita/skills/<nome>/`, com um
+  `template.md` se lhe deste uma forma;
 
-and replies with what it wrote, where, and one task to type to try it. Everything it writes is
-an ordinary file you can edit. Run it again any time; briefs are replaced, and an existing skill
-of the same name is kept beside the new one as a backup. A lead whose department has nothing of
-yours yet says so in its greeting and offers the interview.
+e responde com o que escreveu, onde, e uma tarefa para escrever e experimentar. Tudo o que escreve
+é um ficheiro normal que podes editar. Corre-o outra vez quando quiseres; os briefings são
+substituídos e uma competência existente com o mesmo nome fica ao lado da nova como cópia de
+segurança. Um líder cujo departamento ainda não tem nada teu diz isso na saudação e oferece a
+entrevista.
 
-## They learn from your corrections
+## Eles aprendem com as tuas correções
 
-When you send a deliverable back with `revise: …` in the chat, the agent revises it, and the
-correction is written to `<brain>/Agents Office/feedback/<agent-id>.md`. Claude sorts each one:
+Quando devolves um trabalho com `revise: …` na conversa, o agente revê-o e a correção é escrita em
+`<cérebro>/Órbita/feedback/<id-do-agente>.md`. O Claude classifica cada uma:
 
-- a **one-off**: about that task, that client, that draft ("add the booking integration");
-- a **standing rule**: something you will want every time ("too long, proposals are one page"
-  becomes *Keep every proposal to one page*).
+- uma **pontual**: sobre aquela tarefa, aquele cliente, aquele rascunho («acrescenta a integração de
+  reservas»);
+- uma **regra permanente**: algo que vais querer sempre («demasiado longo, as propostas são uma
+  página» torna-se *Mantém todas as propostas numa página*).
 
-Standing rules are read by that agent before every task and chat turn, newest last, the most
-recent fifteen. The file is plain Markdown with two sections, "Standing rules" and "One-offs",
-one line each. It is yours: reword a rule, delete a line to unlearn it, move a one-off up to
-promote it. http://localhost:4520/api/lessons shows what every agent has learned.
+As regras permanentes são lidas por esse agente antes de cada tarefa e de cada conversa, as mais
+recentes por último, no máximo as quinze mais recentes. O ficheiro é Markdown simples com duas
+secções, «Regras permanentes» e «Pontuais», uma linha cada. É teu: reescreve uma regra, apaga uma
+linha para a desaprender, sobe uma pontual para a promover. http://localhost:4520/api/lessons mostra
+o que cada agente aprendeu.
 
-Lessons are for preferences. When a rule turns into a process with steps and a shape, it
-belongs in a skill: open Claude Code in this folder and say "fold the Proposals agent's lessons
-into the proposal skill".
+As lições servem para preferências. Quando uma regra se torna um processo com passos e uma forma,
+pertence a uma competência: abre o Claude Code nesta pasta e diz «incorpora as lições do agente de
+Propostas na competência de proposta».
 
-## What the agent sees
+## O que o agente vê
 
-For a task, the agent's instructions are assembled in this order:
+Para uma tarefa, as instruções do agente são montadas por esta ordem:
 
-1. Who it is: name, role, what it does.
-2. Its brief, if it has one.
-3. Every skill bound to it, in full, with the files beside each one.
-4. Its standing rules from your corrections.
-5. The tools it may call.
-6. Your brain's `CLAUDE.md`, `index.md`, `business-model.md` and `voice.md`, if present.
-7. The notes it picked for this task.
+1. Quem é: nome, função, o que faz.
+2. O seu briefing, se tiver um.
+3. Todas as competências ligadas a ele, por inteiro, com os ficheiros ao lado de cada uma.
+4. As suas regras permanentes saídas das tuas correções.
+5. As ferramentas que pode chamar.
+6. O `CLAUDE.md`, `index.md`, `business-model.md` e `voice.md` do teu cérebro, se existirem.
+7. As notas que escolheu para esta tarefa.
 
-A skill or a brief overrides the default shape (short, under 260 words). The deliverable ends
-with a line naming the skill it followed, and the note saved in your brain records it in its
-front matter, so you can see later which work was done to which skill.
+Uma competência ou um briefing substitui a forma por omissão (curta, menos de 260 palavras). O
+trabalho termina com uma linha que nomeia a competência seguida, e a nota guardada no teu cérebro
+regista-a no seu front matter, para veres mais tarde que trabalho foi feito segundo que competência.
 
-The router also sees each agent's skill names, so a task that reads "draft the proposal for
-Harbourside" lands on the agent who owns the proposal skill.
+O encaminhador também vê os nomes das competências de cada agente, por isso uma tarefa que diga
+«escreve a proposta para a Harbourside» acaba no agente que é dono da competência de propostas.
 
-## Writing a good one
+## Escrever bem uma
 
-- **Say when.** The first line after the heading is the trigger: "Use this for any request that
-  ends in a document a client says yes or no to." The agent matches tasks to skills by this.
-- **Steps, then shape, then rules.** What to read first, what the finished thing looks like, what
-  is never allowed. A template file beats a description of a template.
-- **Point at notes by name.** "Prices come from `10-Business/offer-ladder.md`" makes the agent go
-  and read it. "Use our pricing" does not.
-- **One real example.** An `example.md` of one you were happy with does more than a page of
-  adjectives.
-- **Keep the red lines short and absolute.** "No discounts." "Nothing outbound without the owner."
-- **One skill per kind of work.** A proposal skill, a client reply skill, a weekly report skill.
-  Not one giant "sales" skill.
+- **Diz quando.** A primeira linha depois do título é o gatilho: «Usa isto para qualquer pedido que
+  termine num documento a que o cliente diz sim ou não.» O agente faz corresponder tarefas a
+  competências por isto.
+- **Passos, depois a forma, depois as regras.** O que ler primeiro, como é a coisa acabada, o que
+  nunca é permitido. Um ficheiro modelo vale mais do que a descrição de um modelo.
+- **Aponta as notas pelo nome.** «Os preços vêm de `10-Negocio/escada-de-ofertas.md`» faz o agente ir
+  lê-lo. «Usa o nosso preçário» não.
+- **Um exemplo real.** Um `example.md` de um de que gostaste faz mais do que uma página de
+  adjetivos.
+- **Mantém as linhas vermelhas curtas e absolutas.** «Sem descontos.» «Nada para fora sem o
+  proprietário.»
+- **Uma competência por tipo de trabalho.** Uma competência de propostas, uma de resposta a
+  clientes, uma de relatório semanal. Não uma competência gigante de «vendas».
 
-## Turning what you already have into a skill
+## Transformar o que já tens numa competência
 
-Most businesses already have the material: an SOP in a Word doc, an email you keep copying, a
-report you built last quarter, a checklist on the wall. The fastest route is to give that to
-Claude Code in this folder and let it write the skill.
+A maioria das empresas já tem o material: um procedimento num documento Word, um e-mail que andas
+sempre a copiar, um relatório que fizeste no trimestre passado, uma lista de verificação na parede.
+O caminho mais rápido é dar isso ao Claude Code nesta pasta e deixá-lo escrever a competência.
 
 ```
 claude
-> Here is the proposal I sent Harbourside and was happy with (paste, or point at the file).
-  Turn it into a skill for the Proposals agent: the shape as a template, the rules I follow,
-  and keep this one as the example.
+> Aqui está a proposta que enviei à Harbourside e de que gostei (cola, ou aponta o ficheiro).
+  Transforma-a numa competência para o agente de Propostas: a forma como modelo, as regras que
+  sigo, e mantém esta como exemplo.
 
-> Our client-reply rules are in ~/Documents/support-sop.docx. Make it a skill for the whole
-  Emails department.
+> As nossas regras de resposta a clientes estão em ~/Documentos/procedimento-apoio.docx. Faz delas
+  uma competência para todo o departamento de E-mails.
 
-> Every Monday I want a one-page ops report: last week's deliveries, anything late, this
-  week's risks. Make a skill for Internal Reporting that produces exactly that.
+> Todas as segundas quero um relatório de operações de uma página: as entregas da semana passada,
+  o que está atrasado, os riscos desta semana. Faz uma competência de Relatório Interno que produza
+  exatamente isso.
 ```
 
-Claude reads `CLAUDE.md`, asks what it does not know, writes the folder into your brain's
-`Agents Office/skills/`, binds it to the right agent, and runs `npm run check`. Then give the
-agent the task and read the result. Send it back with `revise: …` from the chat and, when the
-correction is one you will want every time, fold it into the skill.
+O Claude lê o `CLAUDE.md`, pergunta o que não sabe, escreve a pasta em `Órbita/skills/` do teu
+cérebro, liga-a ao agente certo e corre o `npm run check`. Depois dá a tarefa ao agente e lê o
+resultado. Devolve-o com `revise: …` na conversa e, quando a correção for algo que vais querer
+sempre, incorpora-a na competência.
 
-## Checking it worked
+## Verificar que funcionou
 
-- `npm run check` lists every skill, who it is bound to, and every problem in plain sentences.
-- `npm start` prints the count at boot and which departments are set up;
-  http://localhost:4520/api/skills shows the detail, `/api/lessons` the corrections.
-- Give the agent a task the skill covers. The deliverable ends with `Skill: <name>`.
-- Open the saved note in `<brain>/Agents Office/`. Its front matter has `skills:`.
+- O `npm run check` lista todas as competências, a quem estão ligadas e todos os problemas em frases
+  simples.
+- O `npm start` imprime a contagem no arranque e que departamentos estão configurados;
+  http://localhost:4520/api/skills mostra o detalhe, `/api/lessons` as correções.
+- Dá ao agente uma tarefa que a competência cubra. O trabalho termina com `Skill: <nome>`.
+- Abre a nota guardada em `<cérebro>/Órbita/`. O front matter tem `skills:`.
 
-## Limits and rules
+## Limites e regras
 
-- `SKILL.md` over 6,000 characters is trimmed; files over 4,000 characters each or 8,000 in total
-  per skill are trimmed or listed by name. Long material belongs in your notes, where the agent
-  reads it when the task calls for it.
-- Skills are instructions, not tools. An agent with a Gmail skill still needs Gmail connected
-  in Claude Code and allowed in `office.config.json`.
-- Skills cannot add agents, change departments or grant tools. They say how, not who.
-- A skill does not override the standing rule: read freely; send, post, pay, delete or change
-  anything outside this machine only when the task explicitly asks for that exact action.
+- Um `SKILL.md` acima de 6 000 caracteres é cortado; ficheiros acima de 4 000 caracteres cada ou
+  8 000 no total por competência são cortados ou listados pelo nome. Material longo pertence às
+  tuas notas, onde o agente o lê quando a tarefa o pede.
+- As competências são instruções, não ferramentas. Um agente com uma competência de Gmail ainda
+  precisa do Gmail ligado no Claude Code e autorizado em `office.config.json`.
+- As competências não podem acrescentar agentes, mudar departamentos ou atribuir ferramentas. Dizem
+  como, não quem.
+- Uma competência não se sobrepõe à regra permanente: ler livremente; enviar, publicar, pagar,
+  apagar ou alterar qualquer coisa fora desta máquina só quando a tarefa pedir explicitamente essa
+  ação exata.

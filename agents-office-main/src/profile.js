@@ -79,15 +79,15 @@ export function applyV1({ P, V1, FILE_GEN, clockStr }) {
     v.stats = [['Feito esta semana', () => 8 + sr(1) % 30], ['em curso', () => 1 + sr(2) % 3], ['À tua espera', () => sr(3) % 3], ['Tempo médio de resposta', () => (9 + sr(4) % 40) + ' min']];
     v.chartLbl = 'Tarefas concluídas — últimos 7 dias';
     v.chart = [0, 1, 2, 3, 4, 5, 6].map(i => 4 + sr(i + 5) % 14);
-    v.greeting = p.greeting || `${p.name ? titleCase(p.name) : 'Eu'} aqui. ${does} Ask me what is on my desk, or give me a task in the bar on the right.`;
+    v.greeting = p.greeting || `${p.name ? titleCase(p.name) : 'Eu'} aqui. ${does} Pergunta-me o que tenho na secretária, ou dá-me uma tarefa na barra à direita.`;
     v.chat = [
       { k: ['desk', 'today', 'working', 'doing', 'on', 'what'], r: [`Na minha secretária neste momento: ${tasks.map(t => fillVars(t, W)).join('; ')}.`] },
       { k: ['waiting', 'need', 'approve', 'ok', 'sign'], r: [`${sr(3) % 3 || 'Nada'} à tua espera da minha parte${sr(3) % 3 ? ': ' + fillVars(tasks[0], W) + '. Está no painel à direita.' : ' neste momento.'}`] },
       { k: ['tool', 'use', 'system', 'software', 'connect'], r: [tools.length ? `Trabalho em ${tools.join(' e ')}. Leio livremente; só envio, publico ou altero algo fora deste escritório quando mo pedes.` : 'Trabalho a partir do Cérebro e da caixa de entrada do escritório. Só envio ou altero algo quando mo pedes.'] },
       { k: ['how', 'why', 'rule', 'brain'], r: [`Leio o Cérebro primeiro, em cada tarefa: as notas de ${(PROFILE.company || 'a empresa')} dizem como se faz aqui. Depois faço o trabalho e ponho-o no painel para ti.`] },
     ];
-    v.fallback = [`I ${lc1(does) || 'work in ' + v.role}. Pergunta o que tenho na secretária, o que está à tua espera, ou que ferramentas uso.`, `Try "${(p.chips || [])[0] || 'O que tens na secretária?'}" or "${(p.chips || [])[1] || 'O que está à minha espera?'}".`];
-    v.chips = (p.chips && p.chips.length ? p.chips : ["What's on your desk?", "What's waiting on me?", 'Que ferramentas usas?']).slice(0, 3);
+    v.fallback = [`Eu ${lc1(does) || 'trabalho em ' + v.role}. Pergunta o que tenho na secretária, o que está à tua espera, ou que ferramentas uso.`, `Try "${(p.chips || [])[0] || 'O que tens na secretária?'}" or "${(p.chips || [])[1] || 'O que está à minha espera?'}".`];
+    v.chips = (p.chips && p.chips.length ? p.chips : ["O que tenho na secretária?", "O que está à minha espera?", 'Que ferramentas usas?']).slice(0, 3);
   }
   for (const k of Object.keys(FILE_GEN)) delete FILE_GEN[k];
   for (const v of V1) {

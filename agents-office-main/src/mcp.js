@@ -1,5 +1,5 @@
 // CONNECTORS — per-department dock of MCP brand-logo tiles (AJ's spec, 2 Aug 2026, rev 2).
-// v1 was an orbit ring; AJ: "uncoordinated and hard to notice". Now each dept has ONE fixed
+// v1 was an orbit ring; AJ: "descoordenado e difícil de notar". Now each dept has ONE fixed
 // "CONECTORES" group — a tidy camera-facing row of tiles — with constant back-and-forth
 // packet traffic between tiles and desks so the connectors visibly help the agents work.
 // Real sim events fire a strong pulse + tile→desk beam + return ack; ambient exchanges keep
@@ -169,8 +169,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       img.alt = img.title = LOGOS[k].name;
       if (STATUS[k] && STATUS[k] !== 'connected') { // real list: a server that is there but not usable
         img.classList.add('off', 'st-' + STATUS[k]);
-        img.title = LOGOS[k].name + ' — ' + (k === 'chrome' && STATUS[k] === 'pending' ? 'Claude in Chrome extension not paired on this machine — run `claude --chrome` once, then restart the office' // V3.2 (16 Sep)
-          : ({ 'needs-auth': 'precisa de autenticação (corre claude e depois /mcp)', failed: 'failed to connect', pending: 'connecting…', denied: 'ligado · bloqueado para os agentes em office.config.json' }[STATUS[k]] || STATUS[k]));
+        img.title = LOGOS[k].name + ' — ' + (k === 'chrome' && STATUS[k] === 'pending' ? 'Extensão Claude in Chrome não emparelhada nesta máquina — corre `claude --chrome` uma vez e reinicia o escritório' // V3.2 (16 Sep)
+          : ({ 'needs-auth': 'precisa de autenticação (corre claude e depois /mcp)', failed: 'falha na ligação', pending: 'connecting…', denied: 'ligado · bloqueado para os agentes em office.config.json' }[STATUS[k]] || STATUS[k]));
       }
       img.style.setProperty('--d', (0.15 + i * 0.09) + 's'); // staggered pop-in on load
       img.addEventListener('animationend', (e) => { if (e.animationName === 'tcin') img.classList.add('in'); });
@@ -328,7 +328,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     } else if (u && u.ok && u.source === 'office') {
       const w = u.window || {}; const n = w.tokens || 0; const tok = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
       usageEl.className = 'tm-usage off';
-      usageEl.innerHTML = `<span>ESTA JANELA</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>RUNS</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
+      usageEl.innerHTML = `<span>ESTA JANELA</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>EXECUÇÕES</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
       usageEl.title = `O medidor de utilização do Claude não está disponível (${u.reason || 'sem resposta'}). Esta é a contagem do próprio escritório para a janela atual de cinco horas.`;
     } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>UTILIZAÇÃO INDISPONÍVEL</span>'; usageEl.title = (u && u.reason) || ''; }
   }
@@ -360,7 +360,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
           for (const [k, img] of Object.entries(topImgs)) img.style.display = BY_DEPT[f].includes(k) ? '' : 'none';
           topconn.classList.add('focus');
           topconn.querySelector('.tc-lab').innerHTML =
-            `<span class="dot" style="background:${DEPTS[f].chip}"></span>${DEPTS[f].short} · CONNECTED TO`;
+            `<span class="dot" style="background:${DEPTS[f].chip}"></span>${DEPTS[f].short} · LIGADO A`;
         }
       } else {
         topconn.style.opacity = wireA;
@@ -368,7 +368,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
         if (stripDept !== null) {
           for (const img of Object.values(topImgs)) img.style.display = '';
           topconn.classList.remove('focus');
-          topconn.querySelector('.tc-lab').innerHTML = `<span class="dot"></span>CONNECTED TO`;
+          topconn.querySelector('.tc-lab').innerHTML = `<span class="dot"></span>LIGADO A`;
         }
       }
       stripDept = f;
@@ -722,7 +722,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       dk.conn.style.opacity = (dimmed ? 1 - 0.85 * focusDim : 1) * dockA;
 
       // steady exchange: a random connector and a random desk trade packets both ways —
-      // the constant "connectors helping the agents" energy AJ asked for
+      // the constant "conectores que servem os agentes" energy AJ asked for
       if (now > dk.nextAmbient && dk.seats.length && n) { // n = 0 when no connector is wired to this pod — nothing to pulse
         const item = byDept[dept][Math.floor(Math.random() * n)];
         const seat = dk.seats[Math.floor(Math.random() * dk.seats.length)];
