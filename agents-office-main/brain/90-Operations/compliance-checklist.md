@@ -1,3 +1,3 @@
-# Compliance checklist
+# Lista de conformidade
 
-Privacy policy reviewed yearly, consent wording on every form, data retained 3 years then deleted. Checked quarterly and logged in [[log]].
+Política de privacidade revista anualmente, texto de consentimento em todos os formulários, dados retidos 3 anos e depois apagados. Verificado trimestralmente e registado em [[log]].

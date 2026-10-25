@@ -1,4 +1,4 @@
-// Agents Office V3.6 — the usage gauge: what the subscription has used, shown the way Claude Code's
+// Órbita V3.6 — the usage gauge: what the subscription has used, shown the way Claude Code's
 // own usage screen shows it (session and week, percent and reset time).
 //
 // A3 (AJ, 9 Sep 2026): read the same endpoint Claude Code reads, with the token Claude Code already
@@ -36,7 +36,7 @@ export function parseUsage(j) {
 
 export async function fetchUsage() {
   const token = readToken();
-  if (!token) return { ok: false, reason: 'no Claude Code login found on this machine' };
+  if (!token) return { ok: false, reason: 'não há sessão do Claude Code nesta máquina' };
   try {
     const r = await fetch(ENDPOINT, { headers: { Authorization: 'Bearer ' + token, 'anthropic-beta': 'oauth-2025-04-20', Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return { ok: false, reason: `Claude's usage endpoint answered ${r.status}` };

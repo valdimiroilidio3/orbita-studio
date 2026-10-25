@@ -1,6 +1,6 @@
 // CONNECTORS — per-department dock of MCP brand-logo tiles (AJ's spec, 2 Aug 2026, rev 2).
 // v1 was an orbit ring; AJ: "uncoordinated and hard to notice". Now each dept has ONE fixed
-// "CONNECTORS" group — a tidy camera-facing row of tiles — with constant back-and-forth
+// "CONECTORES" group — a tidy camera-facing row of tiles — with constant back-and-forth
 // packet traffic between tiles and desks so the connectors visibly help the agents work.
 // Real sim events fire a strong pulse + tile→desk beam + return ack; ambient exchanges keep
 // steady energy between events. Full brand colour · LOD small-out/full-in · click = tooltip.
@@ -136,7 +136,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       byDeptKey[dept + ':' + key] = item;
     });
 
-    // the group label — this is what names the dock "CONNECTORS" at every zoom
+    // the group label — this is what names the dock "CONECTORES" at every zoom
     const conn = document.createElement('div');
     conn.className = 'connl';
     conn.innerHTML = `<span class="dot" style="background:${DEPTS[dept].chip}"></span>CONNECTORS`;
@@ -162,7 +162,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   const topconn = document.getElementById('topconn');
   const topImgs = {};
   if (topconn) {
-    topconn.innerHTML = `<span class="tc-lab"><span class="dot"></span>CONNECTED TO</span>`;
+    topconn.innerHTML = `<span class="tc-lab"><span class="dot"></span>LIGADO A</span>`;
     uniqKeys.forEach((k, i) => {
       const img = document.createElement('img');
       img.src = LOGOS[k].img;
@@ -170,7 +170,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       if (STATUS[k] && STATUS[k] !== 'connected') { // real list: a server that is there but not usable
         img.classList.add('off', 'st-' + STATUS[k]);
         img.title = LOGOS[k].name + ' — ' + (k === 'chrome' && STATUS[k] === 'pending' ? 'Claude in Chrome extension not paired on this machine — run `claude --chrome` once, then restart the office' // V3.2 (16 Sep)
-          : ({ 'needs-auth': 'needs authentication (run claude, then /mcp)', failed: 'failed to connect', pending: 'connecting…', denied: 'connected · blocked for agents in office.config.json' }[STATUS[k]] || STATUS[k]));
+          : ({ 'needs-auth': 'precisa de autenticação (corre claude e depois /mcp)', failed: 'failed to connect', pending: 'connecting…', denied: 'ligado · bloqueado para os agentes em office.config.json' }[STATUS[k]] || STATUS[k]));
       }
       img.style.setProperty('--d', (0.15 + i * 0.09) + 's'); // staggered pop-in on load
       img.addEventListener('animationend', (e) => { if (e.animationName === 'tcin') img.classList.add('in'); });
@@ -181,7 +181,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
       const none = document.createElement('span');
       none.className = 'tc-none';
-      none.textContent = 'nothing yet — connect in claude.ai or run: claude mcp add';
+      none.textContent = 'nada ainda — liga em claude.ai ou corre: claude mcp add';
       topconn.appendChild(none);
     }
   }
@@ -283,7 +283,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   const topmodels = document.getElementById('topmodels');
   const modelImgs = {};
   if (topmodels) {
-    topmodels.innerHTML = `<span class="tc-lab"><span class="dot"></span>RUNS HEADLESS ON</span>`;
+    topmodels.innerHTML = `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
     Object.keys(MODELS).forEach((k, i) => {
       const img = document.createElement('img');
       img.src = LOGOS[k].img;
@@ -324,13 +324,13 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     if (u && u.ok && u.source === 'claude') {
       usageEl.className = 'tm-usage';
       usageEl.innerHTML = bar('SESSION', u.session) + (u.session && u.week ? '<span class="sep">·</span>' : '') + bar('WEEK', u.week);
-      usageEl.title = `Your Claude plan, as Claude Code shows it. Session resets ${when(u.session && u.session.resetsAt)} · week resets ${when(u.week && u.week.resetsAt)}.`;
+      usageEl.title = `O teu plano Claude, como o Claude Code o mostra. Sessão reinicia ${when(u.session && u.session.resetsAt)} · semana reinicia ${when(u.week && u.week.resetsAt)}.`;
     } else if (u && u.ok && u.source === 'office') {
       const w = u.window || {}; const n = w.tokens || 0; const tok = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
       usageEl.className = 'tm-usage off';
-      usageEl.innerHTML = `<span>THIS WINDOW</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>RUNS</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
-      usageEl.title = `Claude's usage gauge is unavailable (${u.reason || 'no answer'}). This is the office's own count for the current five-hour window.`;
-    } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>USAGE UNAVAILABLE</span>'; usageEl.title = (u && u.reason) || ''; }
+      usageEl.innerHTML = `<span>ESTA JANELA</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>RUNS</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
+      usageEl.title = `O medidor de utilização do Claude não está disponível (${u.reason || 'sem resposta'}). Esta é a contagem do próprio escritório para a janela atual de cinco horas.`;
+    } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>UTILIZAÇÃO INDISPONÍVEL</span>'; usageEl.title = (u && u.reason) || ''; }
   }
   function modelPulse(k, strong = false) {
     if (!modelImgs[k]) return; // a tile that has gone (ChatGPT in a live office) has no wire to pulse

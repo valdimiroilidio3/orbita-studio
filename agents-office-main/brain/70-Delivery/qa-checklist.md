@@ -1,3 +1,3 @@
-# QA checklist
+# Lista de controlo de qualidade
 
-Every link, every number traced to [[numbers-ledger]] or the client, spelling, brand colours ([[visual-identity]]), the three things a client does first. Nothing ships without a pass.
+Todas as ligações, todos os números com origem em [[numbers-ledger]] ou no cliente, ortografia, cores de marca ([[visual-identity]]), as três coisas que um cliente faz primeiro. Nada sai sem passar.

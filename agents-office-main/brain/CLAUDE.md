@@ -1,9 +1,9 @@
-# Northgate Studio — AI Brain
+# Northgate Studio — Cérebro da IA
 
-This folder is the company's brain: the notes the agents read before they act and write to when they finish.
-Read `00-Meta/index.md` first, then the MOC (map of content) for the department your task touches.
+Esta pasta é o cérebro da empresa: as notas que os agentes leem antes de agir e onde escrevem quando terminam.
+Lê primeiro `00-Meta/index.md` e depois o MOC (mapa de conteúdo) do departamento que a tua tarefa toca.
 
-Rules
-- Numbers come from `00-Meta/numbers-ledger.md` only. Never invent a figure.
-- Client-facing copy follows `20-Brand/voice.md`.
-- Anything outbound waits for the owner's approval.
+Regras
+- Os números vêm apenas de `00-Meta/numbers-ledger.md`. Nunca inventes um valor.
+- O texto virado para o cliente segue `20-Brand/voice.md`.
+- Tudo o que seja dirigido ao exterior espera pela aprovação do proprietário.

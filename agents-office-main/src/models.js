@@ -1,4 +1,4 @@
-// Agents Office V3.6 — the three models, by name. Shared by the page and the server.
+// Órbita V3.6 — the three models, by name. Shared by the page and the server.
 // AJ (9 Sep 2026): "it is either Opus, Sonnet, or Fable. That's it." Sonnet is the default for
 // everything, including the routing call. Effort lives inside the name (Opus runs at high); nobody
 // sees an effort setting. Four places, one precedence: the task beats the routine beats the agent
@@ -13,7 +13,7 @@ export const MODELS = {
 };
 export const MODEL_KEYS = ['sonnet', 'opus', 'fable'];
 export const DEFAULT_MODEL = 'sonnet';
-export const FROM_TEXT = { task: 'this task', routine: 'this routine', agent: 'this agent', office: 'office default', model: 'the model\'s own' };
+export const FROM_TEXT = { task: 'esta tarefa', routine: 'esta rotina', agent: 'este agente', office: 'padrão do escritório', model: 'o do próprio modelo' };
 export const EFFORT_KEYS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export const EFFORT_NAME = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
 

@@ -1,6 +1,6 @@
-# Reel hooks that worked
+# Ganchos de reel que funcionaram
 
-- "Your website is losing the leads you paid for"
-- "Three emails your clients never reply to"
-- "The 10am rule"
-Used by [[content-engine]].
+- «O teu site está a perder os leads que pagaste»
+- «Três e-mails a que os teus clientes nunca respondem»
+- «A regra das 10h»
+Usados por [[content-engine]].

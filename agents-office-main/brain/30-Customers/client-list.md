@@ -1,3 +1,3 @@
-# Client list
+# Lista de clientes
 
-14 active clients ([[numbers-ledger]]). Each has a project folder under [[MOC-Delivery]] and a monthly report from Client Reports.
+14 clientes ativos ([[numbers-ledger]]). Cada um tem uma pasta de projeto em [[MOC-Delivery]] e um relatório mensal dos Relatórios de Clientes.

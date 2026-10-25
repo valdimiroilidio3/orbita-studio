@@ -1,3 +1,3 @@
-# Content engine
+# Motor de conteúdo
 
-Three reels a week, one carousel, one newsletter a month ([[newsletter]]). Hooks from [[reel-hooks]]. Results logged in [[numbers-ledger]].
+Três reels por semana, um carrossel, uma newsletter por mês ([[newsletter]]). Ganchos de [[reel-hooks]]. Resultados registados em [[numbers-ledger]].

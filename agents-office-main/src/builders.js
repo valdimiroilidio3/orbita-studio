@@ -1,4 +1,4 @@
-// Agents Office v2 — procedural mesh builders (stylised 3D, Image-1/2 blend on nominal palette)
+// Órbita v2 — procedural mesh builders (stylised 3D, Image-1/2 blend on nominal palette)
 import * as THREE from 'three';
 
 export const PLINTH_H = 2.6;

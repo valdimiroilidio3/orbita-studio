@@ -1,23 +1,23 @@
 ---
 name: proposal
-description: How we write a client proposal
+description: Como escrevemos uma proposta a um cliente
 agents: [piper]
 ---
-# Writing a proposal
+# Escrever uma proposta
 
-Use this for any request that ends in a document a client says yes or no to: a proposal, a quote, a scope, a pricing page for one client.
+Usa isto em qualquer pedido que termine num documento ao qual o cliente diz sim ou não: uma proposta, um orçamento, um âmbito, uma página de preços para um cliente.
 
-## Before you write
-1. Find the client in `30-Customers`. If they are not there, say so at the top and write for the person described in the request.
-2. Take the packages and prices from `10-Business/offer-ladder.md`. Never invent a price. If the request needs a price the ladder does not have, write "(price to confirm)".
-3. Read `20-Brand/voice.md` and write in that voice.
+## Antes de escrever
+1. Encontra o cliente em `30-Customers`. Se não estiver lá, di-lo no topo e escreve para a pessoa descrita no pedido.
+2. Tira os pacotes e preços de `10-Business/offer-ladder.md`. Nunca inventes um preço. Se o pedido precisar de um preço que a escada não tem, escreve «(preço a confirmar)».
+3. Lê `20-Brand/voice.md` e escreve nessa voz.
 
-## The shape
-Follow `template.md` beside this file, section for section. Keep the headings. Do not add sections.
+## A forma
+Segue o `template.md` ao lado deste ficheiro, secção por secção. Mantém os títulos. Não acrescentes secções.
 
-## Rules
-- Three options, always. The middle one is the one we want them to pick; say so in one line under the table.
-- Price per month, ex GST, and say so once under the table.
-- One page. If it will not fit, cut the background, not the scope.
-- No discounts. A cheaper option is a smaller scope, never the same scope for less.
-- The last line is the next step and a date, never "let me know".
+## Regras
+- Três opções, sempre. A do meio é a que queremos que escolham; di-lo numa linha por baixo da tabela.
+- Preço por mês, sem IVA, e di-lo uma vez por baixo da tabela.
+- Uma página. Se não couber, corta o contexto, não o âmbito.
+- Sem descontos. Uma opção mais barata é um âmbito menor, nunca o mesmo âmbito por menos.
+- A última linha é o próximo passo e uma data, nunca «diz-me alguma coisa».

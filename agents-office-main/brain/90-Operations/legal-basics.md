@@ -1,3 +1,3 @@
-# Legal basics
+# Bases jurídicas
 
-Every client signs the master agreement. Two clauses get reviewed on every deal: liability cap and price lock. Contractors sign [[contractor-terms]].
+Todos os clientes assinam o contrato principal. Duas cláusulas são revistas em cada negócio: limite de responsabilidade e fixação de preço. Os freelancers assinam [[contractor-terms]].

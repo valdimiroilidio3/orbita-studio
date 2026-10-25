@@ -1,5 +1,5 @@
-# MOC — Operations
+# MOC — Operações
 
-- [[legal-basics]] — contracts and terms
-- [[compliance-checklist]] — privacy, consent, retention
-- [[reporting-cadence]] — weekly board pack, monthly KPIs, dashboards
+- [[legal-basics]] — contratos e termos
+- [[compliance-checklist]] — privacidade, consentimento, retenção
+- [[reporting-cadence]] — relatório semanal, KPI mensais, painéis

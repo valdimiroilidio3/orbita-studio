@@ -164,8 +164,8 @@ export function initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_
   linkedInOn(true); // the feed runs on that screen from the start, so it is there whenever someone looks
 
   /* ---------- the speech bubbles over the other departments ---------- */
-  // Everyone says "They streamlined their operations"; one person says "Wow that was quick".
-  const BUBBLE_MAIN = 'They streamlined their operations', BUBBLE_ONE = 'Wow that was quick';
+  // Everyone says "They streamlined their operations"; one person says "Uau, isso foi rápido".
+  const BUBBLE_MAIN = 'They streamlined their operations', BUBBLE_ONE = 'Uau, isso foi rápido';
   const bubbleTexes = {};
   function bubbleTex(text) {
     if (bubbleTexes[text]) return bubbleTexes[text];

@@ -1,10 +1,10 @@
-// Agents Office — the local server (Beta).
+// Órbita — the local server (Beta).
 // Serves the office and makes it real on your own Claude login:
 //   · the command bar routes a typed task through Claude to the right agent in the department
 //   · the agent produces the deliverable, which is saved as a note in your brain folder
 //   · the Brain is your vault's real wiki-link graph, rebuilt live as notes are written
 //   · chat with any agent is a real conversation in that agent's persona, grounded in your notes
-// Everything stays on this machine: data/tasks.json and <brain>/Agents Office/*.md.
+// Everything stays on this machine: data/tasks.json and <brain>/Órbita/*.md.
 //
 //   npm start                 → http://localhost:4520
 //   PORT=4600 npm start       → another port
@@ -16,12 +16,12 @@
 // top bar shows and what the agents can call (mcp.mjs); the roster is yours (office.agents.json,
 // roster.mjs). Tool calls only happen on the CLI backend: the SDK path has no MCP servers.
 // V3.2: how the work is done is yours too — each agent's `brief` (roster.mjs) and the skills
-// bound to it (skills.mjs: skills/ + <brain>/Agents Office/skills/) go into every task and chat.
+// bound to it (skills.mjs: skills/ + <brain>/Órbita/skills/) go into every task and chat.
 // V3.3: the agents learn — every "revise: …" is recorded and standing rules come back into the
 // prompt (learn.mjs); a department lead interviews the owner in chat and writes the briefs and a
 // skill for its team (onboard.mjs). Roster, skills and lessons are re-read before every task.
 // V3.5: routines — the office keeps its own clock (routines.mjs + src/when.js). A routine in
-// <brain>/Agents Office/routines.json fires at its minute whether or not the page is open; the
+// <brain>/Órbita/routines.json fires at its minute whether or not the page is open; the
 // server creates the task, runs it here, and a result that needs the owner's OK waits in
 // WAITING ON APPROVAL until /approve (the agent then does the outbound step) or /reject (with a
 // note, which the agent learns from). Emails, Accounting and Sales only in this release.
@@ -58,7 +58,7 @@ const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by buil
 const DATA = path.join(ROOT, 'data');
 const FILE = path.join(DATA, 'tasks.json');
 const BRAIN = cfg.brainPath;
-const NOTES_DIR = path.join(BRAIN, 'Agents Office');
+const NOTES_DIR = path.join(BRAIN, 'Órbita');
 const CLI_CWD = path.join(os.tmpdir(), 'agents-office-cli'); // an empty cwd: no CLAUDE.md, no repo context
 const version = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 const RUN_TIMEOUT = Math.max(60, +cfg.timeout || 300) * 1000; // agents with tools take longer than a plain draft
@@ -87,7 +87,7 @@ if (process.env.ANTHROPIC_API_KEY) {
   try {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     sdk = new Anthropic(); backend = 'anthropic-sdk';
-  } catch (e) { console.warn('SDK not installed (npm install @anthropic-ai/sdk) — using the Claude CLI:', e.message.split('\n')[0]); }
+  } catch (e) { console.warn('SDK não instalado (npm install @anthropic-ai/sdk) — a usar a CLI do Claude:', e.message.split('\n')[0]); }
 }
 
 /* ---------- storage ---------- */
@@ -121,7 +121,7 @@ function ranOn(mu, want) {
 async function askX(system, user, { maxTokens = 4000, tools = true, timeout = RUN_TIMEOUT, model = cfg.model, effort = null } = {}) { // model: sonnet · opus · fable · effort: low…max or null = the model's own (src/models.js)
   if (sdk) {
     const res = await sdk.messages.create({ model: modelId(model), max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] });
-    if (res.stop_reason === 'refusal') throw new Error('Claude declined this request');
+    if (res.stop_reason === 'refusal') throw new Error('O Claude recusou este pedido');
     bumpUsage(res.usage);
     return { text: res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(), tools: [], usage: res.usage, modelId: res.model };
   }
@@ -146,7 +146,7 @@ async function askX(system, user, { maxTokens = 4000, tools = true, timeout = RU
     };
     p.stdout.on('data', d => { out += d; let i; while ((i = out.indexOf('\n')) >= 0) { feed(out.slice(0, i)); out = out.slice(i + 1); } });
     p.stderr.on('data', d => { err += d; });
-    p.on('error', e => { clearTimeout(timer); reject(new Error(e.code === 'ENOENT' ? 'Claude Code is not installed (claude not found on PATH)' : e.message)); });
+    p.on('error', e => { clearTimeout(timer); reject(new Error(e.code === 'ENOENT' ? 'O Claude Code não está instalado (claude não encontrado no PATH)' : e.message)); });
     p.on('close', code => {
       clearTimeout(timer); feed(out);
       if (code !== 0 && !gotResult) return reject(new Error(`claude exited ${code}${err ? ': ' + err.trim().slice(0, 300) : ''}`));
@@ -225,9 +225,9 @@ async function route(dept, text) {
 function agentSystem(a, index, read, { extra = '', words = 260 } = {}) {
   const d = DEPTS[a.department];
   return `You are ${a.name}, ${a.role || 'an agent'}, in the ${d.name} department of ${cfg.name}. ${a.does}\n${agentBrief(a)}` + (extra ? `\n${extra}\n` : '') +
-    'Write the finished deliverable itself, not a description of what you would do. Plain text: a short heading, then short sections or bullets. ' +
+    'Escreve o próprio trabalho final, não uma descrição do que farias. Texto simples: um título curto e depois secções curtas ou tópicos. ' +
     `At most ${words} words unless a skill or the owner\'s instructions set a different shape — those win. No preamble, no sign-off. Ground it in the company notes below; where a fact is missing, make a reasonable assumption and mark it (assumed). ` +
-    'If you used a tool, say so in one line at the end ("Used: Gmail — searched the client thread").\n\n' +
+    'If you used a tool, say so in one line at the end ("Usado: Gmail — procurei a conversa com o cliente").\n\n' +
     `${mcp.promptText(a.tools)}\n\nCOMPANY NOTES\n${businessContext(index)}\n\nNOTES YOU READ FOR THIS TASK\n${contextText(index, read)}`;
 }
 const modeLineFor = (mode, task) => mode === 'draft' ? '\nPrepare everything, but send, post, pay or change NOTHING outside this machine: the owner reads this first and approves it. End with one line saying exactly what will go out when approved (or that nothing needs to).'
@@ -257,7 +257,7 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
     (feedback && mode !== 'approve' ? `\n\nThe owner reviewed your previous version and asked for changes: "${feedback}"\nPrevious version:\n${task.result}` : '');
   const { pick, eff } = pickFor(task, a);
   const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort });
-  if (!text) throw new Error('Claude returned nothing');
+  if (!text) throw new Error('O Claude não devolveu nada');
   return { result: text, read, tools: toolKeys(tools), used: mcp.namesOf(tools), skills: skills.names(a), modelUsed: pick.model, modelFrom: pick.from, modelId: ran, effortUsed: eff.effort || '', effortFrom: eff.from };
 }
 
@@ -293,7 +293,7 @@ async function runTeam(task, mode) {
       const { body, messages } = teams.parseMessages(text, ids);
       Object.assign(piece, { result: body || '(empty)', tools: toolKeys(tools), used: mcp.namesOf(tools), read, modelId: ran, error: !text });
       for (const m of messages) task.team.messages.push({ from: a.id, to: m.to === lead.id ? 'lead' : m.to, text: m.text, at: Date.now() });
-    } catch (e) { Object.assign(piece, { result: 'Could not complete this piece: ' + e.message, error: true }); }
+    } catch (e) { Object.assign(piece, { result: 'Não foi possível concluir esta parte: ' + e.message, error: true }); }
     piece.state = 'done'; piece.doneAt = Date.now(); persist(task);
     console.log(`    ${piece.error ? '✗' : '✓'} ${a.name}: ${piece.title} (${(piece.result || '').length} chars${piece.tools?.length ? ', tools: ' + piece.tools.join(' ') : ''})`);
   });
@@ -309,7 +309,7 @@ async function runTeamLead(task, feedback, mode) {
   const user = teams.synthPrompt({ task, pieces: tm.pieces || [], messages: tm.messages || [], nameOf, feedback: mode === 'approve' ? null : feedback }) + routineLineFor(task) + modeLineFor(mode, task);
   const { pick, eff } = pickFor(task, lead);
   const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort, maxTokens: 6000 });
-  if (!text) throw new Error('Claude returned nothing');
+  if (!text) throw new Error('O Claude não devolveu nada');
   const allTools = [...new Set([...(tm.pieces || []).flatMap(p => p.tools || []), ...toolKeys(tools)])];
   const allUsed = [...new Set([...(tm.pieces || []).flatMap(p => p.used || []), ...mcp.namesOf(tools)])];
   const allRead = [...new Set([...read, ...(tm.pieces || []).flatMap(p => p.read || [])])];
@@ -331,7 +331,7 @@ async function chat(agentId, text, history) {
   const read = relevantNotes(index, a.department, text, 3);
   const mine = load().filter(t => t.agent === agentId).slice(-6).map(t => `- [${t.state}] ${t.title}`).join('\n');
   const system = `You are ${a.name}, ${a.role || 'an agent'}, in the ${d.name} department of ${cfg.name}. ${a.does}\n${agentBrief(a)}` +
-    'You are talking to the owner. Answer as this agent, in first person, briefly (under 120 words unless asked for detail), plainly, no hype. ' +
+    'Estás a falar com o proprietário. Responde como este agente, na primeira pessoa, de forma breve (menos de 120 palavras, salvo se pedirem detalhe), simples, sem exageros. ' +
     'Use the company notes; say when something is not in them. If the owner asks you to look something up, use your tools. Nothing outbound is sent without the owner\'s explicit say-so.\n\n' +
     `${mcp.promptText(a.tools)}\n\nCOMPANY NOTES\n${businessContext(index)}\n\nRELEVANT NOTES\n${contextText(index, read)}\n\nYOUR RECENT TASKS\n${mine || '—'}`;
   const convo = (history || []).slice(-8).map(m => `${m.who === 'user' ? 'Owner' : a.name}: ${m.text}`).join('\n');
@@ -359,7 +359,7 @@ function fire(r, { due = Date.now(), late = false, by = 'routine' } = {}) { // t
   const task = { id: nid(), dept: r.dept, agent: r.agent, title: r.title, text: r.text, plan: r.plan || [], eta: 15, why: '', state: 'next', addedAt: Date.now(), by, routine: r.id, when: r.desc || describe(r.when), needsOk: r.needsOk, due, late, routineModel: r.model || undefined, routineEffort: r.effort || undefined, team: r.team && TEAMS.enabled ? { lead: r.agent, asked: 'routine' } : undefined };
   const list = load(); list.push(task); save(list);
   routines.advance(RSTATE, r, Date.now(), task.id, late); routines.saveState(DATA, RSTATE);
-  console.log(`⏱ ${task.id} → ${task.agent}: ${task.title}${late ? ' (LATE · was due ' + new Date(due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
+  console.log(`⏱ ${task.id} → ${task.agent}: ${task.title}${late ? ' (ATRASADA · era para ' + new Date(due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
   enqueue(() => runServerTask(task.id));
   return task;
 }
@@ -374,10 +374,10 @@ async function runServerTask(id, { feedback, approve } = {}) {
     if (task.needsOk && !approve) { task.state = 'waiting'; task.draft = out.result; task.waitingAt = Date.now(); task.ask = routines.askLine(task); }
     else { task.state = 'done'; task.doneAt = Date.now(); task.note = writeNote(task); await rebuildGraph(); }
   } catch (e) {
-    Object.assign(task, { state: 'done', doneAt: Date.now(), result: 'Could not complete this task: ' + e.message, error: true });
+    Object.assign(task, { state: 'done', doneAt: Date.now(), result: 'Não foi possível concluir esta tarefa: ' + e.message, error: true });
   }
   list = load(); const i = list.findIndex(t => t.id === task.id); if (i >= 0) list[i] = task; save(list);
-  console.log(`${task.error ? '✗' : task.state === 'waiting' ? '⏸' : '✓'} ${task.id} ${task.error ? 'failed' : task.state === 'waiting' ? 'waiting for your OK' : 'done'} (${task.result.length} chars${task.tools?.length ? ', tools: ' + task.tools.join(' ') : ''}${task.note ? ', note: ' + task.note : ''})`);
+  console.log(`${task.error ? '✗' : task.state === 'waiting' ? '⏸' : '✓'} ${task.id} ${task.error ? 'failed' : task.state === 'waiting' ? 'à espera do teu OK' : 'done'} (${task.result.length} chars${task.tools?.length ? ', tools: ' + task.tools.join(' ') : ''}${task.note ? ', note: ' + task.note : ''})`);
   return task;
 }
 function tickRoutines() {
@@ -390,7 +390,7 @@ function tickScheduled() { // V3.2.1: a task scheduled for a date fires on its m
   for (const t of list) {
     if (t.state !== 'scheduled' || !(t.dueAt <= now)) continue;
     t.state = 'next'; t.due = t.dueAt; t.late = now - t.dueAt > routines.LATE_AFTER; t.addedAt = now; changed = true;
-    console.log(`⏱ ${t.id} scheduled task fires → ${t.agent}: ${t.title}${t.late ? ' (LATE · was due ' + new Date(t.dueAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
+    console.log(`⏱ ${t.id} scheduled task fires → ${t.agent}: ${t.title}${t.late ? ' (ATRASADA · era para ' + new Date(t.dueAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
     enqueue(() => runServerTask(t.id));
   }
   if (changed) save(list);
@@ -403,13 +403,13 @@ async function makeRoutine({ dept, text, when, agent, needsOk, model, effort }) 
   let taskText = String(text || '').trim(), w = when, parsed = null;
   if (!w) {
     parsed = parseWhen(taskText);
-    if (!parsed) return { error: 'No schedule in that sentence. Say when: "every weekday at 8am, …", "Mondays 9am, …", "every hour 9-5, …".', noSchedule: true };
-    if (parsed.needsDay) return { error: 'Which day? Say "every Monday …" or "Mon and Thu …".', needsDay: true };
-    if (parsed.needsTime) return { error: 'What time? Say "… at 8am" or "… at 17:30".', needsTime: true };
+    if (!parsed) return { error: 'No schedule in that sentence. Say when: "every weekday at 8am, …", "Segundas às 9h, …", "de hora a hora, 9h-17h, …".', noSchedule: true };
+    if (parsed.needsDay) return { error: 'Which day? Say "todas as segundas …" or "Seg e Qui …".', needsDay: true };
+    if (parsed.needsTime) return { error: 'What time? Say "… às 8h" or "… at 17:30".', needsTime: true };
     w = parsed.when; taskText = parsed.text;
   }
-  if (!validWhen(w)) return { error: 'That schedule is not complete.' };
-  if (!taskText) return { error: 'What should happen? The sentence has a time but no task.' };
+  if (!validWhen(w)) return { error: 'Esse horário está incompleto.' };
+  if (!taskText) return { error: 'O que deve acontecer? A frase tem uma hora mas não tem tarefa.' };
   loadRoutines();
   const r = await route(dept, taskText);
   const a = agent && AGENTS.find(x => x.id === agent && x.department === dept) ? agent : r.agent;
@@ -417,7 +417,7 @@ async function makeRoutine({ dept, text, when, agent, needsOk, model, effort }) 
   if (v.problems.length) return { error: v.problems.join('; ') };
   rlist.routines.push(v.routine); routines.save(BRAIN, rlist.routines);
   const out = loadRoutines().find(x => x.id === v.routine.id);
-  console.log(`⏱ routine ${out.id} → ${out.agent}: ${out.title} (${out.desc} · next ${untilText(out.nextAt)}${out.needsOk ? ' · waits for the OK' : ''})`);
+  console.log(`⏱ routine ${out.id} → ${out.agent}: ${out.title} (${out.desc} · next ${untilText(out.nextAt)}${out.needsOk ? ' · espera pelo OK' : ''})`);
   return { ok: true, routine: out, why: r.why, guessed: parsed?.guessed ? parsed.guessWord : null };
 }
 // B2: a routine said to an agent in chat. The lead routes it inside the department; a specialist takes it on.
@@ -427,9 +427,9 @@ async function routinesChat(a, text) {
   const cmd = /^\s*(pause|stop|resume|start|unpause|delete|remove|run)\b\s*(?:the\s+)?(.*?)\s*[.!]?$/i.exec(t);
   if (cmd && allowed && !parseWhen(t)) {
     const list = loadRoutines(); const words = cmd[2].replace(/\s+(routine|one)$/i, ''); const r = routines.matchRoutine(list, dept, words);
-    if (!r) return { reply: (list.some(x => x.dept === dept) ? 'Which one? ' : '') + routines.listText(list, dept, AGENTS) };
+    if (!r) return { reply: (list.some(x => x.dept === dept) ? 'Qual deles? ' : '') + routines.listText(list, dept, AGENTS) };
     const verb = cmd[1].toLowerCase();
-    if (verb === 'run') { const task = fire(r, { by: 'you' }); return { reply: `Running "${r.title}" now — ${r.agent === a.id ? 'I have it' : agentName(r.agent) + ' has it'}. It lands in the panel${r.needsOk ? ' and waits for your OK before anything is sent' : ''}.`, task }; }
+    if (verb === 'run') { const task = fire(r, { by: 'you' }); return { reply: `Running "${r.title}" now — ${r.agent === a.id ? 'Já tenho' : agentName(r.agent) + ' has it'}. It lands in the panel${r.needsOk ? ' e espera pelo teu OK antes de algo sair' : ''}.`, task }; }
     if (/pause|stop/.test(verb)) { editRoutine(r.id, { paused: true }); return { reply: `Paused "${r.title}". It stays on the timetable; say "resume ${r.title.toLowerCase()}" to start it again.` }; }
     if (/resume|start|unpause/.test(verb)) { const n = editRoutine(r.id, { paused: false }); return { reply: `"${r.title}" is back on — next ${untilText(n.nextAt)}.` }; }
     if (/delete|remove/.test(verb)) { removeRoutine(r.id); return { reply: `Deleted "${r.title}". It is off the timetable.` }; }
@@ -437,12 +437,12 @@ async function routinesChat(a, text) {
   const p = parseWhen(t);
   if (!p) return null;
   if (!allowed) return { reply: routines.refusal(dept) };
-  if (p.needsDay) return { reply: 'Which day? Say it again with the day: "every Monday at 9am, …".' };
+  if (p.needsDay) return { reply: 'Which day? Say it again with the day: "todas as segundas às 9h, …".' };
   if (p.needsTime) return { reply: `What time? Say it again with the time, e.g. "every weekday at 8am, ${p.text ? p.text.slice(0, 60) : '…'}".` };
-  if (!p.text) return { reply: 'I have the time but not the task. Say it again with what should happen.' };
+  if (!p.text) return { reply: 'Tenho a hora mas não a tarefa. Diz outra vez com o que deve acontecer.' };
   const made = await makeRoutine({ dept, text: p.text, when: p.when, agent: a.lead ? undefined : a.id });
   if (made.error) return { reply: made.error };
-  const r = made.routine, who = r.agent === a.id ? 'I have it' : `${agentName(r.agent)} has it`;
+  const r = made.routine, who = r.agent === a.id ? 'Já tenho' : `${agentName(r.agent)} has it`;
   return { reply: `Done. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${who}.${made.guessed ? ` I took "${made.guessed}" as ${r.when.at}; say a time to change it.` : ''} ${r.needsOk ? 'Anything to send waits for your OK first.' : 'It only reads, so it will not wait for you.'} Next run ${untilText(r.nextAt)}. Say "routines" to see the list, "pause ${r.title.toLowerCase()}" to stop it.`, routine: r };
 }
 
@@ -483,8 +483,8 @@ const server = http.createServer(async (req, res) => {
     if (rm) {
       const r = loadRoutines().find(x => x.id === rm[1]);
       if (!r) return json(res, 404, { error: 'no such routine' });
-      if (req.method === 'DELETE') { removeRoutine(r.id); return json(res, 200, { ok: true, routines: loadRoutines() }); }
-      if (req.method !== 'POST') return json(res, 405, { error: 'POST or DELETE' });
+      if (req.method === 'APAGAR') { removeRoutine(r.id); return json(res, 200, { ok: true, routines: loadRoutines() }); }
+      if (req.method !== 'POST') return json(res, 405, { error: 'PUBLICAR ou APAGAR' });
       if (rm[2] === 'run') return json(res, 200, { ok: true, task: fire(r, { by: 'you' }), routines: loadRoutines() });
       if (rm[2] === 'pause' || rm[2] === 'resume') { editRoutine(r.id, { paused: rm[2] === 'pause' }); return json(res, 200, { ok: true, routines: loadRoutines() }); }
       const b = await body(req); const patch = {};
@@ -501,7 +501,7 @@ const server = http.createServer(async (req, res) => {
       if (!text || !String(text).trim()) return json(res, 400, { error: 'empty task' });
       const dueAt = at ? (typeof at === 'number' ? at : Date.parse(at)) : null; // V3.2.1: a task for a date
       if (at && !(dueAt > 0)) return json(res, 400, { error: 'at must be a time (ms or ISO)' });
-      if (dueAt && dueAt < Date.now() - 60000) return json(res, 400, { error: 'that time has passed — pick one that is still ahead' });
+      if (dueAt && dueAt < Date.now() - 60000) return json(res, 400, { error: 'essa hora já passou — escolhe uma que ainda esteja à frente' });
       const r = await route(dept, String(text).trim());
       const asTeam = TEAMS.enabled && (team === true || teams.intent(text)); // V3.2 (16 Sep): TEAM in the bar, or "as a team" in the sentence → the lead owns it and splits it
       const task = { id: nid(), dept, agent: asTeam ? leadOf(dept).id : r.agent, title: r.title, text: String(text).trim(), plan: r.plan, eta: r.eta, why: asTeam ? `team — ${leadOf(dept).name} splits it across the desks` : r.why, state: 'next', addedAt: Date.now(), by: 'you', model: normModel(model) || undefined, effort: normEffort(effort) || undefined, // model/effort: set on this task (beats routine, agent, office)
@@ -515,11 +515,11 @@ const server = http.createServer(async (req, res) => {
     if (m && req.method === 'POST' && (m[2] === 'approve' || m[2] === 'reject')) { // D1: the owner's tick on a routine's draft
       const task = load().find(t => t.id === m[1]);
       if (!task) return json(res, 404, { error: 'no such task' });
-      if (task.state !== 'waiting') return json(res, 400, { error: 'this task is not waiting for your OK' });
+      if (task.state !== 'waiting') return json(res, 400, { error: 'esta tarefa não está à espera do teu OK' });
       const { feedback } = m[2] === 'reject' ? await body(req) : {};
       const note = String(feedback || '').trim();
       console.log(`${m[2] === 'approve' ? '✅' : '↩'} ${task.id} ${m[2] === 'approve' ? 'approved — ' + agentName(task.agent) + ' is sending' : 'sent back: ' + note.slice(0, 80)}`);
-      enqueue(() => runServerTask(task.id, m[2] === 'approve' ? { approve: true } : { feedback: note || 'Not this. Rework it.' }))
+      enqueue(() => runServerTask(task.id, m[2] === 'approve' ? { approve: true } : { feedback: note || 'Não é isto. Refazer.' }))
         .then(t => { if (m[2] === 'reject' && note && t && !t.error) { const a = AGENTS.find(x => x.id === t.agent); return learn.classify(ask, a, t, note).then(v => { const r = learn.record(BRAIN, a, t, note, v); console.log(`  ↳ ${a.name} ${r.standing ? 'learned a rule' : 'noted a one-off'}: ${r.line.slice(0, 100)}`); }); } })
         .catch(e => console.warn('approval:', e.message));
       return json(res, 200, { ok: true, id: task.id, state: 'doing' });
@@ -535,7 +535,7 @@ const server = http.createServer(async (req, res) => {
         task.note = writeNote(task);
         await rebuildGraph();
       } catch (e) {
-        Object.assign(task, { state: 'done', doneAt: Date.now(), result: 'Could not complete this task: ' + e.message, error: true });
+        Object.assign(task, { state: 'done', doneAt: Date.now(), result: 'Não foi possível concluir esta tarefa: ' + e.message, error: true });
       }
       const l2 = load(); const i = l2.findIndex(t => t.id === task.id); if (i >= 0) l2[i] = task; save(l2);
       console.log(`${task.error ? '✗' : '✓'} ${task.id} ${task.error ? 'failed' : 'done'} (${task.result.length} chars${task.tools?.length ? ', tools: ' + task.tools.join(' ') : ''}${task.note ? ', note: ' + task.note : ''})`);
@@ -547,12 +547,12 @@ const server = http.createServer(async (req, res) => {
       }
       return;
     }
-    if (m && req.method === 'DELETE') { save(load().filter(t => t.id !== m[1])); return json(res, 200, { ok: true }); }
+    if (m && req.method === 'APAGAR') { save(load().filter(t => t.id !== m[1])); return json(res, 200, { ok: true }); }
     if (url.pathname === '/api/chat' && req.method === 'POST') {
       const { agent, text, history } = await body(req);
       if (!text || !String(text).trim()) return json(res, 400, { error: 'empty message' });
       const a = AGENTS.find(x => x.id === agent); if (!a) return json(res, 400, { error: 'unknown agent' });
-      if (!onboard.active(DATA, a.department)) { // V3.5: "every weekday at 8am, …" · "routines" · "pause …" · "run … now" — unless the lead is mid-interview
+      if (!onboard.active(DATA, a.department)) { // V3.5: "every weekday at 8am, …" · "routines" · "pause …" · "corre … agora" — unless the lead is mid-interview
         const rc = await routinesChat(a, String(text).trim());
         if (rc) return json(res, 200, { reply: rc.reply, read: [], tools: [], interview: false, routine: rc.routine || null, routines: true });
       }
@@ -569,7 +569,7 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { console.error(e); json(res, 500, { error: e.message }); }
 });
 server.listen(cfg.port, () => {
-  console.log(`Agents Office ${version} → http://localhost:${cfg.port}`);
+  console.log(`Órbita ${version} → http://localhost:${cfg.port}`);
   console.log(`  business: ${cfg.name}   brain: ${BRAIN} (${graph.notes} notes, ${graph.links.length} links)   claude: ${backend} · ${modelName(cfg.model)}${cfg.effort ? ' · effort ' + cfg.effort : ''} by default (routing on Sonnet)`);
   getUsage(true).then(u => console.log(u.source === 'claude' ? `  usage: session ${u.session?.percent ?? '—'}% · week ${u.week?.percent ?? '—'}% (your Claude plan, as Claude Code shows it)` : `  usage: Claude's gauge unavailable (${u.reason}) — showing the office's own count`)).catch(() => {});
   console.log(`  tasks: ${FILE}   notes the agents write: ${NOTES_DIR}`);

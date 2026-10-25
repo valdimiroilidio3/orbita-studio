@@ -1,4 +1,4 @@
-// LIVE SCREENS (14 Sep 2026). AJ: viewers ask "what are they doing, it just looks like an animation" —
+// LIVE SCREENS (14 Sep 2026). AJ: viewers ask "o que estão a fazer? parece só uma animação" —
 // so every monitor plays what its seat really runs on. Three players, one per screen kind:
 //   cli  — a recorded Claude Code session (real tool calls, real results, real timings; recorded by
 //          industry-demos/screens/tools/record.mjs against the demo company's sample brain), replayed
@@ -52,7 +52,7 @@ function wrap(s, cols) {
 
 function cliPlayer(seat, tr) {
   const { c, x, tex } = canvas();
-  const task = tr.task || 'Working through the queue';
+  const task = tr.task || 'A avançar na fila';
   const events = (tr.events || []).filter(e => e.k !== 'init');
   const t0 = events.length ? events[0].t : 0;
   // the loop's timeline: banner → typed prompt → the recorded events at their own spacing → hold → again
@@ -68,7 +68,7 @@ function cliPlayer(seat, tr) {
   const banner = () => {
     lines.length = 0;
     lines.push({ s: '╭' + '─'.repeat(COLS - 2) + '╮', col: CLI.box });
-    lines.push({ s: '│ ✻ Welcome to Claude Code' + ' '.repeat(COLS - 27) + '│', col: CLI.box, mix: [[2, 3, CLI.spin], [4, 26, CLI.ink]] });
+    lines.push({ s: '│ ✻ Bem-vindo ao Claude Code' + ' '.repeat(COLS - 27) + '│', col: CLI.box, mix: [[2, 3, CLI.spin], [4, 26, CLI.ink]] });
     lines.push({ s: '│' + ' '.repeat(COLS - 2) + '│', col: CLI.box });
     lines.push({ s: '│   ' + (tr.model && /opus/i.test(tr.model) ? 'Opus' : 'Sonnet') + ' · ~/' + BRAIN + ' '.repeat(Math.max(1, COLS - 3 - 2 - (tr.model && /opus/i.test(tr.model) ? 4 : 6) - 5 - BRAIN.length)) + '│', col: CLI.box, mix: [[4, COLS - 2, CLI.dim]] });
     lines.push({ s: '╰' + '─'.repeat(COLS - 2) + '╯', col: CLI.box });
@@ -127,7 +127,7 @@ function cliPlayer(seat, tr) {
       tokens = Math.round(1.2 * (el - typed) / 100 + built * 340);
       const yy = H - PAD - 2;
       x.fillStyle = CLI.spin; x.fillText(g + ' ' + verb + '…', PAD, yy);
-      x.fillStyle = CLI.dim; x.fillText(`(${secs}s · ↓ ${tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'k' : tokens} tokens · esc to interrupt)`, PAD + (verb.length + 3) * cw + 6, yy);
+      x.fillStyle = CLI.dim; x.fillText(`(${secs}s · ↓ ${tokens >= 1000 ? (tokens / 1000).toFixed(1) + 'k' : tokens} tokens · esc para interromper)`, PAD + (verb.length + 3) * cw + 6, yy);
     }
   }
   return {

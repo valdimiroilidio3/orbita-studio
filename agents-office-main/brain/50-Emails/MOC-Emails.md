@@ -1,6 +1,6 @@
-# MOC — Emails
+# MOC — E-mails
 
-- [[email-rules]] — reply times, tone, escalation
-- [[vendor-list]] — who we buy from and their terms
-- [[contractor-terms]] — freelancer rates and briefs
-Every client reply within the hour. Voice: [[voice]].
+- [[email-rules]] — tempos de resposta, tom, escalonamento
+- [[vendor-list]] — a quem compramos e em que termos
+- [[contractor-terms]] — valores e briefings de freelancers
+Cada resposta a cliente na primeira hora. Voz: [[voice]].

@@ -1,3 +1,3 @@
-# Proposal template
+# Modelo de proposta
 
-Sections: your situation, what we will do, timeline, price, proof. Price from [[offer-ladder]]. Sent by Proposals in [[MOC-Sales]].
+Secções: a tua situação, o que vamos fazer, calendário, preço, provas. Preço a partir de [[offer-ladder]]. Enviada pelas Propostas em [[MOC-Sales]].

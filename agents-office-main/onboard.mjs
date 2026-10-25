@@ -1,8 +1,8 @@
-// Agents Office — the department lead interviews the owner (Beta).
+// Órbita — the department lead interviews the owner (Beta).
 // In the chat with a department lead, say "set up". The lead asks five questions, one at a time,
 // about how that department works here, then writes it down for the team:
-//   · a brief for each agent in the department   → <brain>/Agents Office/agents.json
-//   · one skill for the job the owner described  → <brain>/Agents Office/skills/<name>/
+//   · a brief for each agent in the department   → <brain>/Órbita/agents.json
+//   · one skill for the job the owner described  → <brain>/Órbita/skills/<name>/
 // Nothing is written until the last answer. "skip" skips a question, "done" finishes early,
 // "cancel" throws the answers away. State lives in data/interviews.json while an interview runs.
 import fs from 'node:fs';
@@ -16,8 +16,8 @@ const DONE = /^\s*(done|finish|that'?s\s+(it|all|enough)|enough)\s*[.!]?\s*$/i;
 export const QUESTIONS = [
   { k: 'what', q: d => `First: what does ${d} actually do here, in your words? What comes in, what goes out, and who is it for?` },
   { k: 'job', q: d => `Walk me through the one ${d.toLowerCase()} job you do most often, start to finish. Where does it start, what do you check, what does the finished thing look like?` },
-  { k: 'good', q: () => `What does a good result look like? If you have one you were happy with, paste it in or describe it. If you have a template, describe its sections.` },
-  { k: 'never', q: () => `What must never happen? Red lines, things that always wait for you, anything that has gone wrong before and must not again.` },
+  { k: 'good', q: () => `Como é um bom resultado? Se tens um de que gostaste, cola-o aqui ou descreve-o. Se tens um modelo, descreve as secções.` },
+  { k: 'never', q: () => `O que nunca pode acontecer? Linhas vermelhas, coisas que esperam sempre por ti, algo que já correu mal e não pode repetir-se.` },
   { k: 'tools', q: () => `Which tools or systems do we use for this, and who are the people involved (clients, suppliers, staff, a bookkeeper)? Say "skip" if nothing comes to mind.` },
 ];
 
@@ -59,7 +59,7 @@ export async function handle(text, ctx) {
   if (wrote.skill) lines.push(`- A skill, **${wrote.skill.name}**${wrote.skill.description ? ' (' + wrote.skill.description + ')' : ''}, for ${wrote.skill.agents.map(id => ctx.agents.find(a => a.id === id)?.name || id).join(' and ')} in \`${wrote.skill.dir}\`${wrote.skill.template ? ' with a template beside it' : ''}.`);
   if (!wrote.briefs.length && !wrote.skill) lines.push(`- Nothing usable came out of the answers, so nothing was written. Say "set up" to try again with more detail.`);
   if (wrote.problems.length) lines.push(`- Skipped: ${wrote.problems.join('; ')}.`);
-  lines.push(`They apply from the next task. Try it: pick ${d} in the task bar and type "${wrote.tryTask || 'the job you described, for a real client'}". If the result is off, send it back with "revise: …" and I will remember the correction. Edit the files any time; they are yours.`);
+  lines.push(`They apply from the next task. Try it: pick ${d} in the task bar and type "${wrote.tryTask || 'o trabalho que descreveste, para um cliente real'}". If the result is off, send it back with "revise: …" and I will remember the correction. Edit the files any time; they are yours.`);
   return { reply: lines.join('\n'), wrote };
 }
 
@@ -77,24 +77,24 @@ export async function writeUp(answers, ctx) {
     'Return: {"briefs":[{"id":"<agent id>","brief":"<text>"}],"skill":{"name":"","description":"","agents":[],"body":"","template":""}|null,"try":""}';
   let j = null; try { const t = await ask(system, user, { maxTokens: 3000, timeout: 180000 }); const s = t.replace(/```json|```/g, ''); j = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1)); } catch (e) { j = { briefs: [], skill: null, try: '', error: e.message }; }
   const ids = new Set(agents.map(a => a.id)); const problems = [];
-  if (j.error) problems.push('Claude did not return usable instructions (' + j.error.split('\n')[0] + ')');
-  // briefs → <brain>/Agents Office/agents.json (merged: other agents and other fields untouched)
+  if (j.error) problems.push('O Claude não devolveu instruções utilizáveis (' + j.error.split('\n')[0] + ')');
+  // briefs → <brain>/Órbita/agents.json (merged: other agents and other fields untouched)
   const briefs = (Array.isArray(j.briefs) ? j.briefs : []).filter(b => b && ids.has(b.id) && String(b.brief || '').trim()).map(b => ({ id: b.id, brief: String(b.brief).trim().slice(0, 2000) }));
   for (const b of (Array.isArray(j.briefs) ? j.briefs : [])) if (b && b.id && !ids.has(b.id)) problems.push(`"${b.id}" is not in ${d}`);
-  const agentsFile = path.join(brainPath, 'Agents Office', 'agents.json');
+  const agentsFile = path.join(brainPath, 'Órbita', 'agents.json');
   if (briefs.length) {
     fs.mkdirSync(path.dirname(agentsFile), { recursive: true });
     let doc = { agents: [] }; try { const x = JSON.parse(fs.readFileSync(agentsFile, 'utf8')); if (Array.isArray(x?.agents)) doc = x; } catch {}
     for (const b of briefs) { const e = doc.agents.find(x => x && x.id === b.id); if (e) e.brief = b.brief; else doc.agents.push({ id: b.id, brief: b.brief }); }
     fs.writeFileSync(agentsFile, JSON.stringify(doc, null, 2) + '\n');
   }
-  // the skill → <brain>/Agents Office/skills/<name>/SKILL.md (+ template.md)
+  // the skill → <brain>/Órbita/skills/<name>/SKILL.md (+ template.md)
   let skill = null;
   if (j.skill && typeof j.skill === 'object' && String(j.skill.body || '').trim()) {
     const name = String(j.skill.name || `${dept}-job`).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-|-$/g, '') || `${dept}-job`;
     let bound = (Array.isArray(j.skill.agents) ? j.skill.agents : []).filter(id => ids.has(id));
     if (!bound.length) bound = [lead.id];
-    const dir = path.join(brainPath, 'Agents Office', 'skills', name);
+    const dir = path.join(brainPath, 'Órbita', 'skills', name);
     if (fs.existsSync(path.join(dir, 'SKILL.md'))) { const bak = path.join(dir, `SKILL.md.backup-${Date.now()}`); fs.copyFileSync(path.join(dir, 'SKILL.md'), bak); problems.push(`a skill called ${name} already existed — the old SKILL.md is kept beside it as ${path.basename(bak)}`); }
     fs.mkdirSync(dir, { recursive: true });
     const description = String(j.skill.description || '').replace(/\n/g, ' ').trim().slice(0, 160);

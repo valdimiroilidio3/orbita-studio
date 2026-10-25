@@ -1,4 +1,4 @@
-// Agents Office — connectors (Beta). The office shows the MCP servers YOUR Claude Code is
+// Órbita — connectors (Beta). The office shows the MCP servers YOUR Claude Code is
 // actually connected to, and hands those same servers to the agents as tools.
 //
 //   discover()          → `claude mcp list`, parsed: every server, its status, the tool id
@@ -102,7 +102,7 @@ export function browserState() {
 }
 function browserServer(prev) {
   const b = browserState();
-  const s = make(BROWSER, b.device ? `Claude in Chrome · ${b.device}` : 'Claude in Chrome extension', prev?.status === 'connected' || prev?.status === 'failed' ? prev.status : b.installed ? 'connected' : 'pending');
+  const s = make(BROWSER, b.device ? `Claude in Chrome · ${b.device}` : 'extensão Claude no Chrome', prev?.status === 'connected' || prev?.status === 'failed' ? prev.status : b.installed ? 'connected' : 'pending');
   s.name = 'Chrome'; s.key = 'chrome'; s.source = 'chrome'; s.browser = true; s.tools = prev?.tools || [];
   return s;
 }

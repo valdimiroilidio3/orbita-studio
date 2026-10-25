@@ -1,3 +1,3 @@
-# Visual identity
+# Identidade visual
 
-Ink on cream. One accent colour per client. Templates live with Client Assets in [[MOC-Delivery]]. See [[voice]].
+Tinta sobre creme. Uma cor de destaque por cliente. Os modelos vivem com os Recursos de Clientes em [[MOC-Delivery]]. Ver [[voice]].

@@ -1,4 +1,4 @@
-// Agents Office — Agent Teams (V3.2 (16 Sep), 16 Sep 2026).
+// Órbita — Agent Teams (V3.2 (16 Sep), 16 Sep 2026).
 //
 // A team task is one the department LEAD splits across its own desks: the lead plans the pieces,
 // the teammates work them at the same time, each in its own Claude session with its own context,
@@ -37,7 +37,7 @@ export function askedSize(text) { // "spawn three teammates" → 3, else null
 
 export function planPrompt({ business, deptName, lead, seats, text, title, max, notes }) {
   const system = `You are ${lead.name}, the lead of the ${deptName} department of ${business}. You are splitting one request across your team. ` +
-    'Return ONLY a JSON object — no prose, no code fences.';
+    'Devolve APENAS um objeto JSON — sem texto, sem blocos de código.';
   const user = `Your team (id · name · role · what they do${seats.some(s => s.skills?.length) ? ' · skills' : ''}):\n` +
     seats.map(s => `- ${s.id}${s.lead ? ' (you, the lead)' : ''} · ${s.name} · ${s.role} · ${s.does}${s.skills?.length ? ' · skills: ' + s.skills.join(', ') : ''}`).join('\n') +
     `\n\nThe owner's request: "${text}"${title && title !== text ? `\n(Task title: ${title})` : ''}\n\n` +
@@ -51,7 +51,7 @@ export function planPrompt({ business, deptName, lead, seats, text, title, max, 
 
 function parseJSON(text) {
   const s = String(text || '').replace(/```json|```/g, ''); const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('no JSON');
+  if (a < 0 || b < a) throw new Error('sem JSON');
   return JSON.parse(s.slice(a, b + 1));
 }
 
@@ -69,7 +69,7 @@ export function parsePlan(text, { seats, lead, max = DEFAULTS.max, fallback = {}
     if (pieces.length >= max) break;
   }
   if (pieces.length === 1) return { pieces, why: String(j.why || '').slice(0, 200), solo: true }; // the lead named one desk: that desk does it, the lead writes it up
-  if (!pieces.length) return { pieces: [{ agent: lead.id, title: String(fallback.title || fallback.text || 'The task').slice(0, 90), text: String(fallback.text || '') }], why: '', solo: true };
+  if (!pieces.length) return { pieces: [{ agent: lead.id, title: String(fallback.title || fallback.text || 'a tarefa').slice(0, 90), text: String(fallback.text || '') }], why: '', solo: true };
   return { pieces, why: String(j.why || '').slice(0, 200), solo: false };
 }
 
@@ -99,7 +99,7 @@ export function parseMessages(text, ids = []) {
 }
 
 export function synthPrompt({ task, pieces, messages, nameOf, feedback }) {
-  const parts = pieces.map(p => `--- ${nameOf(p.agent)} — ${p.title} ---\n${p.error ? '(could not complete: ' + (p.result || 'no result') + ')' : (p.result || '(empty)')}`).join('\n\n');
+  const parts = pieces.map(p => `--- ${nameOf(p.agent)} — ${p.title} ---\n${p.error ? '(não foi possível concluir: ' + (p.result || 'no result') + ')' : (p.result || '(empty)')}`).join('\n\n');
   const notes = (messages || []).length ? '\n\nNOTES THE TEAM LEFT\n' + messages.map(m => `- ${nameOf(m.from)} → ${m.to === 'lead' ? 'you' : nameOf(m.to)}: ${m.text}`).join('\n') : '';
   return `Task: ${task.title}\nOwner's request: ${task.text}\n\nYour team has done the pieces below. Write the finished deliverable from them: keep the substance, cut repetition, resolve any clash using the notes, and fill only what is plainly missing (mark it (assumed)). ` +
     'Plain text: a short heading, then short sections or bullets. At most 450 words unless a skill or the owner\'s instructions set a different shape — those win. ' +
@@ -110,9 +110,9 @@ export function synthPrompt({ task, pieces, messages, nameOf, feedback }) {
 
 export function noteExtra(team, nameOf) {
   if (!team || !team.pieces?.length) return '';
-  let s = '\n\n---\n## Team\n' + team.pieces.map(p => `- ${nameOf(p.agent)} (${p.agent}): ${p.title}${p.error ? ' — could not complete' : ''}`).join('\n');
+  let s = '\n\n---\n## Team\n' + team.pieces.map(p => `- ${nameOf(p.agent)} (${p.agent}): ${p.title}${p.error ? ' — não foi possível concluir' : ''}`).join('\n');
   if (team.messages?.length) s += '\n\n### Notes between teammates\n' + team.messages.map(m => `- ${nameOf(m.from)} → ${m.to === 'lead' ? 'lead' : nameOf(m.to)}: ${m.text}`).join('\n');
-  for (const p of team.pieces) s += `\n\n### ${nameOf(p.agent)} — ${p.title}\n${p.result || '(no result)'}`;
+  for (const p of team.pieces) s += `\n\n### ${nameOf(p.agent)} — ${p.title}\n${p.result || '(sem resultado)'}`;
   return s;
 }
 

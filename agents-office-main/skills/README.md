@@ -1,5 +1,7 @@
-# Skills
+# Competências
 
-A skill is how you want one kind of work done. The three here are examples for the sample
-studio: one bound to an agent, one to a department, one to everyone. Yours go in
-`<brain>/Agents Office/skills/` so they live with your notes. The guide is [SKILLS.md](../SKILLS.md).
+Cada pasta aqui é uma competência: um `SKILL.md` com front-matter (`name`, `description`, e opcionalmente `departments`, `agents`) e o procedimento em markdown. O servidor relê-as e liga-as a cada agente antes de cada tarefa e conversa.
+
+- As competências incluídas vivem aqui, em `skills/`.
+- As tuas vivem em `<cérebro>/Órbita/skills/<nome>/SKILL.md` e ganham em caso de nome igual.
+- Edita um ficheiro, chama `/api/skills`, e o escritório usa logo a nova versão.

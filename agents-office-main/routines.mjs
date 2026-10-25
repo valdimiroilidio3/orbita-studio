@@ -1,6 +1,6 @@
-// Agents Office V3.5 — routines: tasks the office does on its own clock.
+// Órbita V3.5 — routines: tasks the office does on its own clock.
 //
-// A routine is a line in <brain>/Agents Office/routines.json (yours: written by the task bar,
+// A routine is a line in <brain>/Órbita/routines.json (yours: written by the task bar,
 // by a department lead in chat, or by Claude Code). Run state — when each one is next due, when
 // it last ran — lives in data/routines.json so the brain file stays clean config.
 //
@@ -8,7 +8,7 @@
 // them later; a routine for one of them is refused with a sentence, not an error code.
 //
 //   { "id": "inbox-triage", "dept": "emails", "agent": "elead",
-//     "title": "Triage the overnight inbox", "text": "Triage the overnight inbox: what needs me, …",
+//     "title": "Triar a caixa de entrada da noite", "text": "Triar a caixa de entrada da noite: o que precisa de mim, …",
 //     "when": { "kind": "weekdays", "at": "08:00" },      ← src/when.js
 //     "needsOk": false, "paused": false, "model": "opus", "effort": "high" }   ← optional: model sonnet · opus · fable; effort low · medium · high · xhigh · max (default: the office's, then the model's own)
 //
@@ -19,17 +19,17 @@ import path from 'node:path';
 import { describe, nextRun, valid } from './src/when.js';
 
 export const ALLOWED = ['emails', 'fin', 'sales'];
-export const NAMES = { emails: 'Emails', fin: 'Accounting', sales: 'Sales', marketing: 'Marketing', ops: 'Operations', delivery: 'Delivery' };
-export const file = brainPath => path.join(brainPath, 'Agents Office', 'routines.json');
+export const NAMES = { emails: 'E-mails', fin: 'Contabilidade', sales: 'Vendas', marketing: 'Marketing', ops: 'Operações', delivery: 'Entregas' };
+export const file = brainPath => path.join(brainPath, 'Órbita', 'routines.json');
 export const stateFile = dataDir => path.join(dataDir, 'routines.json');
 export const LATE_AFTER = 90 * 1000; // a run more than 90 s past its minute was missed (asleep, or the office was off) → runs once, marked LATE
 
 const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 const readJSON = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
 
-/** "Routines come to Marketing in a later release. This release: Emails, Accounting, Sales." */
+/** "As rotinas chegam ao Marketing numa versão futura. Nesta versão: E-mails, Contabilidade, Vendas." */
 export function refusal(dept) {
-  return `Routines come to ${NAMES[dept] || dept} in a later release. This release: Emails, Accounting and Sales.`;
+  return `As rotinas chegam ${NAMES[dept] ? 'a ' + NAMES[dept] : 'a este departamento'} numa versão futura. Nesta versão: E-mails, Contabilidade e Vendas.`;
 }
 
 /** Normalise + check one routine against the roster. Returns { routine, problems }. Fixed fields are kept as given; bad ones are named. */
@@ -40,7 +40,7 @@ export function validate(r, agents, existing = []) {
   out.dept = r.dept || (a && a.department);
   if (!ALLOWED.includes(out.dept)) problems.push(`${r.id || r.title || 'routine'}: ${refusal(out.dept)}`);
   if (!a) problems.push(`${r.id || r.title || 'routine'}: no agent called "${r.agent}"`);
-  else if (a.department !== out.dept) problems.push(`${r.id || r.title || 'routine'}: ${a.name} is in ${NAMES[a.department] || a.department}, not ${NAMES[out.dept] || out.dept}`);
+  else if (a.department !== out.dept) problems.push(`${r.id || r.title || 'routine'}: ${a.name} está em ${NAMES[a.department] || a.department}, não em ${NAMES[out.dept] || out.dept}`);
   out.agent = r.agent;
   out.text = String(r.text || '').trim();
   if (!out.text) problems.push(`${r.id || 'routine'}: no task text`);
@@ -135,10 +135,10 @@ export function askLine(task) {
 /** The "routines" list a lead reads back in chat. */
 export function listText(list, dept, agents) {
   const mine = list.filter(r => r.dept === dept);
-  if (!mine.length) return `Nothing on the ${NAMES[dept]} timetable yet. Give me one with a time in it — "every weekday at 8am, …" — and I will put it on.`;
+  if (!mine.length) return `Ainda nada no horário de ${NAMES[dept]}. Dá-me uma com uma hora dentro — «todos os dias úteis às 8h, …» — e ponho-a lá.`;
   const name = id => agents.find(a => a.id === id)?.name || id;
-  return `${NAMES[dept]} routines:\n` + mine.map(r => `• ${r.title} — ${r.desc} · ${name(r.agent)}${r.paused ? ' · PAUSED' : ''}${r.needsOk ? ' · waits for your OK' : ' · read-only'}`).join('\n') +
-    `\n\nSay "pause …", "resume …", "run … now" or "delete …" with a few words from the name.`;
+  return `Rotinas de ${NAMES[dept]}:\n` + mine.map(r => `• ${r.title} — ${r.desc} · ${name(r.agent)}${r.paused ? ' · EM PAUSA' : ''}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}`).join('\n') +
+    `\n\nSay "pause …", "resume …", "corre … agora" or "delete …" with a few words from the name.`;
 }
 
 /** Match "pause the monday one" / "run inbox triage now" to a routine in the department by word overlap. */

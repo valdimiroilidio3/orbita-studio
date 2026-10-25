@@ -1,4 +1,4 @@
-# Business model
+# Modelo de negócio
 
-Northgate Studio is a 12-person B2B services studio: websites, brand and monthly growth retainers for trade and professional-services businesses.
-Revenue is retainers first ([[offer-ladder]]), projects second. Targets in [[numbers-ledger]]. Who we sell to: [[icp]].
+A Northgate Studio é um estúdio de serviços B2B com 12 pessoas: sites, marca e avenças mensais de crescimento para empresas de ofícios e serviços profissionais.
+A receita vem primeiro das avenças ([[offer-ladder]]) e depois dos projetos. Objetivos em [[numbers-ledger]]. A quem vendemos: [[icp]].

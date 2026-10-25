@@ -1,24 +1,26 @@
-# Proposal for {Client}
+# Proposta — {{cliente}}
 
-**Prepared for** {name, role}   **From** Northgate Studio   **Valid until** {date, 14 days out}
+## A tua situação
+{{uma ou duas frases sobre o que o cliente nos disse}}
 
-## What you told us
-Three or four lines in their words: the problem, what it is costing them, what they want by when.
+## O que vamos fazer
+- {{entrega 1}}
+- {{entrega 2}}
 
-## What we will do
-The scope in plain language. One paragraph per stream of work. Name the deliverable, not the activity.
+## Calendário
+{{semanas, com datas}}
 
-## Options
-| | Starter | Studio | Partner |
-|---|---|---|---|
-| Scope | … | … | … |
-| Turnaround | … | … | … |
-| Price / month | $… | $… | $… |
+## Preço
+| Opção | O que inclui | Por mês |
+|---|---|---|
+| Essencial | {{...}} | {{...}} |
+| Crescimento | {{...}} | {{...}} |
+| Completo | {{...}} | {{...}} |
 
-One line under the table: which option we recommend and why, in their terms. Prices ex GST.
+Preços por mês, sem IVA. {{uma linha sobre a opção recomendada}}
 
-## How it starts
-Kick-off date, what we need from them on day one, first deliverable and its date.
+## Provas
+{{um resultado real, do numbers-ledger}}
 
-## Next step
-One sentence: what they do and by when.
+## Próximo passo
+{{o que acontece a seguir}} até {{data}}.

@@ -1,3 +1,3 @@
-# Email rules
+# Regras de e-mail
 
-Clients first, within the hour. Vendors and contractors the same day. Internal by end of day. Anything about money or scope goes to the owner before it is sent. Templates follow [[voice]].
+Clientes primeiro, na primeira hora. Fornecedores e freelancers no mesmo dia. Internos até ao fim do dia. Tudo o que envolva dinheiro ou âmbito vai para o proprietário antes de ser enviado. Os modelos seguem [[voice]].

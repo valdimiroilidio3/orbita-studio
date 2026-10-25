@@ -1,6 +1,6 @@
-// Agents Office — the roster (Beta). Who sits where is fixed (six pods, 35 seats); what each
+// Órbita — the roster (Beta). Who sits where is fixed (six pods, 35 seats); what each
 // agent is called, does and uses is yours to change in office.agents.json.
-//   built-in defaults  ← office.agents.json  ← <brain>/Agents Office/agents.json  ← office.agents.local.json (gitignored)
+//   built-in defaults  ← office.agents.json  ← <brain>/Órbita/agents.json  ← office.agents.local.json (gitignored)
 // Departments, leads and seats cannot be changed from these files; the office ignores such
 // edits and says so. `brief` is the owner's standing instructions to that agent (multi-line),
 // read before every task. Skills — how a kind of work is done — live beside the agents in
@@ -13,7 +13,7 @@ import { V1 } from './src/v1data.js';
 
 export const FILE = path.join(ROOT, 'office.agents.json');
 export const LOCAL = path.join(ROOT, 'office.agents.local.json');
-export const brainFile = brainPath => path.join(brainPath, 'Agents Office', 'agents.json');
+export const brainFile = brainPath => path.join(brainPath, 'Órbita', 'agents.json');
 const EDITABLE = ['name', 'role', 'does', 'tools', 'brief', 'model', 'effort'];
 const BRIEF_MAX = 2000;
 const MODELS = ['sonnet', 'opus', 'fable']; // V3.6: an agent's model, by name; empty = the office default
@@ -62,7 +62,7 @@ function read(p) { if (!fs.existsSync(p)) return null; try { return JSON.parse(f
 export function loadRoster(brainPath = loadConfig().brainPath) {
   let agents = defaults(); const problems = [];
   const sources = [FILE, brainFile(brainPath), LOCAL];
-  const label = p => p === FILE || p === LOCAL ? path.basename(p) : 'brain/Agents Office/agents.json';
+  const label = p => p === FILE || p === LOCAL ? path.basename(p) : 'brain/Órbita/agents.json';
   for (const p of sources) {
     const doc = read(p); if (!doc) continue;
     const rel = label(p);

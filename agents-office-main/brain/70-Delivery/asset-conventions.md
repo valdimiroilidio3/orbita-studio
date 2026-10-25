@@ -1,3 +1,3 @@
-# Asset conventions
+# Convenções de recursos
 
-client / project / type / version. Logos always as SVG, PNG, PDF and favicon. Finals only in the client portal, drafts never.
+cliente / projeto / tipo / versão. Logótipos sempre em SVG, PNG, PDF e favicon. Só finais no portal do cliente, nunca rascunhos.

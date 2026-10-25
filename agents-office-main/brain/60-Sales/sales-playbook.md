@@ -1,3 +1,3 @@
-# Sales playbook
+# Manual de vendas
 
-Qualify on fit ([[icp]]), urgency and budget. Discovery call: 25 minutes, three questions. Objections: price (show [[numbers-ledger]] results), timing, DIY. Hand warm replies to the owner.
+Qualificar por encaixe ([[icp]]), urgência e orçamento. Chamada de descoberta: 25 minutos, três perguntas. Objeções: preço (mostrar resultados de [[numbers-ledger]]), momento, fazer em casa. Passar respostas quentes ao proprietário.

@@ -1,3 +1,3 @@
-# Report template
+# Modelo de relatório
 
-What we did, what happened (numbers, charted), what is next, what you need to decide. Four pages, same order every month. Sent on the 5th after [[qa-checklist]].
+O que fizemos, o que aconteceu (números, em gráfico), o que vem a seguir, o que precisas de decidir. Quatro páginas, mesma ordem todos os meses. Enviado no dia 5 depois da [[qa-checklist]].

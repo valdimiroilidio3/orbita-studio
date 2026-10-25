@@ -1,6 +1,6 @@
-# MOC — Sales
+# MOC — Vendas
 
-- [[sales-playbook]] — qualification, discovery, objections
-- [[proposal-template]] — how a proposal is built
-- [[pipeline-rules]] — stages, follow-up cadence, when a deal goes quiet
-Inbound leads are qualified within the hour. Prices from [[offer-ladder]].
+- [[sales-playbook]] — qualificação, descoberta, objeções
+- [[proposal-template]] — como se constrói uma proposta
+- [[pipeline-rules]] — fases, cadência de seguimento, quando um negócio esfria
+Os leads recebidos são qualificados na primeira hora. Preços de [[offer-ladder]].

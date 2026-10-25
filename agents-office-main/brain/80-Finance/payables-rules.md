@@ -1,3 +1,3 @@
-# Payables rules
+# Regras de contas a pagar
 
-Subscriptions auto-charge the card and are matched monthly. Contractor invoices are checked against [[contractor-terms]] before payment. Anything over the contract rate is held for the owner.
+As subscrições são debitadas no cartão e conciliadas mensalmente. As faturas de freelancers são conferidas com [[contractor-terms]] antes do pagamento. Tudo o que exceda o valor do contrato é retido para o proprietário.

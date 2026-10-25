@@ -1,3 +1,3 @@
-# Vendor list
+# Lista de fornecedores
 
-Hosting (annual, renews March), SMS provider (monthly), print (per job), design tools (monthly). Renewals checked by Accounts Payable in [[MOC-Finance]].
+Alojamento (anual, renova em março), fornecedor de SMS (mensal), impressão (por trabalho), ferramentas de design (mensal). As renovações são verificadas pelas Contas a Pagar em [[MOC-Finance]].

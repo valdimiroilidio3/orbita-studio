@@ -1,5 +1,5 @@
-# MOC — Finance
+# MOC — Finanças
 
-- [[invoicing-rules]] — when and how we invoice
-- [[payables-rules]] — card charges, contractor invoices, what needs approval
-Numbers in [[numbers-ledger]]. Contractor rates in [[contractor-terms]].
+- [[invoicing-rules]] — quando e como faturamos
+- [[payables-rules]] — movimentos de cartão, faturas de freelancers, o que precisa de aprovação
+Números em [[numbers-ledger]]. Valores de freelancers em [[contractor-terms]].

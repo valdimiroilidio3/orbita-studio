@@ -1,3 +1,3 @@
-# Pipeline rules
+# Regras do pipeline
 
-Stages: new, qualified, proposal sent, negotiating, won, lost. Follow up on day 2, day 5, day 12. A deal quiet past 14 days gets the nudge in [[sales-playbook]].
+Fases: novo, qualificado, proposta enviada, negociação, ganho, perdido. Seguimento ao dia 2, dia 5 e dia 12. Um negócio parado há mais de 14 dias recebe o lembrete de [[sales-playbook]].

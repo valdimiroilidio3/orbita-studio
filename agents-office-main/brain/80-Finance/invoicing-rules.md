@@ -1,3 +1,3 @@
-# Invoicing rules
+# Regras de faturação
 
-Retainers on the 1st, projects 50% up front and 50% at handover. Reminders on day 7, 14 and 21. Credit notes need the owner.
+Avenças ao dia 1, projetos 50% adiantado e 50% na entrega. Lembretes ao dia 7, 14 e 21. Notas de crédito precisam do proprietário.

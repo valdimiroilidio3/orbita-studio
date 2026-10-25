@@ -1,10 +1,10 @@
-# Numbers ledger
+# Livro de números
 
-| Metric | Value | As of |
+| Indicador | Valor | A partir de |
 |---|---|---|
-| Active clients | 14 | 1 Sep 2026 |
-| Monthly recurring revenue | $38,400 | 1 Sep 2026 |
-| Average project length | 23 days | Aug 2026 |
-| Proposal win rate | 41% | Q3 2026 |
+| Clientes ativos | 14 | 1 set 2026 |
+| Receita recorrente mensal | 38 400 $ | 1 set 2026 |
+| Duração média de projeto | 23 dias | ago 2026 |
+| Taxa de ganho de propostas | 41% | 3.º trim. 2026 |
 
-Cited by [[MOC-Finance]], [[MOC-Sales]] and [[business-model]].
+Citado por [[MOC-Finance]], [[MOC-Sales]] e [[business-model]].

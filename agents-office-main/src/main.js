@@ -1,4 +1,4 @@
-// Agents Office v2 — Three.js isometric office with zoom-driven LOD
+// Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
 import { TOKENS, DEPTS, DEPT_KEYS, AGENTS, LAYOUT, WORKLINES, APPROVAL_ASKS, APPROVAL_BY_AGENT } from './data.js';
@@ -323,28 +323,28 @@ const kv = id => KPIS.find(k => k.id === id).val;
 let brainNotes = brain.state.notes;
 const BB_ROWS = profileRows() || {
   emails: [
-    ['EMAILS SENT', () => STATS.emailsSent],
-    ['REPLIES DRAFTED', () => STATS.drafts]],
+    ['E-MAILS ENVIADOS', () => STATS.emailsSent],
+    ['RESPOSTAS ESCRITAS', () => STATS.drafts]],
   delivery: [
-    ['REPORTS SENT', () => STATS.reports],
-    ['ON TRACK', () => STATS.onTrack + ' / ' + STATS.projects]],
+    ['RELATÓRIOS ENVIADOS', () => STATS.reports],
+    ['DENTRO DO PRAZO', () => STATS.onTrack + ' / ' + STATS.projects]],
   sales: [
-    ['CALLS S·A·J', () => STATS.spencer + '·' + STATS.arwin + '·' + STATS.jack],
-    ['NEW MANAGERS', () => STATS.managers],
-    ['AUTO-ONBOARDED', () => STATS.autoOnb]],
+    ['CHAMADAS S·A·J', () => STATS.spencer + '·' + STATS.arwin + '·' + STATS.jack],
+    ['NOVOS GESTORES', () => STATS.managers],
+    ['INTEGRADOS AUTO.', () => STATS.autoOnb]],
   marketing: [
-    ['NEW INSIGHTS', () => STATS.insMkt],
-    ['COST PER USER', () => '$' + Math.round(STATS.cpa)]],
+    ['NOVOS INSIGHTS', () => STATS.insMkt],
+    ['CUSTO POR UTILIZADOR', () => '$' + Math.round(STATS.cpa)]],
   ops: [
-    ['PROPOSALS MADE', () => Math.round(kv('proposals'))],
-    ['NEW INSIGHTS', () => STATS.insOps]],
+    ['PROPOSTAS FEITAS', () => Math.round(kv('proposals'))],
+    ['NOVOS INSIGHTS', () => STATS.insOps]],
   fin: [
-    ['INVOICES ISSUED', () => Math.round(kv('invoices'))],
-    ['BILLS PAID', () => STATS.billsPaid]],
+    ['FATURAS EMITIDAS', () => Math.round(kv('invoices'))],
+    ['CONTAS PAGAS', () => STATS.billsPaid]],
   brain: [
-    ['NOTES INDEXED', () => brainNotes.toLocaleString('en-NZ')]],
+    ['NOTAS INDEXADAS', () => brainNotes.toLocaleString('en-NZ')]],
 };
-if (PROFILE && !BB_ROWS.brain) BB_ROWS.brain = [['NOTES INDEXED', () => brainNotes.toLocaleString('en-NZ')]];
+if (PROFILE && !BB_ROWS.brain) BB_ROWS.brain = [['NOTAS INDEXADAS', () => brainNotes.toLocaleString('en-NZ')]];
 for (const k of [...DEPT_KEYS, 'brain']) {
   const dept = DEPTS[k];
   const n = AGENTS.filter(a => a.dept === k).length;
@@ -352,11 +352,11 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   b.className = 'badge';
   b.innerHTML = `
     <div class="b-name"><span class="dot" style="background:${dept.chip}"></span>${dept.short}<span class="live"></span></div>
-    <div class="b-count">${k === 'brain' ? '<span class="b-num">∞</span><span class="b-lab">KNOWLEDGE</span>' : `<span class="b-num">${n}</span><span class="b-lab">AGENTS</span>`}</div>
+    <div class="b-count">${k === 'brain' ? '<span class="b-num">∞</span><span class="b-lab">KNOWLEDGE</span>' : `<span class="b-num">${n}</span><span class="b-lab">AGENTES</span>`}</div>
     <div class="b-metrics">${BB_ROWS[k].map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-m="${k}-${i}">${row[1]()}</span></div>`).join('')}
     </div>
-    <div class="b-appr" style="display:none">⚠ <span class="ap-n">1</span> WAITING APPROVAL</div>`;
+    <div class="b-appr" style="display:none">⚠ <span class="ap-n">1</span> À ESPERA DE APROVAÇÃO</div>`;
   b.addEventListener('click', (e) => {
     if (e.target.closest('.b-appr')) { zoomToApproval(k); e.stopPropagation(); }
     else if (e.target.closest('.b-tasks') && tasks) { tasks.openFor(k); e.stopPropagation(); }
@@ -364,9 +364,9 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   });
   if (k === 'brain') { // V3.6: a small tag names the etched floor and opens the graph (the big card stays retired)
     b.className = 'badge brainTag';
-    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>THE BRAIN<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES</div>`;
+    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>O CÉREBRO<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES</div>`;
     b.onclick = (e) => { e.stopPropagation(); brain.open(); };
-    b.title = 'open the Brain (G)';
+    b.title = 'abrir o Cérebro (G)';
   }
   hud.appendChild(b);
   deptRT[k].badge = b;
@@ -526,7 +526,7 @@ addEventListener('keydown', (e) => {
 
 // camera mode: mid-tone backdrop for filming the screen (#cam=1 / V toggles)
 function setCam(on) { document.body.classList.toggle('cam', !!on); }
-// DARK MODE (AJ, 6 Sep 2026: "make another one in dark mode as I will show both"): D toggles, #dark=1
+// DARK MODE (AJ, 6 Sep 2026: "faz outro em modo escuro, vou mostrar os dois"): D toggles, #dark=1
 // forces it, /dark on the server opens in it. The chrome follows the CSS tokens; the scene
 // re-tints its shared materials (plinths, floors, walkways), relights, and the Brain/wires swap ink.
 let darkOn = false;
@@ -621,11 +621,11 @@ function renderChat(id) {
       </div>`;
     if (m.who === 'appr') return `
       <div class="m-appr" data-i="${i}">
-        <div class="a-who">needs your approval</div>
+        <div class="a-who">precisa da tua aprovação</div>
         <div class="a-ask">${esc(m.text)}</div>
         ${m.mock ? `<div class="a-mock">${m.mock}</div>` : ''}
         ${m.pending
-          ? '<div class="a-btns"><button class="a-yes">APPROVE</button><button class="a-no">REJECT</button></div>'
+          ? '<div class="a-btns"><button class="a-yes">APROVAR</button><button class="a-no">REJEITAR</button></div>'
           : `<div class="a-done">${m.approved ? '✓ Approved' : '✗ Rejected'} by AJ</div>`}
       </div>`;
     return '';
@@ -640,9 +640,9 @@ function renderChat(id) {
 }
 function renderActivity(id) {
   const r = R[id], v = r.v1;
-  const task = rnd(v.tasks || ['Working through the queue'])
+  const task = rnd(v.tasks || ['A avançar na fila'])
     .replace('{co}', rnd(P.co)).replace('{person}', person()).replace('{count}', ri(3, 9));
-  document.getElementById('mNow').innerHTML = `NOW &nbsp;<b>${esc(task)}</b>`;
+  document.getElementById('mNow').innerHTML = `AGORA &nbsp;<b>${esc(task)}</b>`;
   document.getElementById('mStats').innerHTML = (v.stats || []).map(([l, val]) => `
     <div class="st"><div class="st-l">${esc(l)}</div><div class="st-v">${esc(String(typeof val === 'function' ? val() : val))}</div></div>`).join('');
   const chip = DEPTS[r.a.dept].chip;
@@ -729,11 +729,11 @@ function buildDeptRail(k) {
   rh.classList.remove('show');
   rh.innerHTML = `
     <div class="b-name"><span class="dot" style="background:${dept.chip}"></span>${dept.name}<span class="live"></span></div>
-    <div class="b-count"><span class="b-num">${n}</span><span class="b-lab">AGENTS</span></div>
+    <div class="b-count"><span class="b-num">${n}</span><span class="b-lab">AGENTES</span></div>
     <div class="b-metrics">${BB_ROWS[k].map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-rm="${k}-${i}">${row[1]()}</span></div>`).join('')}</div>
     ${tasks ? tasks.rowHTML(k) : ''}
-    <div class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}">⚠ <span class="ap-n">${stuckIn(k).length}</span> WAITING APPROVAL</div>`;
+    <div class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}">⚠ <span class="ap-n">${stuckIn(k).length}</span> À ESPERA DE APROVAÇÃO</div>`;
   const trow = rh.querySelector('.b-tasks');
   if (trow) trow.addEventListener('click', () => tasks.toggle());
   rh.querySelector('.b-appr').addEventListener('click', () => {
@@ -836,16 +836,16 @@ function sendChat(text) {
       return;
     }
     const rv = tasks && tasks.isLive() && text.match(/^\s*revise\s*[:\-–]\s*(.+)$/i); // LIVE: "revise: …" re-runs the last deliverable
-    if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'On it — revising now. It will land here when it is ready.' }); return; }
-    const tr = tasks && tasks.handleChat(id, text); // "add task: …" / "what's on the board"
+    if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'Já vou — a rever agora. Aparece aqui quando estiver pronto.' }); return; }
+    const tr = tasks && tasks.handleChat(id, text); // "adicionar tarefa: …" / "what's on the board"
     if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
     if (tasks && tasks.isLive()) { // LIVE: a real conversation with the agent, grounded in the brain
-      chatPush(id, { who: 'work', i: '…', text: `${r.a.name} is thinking` });
+      chatPush(id, { who: 'work', i: '…', text: `${r.a.name} está a pensar` });
       fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ agent: id, text, history: chatHist[id].filter(m => m.who === 'user' || m.who === 'agent').slice(-8) }) })
         .then(async res => { if (!res.ok) throw new Error((await res.json()).error || res.statusText); return res.json(); })
         .then(j => {
-          const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} is thinking`); if (k >= 0) h.splice(k, 1);
+          const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} está a pensar`); if (k >= 0) h.splice(k, 1);
           chatPush(id, { who: 'agent', text: j.reply });
           if (j.routines && tasks.refresh) tasks.refresh(); // a routine was set, paused, run or deleted in chat
           if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
@@ -855,7 +855,7 @@ function sendChat(text) {
       return;
     }
     const hit = (r.v1.chat || []).find(c => c.k.some(k => low.includes(k)));
-    const reply = hit ? rnd(hit.r) : rnd(r.v1.fallback || ['On it.']);
+    const reply = hit ? rnd(hit.r) : rnd(r.v1.fallback || ['A caminho.']);
     chatPush(id, { who: 'agent', text: reply });
   }, 450 + Math.random() * 500);
 }
@@ -880,12 +880,12 @@ function mockupFor(id) {
       <div class="d-brand">INVOICE AUDIT — #218</div>
       <div class="d-title">Design contractor</div>
       <div class="d-line"><span>Invoiced</span><b>14 hrs × $110 = $1,540</b></div>
-      <div class="d-line"><span>Contract rate</span><b>$85/hr (signed 12 Mar)</b></div>
+      <div class="d-line"><span>Valor do contrato</span><b>$85/hr (signed 12 Mar)</b></div>
       <div class="d-line"><span>Variance</span><b>+$350 ⚠</b></div>
-      <div class="d-line"><span>Scope</span><b>matches the brief ✓</b></div>
+      <div class="d-line"><span>Scope</span><b>corresponde ao briefing ✓</b></div>
       <div class="d-p">Hours and scope check out — only the rate is off, and there's no signed variation covering it. Recommend holding payment and querying the rate before it's paid.</div></div>`;
     case 'piper': return `<div class="mk mk-doc">
-      <div class="d-brand">AGENTS OFFICE — PROPOSAL</div>
+      <div class="d-brand">ÓRBITA — PROPOSTA</div>
       <div class="d-title">Ridgeline Property Group</div>
       <div class="d-line"><span>Seats</span><b>12</b></div>
       <div class="d-line"><span>Plan</span><b>Growth</b></div>
@@ -904,11 +904,11 @@ function mockupFor(id) {
       <div class="ph-sub">connect rates nearly double 10:00–11:30am — across 40,000 dials</div>
       <div class="ph-ui"><span>♥ 2.4k</span><span>💬 118</span><span>↗ share</span></div></div>`;
     case 'ada': return `<div class="mk mk-ad">
-      <div class="ad-head"><div class="ad-av"></div><div><div class="ad-who">sahni.ai</div><div class="ad-sp">Sponsored</div></div></div>
-      <div class="ad-text">Cold call anxiety? Your first 5 dials decide your whole day…</div>
-      <div class="ad-media" style="background:linear-gradient(135deg, ${chip}55, ${chip}22)">“the 10am rule — call when they answer”</div>
-      <div class="ad-foot"><span class="ad-hl">Start your free trial</span><span class="ad-cta">SIGN UP</span></div>
-      <div class="ad-stat">CPA $29 · best performer · scaling to $180/day</div></div>`;
+      <div class="ad-head"><div class="ad-av"></div><div><div class="ad-who">sahni.ai</div><div class="ad-sp">Patrocinado</div></div></div>
+      <div class="ad-text">Ansiedade da chamada fria? As primeiras 5 chamadas decidem o teu dia…</div>
+      <div class="ad-media" style="background:linear-gradient(135deg, ${chip}55, ${chip}22)">«a regra das 10h — liga quando atendem»</div>
+      <div class="ad-foot"><span class="ad-hl">Começa a avaliação gratuita</span><span class="ad-cta">REGISTAR</span></div>
+      <div class="ad-stat">CPA 29 $ · melhor desempenho · a escalar para 180 $/dia</div></div>`;
     case 'newt': return `<div class="mk mk-mail">
       <div class="ml-lab">SUBJECT A</div><div class="ml-sub">calls before 10am are a trap</div>
       <div class="ml-lab">SUBJECT B</div><div class="ml-sub">we looked at 40,000 calls — call at this time</div>
@@ -928,8 +928,8 @@ function mockupFor(id) {
       <div class="d-brand">PURCHASE ORDER</div>
       <div class="d-title">FullEnrich — 500 credits</div>
       <div class="d-line"><span>Cost</span><b>$250 ($0.50/credit)</b></div>
-      <div class="d-line"><span>Current balance</span><b>38 credits — out tomorrow</b></div>
-      <div class="d-line"><span>Burn rate</span><b>~90/week</b></div>
+      <div class="d-line"><span>Saldo atual</span><b>38 credits — out tomorrow</b></div>
+      <div class="d-line"><span>Taxa de consumo</span><b>~90/week</b></div>
       <div class="d-p">Same card as last month. Without credits, enrichment stops and the Sales Lead runs dry.</div></div>`;
     default: {
       // generic: render the agent's own deliverable in a document frame
@@ -1359,9 +1359,9 @@ function applyRoster(agents) {
     r.pill.innerHTML = (r.a.lead ? '<span class="star">★</span>' : '') + esc(a.name);
     r.v1 = r.v1 || {};
     r.v1.role = a.role || r.v1.role || ''; r.v1.tagline = a.does || r.v1.tagline || '';
-    r.v1.greeting = `${a.does || 'I am ' + a.name + '.'} Give me a task in the bar on the right, or ask me something here.` +
+    r.v1.greeting = `${a.does || 'Sou ' + a.name + '.'} Dá-me uma tarefa na barra à direita, ou pergunta-me algo aqui.` +
       (a.interviewer && a.setUp === false ? ` Nothing in this department is yours yet: say "set up" and I will ask you five questions about how it works here, then write it down for the team.` : '');
-    r.v1.chips = a.interviewer && a.setUp === false ? ['set up', 'What can you do for me?', 'What tools can you use?'] : ['What are you working on?', 'What can you do for me?', 'What tools can you use?'];
+    r.v1.chips = a.interviewer && a.setUp === false ? ['set up', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'] : ['Em que estás a trabalhar?', 'O que podes fazer por mim?', 'Que ferramentas podes usar?'];
     if (chatHist[a.id] && chatHist[a.id][0] && chatHist[a.id][0].who === 'agent') chatHist[a.id][0].text = r.v1.greeting;
     if (modalOpen === a.id) openAgentRail(a.id, modalTab, false);
   }
@@ -1370,7 +1370,7 @@ function applyRoster(agents) {
 tasks = initTasks({
   hud, R, deptRT, RAIL_SIDE, spawnEmote, chatPush, chatHist, feedPush, zoomToApproval, enterFocus, openAgent, esc,
   brainWrite: (id, title) => brain.write(id, title), brain,
-  onLive: (h) => { document.querySelector('#topbar .brand .ver').textContent = 'BETA'; document.title = `${h.name} — Agents Office`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
+  onLive: (h) => { document.querySelector('#topbar .brand .ver').textContent = 'BETA'; document.title = `${h.name} — Órbita`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
   onTools: (agentId, keys) => mcp.onToolsUsed(agentId, keys),
   requestApproval, setStuck: setStuckLive,
   onUsage: (u) => { if (mcp && mcp.setUsage) mcp.setUsage(u); }, // V3.6: the plan's gauge in the top bar

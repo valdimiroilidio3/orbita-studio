@@ -1,3 +1,3 @@
-# Reporting cadence
+# Cadência de relatórios
 
-Weekly board pack (6 sections), monthly KPI roll-up into dashboards, every tile with a source in [[numbers-ledger]].
+Relatório semanal para a direção (6 secções), consolidação mensal de KPI nos painéis, cada bloco com origem em [[numbers-ledger]].

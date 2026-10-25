@@ -1,26 +1,26 @@
 ---
 name: client-reply
-description: How we answer a client email
+description: Como respondemos a um e-mail de cliente
 departments: [emails]
 ---
-# Replying to a client
+# Responder a um cliente
 
-Use this whenever the task is to answer, draft or chase an email to a client.
+Usa isto sempre que a tarefa for responder, escrever ou cobrar um e-mail a um cliente.
 
-## Steps
-1. Find the client and their project in `30-Customers` and `70-Delivery`. Quote their real dates and deliverables. Nothing from memory.
-2. Answer the question they asked in the first two lines. Context comes after the answer, never before it.
-3. If the answer is "not yet", give the date it will be, not the reason it is late.
-4. If money, scope or a deadline is changing, stop and say so: that reply waits for the owner.
+## Passos
+1. Encontra o cliente e o projeto dele em `30-Customers` e `70-Delivery`. Cita as datas e entregas reais. Nada de memória.
+2. Responde à pergunta que ele fez nas duas primeiras linhas. O contexto vem depois da resposta, nunca antes.
+3. Se a resposta for «ainda não», dá a data em que será, não a razão do atraso.
+4. Se estiver a mudar dinheiro, âmbito ou prazo, para e di-lo: essa resposta espera pelo proprietário.
 
-## The shape
-- Greeting with their first name.
-- The answer, two lines at most.
-- One short paragraph of context if it is needed.
-- One next step, with a date, and who owns it.
-- Sign-off: first name only, no title, no signature block.
+## A forma
+- Saudação com o primeiro nome.
+- A resposta, no máximo duas linhas.
+- Um parágrafo curto de contexto, se for preciso.
+- Um próximo passo, com data, e quem é responsável.
+- Despedida: só o primeiro nome, sem cargo, sem bloco de assinatura.
 
-## Never
-- "I hope this email finds you well", "just checking in", "as per my last email".
-- Apologies for delays that were not ours.
-- More than 120 words.
+## Nunca
+- «Espero que este e-mail te encontre bem», «só a verificar», «como disse no meu último e-mail».
+- Desculpas por atrasos que não foram nossos.
+- Mais de 120 palavras.

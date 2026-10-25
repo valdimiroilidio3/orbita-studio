@@ -1,14 +1,14 @@
 ---
 name: house-style
-description: How everything we write reads
+description: Como se lê tudo o que escrevemos
 ---
-# House style
+# Estilo da casa
 
-Applies to every deliverable from every agent.
+Aplica-se a todas as entregas de todos os agentes.
 
-- Short sentences. One idea each.
-- Plain words. "Use", not "utilise". "Start", not "commence".
-- Numbers only from `00-Meta/numbers-ledger.md`. A number without a source is written "(assumed)".
-- No exclamation marks. No emoji in anything a client sees.
-- Dates as "14 Sep 2026". Money as "$1,200" and say the currency once.
-- Never describe what you would do. Do it, and hand over the finished thing.
+- Frases curtas. Uma ideia em cada uma.
+- Palavras simples. «Usar», não «utilizar». «Começar», não «iniciar».
+- Números apenas de `00-Meta/numbers-ledger.md`. Um número sem origem é escrito «(estimado)».
+- Sem pontos de exclamação. Sem emoji em nada que um cliente veja.
+- Datas como «14 set 2026». Dinheiro como «1 200 $» e diz a moeda uma vez.
+- Nunca descrevas o que farias. Faz, e entrega a coisa terminada.

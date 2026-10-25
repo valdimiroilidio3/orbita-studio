@@ -1,3 +1,3 @@
-# Ad playbook
+# Manual de anúncios
 
-Start at $50/day per set. Pause anything with frequency above 3.5. Scale the winner by 20% a day, never more. Creative follows [[visual-identity]]. Weekly numbers to [[MOC-Operations]].
+Começar a 50 $/dia por conjunto. Pausar tudo com frequência acima de 3,5. Escalar o vencedor 20% por dia, nunca mais. Os criativos seguem [[visual-identity]]. Números semanais para [[MOC-Operations]].

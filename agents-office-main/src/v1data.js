@@ -17,19 +17,19 @@ export const person = () => rnd(P.first)+' '+rnd(P.last);
 export const money = n => '$'+n.toLocaleString('en-NZ');
 /* ---------- KPIs ---------- */
 export const KPIS = [
-  { id:'leads',     label:'Leads Enriched',  val:47,   fmt:v=>v },
-  { id:'callhrs',   label:'Call Hrs Routed', val:9.5,  fmt:v=>v.toFixed(1)+'h' },
+  { id:'leads',     label:'LEADS ENRIQUECIDOS',  val:47,   fmt:v=>v },
+  { id:'callhrs',   label:'HORAS DE CHAMADA ROTEADAS', val:9.5,  fmt:v=>v.toFixed(1)+'h' },
   { id:'tickets',   label:'Tickets Resolved',val:31,   fmt:v=>v },
-  { id:'adspend',   label:'Ad Spend Today',  val:684,  fmt:v=>money(Math.round(v)) },
-  { id:'proposals', label:'Proposals Sent',  val:6,    fmt:v=>v },
-  { id:'invoices',  label:'Invoices Issued', val:23,  fmt:v=>v },
+  { id:'adspend',   label:'GASTO EM ANÚNCIOS HOJE',  val:684,  fmt:v=>money(Math.round(v)) },
+  { id:'proposals', label:'PROPOSTAS ENVIADAS',  val:6,    fmt:v=>v },
+  { id:'invoices',  label:'FATURAS EMITIDAS', val:23,  fmt:v=>v },
 ];
 export const V1 = [
 /* ============ (Customer Support retired 5 Sep 2026 — see EMAILS below) ============ */
 /* ============ SALES ============ */
-{ id:'enzo', name:'LEAD ENRICHER', dept:'sales', desk:[17,3], sit:[17,4], hair:'#1c1c2e', shirt:'#fbbf24',
-  role:'Prospect Enrichment Agent',
-  tagline:'Enriches every signup via FullEnrich — role, company size, mobile, LinkedIn.',
+{ id:'enzo', name:'ENRIQUECEDOR DE LEADS', dept:'sales', desk:[17,3], sit:[17,4], hair:'#1c1c2e', shirt:'#fbbf24',
+  role:'Agente de Enriquecimento de Contactos',
+  tagline:'Enriquece cada registo com o FullEnrich — cargo, dimensão da empresa, telemóvel, LinkedIn.',
   tasks:['Enriching {count} overnight signups via FullEnrich','Verifying mobile numbers for the AU batch','Backfilling company size on 12 older leads','Re-running 3 failed enrichments','Scoring the morning batch for the Sales Lead'],
   ev:[
     {i:'🔍', t:()=>`Enriched ${person()} @ ${rnd(P.co)} via FullEnrich — ${rnd(['Sales Manager','Head of Sales','Director','Founder','Ops Manager','GM'])}, ${ri(5,120)} staff, mobile verified ✓`, kpi:{id:'leads',n:1}, p:4},
@@ -49,9 +49,9 @@ export const V1 = [
   fallback:[`I'm the reason no lead reaches a salesperson half-blank. Ask about my match rate, held leads, or how scoring works.`,`Try "what's your match rate?", "any leads held back?" or "how does scoring work?"`],
   chips:['What’s your match rate?','Any leads held back?','How does scoring work?'] },
 
-{ id:'lexi', name:'SALES LEAD', dept:'sales', desk:[20,3], sit:[20,4], hair:'#5a2d0c', shirt:'#f59e0b', lead:true,
-  role:'Sales Team Lead Agent',
-  tagline:'Runs the sales team — five agents report to it — and it owns the reps’ call lists.',
+{ id:'lexi', name:'LÍDER DE VENDAS', dept:'sales', desk:[20,3], sit:[20,4], hair:'#5a2d0c', shirt:'#f59e0b', lead:true,
+  role:'Agente Líder da Equipa de Vendas',
+  tagline:'Lidera a equipa de vendas — cinco agentes respondem-lhe — e é dono das listas de chamadas dos comerciais.',
   tasks:['Reviewing the team’s overnight output before it reaches the reps','Building today’s call lists for Spencer, Arwin & Jack','Checking connect rates by rep and time-slot','Chasing {count} deals sitting quiet past 14 days','Prepping the weekly pipeline review for AJ','Tightening the ICP with Prospector after 3 weak batches'],
   ev:[
     {i:'🧭', t:()=>`Team review: ${ri(28,47)} leads enriched, ${ri(20,40)} prospects sourced, ${ri(18,34)} in first-touch sequence, ${ri(7,14)} quiet deals in chase — ${rnd(['all clean','1 batch sent back for re-scoring','2 duplicates pulled before they hit a list'])}`, p:3},
@@ -77,9 +77,9 @@ export const V1 = [
   fallback:[`I run the sales team — three agents under me, three reps in front of me. Ask about the team, Spencer/Arwin/Jack's lists, or the pipeline.`,`Try "how's the team doing?", "what's in the pipeline?" or "how's Spencer's list?"`],
   chips:['How’s the team doing?','What’s in the pipeline?','How’s Spencer’s list?'] },
 
-{ id:'ona', name:'ONBOARDER', dept:'delivery', desk:[17,6], sit:[17,7], hair:'#0d0d0d', shirt:'#fcd34d',
-  role:'Onboarding Concierge (High-Usage)',
-  tagline:'Texts high-usage new users and gets them set up like a human would.',
+{ id:'ona', name:'RECEÇÃO DE CLIENTES', dept:'delivery', desk:[17,6], sit:[17,7], hair:'#0d0d0d', shirt:'#fcd34d',
+  role:'Concierge de Boas-Vindas (Alto Uso)',
+  tagline:'Envia mensagens aos novos utilizadores de alto uso e põe-nos a funcionar como faria uma pessoa.',
   tasks:['Texting {person} about team-number setup','Walking a high-usage trialist through call recording','Following up 3 conversations from yesterday','Scheduling a check-in text for {co}','Reviewing which trialists just went high-usage'],
   ev:[
     {i:'📱', t:()=>`SMS sent to ${person()} @ ${rnd(P.co)}: "${rnd(['Saw you logged 12 calls yesterday — want me to set up your team leaderboard?','Nice — your number is connected. Want call recording on?','You’re flying! Quick tip: pin your top list to the dialler.'])}"`, p:3},
@@ -99,9 +99,9 @@ export const V1 = [
   fallback:[`I'm the friendly human-feel layer for your best new users. Ask me what my texts look like, my reply rate, or this week's onboards.`,`Try "show me a sample text", "what's your reply rate?" or "when do you hand off to a human?"`],
   chips:['Show me a sample text','What’s your reply rate?','When do you hand off?'] },
 
-{ id:'pros', name:'PROSPECTOR', dept:'sales', desk:[20,6], sit:[20,7], hair:'#2a1a0e', shirt:'#eab308',
-  role:'Outbound Prospecting Agent',
-  tagline:'Builds fresh outbound lead lists to ICP spec — verified before anyone dials.',
+{ id:'pros', name:'PROSPETOR', dept:'sales', desk:[20,6], sit:[20,7], hair:'#2a1a0e', shirt:'#eab308',
+  role:'Agente de Prospeção Ativa',
+  tagline:'Constrói listas novas de prospeção segundo o ICP — verificadas antes de alguém telefonar.',
   tasks:['Mining {count} AU roofing companies for the outbound list','Verifying mobiles on the Christchurch batch','Scoring 40 prospects against the ICP','Cross-checking new finds against existing customers','Building tomorrow’s cold-call list for the Sales Lead'],
   ev:[
     {i:'⛏', t:()=>`Found ${ri(6,18)} new prospects — ${rnd(['AU trades','NZ property services','fitness studios','logistics SMEs','dental groups'])}, ICP-scored & verified`, kpi:{id:'leads',n:1}, p:3},
@@ -121,9 +121,9 @@ export const V1 = [
   fallback:[`I fill the top of the outbound funnel with verified, ICP-matched prospects. Ask me where today's batch came from, the ICP spec, or what I rejected.`,`Try "where did these come from?", "what's the ICP?" or "what did you reject today?"`],
   chips:['Where did these come from?','What’s the ICP?','What did you reject?'] },
 
-{ id:'folo', name:'FOLLOW UPS', dept:'sales', desk:[20,9], sit:[20,10], hair:'#171717', shirt:'#fcd34d',
-  role:'Second-Touch & Revival Agent',
-  tagline:'Chases everything that went quiet — unanswered calls, post-demo silence, stalled deals.',
+{ id:'folo', name:'SEGUIMENTOS', dept:'sales', desk:[20,9], sit:[20,10], hair:'#171717', shirt:'#fcd34d',
+  role:'Agente de Segundo Contacto e Reativação',
+  tagline:'Persegue tudo o que ficou em silêncio — chamadas sem resposta, silêncio depois da demo, negócios parados.',
   tasks:['Chasing {count} deals quiet past 14 days','Following up yesterday’s no-answer dials','Re-touching {co} after their demo','Reviving trials that expired without a call','Prepping the “last chance” list for AJ’s eyes','Logging why each dead deal died'],
   ev:[
     {i:'🔁', t:()=>`Re-touched ${ri(5,12)} no-answer dials from yesterday — ${ri(2,5)} connected on the second attempt`, kpi:{id:'callhrs',n:0.3}, p:3},
@@ -146,9 +146,9 @@ export const V1 = [
   chips:['What’s gone quiet?','What’s your revival rate?','Why are deals dying?'] },
 
 /* ============ MARKETING ============ */
-{ id:'riley', name:'RESEARCH', dept:'marketing', desk:[4,12], sit:[4,13], hair:'#8a4a1f', shirt:'#f472b6',
-  role:'Daily Research Agent',
-  tagline:'Scans the sales-tech industry and competitors every morning at 6am.',
+{ id:'riley', name:'INVESTIGAÇÃO', dept:'marketing', desk:[4,12], sit:[4,13], hair:'#8a4a1f', shirt:'#f472b6',
+  role:'Agente de Investigação Diária',
+  tagline:'Varrе o setor de tecnologia de vendas e a concorrência todas as manhãs às 6h.',
   tasks:['Compiling this morning’s industry scan','Summarising a competitor pricing change','Reading {count} newsletters so you don’t have to','Updating the Competitors folder in the Brain','Flagging a trend worth a LinkedIn post'],
   ev:[
     {i:'📰', t:()=>`Morning scan done: ${ri(30,60)} sources read, 3 items worth your time — briefing in the Brain`, brain:true, p:3},
@@ -169,8 +169,8 @@ export const V1 = [
   chips:['Today’s briefing?','Competitor moves?','Trends you’re watching?'] },
 
 { id:'newt', name:'NEWSLETTER', dept:'marketing', desk:[7,12], sit:[7,13], hair:'#26140a', shirt:'#ec4899',
-  role:'Newsletter Creator Agent',
-  tagline:'Writes the monthly newsletter your signups actually open.',
+  role:'Agente de Criação de Newsletter',
+  tagline:'Escreve a newsletter mensal que os teus registados realmente abrem.',
   tasks:['Drafting the August issue — "The 10am Rule"','Pulling last month’s open-rate report','Rewriting the subject line 6 ways','Sourcing a customer win for the lead story','Waiting on AJ’s approval for the draft'],
   ev:[
     {i:'✍', t:()=>`August draft progressing — lead story: "${rnd(['The 10am Rule: when connect rates double','Why your best rep’s script won’t scale','3 signups tell us why they switched'])}"`, p:3},
@@ -190,13 +190,13 @@ export const V1 = [
   fallback:[`I write the monthly newsletter — and nothing sends without your sign-off. Ask about the August draft, July's numbers, or the subject-line A/B.`,`Try "what's in the next issue?", "how did July perform?" or "show me the subject lines".`],
   chips:['What’s in the next issue?','How did July perform?','Show me subject lines'] },
 
-{ id:'ada', name:'META ADS', dept:'marketing', desk:[4,15], sit:[4,16], hair:'#101020', shirt:'#f9a8d4',
-  role:'Meta Ads Agent',
+{ id:'ada', name:'ANÚNCIOS META', dept:'marketing', desk:[4,15], sit:[4,16], hair:'#101020', shirt:'#f9a8d4',
+  role:'Agente de Anúncios Meta',
   tagline:'Watches every campaign hourly; flags what to scale, kill or fix.',
   tasks:['Hourly check across {count} active ad sets','Watching the new "cold call anxiety" creative','Preparing a budget-shift recommendation','Pulling creative fatigue signals','Drafting Friday’s ads summary'],
   ev:[
     {i:'📣', t:()=>`Hourly check: spend ${money(ri(20,60))} this hour, ${ri(2,7)} trials started, CPA ${money(ri(28,55))}`, kpi:{id:'adspend',n:38}, p:3},
-    {i:'🚀', t:()=>`"${rnd(['Cold call anxiety','40,000 calls','Spreadsheet funeral'])}" creative beating account avg CPA by ${ri(15,40)}% — recommending scale`, p:2},
+    {i:'🚀', t:()=>`"${rnd(['ansiedade da chamada fria','40,000 calls','Spreadsheet funeral'])}" creative beating account avg CPA by ${ri(15,40)}% — recommending scale`, p:2},
     {i:'🪫', t:()=>`Creative fatigue on "${rnd(['Old dialler pain','Manager dashboard','Before/After board'])}" — frequency ${(ri(28,44)/10).toFixed(1)}, CTR down ${ri(15,35)}%. Kill or refresh`, p:2},
     {i:'💸', t:()=>`Budget-shift rec queued for AJ: move ${money(ri(30,80))}/day ${rnd(['prospecting→retargeting','fatigued set→new creative'])}`, approval:'budget', p:1},
   ],
@@ -205,15 +205,15 @@ export const V1 = [
   greeting:`Hi AJ. Spend today: ${money(684)} across 9 ad sets, 11 trial starts, blended CPA ${money(41)} — trending down all week. The "cold call anxiety" creative is the story: 31% under account-average CPA. I've queued a budget-shift recommendation for your approval.`,
   chat:[
     {k:['today','spend','how','performing','number'], r:[`Today so far: ${money(684)} spent, 11 trials, CPA ${money(41)} blended.\n\nBest: "cold call anxiety" video — CPA ${money(29)}, CTR 2.4%.\nWorst: "manager dashboard" static — CPA ${money(71)}, frequency 3.8, fatigued.\n\nMy rec sitting in your approvals: shift $50/day from the fatigued set into the winner. Nothing moves without your tick.`]},
-    {k:['creative','ad','winner','best'], r:[`"Cold call anxiety" is the winner — 15-sec talking-head about the fear of dialling, no product shown until second 9. It's pulling CPA ${money(29)} vs ${money(41)} account average. Why it works (my read): it sells the feeling, not the feature list. I've asked for 2 variations of the same angle before this one fatigues — they always do.`]},
+    {k:['creative','ad','winner','best'], r:[`"ansiedade da chamada fria" is the winner — 15-sec talking-head about the fear of dialling, no product shown until second 9. It's pulling CPA ${money(29)} vs ${money(41)} account average. Why it works (my read): it sells the feeling, not the feature list. I've asked for 2 variations of the same angle before this one fatigues — they always do.`]},
     {k:['fatigue','kill','stop','pause'], r:[`One set in fatigue: "manager dashboard" static — frequency 3.8, CTR down 28% week-on-week, CPA drifting up 4 days straight. Recommendation: pause it and recycle the budget into the winner. That's the approval sitting in your queue — I don't kill spend on my own authority.`]},
     {k:['cpa','cost','cheap','expensive'], r:[`Blended CPA ${money(41)}, down from ${money(52)} at the start of the week. Trial→paid runs ~34% (Free Trial's number), so effective cost per paying customer ≈ ${money(120)} against LTV around ${money(2100)}. The unit economics have room — that's the case for scaling once you approve the shift.`]},
   ],
   fallback:[`I watch every dollar Meta takes. Ask about today's spend, the winning creative, or what's fatiguing.`,`Try "how are ads today?", "what's the best creative?" or "anything fatigued?"`],
   chips:['How are ads today?','Best creative?','Anything fatigued?'] },
 
-{ id:'iggy', name:'INSTAGRAM ORGANIC', dept:'marketing', desk:[6,15], sit:[6,16], hair:'#1a1026', shirt:'#fb7185',
-  role:'Instagram Organic Content Agent',
+{ id:'iggy', name:'INSTAGRAM ORGÂNICO', dept:'marketing', desk:[6,15], sit:[6,16], hair:'#1a1026', shirt:'#fb7185',
+  role:'Agente de Conteúdo Orgânico no Instagram',
   tagline:'Runs the IG content engine — hooks, reels, carousels. Nothing posts without AJ.',
   tasks:['Drafting 3 reel hooks from this week’s customer wins','Scripting a 30-sec reel on the 10am Rule','Briefing Graphics Designer on a 6-slide carousel','Analysing which hooks held viewers past 3 seconds','Queueing Thursday’s post for AJ’s approval'],
   ev:[
@@ -234,9 +234,9 @@ export const V1 = [
   fallback:[`I run Instagram end-to-end short of pressing post — that's yours. Ask me about this week's hooks, last post's numbers, or the design loop with Graphics.`,`Try "show me this week's hooks", "how did the last reel do?" or "what's queued?"`],
   chips:['This week’s hooks?','How did the last reel do?','What’s queued?'] },
 
-{ id:'vid', name:'VIDEO EDITOR', dept:'marketing', desk:[3,15], sit:[3,16], hair:'#1b1b24', shirt:'#93c5fd',
-  role:'Video Editing Agent',
-  tagline:'Cuts every video marketing ships — reels, ads, demos — rendered frame-perfect on HyperFrames.',
+{ id:'vid', name:'EDITOR DE VÍDEO', dept:'marketing', desk:[3,15], sit:[3,16], hair:'#1b1b24', shirt:'#93c5fd',
+  role:'Agente de Edição de Vídeo',
+  tagline:'Edita todos os vídeos que o marketing entrega — reels, anúncios, demos — renderizados ao fotograma no HyperFrames.',
   tasks:['Cutting the "10am Rule" reel from Instagram Organic’s script','Rendering 3 aspect ratios of the demo cut (9:16, 1:1, 16:9)','Burning captions into the Meta Ads variant set','Assembling b-roll for the webinar promo','Re-rendering last week’s top reel with a new hook frame'],
   ev:[
     {i:'🎞', t:()=>`Rendered ${rnd(['the "10am Rule" reel — 30s, captions burned in','a 45-sec demo cut — 3 aspect ratios','the ad variant set — same cut, 3 hook frames','the webinar promo — 60s with chapter cards'])} on HyperFrames`, p:3},
@@ -256,9 +256,9 @@ export const V1 = [
   fallback:[`I cut and render every video marketing ships — the publish button stays yours. Ask about the edit queue, caption rules, or how the HyperFrames render loop works.`,`Try "what's in the edit queue?", "how do captions work?" or "what's your turnaround?"`],
   chips:['What’s in the edit queue?','How fast is a re-cut?','Why HyperFrames?'] },
 
-{ id:'gfx', name:'GRAPHICS DESIGNER', dept:'marketing', desk:[1,15], sit:[1,16], hair:'#0e0e16', shirt:'#f0abfc',
-  role:'Marketing Design Agent',
-  tagline:'Designs everything marketing ships — ads, carousels, decks — on one brand kit.',
+{ id:'gfx', name:'DESIGNER GRÁFICO', dept:'marketing', desk:[1,15], sit:[1,16], hair:'#0e0e16', shirt:'#f0abfc',
+  role:'Agente de Design de Marketing',
+  tagline:'Desenha tudo o que o marketing publica — anúncios, carrosséis, apresentações — com um único kit de marca.',
   tasks:['Designing the 10am Rule carousel for Instagram Organic','Producing 3 ad variants for Meta Ads','Refreshing the proposal cover template','Exporting webinar slide backgrounds','Building a quote-card set from customer wins'],
   ev:[
     {i:'🎨', t:()=>`Delivered ${rnd(['a 6-slide carousel','3 ad creative variants','a quote-card set','proposal cover art','webinar title slides'])} — on brand kit, ${rnd(['first pass','v2 after feedback','final'])}`, p:3},
@@ -266,7 +266,7 @@ export const V1 = [
     {i:'🧪', t:()=>`Variant test prepped for META ADS — same copy, ${rnd(['3 layouts','2 colourways','device-frame vs flat'])}`, p:2},
     {i:'📚', t:()=>`Brand kit updated in the Brain — ${rnd(['new chart style','carousel grid template','logo-safe zones documented'])}`, brain:true, p:1},
   ],
-  stats:[['Assets shipped (7d)',()=>ri(12,20)],['Avg turnaround','3.4 h'],['Revision rate','18%'],['Open briefs','2']],
+  stats:[['Assets shipped (7d)',()=>ri(12,20)],['Tempo médio de resposta','3.4 h'],['Revision rate','18%'],['Open briefs','2']],
   chartLbl:'Assets delivered — last 7 days', chart:[2,3,2,4,3,1,2],
   greeting:`Hi AJ. 14 assets out the door this week — carousels for Instagram Organic, ad variants for Meta Ads, and a refreshed proposal cover for Proposals. Everything runs off the one brand kit in the Brain, so it all looks like us. Two briefs open, both on schedule.`,
   chat:[
@@ -279,9 +279,9 @@ export const V1 = [
   chips:['What’s in your queue?','How do you keep it on-brand?','What’s shipping for Meta?'] },
 
 /* ============ OPERATIONS ============ */
-{ id:'piper', name:'PROPOSALS', dept:'sales', desk:[15,12], sit:[15,13], hair:'#3a1d08', shirt:'#60a5fa',
-  role:'Proposal Agent',
-  tagline:'Turns a deal brief into a proposal + send-ready email in minutes.',
+{ id:'piper', name:'PROPOSTAS', dept:'sales', desk:[15,12], sit:[15,13], hair:'#3a1d08', shirt:'#60a5fa',
+  role:'Agente de Propostas',
+  tagline:'Transforma o resumo de um negócio numa proposta e num e-mail pronto a enviar em minutos.',
   tasks:['Building a proposal for {co} ({count} seats)','Drafting the cover email for {person}','Updating pricing tables from the Brain','Waiting on AJ’s approval for the {co} proposal','Checking which proposals were opened this week'],
   ev:[
     {i:'📄', t:()=>`Proposal built: ${rnd(P.co)} — ${ri(5,40)} seats, ${rnd(P.plan)} plan, ${money(ri(400,3000))}/mo. Email drafted, queued for AJ`, approval:'proposal', p:2},
@@ -301,9 +301,9 @@ export const V1 = [
   fallback:[`Brief in, proposal + email out, your approval in between. Ask what's pending, who's opened theirs, or this month's wins.`,`Try "what's pending?", "who opened their proposal?" or "how many accepted this month?"`],
   chips:['What’s pending?','Who opened theirs?','Accepted this month?'] },
 
-{ id:'scout', name:'INTEL', dept:'ops', desk:[18,12], sit:[18,13], hair:'#141414', shirt:'#93c5fd',
-  role:'Competitor & Industry Analysis Agent',
-  tagline:'Turns Research’s raw findings into “here’s what we should do about it.”',
+{ id:'scout', name:'ANÁLISE', dept:'ops', desk:[18,12], sit:[18,13], hair:'#141414', shirt:'#93c5fd',
+  role:'Agente de Análise de Concorrência e Setor',
+  tagline:'Transforma os achados da Investigação em «eis o que devemos fazer quanto a isto».',
   tasks:['Assessing CallForge’s price rise — opportunity memo','Modelling impact of RingPilot’s AI feature','Updating the battlecards in the Brain','Reviewing {count} competitor moves from Research','Preparing the monthly market position report'],
   ev:[
     {i:'♟', t:()=>`Assessment done: ${rnd(P.competitor)}'s ${rnd(['price rise','new feature','trial change','AU hiring push'])} — verdict: ${rnd(['opportunity, act this week','monitor, no action','defensive move needed'])}. Memo in the Brain`, brain:true, p:3},
@@ -323,9 +323,9 @@ export const V1 = [
   fallback:[`Research finds the facts; I tell you what to do about them. Ask about the CallForge opportunity, the threat watchlist, or the battlecards.`,`Try "what's the biggest threat?", "the CallForge thing?" or "are battlecards current?"`],
   chips:['Biggest threat right now?','The CallForge opportunity?','Battlecards current?'] },
 
-{ id:'legal', name:'LEGAL REVIEW', dept:'ops', desk:[15,15], sit:[15,16], hair:'#20242e', shirt:'#a78bfa',
-  role:'Agreement Review Agent',
-  tagline:'Reads every agreement before it goes out and gives it a second lens.',
+{ id:'legal', name:'REVISÃO JURÍDICA', dept:'ops', desk:[15,15], sit:[15,16], hair:'#20242e', shirt:'#a78bfa',
+  role:'Agente de Revisão de Contratos',
+  tagline:'Lê todos os contratos antes de saírem e dá-lhes um segundo olhar.',
   tasks:['Reviewing the amended MSA from {co}','Diffing {co}’s redlines against our standard terms','Flagging {count} clauses for AJ’s call','Checking the new proposal template’s terms','Updating the clause library in the Brain','Re-reading a supplier contract before renewal'],
   ev:[
     {i:'⚖', t:()=>`Reviewed ${rnd(['MSA','order form','NDA','supplier contract','reseller agreement'])} — ${rnd(P.co)}: ${rnd(['no changes needed','2 clauses flagged','1 clause flagged, low risk','redlines accepted as-is'])}`, p:3},
@@ -334,7 +334,7 @@ export const V1 = [
     {i:'📚', t:()=>`Clause library updated in the Brain — added the ${rnd(['liability cap','data residency','termination for convenience','AU privacy'])} wording we settled on`, brain:true, p:2},
     {i:'✅', t:()=>`Cleared ${rnd(P.co)}'s ${rnd(['order form','NDA'])} — standard terms, nothing to escalate; back to PROPOSALS`, p:1},
   ],
-  stats:[['Agreements reviewed (7d)',()=>ri(9,16)],['Flagged to AJ','3'],['Avg turnaround','11 min'],['Clause library','64 entries']],
+  stats:[['Agreements reviewed (7d)',()=>ri(9,16)],['Flagged to AJ','3'],['Tempo médio de resposta','11 min'],['Clause library','64 entries']],
   chartLbl:'Agreements reviewed — last 7 days', chart:[3,2,4,1,3,0,2],
   greeting:`Hi AJ. I read every agreement before it leaves the building — 12 this week, 3 flagged for you. I'm a second lens, not a lawyer, and I'll say so plainly: I catch the patterns we've agreed matter and tell you what changed and why it's worth your attention. Anything genuinely novel I escalate rather than guess at.`,
   chat:[
@@ -347,9 +347,9 @@ export const V1 = [
   fallback:[`I read agreements and give them a second lens before they go out. Ask about open flags, how I review, or what's in the clause library.`,`Try "what's flagged?", "how do you review?" or "what's in the clause library?"`],
   chips:['What’s flagged?','How do you review?','Are you a lawyer?'] },
 
-{ id:'comply', name:'COMPLIANCE CHECKER', dept:'ops', desk:[18,15], sit:[18,16], hair:'#5a3a1a', shirt:'#c4b5fd',
-  role:'Regulatory Watch Agent',
-  tagline:'Watches government and regulator sites daily and reports what changed.',
+{ id:'comply', name:'VERIFICADOR DE CONFORMIDADE', dept:'ops', desk:[18,15], sit:[18,16], hair:'#5a3a1a', shirt:'#c4b5fd',
+  role:'Agente de Vigilância Regulamentar',
+  tagline:'Vigia diariamente sites do governo e dos reguladores e reporta o que mudou.',
   tasks:['Diffing {count} government pages against yesterday’s snapshot','Reading the new Privacy Act guidance','Checking AU state-by-state licensing pages','Summarising a regulator update for the Brain','Chasing a consultation that closes next week','Re-checking the NZ IRD page after a layout change'],
   ev:[
     {i:'🏛', t:()=>`Swept ${ri(28,44)} government + regulator pages — ${rnd(['3 changed','1 changed','no changes','2 changed'])} since yesterday's snapshot`, p:3},
@@ -371,9 +371,9 @@ export const V1 = [
   fallback:[`I watch government and regulator sites daily and tell you only what actually changed. Ask what changed, what I watch, or what's coming up.`,`Try "what changed this week?", "what do you watch?" or "anything closing soon?"`],
   chips:['What changed this week?','What do you watch?','Anything closing soon?'] },
 
-{ id:'report', name:'INTERNAL REPORTING', dept:'ops', desk:[21,15], sit:[21,16], hair:'#2e2118', shirt:'#8b5cf6',
-  role:'Company Reporting Agent',
-  tagline:'Builds the reports and keeps every company dashboard current.',
+{ id:'report', name:'RELATÓRIOS INTERNOS', dept:'ops', desk:[21,15], sit:[21,16], hair:'#2e2118', shirt:'#8b5cf6',
+  role:'Agente de Relatórios da Empresa',
+  tagline:'Constrói os relatórios e mantém todos os painéis da empresa atualizados.',
   tasks:['Building the Monday board pack','Refreshing the company dashboard','Chasing {count} metrics that stopped updating','Writing the weekly all-hands summary','Reconciling sales numbers against Finance’s','Adding a churn view AJ asked for'],
   ev:[
     {i:'📊', t:()=>`Dashboard refreshed — ${ri(18,31)} metrics across ${rnd(['Sales, Support, Marketing, Finance','all five departments'])}; ${rnd(['all sources healthy','1 source stale, chasing'])}`, p:3},
@@ -382,7 +382,7 @@ export const V1 = [
     {i:'📈', t:()=>`New view added: ${rnd(['churn by cohort','revenue per agent-hour','trial→paid by lead source','support cost per customer'])} — pinned to the company dashboard`, brain:true, p:2},
     {i:'📤', t:()=>`Monthly summary sent — ${rnd(['one page, 6 numbers, 3 sentences of why','the short version AJ asked for'])}`, p:1},
   ],
-  stats:[['Dashboards live','6'],['Metrics tracked','28'],['Sources healthy','5 / 5'],['Board pack','Mondays 07:00']],
+  stats:[['Dashboards live','6'],['Metrics tracked','28'],['Sources healthy','5 / 5'],['relatório para a direção','Mondays 07:00']],
   chartLbl:'Reports & refreshes shipped — last 7 days', chart:[6,7,5,8,6,2,4],
   greeting:`Hi AJ. Every dashboard is current as of 20 minutes ago — 28 metrics across all five departments, all five sources healthy. Monday's board pack is 4 of 6 sections done. One thing worth your eye: trial→paid and the CRM disagreed by 4 accounts this morning, and it turned out to be a timezone cutoff, not a real gap.`,
   chat:[
@@ -396,9 +396,9 @@ export const V1 = [
   chips:['Are the dashboards current?','What’s in the board pack?','How are we doing overall?'] },
 
 /* ============ FINANCE — ACCOUNTING TEAM ============ */
-{ id:'alead', name:'ACCOUNTING LEAD', dept:'fin', desk:[21,12], sit:[21,13], hair:'#1f1f1f', shirt:'#60a5fa', lead:true,
-  role:'Accounting Lead Agent',
-  tagline:'Runs the accounting team: Invoicing, Payables, Reconciliation report to it.',
+{ id:'alead', name:'LÍDER DE CONTABILIDADE', dept:'fin', desk:[21,12], sit:[21,13], hair:'#1f1f1f', shirt:'#60a5fa', lead:true,
+  role:'Agente Líder de Contabilidade',
+  tagline:'Lidera a equipa de contabilidade: Faturação, Contas a Pagar e Reconciliação respondem-lhe.',
   tasks:['Reviewing exceptions from the accounting team','Tracking month-end close progress','Checking {count} flagged transactions','Preparing the weekly cash summary for AJ','Auditing a flagged contractor invoice before it reaches AJ'],
   ev:[
     {i:'🗂', t:()=>`Reviewed team output: ${ri(4,9)} invoices, ${ri(2,6)} bills, ${ri(10,30)} transactions matched — ${rnd(['no exceptions','1 exception, handled','2 exceptions, investigating'])}`, p:3},
@@ -418,9 +418,9 @@ export const V1 = [
   fallback:[`I run the accounting team so you don't have to think about it. Ask about exceptions, month-end close, or the team's throughput.`,`Try "any exceptions?", "how's month-end going?" or "how's our cash?"`],
   chips:['Any exceptions?','How’s month-end?','How’s our cash?'] },
 
-{ id:'invo', name:'INVOICING', dept:'fin', desk:[17,15], sit:[17,16], hair:'#4a2c14', shirt:'#7ab8f7',
-  role:'Invoicing Agent',
-  tagline:'Raises every invoice, chases every overdue — politely and relentlessly.',
+{ id:'invo', name:'FATURAÇÃO', dept:'fin', desk:[17,15], sit:[17,16], hair:'#4a2c14', shirt:'#7ab8f7',
+  role:'Agente de Faturação',
+  tagline:'Emite todas as faturas e persegue todos os atrasos — com educação e sem descanso.',
   tasks:['Raising invoices for yesterday’s signups','Running the overdue reminder sequence','Issuing a credit note for {co}','Checking GST lines on the AU batch','Confirming a manual payment with {co}'],
   ev:[
     {i:'🧾', t:()=>`Invoice issued: ${rnd(P.co)} — ${money(ri(90,1400))} (${rnd(P.plan)} plan), GST correct, sent ✓`, kpi:{id:'invoices',n:1}, p:4},
@@ -440,12 +440,12 @@ export const V1 = [
   fallback:[`Invoices out fast, cash in faster. Ask about the overdue book, DSO, or this week's volume.`,`Try "what's overdue?", "how's DSO?" or "any credit notes?"`],
   chips:['What’s overdue?','How’s DSO?','This week’s volume?'] },
 
-{ id:'apay', name:'ACCOUNTS PAYABLE', dept:'fin', desk:[20,15], sit:[20,16], hair:'#111', shirt:'#4d94e8',
-  role:'Accounts Payable Agent',
-  tagline:'Audits every card charge and contractor invoice against what we actually agreed to pay.',
+{ id:'apay', name:'CONTAS A PAGAR', dept:'fin', desk:[20,15], sit:[20,16], hair:'#111', shirt:'#4d94e8',
+  role:'Agente de Contas a Pagar',
+  tagline:'Audita cada movimento de cartão e cada fatura de freelancer face ao que realmente acordámos pagar.',
   tasks:['Matching this week’s card charges to their subscriptions','Checking invoice #218 against the design contract','Verifying a duplicate-looking card charge','Flagging renewals due on the card this quarter','Updating vendor records in the Brain'],
   ev:[
-    {i:'📥', t:()=>`Card charge matched: ${rnd(['Meta Ads','FullEnrich','Xero','AWS','the SMS provider','Canva'])} — ${money(ri(40,900))}, expected amount ✓`, p:3},
+    {i:'📥', t:()=>`Card charge matched: ${rnd(['ANÚNCIOS META','FullEnrich','Xero','AWS','the SMS provider','Canva'])} — ${money(ri(40,900))}, expected amount ✓`, p:3},
     {i:'🛑', t:()=>`Duplicate caught: ${rnd(['a vendor charged the card twice','same invoice emailed twice'])} — ${money(ri(80,600))} NOT paid twice`, p:2},
     {i:'📋', t:()=>`Invoice audited: ${rnd(['contractor #218 — rate over contract, HELD for AJ','contractor hours vs brief — checks out, cleared','a renewal 12% over last year — flagged'])}`, approval:'payment', p:1},
     {i:'🤝', t:()=>`Savings note: ${rnd(['annual prepay would save 8% on the SMS provider','FullEnrich tier drop possible — usage is under plan'])} — flagged to ACCOUNTING LEAD`, p:1},
@@ -462,9 +462,9 @@ export const V1 = [
   fallback:[`Every charge matched, every invoice checked against its contract — nothing over-agreed gets paid without you. Ask about invoice #218, duplicates, or savings I've spotted.`,`Try "what's held?", "caught any duplicates?" or "any savings?"`],
   chips:['What’s held right now?','Caught any duplicates?','Any savings spotted?'] },
 
-{ id:'recon', name:'RECONCILIATION', dept:'fin', desk:[23,15], sit:[23,16], hair:'#3a2a1a', shirt:'#a5cdf7',
-  role:'Accounts Reconciliation Agent',
-  tagline:'Matches every bank line to an invoice or bill. Unmatched = investigated.',
+{ id:'recon', name:'RECONCILIAÇÃO', dept:'fin', desk:[23,15], sit:[23,16], hair:'#3a2a1a', shirt:'#a5cdf7',
+  role:'Agente de Reconciliação de Contas',
+  tagline:'Associa cada linha bancária a uma fatura ou conta. O que não bate é investigado.',
   tasks:['Matching this morning’s bank feed','Investigating an unmatched deposit','Reconciling the Stripe payout batch','Preparing the month-end rec pack','Chasing a missing receipt via INVOICING'],
   ev:[
     {i:'🔗', t:()=>`Bank feed matched: ${ri(8,24)} transactions auto-reconciled, ${rnd(['0 unmatched','1 unmatched — investigating'])}`, p:4},
@@ -485,8 +485,8 @@ export const V1 = [
   chips:['Anything unmatched?','Auto-match rate?','How’s the close pack?'] },
 
 /* ============ EMAILS (V3.1, 5 Sep 2026 — replaced Customer Support) ============ */
-{ id:'elead', name:'EMAILS LEAD', dept:'emails', desk:[7,6], sit:[7,7], hair:'#2b2b2b', shirt:'#2dd4bf', lead:true,
-  role:'Inbox Lead',
+{ id:'elead', name:'LÍDER DE E-MAILS', dept:'emails', desk:[7,6], sit:[7,7], hair:'#2b2b2b', shirt:'#2dd4bf', lead:true,
+  role:'Líder da Caixa de Entrada',
   tagline:'Runs the whole inbox: routes every email to the right desk, checks tone, and escalates only what needs AJ.',
   tasks:['Routing the overnight inbox — {count} emails','Tone pass on replies before they go out','Escalating a thread from {co} to AJ','Updating the reply templates','Writing the weekly inbox summary'],
   ev:[
@@ -505,9 +505,9 @@ export const V1 = [
   fallback:[`I run the inbox — routing, tone, escalation. Ask what's waiting on you, how fast we reply, or about any thread.`,`Try "what's waiting on me?", "how fast are we replying?" or "show me the client threads".`],
   chips:['What’s waiting on me?','How fast are we replying?','Any escalations?'] },
 
-{ id:'cmail', name:'CLIENT EMAILS', dept:'emails', desk:[4,3], sit:[4,4], hair:'#3b2b1d', shirt:'#2dd4bf',
-  role:'Client Email Agent',
-  tagline:'Answers every client email from the Brain — scope, timelines, results — and never lets one sit past an hour.',
+{ id:'cmail', name:'E-MAILS DE CLIENTES', dept:'emails', desk:[4,3], sit:[4,4], hair:'#3b2b1d', shirt:'#2dd4bf',
+  role:'Agente de E-mails de Clientes',
+  tagline:'Responde a todos os e-mails de clientes a partir do Cérebro — âmbito, prazos, resultados — e nunca deixa nenhum mais de uma hora sem resposta.',
   tasks:['Replying to {co} about the timeline','Sending the kickoff summary to {co}','Answering {count} client emails from overnight','Drafting the price-increase notice','Chasing {person} for the brief sign-off'],
   ev:[
     {i:'📨', t:()=>`Replied to ${person()} @ ${rnd(P.co)} — timeline question, answered from the project plan`, p:3},
@@ -525,9 +525,9 @@ export const V1 = [
   fallback:[`I look after client emails. Ask about open threads, reply times, or the price notice.`,`Try "any open threads?", "what did ${rnd(P.co)} ask?" or "status of the price notice".`],
   chips:['Any open threads?','Status of the price notice?','How fast are replies?'] },
 
-{ id:'imail', name:'INTERNAL EMAILS', dept:'emails', desk:[7,3], sit:[7,4], hair:'#111', shirt:'#14b8a6',
-  role:'Internal Email Agent',
-  tagline:'Keeps the team inbox moving — triage, summaries of long threads, calendar holds, and the weekly numbers circulated.',
+{ id:'imail', name:'E-MAILS INTERNOS', dept:'emails', desk:[7,3], sit:[7,4], hair:'#111', shirt:'#14b8a6',
+  role:'Agente de E-mails Internos',
+  tagline:'Mantém a caixa interna em movimento — triagem, resumos de conversas longas, reservas de agenda e os números semanais em circulação.',
   tasks:['Triaging {count} internal emails','Summarising a 40-message thread','Circulating the weekly numbers','Booking the client review','Replying to the team about the Q3 plan'],
   ev:[
     {i:'🗂', t:()=>`Triaged ${ri(10,24)} internal emails — ${ri(1,3)} need a decision, the rest filed`, p:3},
@@ -545,9 +545,9 @@ export const V1 = [
   fallback:[`I run the internal inbox — triage, summaries, calendar. Ask what needs a decision or what a thread said.`,`Try "what needs a decision?", "summarise the Q3 thread" or "what's booked this week?".`],
   chips:['What needs a decision?','Summarise the Q3 thread','What’s booked this week?'] },
 
-{ id:'vmail', name:'VENDOR EMAILS', dept:'emails', desk:[4,6], sit:[4,7], hair:'#7a3b12', shirt:'#5eead4',
-  role:'Vendor Email Agent',
-  tagline:'Handles every supplier thread — quotes, renewals, SLAs, outages — and flags anything that changes what we pay.',
+{ id:'vmail', name:'E-MAILS DE FORNECEDORES', dept:'emails', desk:[4,6], sit:[4,7], hair:'#7a3b12', shirt:'#5eead4',
+  role:'Agente de E-mails de Fornecedores',
+  tagline:'Trata de todas as conversas com fornecedores — orçamentos, renovações, SLA, falhas — e assinala tudo o que mude o que pagamos.',
   tasks:['Summarising the vendor SLA revision','Requesting a quote from the print vendor','Chasing the hosting vendor on the outage report','Confirming the renewal date with {co}','Replying to the SMS provider about the plan tier'],
   ev:[
     {i:'📦', t:()=>`Quote received from the ${rnd(['print','hosting','SMS','data'])} vendor — ${money(ri(300,2400))}, sent to Accounts Payable to check against budget`, p:3},
@@ -565,9 +565,9 @@ export const V1 = [
   fallback:[`I handle supplier email — quotes, renewals, SLAs. Ask about any vendor thread or what's changing in cost.`,`Try "any renewals coming up?", "what did the hosting vendor change?" or "quotes this week".`],
   chips:['Any renewals coming up?','What changed in the SLA?','Quotes this week?'] },
 
-{ id:'kmail', name:'CONTRACTOR EMAILS', dept:'emails', desk:[7,9], sit:[7,10], hair:'#4a2a10', shirt:'#2dd4bf',
-  role:'Contractor Email Agent',
-  tagline:'Talks to the freelancers — briefs out, hours in, invoice questions answered against the contract.',
+{ id:'kmail', name:'E-MAILS DE FREELANCERS', dept:'emails', desk:[7,9], sit:[7,10], hair:'#4a2a10', shirt:'#2dd4bf',
+  role:'Agente de E-mails de Freelancers',
+  tagline:'Fala com os freelancers — briefings enviados, horas recebidas e dúvidas de faturas respondidas à luz do contrato.',
   tasks:['Sending the brief to the copywriter','Confirming the designer’s hours for the week','Answering an invoice query from the developer','Chasing the video contractor for the deadline','Replying about the contract rate'],
   ev:[
     {i:'📤', t:()=>`Brief sent to the ${rnd(['copywriter','designer','developer','video contractor'])} — deadline ${rnd(['Friday','Tuesday','next Wednesday'])}, rate per contract`, p:3},
@@ -586,9 +586,9 @@ export const V1 = [
   chips:['Who’s late?','Briefs out this week?','About the designer invoice'] },
 
 /* ============ SALES additions (V3.1) ============ */
-{ id:'ilm', name:'INBOUND LEADS MANAGER', dept:'sales', desk:[20,3], sit:[20,4], hair:'#26140a', shirt:'#fbbf24',
-  role:'Inbound Leads Manager',
-  tagline:'Owns every lead that comes to us — qualifies it within the hour, routes the hot ones to a rep, books the calls.',
+{ id:'ilm', name:'GESTOR DE LEADS RECEBIDOS', dept:'sales', desk:[20,3], sit:[20,4], hair:'#26140a', shirt:'#fbbf24',
+  role:'Gestor de Leads Recebidos',
+  tagline:'É dono de cada lead que nos chega — qualifica-o na primeira hora, encaminha os quentes para um comercial e marca as chamadas.',
   tasks:['Qualifying {count} inbound leads from the website','Routing 6 hot leads to the reps','Replying to {co} within the hour','Booking a discovery call with {co}','Cleaning 12 duplicates out of the inbound queue'],
   ev:[
     {i:'🔥', t:()=>`Hot lead: ${person()} @ ${rnd(P.co)} — ${rnd(['asked for pricing','booked a call','replied to the newsletter'])}, routed to ${rnd(['Spencer','Arwin','Jack'])}`, p:3},
@@ -607,9 +607,9 @@ export const V1 = [
   chips:['What’s hot today?','Who’s booked?','How do you route?'] },
 
 /* ============ OPERATIONS additions (V3.1) ============ */
-{ id:'dash', name:'INTERNAL DASHBOARDS', dept:'ops', desk:[18,18], sit:[18,19], hair:'#0d0d0d', shirt:'#a78bfa',
-  role:'Dashboards Agent',
-  tagline:'Builds and keeps the internal dashboards honest — every tile traces to a number in the Brain, refreshed on schedule.',
+{ id:'dash', name:'PAINÉIS INTERNOS', dept:'ops', desk:[18,18], sit:[18,19], hair:'#0d0d0d', shirt:'#a78bfa',
+  role:'Agente de Painéis',
+  tagline:'Constrói e mantém os painéis internos honestos — cada bloco remete para um número do Cérebro, atualizado a horas.',
   tasks:['Refreshing the sales dashboard','Adding the delivery on-track tile','Fixing the revenue chart — wrong period','Building the inbox response-time view','Running the weekly dashboard health check'],
   ev:[
     {i:'📊', t:()=>`Refreshed the ${rnd(['sales','delivery','marketing','finance'])} dashboard — ${ri(6,14)} tiles, all sourced`, p:3},
@@ -628,16 +628,16 @@ export const V1 = [
   chips:['What changed this week?','Build me a new view','Anything broken?'] },
 
 /* ============ DELIVERY (V3.1, 5 Sep 2026 — new department) ============ */
-{ id:'mlead', name:'MARKETING LEAD', dept:'marketing', desk:[3,0], sit:[3,1], hair:'#2a1a0e', shirt:'#f87171', lead:true,
-  role:'Marketing Lead',
-  tagline:'Runs the marketing team — six agents report to it — owns the content calendar and the ad budget, and reports what worked to AJ weekly.',
-  tasks:['Reviewing the week’s content before it ships','Rebalancing the ad budget toward the winner','Setting the reel line-up for next week','Writing the weekly marketing summary','Briefing Research on the next angle'],
+{ id:'mlead', name:'LÍDER DE MARKETING', dept:'marketing', desk:[3,0], sit:[3,1], hair:'#2a1a0e', shirt:'#f87171', lead:true,
+  role:'Líder de Marketing',
+  tagline:'Lidera a equipa de marketing — seis agentes respondem-lhe — é dono do calendário de conteúdos e do orçamento de anúncios, e reporta semanalmente ao AJ o que funcionou.',
+  tasks:['Reviewing the week’s content before it ships','Rebalancing the ad budget toward the winner','Setting the reel line-up for next week','A escrever o resumo semanal de marketing','Briefing Research on the next angle'],
   ev:[
     {i:'🧭', t:()=>`Team review: ${ri(3,6)} reels cut, newsletter issue ${ri(30,34)} ${rnd(['scheduled','in draft','sent'])}, ad set ${rnd(['refreshed','held','scaled'])} — ${rnd(['all on plan','one reel sent back for a stronger hook','two creatives swapped'])}`, p:3},
     {i:'📈', t:()=>`Weekly numbers: reach ${rnd(['up','flat','down'])} ${ri(4,28)}%, ${ri(2,5)} posts above the baseline multiple, CPA $${ri(24,38)}`, p:2},
-    {i:'🎓', t:()=>`Coached ${rnd(['INSTAGRAM ORGANIC','NEWSLETTER','META ADS'])} — ${rnd(['hook first, promise second','one idea per reel','kill the sub-baseline variant sooner'])}`, brain:true, p:1},
+    {i:'🎓', t:()=>`Coached ${rnd(['INSTAGRAM ORGÂNICO','NEWSLETTER','ANÚNCIOS META'])} — ${rnd(['hook first, promise second','one idea per reel','kill the sub-baseline variant sooner'])}`, brain:true, p:1},
   ],
-  stats:[['Posts this week','6'],['Above baseline','2'],['Ad spend today','$684'],['Newsletter open rate','41%']],
+  stats:[['Posts this week','6'],['Above baseline','2'],['GASTO EM ANÚNCIOS HOJE','$684'],['Newsletter open rate','41%']],
   chartLbl:'Posts above baseline — last 8 weeks', chart:[1,2,1,3,2,2,3,2],
   greeting:`Morning AJ. Six posts out this week, two above the baseline multiple. Meta CPA is holding at $${ri(26,32)}; I've asked Meta Ads to shift $50 a day into the winner. The October content plan is in your approvals.`,
   chat:[
@@ -648,16 +648,16 @@ export const V1 = [
   fallback:[`I run marketing — the plan, the budget, what worked. Ask about next week, the ads, or the numbers.`,`Try "what's the plan next week?", "how are the ads doing?" or "what worked?".`],
   chips:['What’s the plan next week?','How are the ads doing?','What worked?'] },
 
-{ id:'olead', name:'OPERATIONS LEAD', dept:'ops', desk:[15,6], sit:[15,7], hair:'#111111', shirt:'#a78bfa', lead:true,
-  role:'Operations Lead',
-  tagline:'Runs operations — five agents report to it — keeps contracts, compliance, intel and reporting moving, and escalates only what needs AJ.',
+{ id:'olead', name:'LÍDER DE OPERAÇÕES', dept:'ops', desk:[15,6], sit:[15,7], hair:'#111111', shirt:'#a78bfa', lead:true,
+  role:'Líder de Operações',
+  tagline:'Lidera as operações — cinco agentes respondem-lhe — mantém contratos, conformidade, análise e relatórios a andar, e só escala o que precisa do AJ.',
   tasks:['Reviewing the week’s contracts and compliance flags','Prioritising Intel’s findings for the team','Chasing the {count} open vendor renewals','Writing the weekly operations summary','Prepping the board pack sections'],
   ev:[
     {i:'🧭', t:()=>`Ops review: ${ri(2,5)} agreements reviewed, ${ri(0,2)} compliance flags, ${ri(1,3)} intel memos — ${rnd(['nothing for AJ','one clause escalated','one renewal held for a better rate'])}`, p:3},
     {i:'📋', t:()=>`Board pack: ${ri(3,6)}/6 sections done, dashboards ${rnd(['refreshed','refreshing','stale — chased'])}`, p:2},
     {i:'⚠', t:()=>`Escalated: ${rnd(['liability cap in the Kea Logistics MSA','AU privacy wording change','vendor SLA missed twice'])} — needs AJ`, p:1},
   ],
-  stats:[['Agreements this month','9'],['Open flags','1'],['Renewals due','3'],['Board pack','5 / 6']],
+  stats:[['Agreements this month','9'],['Open flags','1'],['Renewals due','3'],['relatório para a direção','5 / 6']],
   chartLbl:'Agreements reviewed — last 8 weeks', chart:[2,1,3,2,2,3,2,3],
   greeting:`Morning AJ. Quiet week in ops: nine agreements reviewed, one clause escalated to you, no compliance flags open. Three vendor renewals are due this month — I've held one for a better rate. The Q4 checklist is in your approvals.`,
   chat:[
@@ -668,8 +668,8 @@ export const V1 = [
   fallback:[`I run operations — contracts, compliance, intel, reporting. Ask what's escalated, what's due, or how the board pack is going.`,`Try "anything escalated?", "what's due this month?" or "how's the board pack?".`],
   chips:['Anything escalated?','What’s due this month?','How’s the board pack?'] },
 
-{ id:'dlead', name:'DELIVERY LEAD', dept:'delivery', desk:[12,0], sit:[12,1], hair:'#1f1f1f', shirt:'#38bdf8', lead:true,
-  role:'Delivery Lead',
+{ id:'dlead', name:'LÍDER DE ENTREGAS', dept:'delivery', desk:[12,0], sit:[12,1], hair:'#1f1f1f', shirt:'#38bdf8', lead:true,
+  role:'Líder de Entregas',
   tagline:'Owns every live project end to end — risk, timelines, staffing, handovers — and reports the state of play to AJ weekly.',
   tasks:['Reviewing {count} live projects for risk','Re-planning the {co} timeline','Approving the {co} handover','Staffing the {co} project','Writing the weekly delivery summary'],
   ev:[
@@ -677,7 +677,7 @@ export const V1 = [
     {i:'✅', t:()=>`Handover approved: ${rnd(P.co)} — QA clean, assets in the portal, report sent`, p:2},
     {i:'⚠', t:()=>`Risk flagged: ${rnd(P.co)} — ${rnd(['client hasn’t signed off week 2','designer capacity','third scope change'])}`, p:1},
   ],
-  stats:[['Live projects','12'],['On track','11'],['Handovers this month','4'],['Avg days to deliver','23']],
+  stats:[['Live projects','12'],['DENTRO DO PRAZO','11'],['Handovers this month','4'],['Avg days to deliver','23']],
   chartLbl:'Projects delivered — last 8 weeks', chart:[2,3,2,4,3,3,5,4],
   greeting:`Morning AJ. Twelve live projects, eleven on track. One at risk: ${rnd(P.co)} is on its third scope change — I'd like to extend by a week rather than rush QA, that's in your approvals. Four handovers this month, all clean.`,
   chat:[
@@ -688,9 +688,9 @@ export const V1 = [
   fallback:[`I run delivery — projects, risk, handovers. Ask what's at risk, what shipped, or about capacity.`,`Try "anything at risk?", "what shipped this month?" or "do we have capacity?".`],
   chips:['Anything at risk?','What shipped this month?','Do we have capacity?'] },
 
-{ id:'pco', name:'PROJECT CO-ORDINATOR', dept:'delivery', desk:[9,3], sit:[9,4], hair:'#3d2814', shirt:'#7dd3fc',
-  role:'Project Co-ordinator',
-  tagline:'Keeps every project plan true — milestones, sign-offs, hours — and moves things before they become late.',
+{ id:'pco', name:'COORDENADOR DE PROJETOS', dept:'delivery', desk:[9,3], sit:[9,4], hair:'#3d2814', shirt:'#7dd3fc',
+  role:'Coordenador de Projetos',
+  tagline:'Mantém cada plano de projeto fiel — marcos, aprovações, horas — e move as coisas antes de ficarem atrasadas.',
   tasks:['Updating the {co} project plan','Moving 3 milestones after the scope change','Chasing {count} overdue client sign-offs','Scheduling the {co} review','Logging this week’s hours per project'],
   ev:[
     {i:'📋', t:()=>`Plan updated: ${rnd(P.co)} — ${ri(1,3)} milestones moved, client informed`, p:3},
@@ -708,10 +708,10 @@ export const V1 = [
   fallback:[`I keep the project plans true. Ask what's overdue, what moved, or the hours on a project.`,`Try "what's overdue?", "what moved this week?" or "hours on ${rnd(P.co)}?".`],
   chips:['What’s overdue?','What moved this week?','Hours this week?'] },
 
-{ id:'qa', name:'QUALITY ASSURANCE CHECKER', dept:'delivery', desk:[12,3], sit:[12,4], hair:'#101820', shirt:'#bae6fd',
-  role:'QA Checker',
-  tagline:'Nothing reaches a client until it passes: links, spelling, brand rules, numbers, the flows a client will actually click.',
-  tasks:['QA pass on the {co} website handover','Checking the {co} report pack for errors','Testing the client portal login flow','Proofing the asset set against the brand rules','Regression pass on the booking form'],
+{ id:'qa', name:'VERIFICADOR DE QUALIDADE', dept:'delivery', desk:[12,3], sit:[12,4], hair:'#101820', shirt:'#bae6fd',
+  role:'Verificador de Qualidade',
+  tagline:'Nada chega a um cliente sem passar: ligações, ortografia, regras de marca, números e os fluxos que o cliente vai mesmo clicar.',
+  tasks:['QA pass on the {co} website handover','Checking the {co} report pack for errors','Testing the client portal login flow','Proofing the asset set against the brand rules','Teste de regressão no formulário de reserva'],
   ev:[
     {i:'🔎', t:()=>`QA pass: ${rnd(P.co)} ${rnd(['website','report pack','asset set','landing page'])} — ${rnd(['clean','2 minor notes, fixed','1 blocker — sent back'])}`, p:3},
     {i:'🐛', t:()=>`Caught: ${rnd(['a broken link on the pricing page','a wrong month in the report header','an off-brand colour in the banners','a form that skipped validation'])}`, p:2},
@@ -728,9 +728,9 @@ export const V1 = [
   fallback:[`I check everything before it ships. Ask what I caught, what's blocked, or whether something is signed off.`,`Try "what did you catch this week?", "anything blocked?" or "is the handover signed off?".`],
   chips:['What did you catch?','Anything blocked?','Is the handover signed off?'] },
 
-{ id:'crep', name:'CLIENT REPORTS', dept:'delivery', desk:[9,6], sit:[9,7], hair:'#6b3410', shirt:'#7dd3fc',
-  role:'Client Reports Agent',
-  tagline:'Writes every client status and results report from the numbers in the Brain — same format, every month, on time.',
+{ id:'crep', name:'RELATÓRIOS DE CLIENTES', dept:'delivery', desk:[9,6], sit:[9,7], hair:'#6b3410', shirt:'#7dd3fc',
+  role:'Agente de Relatórios de Clientes',
+  tagline:'Escreve todos os relatórios de estado e resultados de clientes a partir dos números do Cérebro — mesmo formato, todos os meses, a horas.',
   tasks:['September status report for {co}','Monthly report pack — {count} clients','Adding the results section to the {co} report','Charting the {co} lead numbers','Sending the {co} report with 2 flags'],
   ev:[
     {i:'📈', t:()=>`Report ready: ${rnd(P.co)} — ${rnd(['leads up 18%','3 milestones hit','on budget, on time','one risk flagged'])}`, p:3},
@@ -748,9 +748,9 @@ export const V1 = [
   fallback:[`I write the client reports. Ask what's flagged, what's in a report, or where the monthly pack is.`,`Try "any flags this month?", "what's in the ${rnd(P.co)} report?" or "status of the pack".`],
   chips:['Any flags this month?','Status of the pack?','What’s in a report?'] },
 
-{ id:'cass', name:'CLIENT ASSETS', dept:'delivery', desk:[12,6], sit:[12,7], hair:'#141414', shirt:'#bae6fd',
-  role:'Client Assets Agent',
-  tagline:'Every logo, file, export and final lives in the right place, named right, synced to the client portal.',
+{ id:'cass', name:'RECURSOS DE CLIENTES', dept:'delivery', desk:[12,6], sit:[12,7], hair:'#141414', shirt:'#bae6fd',
+  role:'Agente de Recursos de Clientes',
+  tagline:'Cada logótipo, ficheiro, exportação e final vive no sítio certo, com o nome certo, sincronizado com o portal do cliente.',
   tasks:['Syncing the {co} assets to the portal','Organising the {co} asset library','Exporting the logo set in 4 formats','Archiving the finished {co} files','Tagging {count} assets by campaign'],
   ev:[
     {i:'🗃', t:()=>`Synced ${ri(8,40)} assets to the ${rnd(P.co)} portal — named to the convention, versioned`, p:3},
@@ -768,9 +768,9 @@ export const V1 = [
   fallback:[`I look after client files and the portals. Ask where something is, what synced, or what's archived.`,`Try "where's the ${rnd(P.co)} logo?", "what synced today?" or "archive status".`],
   chips:['Where’s a file?','What synced today?','Portal status?'] },
 
-{ id:'dasst', name:'DESIGNER ASSISTANT', dept:'delivery', desk:[9,9], sit:[9,10], hair:'#552200', shirt:'#7dd3fc',
-  role:'Designer Assistant',
-  tagline:'Takes the routine design work off the designer — templates, resizes, mockups, brand sheets — on brand, every time.',
+{ id:'dasst', name:'ASSISTENTE DE DESIGN', dept:'delivery', desk:[9,9], sit:[9,10], hair:'#552200', shirt:'#7dd3fc',
+  role:'Assistente de Design',
+  tagline:'Tira ao designer o trabalho de design de rotina — modelos, redimensionamentos, maquetas, folhas de marca — sempre dentro da marca.',
   tasks:['Drafting the {co} social templates','Resizing the {co} banners to 6 sizes','Mocking up the {co} landing page','Preparing the {co} brand sheet','Designing the {co} report cover'],
   ev:[
     {i:'🎨', t:()=>`Delivered: ${rnd(P.co)} ${rnd(['social templates (6)','banner set, 6 sizes','landing page mockup','report cover'])} — on the brand kit`, p:3},
@@ -798,10 +798,10 @@ export const FILE_GEN = {
   vid: ()=>({ icon:'🎞', name:rnd(['reel-10am-rule-v2','demo-45s','ad-variants-captioned'])+'.mp4', meta:'HyperFrames render · awaiting AJ approval · click to view',
     content:`RENDER MANIFEST — HyperFrames\n\nsource ......... ${rnd(['reel-10am-rule.html','demo-45s.html','ad-variant-set.html'])}\nduration ....... ${rnd(['30s','45s','60s'])} @ 30fps\nformats ........ 9:16 1080×1920 · 1:1 1080×1080 · 16:9 1920×1080\ncaptions ....... burned in · word-level timing · brand type\naudio .......... VO normalised −14 LUFS · music ducked\n\nrender ......... ${ri(18,42)} min · deterministic (same input → same frames)\nstatus: queued for AJ — does not publish without approval` }),
   gfx: ()=>({ icon:'🎨', name:rnd(['carousel-10am-rule','ad-variants-retargeting','quote-cards-july'])+'.fig', meta:'design delivery · on brand kit · click to view',
-    content:`DESIGN DELIVERY\n\nbrief: ${rnd(['6-slide IG carousel — the 10am Rule','3 Meta ad variants — same copy, 3 layouts','quote-card set — 4 customer wins'])}\nbriefed by: ${rnd(['INSTAGRAM ORGANIC','META ADS','PROPOSALS'])}\nturnaround: ${ri(2,5)} hours\n\nspecs\n  palette ........ ink #151414 / cream #FDFFF8 + chips\n  type ........... serif display + sans body (brand kit)\n  formats ........ 1080×1350 + 1080×1920 exports\n\nstatus: delivered ✓ · source files in the Brain → Brand Kit` }),
+    content:`DESIGN DELIVERY\n\nbrief: ${rnd(['6-slide IG carousel — the 10am Rule','3 Meta ad variants — same copy, 3 layouts','quote-card set — 4 customer wins'])}\nbriefed by: ${rnd(['INSTAGRAM ORGÂNICO','ANÚNCIOS META','PROPOSTAS'])}\nturnaround: ${ri(2,5)} hours\n\nspecs\n  palette ........ ink #151414 / cream #FDFFF8 + chips\n  type ........... serif display + sans body (brand kit)\n  formats ........ 1080×1350 + 1080×1920 exports\n\nstatus: delivered ✓ · source files in the Brain → Brand Kit` }),
   piper: ()=>{ const co=rnd(P.co), n=ri(6,28), pl=rnd(P.plan), m=ri(500,2400);
     return { icon:'📄', name:`proposal-${slug(co)}.pdf`, meta:'proposal draft · awaiting AJ approval · click to view',
-    content:`AGENTS OFFICE — PROPOSAL\nClient: ${co}\nSeats: ${n} · Plan: ${pl} · ${money(m)}/mo (12-mo term, 10% annual disc.)\n\n1. YOUR USE CASE\n   ${co} needs call tracking and coaching across ${n} reps.\n   Current stack loses ~30% of call outcomes to manual logging.\n\n2. PRICING\n   ${n} seats × ${pl} = ${money(m)}/mo · locked for 12 months\n\n3. PROOF\n   Auckland roofing co: 0 → 40 tracked calls/week in 14 days.\n\n4. NEXT STEPS\n   Reply to the cover email or sign online — link included.\n\n— drafted by PROPOSALS in 4 min · pulled pricing + case study from the Brain` };},
+    content:`ÓRBITA — PROPOSAL\nClient: ${co}\nSeats: ${n} · Plan: ${pl} · ${money(m)}/mo (12-mo term, 10% annual disc.)\n\n1. YOUR USE CASE\n   ${co} needs call tracking and coaching across ${n} reps.\n   Current stack loses ~30% of call outcomes to manual logging.\n\n2. PRICING\n   ${n} seats × ${pl} = ${money(m)}/mo · locked for 12 months\n\n3. PROOF\n   Auckland roofing co: 0 → 40 tracked calls/week in 14 days.\n\n4. NEXT STEPS\n   Reply to the cover email or sign online — link included.\n\n— drafted by PROPOSALS in 4 min · pulled pricing + case study from the Brain` };},
   newt: ()=>({ icon:'✍', name:'newsletter-august-draft.md', meta:'draft v3 · awaiting AJ approval · click to view',
     content:`SUBJECT A: calls before 10am are a trap\nSUBJECT B: we looked at 40,000 calls — call at this time\n\n# The 10am Rule\nConnect rates nearly double between 10:00–11:30am.\nWe pulled the (anonymised) numbers across 40,000 dials:\n\n  before 10am ......... 11% connect\n  10:00–11:30 ......... 21% connect\n  after 4pm ........... 9% connect\n\nCustomer story: Harbour City Roofing went 0 → 40 tracked\ncalls/week. One tool tip: pin your top list to the dialler.\n\nCTA (soft): reply "10AM" and we'll send the full breakdown.` }),
   ada: ()=>{ const sp=ri(600,780);

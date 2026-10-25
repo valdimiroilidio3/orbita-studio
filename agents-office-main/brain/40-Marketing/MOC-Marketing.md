@@ -1,7 +1,7 @@
 # MOC — Marketing
 
-- [[content-engine]] — what we publish and how often
-- [[ad-playbook]] — Meta ads: budgets, creative rules, what gets paused
-- [[newsletter]] — the monthly issue
-- [[reel-hooks]] — hooks that worked
-Research briefs feed [[MOC-Sales]] with trends. Voice in [[voice]].
+- [[content-engine]] — o que publicamos e com que frequência
+- [[ad-playbook]] — anúncios Meta: orçamentos, regras de criativos, o que se pausa
+- [[newsletter]] — a edição mensal
+- [[reel-hooks]] — ganchos que funcionaram
+Os briefings da Investigação alimentam [[MOC-Sales]] com tendências. Voz em [[voice]].

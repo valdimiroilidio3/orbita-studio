@@ -1,7 +1,7 @@
-# Offer ladder
+# Escada de ofertas
 
-1. Website build — fixed price, 3 to 5 weeks ([[MOC-Delivery]])
-2. Brand kit — logo, colours, type, templates ([[voice]])
-3. Growth retainer — monthly content, ads and reporting ([[MOC-Marketing]])
+1. Criação de site — preço fixo, 3 a 5 semanas ([[MOC-Delivery]])
+2. Kit de marca — logótipo, cores, tipografia, modelos ([[voice]])
+3. Avença de crescimento — conteúdo mensal, anúncios e relatórios ([[MOC-Marketing]])
 
-Proposals follow [[proposal-template]]. Pricing rationale in [[business-model]].
+As propostas seguem [[proposal-template]]. Racional de preços em [[business-model]].

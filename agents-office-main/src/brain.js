@@ -1,4 +1,4 @@
-// Agents Office V3.6 — the Brain as an etched floor (AJ, 6 Sep 2026: option B + the panel strip).
+// Órbita V3.6 — the Brain as an etched floor (AJ, 6 Sep 2026: option B + the panel strip).
 // The particle nebula is gone. The vault's wiki-link graph (src/braingraph.js, baked by
 // graph-build.mjs) is drawn into the floor of the centre pod as faint ink line-work: texture at
 // overview, a graph when you lean in. It moves only when an agent READS (a note glints green and a
@@ -118,7 +118,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glintTex, transparent: true, depthTest: false }));
     s.position.copy(p); s.scale.set(0.9, 0.9, 1); s.renderOrder = 60;
     scene.add(s);
-    if (label && hud && toScreen) { // "CLIENT EMAILS READ MOC-DELIVERY" — the mock's little pill
+    if (label && hud && toScreen) { // "E-MAILS DE CLIENTES LERAM MOC-DELIVERY" — the mock's little pill
       const el = document.createElement('div'); el.className = 'readlab'; el.textContent = label; hud.appendChild(el);
       labels.push({ el, at: p.clone(), born: performance.now() });
     }
@@ -131,7 +131,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     }
     fx.push({ sprite: s, line, born: performance.now() });
   }
-  let quiet = false; // V3.5 (AJ: "the alerts on the Brain are distracting"): a live office shows only REAL reads and writes — no theatre glints, no ambient pulse
+  let quiet = false; // V3.5 (AJ: "os alertas no Cérebro distraem"): a live office shows only REAL reads and writes — no theatre glints, no ambient pulse
   function setQuiet(on) { quiet = !!on; }
   function read(agentId) {
     const a = agentOf(agentId); if (!a) return;
@@ -163,7 +163,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   function setGraph(g) {
     if (!g || !g.nodes || !g.nodes.length) return;
     const today = new Date().toISOString().slice(0, 10);
-    nodes = g.nodes.map((n, i) => ({ ...n, i, fresh: n.g === 'Agents Office' && n.id.startsWith(today) })); // notes the office wrote today glow green
+    nodes = g.nodes.map((n, i) => ({ ...n, i, fresh: n.g === 'Órbita' && n.id.startsWith(today) })); // notes the office wrote today glow green
     links = g.links.map(([a, b]) => [a, b]);
     adj = nodes.map(() => new Set()); for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
     byId = new Map(nodes.map(n => [n.id, n.i])); hubs = nodes.slice(0, 8);
@@ -220,7 +220,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     strip.querySelector('.tb-count').textContent = state.notes.toLocaleString('en-NZ');
     const lr = strip.querySelector('.tb-last');
     lr.innerHTML = state.lastRead ? `Last read <b>${esc(state.lastRead.note)}</b> by ${esc(state.lastRead.agent)} · ${timeStr(state.lastRead.ts)}` : `${BRAIN.links.length} wiki links · nothing read yet`;
-    strip.querySelector('.tb-new').textContent = state.newToday ? `+${state.newToday} note${state.newToday > 1 ? 's' : ''} today` : '';
+    strip.querySelector('.tb-new').textContent = state.newToday ? `+${state.newToday} nota${state.newToday > 1 ? 's' : ''} hoje` : '';
   }
   updateStrip();
 
@@ -234,7 +234,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   const on = new Set(groups);
   function chips() {
     chipsEl.innerHTML = groups.map(g => `<button class="bv-chip${on.has(g) ? ' on' : ''}" data-g="${g}"><i style="background:${GROUP_COL[g] || '#B0ADA3'}"></i>${GROUP_NAME(g)}</button>`).join('') +
-      `<button class="bv-chip live${freshOnly ? ' on' : ''}" data-g="__fresh">New today · ${state.newToday}</button>`;
+      `<button class="bv-chip live${freshOnly ? ' on' : ''}" data-g="__fresh">Novas hoje · ${state.newToday}</button>`;
   }
   chipsEl.addEventListener('click', e => {
     const b = e.target.closest('.bv-chip'); if (!b) return;
@@ -265,11 +265,11 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     sel = n;
     const out = [...adj[n.i]].map(i => nodes[i]).sort((a, b) => b.d - a.d);
     const rd = state.reads.get(n.id), wr = state.written.get(n.id);
-    pane.innerHTML = `<h3>${esc(n.id)}</h3><div class="bv-path"><i style="background:${GROUP_COL[n.g] || '#B0ADA3'}"></i>${esc(GROUP_NAME(n.g))} · ${n.d} link${n.d === 1 ? '' : 's'}${n.fresh ? ' · <span class="bv-g">new today</span>' : ''}</div>` +
-      (wr ? `<div class="bv-lab">Written by</div><p>${esc(wr.agent)} · ${timeStr(wr.ts)} · from the task “${esc(wr.task)}”</p>` : '') +
-      (rd ? `<div class="bv-lab">Last read by</div><p>${esc(rd.agent)} · ${timeStr(rd.ts)}</p>` : '') +
+    pane.innerHTML = `<h3>${esc(n.id)}</h3><div class="bv-path"><i style="background:${GROUP_COL[n.g] || '#B0ADA3'}"></i>${esc(GROUP_NAME(n.g))} · ${n.d} link${n.d === 1 ? '' : 's'}${n.fresh ? ' · <span class="bv-g">novo hoje</span>' : ''}</div>` +
+      (wr ? `<div class="bv-lab">Escrito por</div><p>${esc(wr.agent)} · ${timeStr(wr.ts)} · da tarefa «${esc(wr.task)}»</p>` : '') +
+      (rd ? `<div class="bv-lab">Lido por último por</div><p>${esc(rd.agent)} · ${timeStr(rd.ts)}</p>` : '') +
       `<div class="bv-lab">Links · ${out.length}</div>` + out.slice(0, 18).map(o => `<div class="bv-lk" data-i="${o.i}">${esc(o.id)}</div>`).join('') +
-      (out.length > 18 ? `<div class="bv-more">+${out.length - 18} more</div>` : '');
+      (out.length > 18 ? `<div class="bv-more">+${out.length - 18} mais</div>` : '');
     pane.querySelectorAll('.bv-lk').forEach(el => el.addEventListener('click', () => { const t = nodes[+el.dataset.i]; select(t); centre(t); }));
   }
   function centre(n) { tx = -n.x * S(); ty = -n.y * S(); }
@@ -301,13 +301,13 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     }
     requestAnimationFrame(draw);
   }
-  let owner = PROFILE && PROFILE.company ? String(PROFILE.company).toUpperCase() : 'YOUR NOTES'; // V3.1: the business name when served (was hard-coded to one company); INDUSTRY PROFILE: the demo company
-  function setOwner(name) { owner = String(name || 'YOUR NOTES').toUpperCase(); if (openNow) meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`; }
+  let owner = PROFILE && PROFILE.company ? String(PROFILE.company).toUpperCase() : 'AS TUAS NOTAS'; // V3.1: the business name when served (was hard-coded to one company); INDUSTRY PROFILE: the demo company
+  function setOwner(name) { owner = String(name || 'AS TUAS NOTAS').toUpperCase(); if (openNow) meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`; }
   function open() {
     if (openNow) return;
     openNow = true; ov.classList.add('on'); document.body.classList.add('brainOpen');
     meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`;
-    chips(); if (!sel) pane.innerHTML = '<div class="bv-empty">Click a note to read it. Hover to see its neighbours.</div>';
+    chips(); if (!sel) pane.innerHTML = '<div class="bv-empty">Clica numa nota para a ler. Passa o rato para ver as vizinhas.</div>';
     requestAnimationFrame(draw);
   }
   function close() { if (!openNow) return; openNow = false; ov.classList.remove('on'); document.body.classList.remove('brainOpen'); }
