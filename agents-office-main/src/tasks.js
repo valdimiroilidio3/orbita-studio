@@ -27,88 +27,106 @@ import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
 
-const SEGMENTS = ['roofing', 'HVAC', 'dental', 'logistics', 'fitness', 'property', 'landscaping', 'legal'];
+const SEGMENTS = ['construção', 'climatização', 'clínicas dentárias', 'logística', 'ginásios', 'imobiliário', 'jardinagem', 'advocacia'];
 
-// generic-business task pool per agent (AJ: generic business, not TerriTool-flavoured)
+// tarefas típicas por agente (negócio genérico, não TerriTool)
 const POOL = {
-  elead: ['Rever a caixa de entrada da noite, encaminhar 40 e-mails', 'Rever o tom de 6 respostas a clientes', 'Resumo semanal da caixa de entrada para o AJ', 'Atualizar os modelos de resposta', 'Escalar 2 conversas ao AJ'],
-  cmail: ['Responder ao {co} scope question', 'Enviar o resumo de arranque a {co}', 'Responder a 9 e-mails de clientes da noite', 'Escrever o aviso de aumento de preços', 'Chase {co} para a aprovação do briefing'],
-  imail: ['Triar 14 e-mails internos', 'Fazer circular os números da semana', 'Responder à equipa sobre o plano do 3.º trimestre', 'Resumir a conversa de 40 mensagens', 'Marcar a revisão com o cliente no calendário'],
-  vmail: ['Resumir a revisão do SLA do fornecedor', 'Responder ao fornecedor de SMS sobre o nível do plano', 'Pedir orçamento ao fornecedor de impressão', 'Pressionar o fornecedor de alojamento sobre o relatório de avaria', 'Confirmar a data de renovação do fornecedor'],
-  kmail: ['Responder à dúvida da fatura do designer', 'Enviar o briefing ao redator', 'Confirmar as horas do freelancer nesta semana', 'Pressionar o programador pelo orçamento', 'Responder ao freelancer de vídeo sobre o prazo'],
-  lexi:  ['Rever o enriquecimento da noite antes de os comerciais verem', "Build today's call lists", 'Chase {n} deals quiet past 14 days', 'Preparar a revisão semanal do pipeline', 'Afilar o ICP com o Prospetor'],
-  enzo:  ['Enrich {n} overnight signups', 'Verificar telemóveis no lote AU', 'Preencher a dimensão da empresa em 12 leads', 'Pontuar o lote da manhã para o Líder de Vendas', 'Repetir 3 enriquecimentos falhados'],
-  ilm:   ['Qualify {n} leads recebidos pelo site', 'Encaminhar 6 leads quentes para os comerciais', 'Reply to {co} dentro da hora', 'Marcar uma chamada de apresentação com {co}', 'Limpar a fila de entrada, 12 duplicados'],
-  pros:  ['Mine {n} {segment} empresas para prospeção', 'Pontuar 40 potenciais clientes face ao ICP', "Build tomorrow's cold-call list", 'Cruzar novos contactos com os clientes atuais', 'Verificar telemóveis no novo lote'],
-  piper: ['Proposta para o potencial cliente de 40 licenças', 'Atualizar o modelo de proposta do plano Growth', 'Opções de preço para {co}', 'Pacote de seguimento da proposta para {co}', 'Ligação de assinatura online para a {co} proposal'],
-  folo:  ['Fazer seguimento de {n} orçamentos enviados na semana passada', 'Reativar 8 leads frios', 'Registar os resultados das chamadas no CRM', 'Enviar o lembrete de 14 dias aos negócios parados', 'Marcar uma demo para {co}'],
-  mlead: ["Rever o conteúdo da semana antes de sair", 'Passar 50 $/dia para o anúncio vencedor', 'Definir a programação de reels da próxima semana', 'Resumo semanal de marketing para o AJ', 'Investigação breve sobre o {segment} angle'],
-  riley: ['Morning scan: 49 sources', 'Varrimento semanal de preços da concorrência', 'Extrair 3 estatísticas para a newsletter', 'Nota de tendência para o Líder de Vendase', 'Ler 6 avaliações de clientes à procura de ângulos'],
-  newt:  ['Escrever a newsletter de setembro', 'Testar A/B das linhas de assunto do número 32', 'Log issue 31 numbers', 'Reconstruir a sequência de boas-vindas, e-mail 2', 'Limpar 40 subscritores com devolução'],
-  gfx:   ['Conjunto de cartões de citação para a página de preços', 'Story + square exports, brand kit', 'Thumbnail for the "10am rule" reel', 'Carousel cover, 3 options', 'Redimensionar o criativo do anúncio para 4:5'],
-  ada:   ['Renovar o conjunto de anúncios saturado', 'Lançar 4 variantes de "cold call anxiety"', 'Extrair o relatório de gasto diário', 'Passar 50 $/dia para o vencedor', 'Excluir clientes atuais do direcionamento'],
-  iggy:  ['Escrever o gancho do carrossel', 'Registar o desempenho dos ganchos no manual', 'Agendar 3 publicações para a semana', 'Responder a 14 mensagens diretas', 'Recortar a legenda do "10am rule" reel'],
-  vid:   ['Render the "10am rule" reel, com legendas', 'Fazer um teaser de 15 s a partir da demo', 'Re-renderizar as variantes do anúncio em 4:5', 'Passagem de legendas no clipe do webinar', 'Correção de cor e legendas no reel do fundador', 'Renderizar o corte de 45 s da demo'],
-  olead: ["Rever os contratos e sinais da semana", 'Chase {n} open vendor renewals', 'Prioritise Intel’s findings', 'Resumo semanal de operações para o AJ', 'Preparar as secções do relatório para a direção'],
-  scout: ['Comparação da página de preços do concorrente', 'Varrimento de avaliações G2 dos 3 principais rivais', 'Memorando de oportunidade: subida de preços do rival', 'Atualizar o mapa de mercado, 3.º trimestre', 'Vigiar a página de lançamento do rival'],
-  legal: ['Rever o contrato alterado, 2 cláusulas', 'Contrato do designer', 'Revisão anual da política de privacidade', 'Redline the {co} terms', 'Verificar a cláusula de fixação de preço'],
-  comply:['Página de regulamentação AU mudou, a comparar', 'Auditoria do texto de consentimento nos formulários', 'Verificação de retenção de dados, 3 sistemas', 'Lista de conformidade trimestral', 'Revisão do banner de cookies'],
-  report:['Relatório semanal para a direção, 6 secções', 'Consolidação mensal de KPI', 'Relatório de coortes de churn para o Cérebro', 'Relatório de SLA de entregas', 'Resumo da atividade dos comerciais'],
-  dash:  ['Atualizar o painel de vendas', 'Adicionar o bloco de entregas dentro do prazo', 'Corrigir o gráfico de receita, período errado', 'Criar a vista de tempos de resposta da caixa de entrada', 'Verificação semanal da saúde dos painéis'],
-  alead: ["Rever a posição de tesouraria da semana", 'Aprovar o lote de pagamentos a freelancers', 'Preparar o pacote de fecho do mês', 'Revisão de valores do fornecedor', 'Previsão de tesouraria, próximas 8 semanas'],
-  invo:  ['Issue {n} faturas da semana', 'Cobrar 3 faturas em atraso', 'Nota de crédito para {co}', 'Invoice {co} $840', 'Lembrete 2 de 3 para {co}'],
-  apay:  ["Match today's card charges", 'Auditar a fatura de freelancer n.º 218 face ao contrato', 'Agendar os pagamentos a freelancers', 'Flag a subscription overlap', 'Verificar o nível do plano do fornecedor de SMS'],
-  recon: ['Reconciliar 14 pagamentos, 2 assinalados', 'Reconciliação bancária de fecho do mês', 'Associar pagamentos Stripe às faturas', 'Limpar 2 taxas não conciliadas', 'Conciliar o extrato do cartão'],
-  dlead: ['Rever 12 projetos em curso quanto a risco', 'Resumo semanal de entregas para o AJ', 'Refazer o {co} timeline', 'Aprovar a {co} handover', 'Atribuir pessoal ao {co} project'],
-  pco:   ['Atualizar o {co} project plan', 'Mover 3 marcos após a alteração de âmbito', 'Cobrar 2 aprovações de clientes em atraso', 'Agendar a {co} review', 'Registar as horas desta semana por projeto'],
-  qa:    ['Fazer o controlo de qualidade de {co} website handover', 'Verificar o {co} pacote de relatórios quanto a erros', 'Testar o início de sessão do portal do cliente', 'Rever o conjunto de recursos segundo as regras de marca', 'Teste de regressão no formulário de reserva'],
-  crep:  ['Relatório de estado de setembro para {co}', 'Pacote de relatórios mensal, 14 clientes', 'Acrescentar a secção de resultados ao {co} report', 'Enviar o {co} report, 2 flags', 'Fazer o gráfico de {co} lead numbers'],
-  cass:  ['Sincronizar os {co} recursos para o portal', 'Organizar a {co} asset library', 'Exportar o conjunto de logótipos, 4 formatos', 'Arquivar os ficheiros {co} files', 'Etiquetar 60 recursos por campanha'],
-  dasst: ['Escrever o {co} social templates', 'Resize the {co} banners, 6 sizes', 'Fazer a maqueta da {co} landing page', 'Preparar a {co} brand sheet', 'Desenhar a {co} report cover'],
-  ona:   ['Preparação da chamada de arranque para {co}', 'Lista de integração para {co}', 'Configurar o {co} client portal', 'Walk {co} o primeiro relatório', 'Contacto do dia 7 com {co}'],
+  elead: ['Rever as prioridades do dia com as seis salas', 'Assinalar 3 tarefas atrasadas e reagendar', 'Fechar o relatório de estado da empresa', 'Dar OK a 4 entregas à espera do proprietário', 'Distribuir os leads novos pelas salas'],
+  imail: ['Transformar 6 pedidos em tarefas com dono e prazo', 'Atualizar a lista de tarefas paradas', 'Marcar as revisões semanais no calendário', 'Fechar 3 tarefas sem responsável'],
+  report: ['Relatório semanal: vendas, leads e projetos', 'Consolidar os números do mês no Cérebro', 'Comparar a produtividade das seis salas', 'Apontar o que piorou esta semana'],
+  dash:  ['Atualizar o painel de leads e propostas', 'Acrescentar o bloco de entregas dentro do prazo', 'Corrigir o gráfico de vendas, período errado', 'Ligar o bloco de produtividade ao Cérebro'],
+  comply:['Auditar o consentimento dos formulários', 'Confirmar a aprovação antes de 2 envios', 'Revisar a lista de contactos com consentimento', 'Sinalizar os limites de abordagem no Instagram'],
+  pros:  ['Varrer o Google Maps: 60 empresas sem site em {segment}', 'Pontuar 40 empresas face ao ICP', 'Remover duplicados da lista de {n} leads', 'Analisar a presença digital de 20 empresas', 'Entregar a lista do dia ao Sales Closer'],
+  enzo:  ['Enriquecer {n} registos com decisor e e-mail', 'Verificar os telemóveis do lote de hoje', 'Preencher a dimensão de 12 empresas', 'Reter 4 registos com correspondência baixa'],
+  ilm:   ['Qualificar {n} pedidos recebidos pelo site', 'Marcar 3 reuniões com o Sales Closer', 'Responder a {co} na primeira hora', 'Separar 5 pedidos fora do ICP'],
+  riley: ['Varrimento diário de 47 fontes', 'Extrair 3 tendências, com fonte', 'Nota de mercado para o Sales Closer', 'Ler 6 avaliações de clientes à procura de ângulos'],
+  scout: ['Comparar os preços dos 3 estúdios rivais', 'Memorando: subida de preços do concorrente', 'Atualizar os argumentos de venda com 2 factos', 'Vigiar a página de lançamento do rival'],
+  vmail: ['Diagnosticar 15 sites da lista', 'Testar HTTPS e velocidade de 10 sites', 'Registar o que está mal no site da {co}', 'Ver se os formulários de contacto funcionam, 12 sites'],
+  olead: ['Preparar a abordagem de 6 leads quentes', 'Fechar a proposta da {co}', 'Responder às objeções de 3 negócios abertos', 'Registar o motivo de 2 negócios perdidos', 'Pedir aprovação para 4 envios'],
+  piper: ['Proposta para a {co}, três opções', 'Atualizar o preçário de manutenção', 'Reescrever o âmbito da {co} após a reunião', 'Reduzir âmbito em vez de preço na {co}'],
+  folo:  ['Retomar {n} propostas sem resposta', 'Segundo contacto para 8 leads frios', 'Reativar quem testou e não avançou', 'Fechar como perdido o que já não responde'],
+  ona:   ['Arranque da {co}: acessos e expectativas', 'Lista de integração da {co}', 'Apresentar o primeiro relatório à {co}', 'Ponto de situação ao dia 7 com a {co}'],
+  legal: ['Rever o contrato da {co}, 2 cláusulas', 'Verificar os termos da proposta aceite', 'Política de privacidade, revisão anual', 'Assinalar a cláusula de renovação automática'],
+  cmail: ['Responder aos 9 e-mails de clientes da noite', 'Explicar o prazo novo à {co}', 'Enviar o resumo de arranque à {co}', 'Responder à dúvida de âmbito da {co}'],
+  gfx:   ['Briefing da {co}: problema, público e ação', 'Definir a estrutura e a navegação do site novo', 'Fechar o design system do projeto {co}', 'Escolher a direção visual entre 3 conceitos'],
+  dasst: ['Ecrãs do site da {co}, computador e telemóvel', 'Fechar os componentes do design system', 'Versões responsivas da página de preços', 'Estados de erro e vazio dos formulários'],
+  alead: ['Mockups do site da {co} para apresentação', 'Capa e peças do caso de estudo', 'Três conceitos visuais para a {co}', 'Preparar a apresentação visual da proposta'],
+  invo:  ['Mapear o percurso de contacto do site', 'Escrever os textos de interface', 'Validar o fluxo com 40 sessões gravadas', 'Testar a navegação com 5 utilizadores'],
+  dlead: ['Construir a página inicial do projeto {co}', 'Ligar o formulário ao CRM', 'Rever a arquitetura da área de clientes', 'Preparar a entrega da {co} para o QA'],
+  pco:   ['Plano da {co}: marcos e datas', 'Refazer 3 marcos após alteração de âmbito', 'Registar as horas da semana por projeto', 'Cobrar 2 aprovações de clientes em atraso'],
+  qa:    ['Testar o site da {co} em telemóvel e computador', 'Corrigir 4 erros do último deploy', 'Teste de regressão no formulário de reserva', 'Verificar velocidade e acessibilidade'],
+  crep:  ['Página de serviços fiel ao design aprovado', 'Otimizar a velocidade da página inicial', 'Componentes reutilizáveis da área de clientes', 'Corrigir o menu no telemóvel'],
+  cass:  ['Ligar os pagamentos Stripe ao projeto {co}', 'Garantir que cada formulário entra no CRM', 'Teste de integração das automações', 'Proteger os dados de clientes no backend'],
+  apay:  ['Publicar o site da {co} no domínio', 'Configurar a cópia de segurança semanal', 'Verificar certificado e monitorização', 'Confirmar que o que está no ar é a versão aprovada'],
+  kmail: ['Manual de manutenção do site da {co}', 'Documentar as decisões do projeto {co}', 'Arquivar a documentação no Cérebro', 'Escrever o que não se deve tocar no código'],
+  mlead: ['Plano editorial de outubro', 'Fechar o calendário da próxima semana', 'Rever o que funcionou no Instagram', 'Pedir aprovação para 4 publicações'],
+  newt:  ['Newsletter mensal: caso de estudo', 'Legenda para o vídeo da {co}', 'Escrever o caso de estudo com números reais', 'Reescrever a primeira linha de 6 publicações'],
+  ada:   ['Renovar o conjunto de anúncios saturado', 'Lançar 4 variantes do anúncio de {segment}', 'Relatório de CPA e do que aprendemos', 'Excluir clientes atuais do direcionamento'],
+  iggy:  ['Agendar 3 publicações no Instagram', 'Responder a 14 mensagens diretas', 'Preparar a publicação de LinkedIn da {co}', 'Registar os ganchos que funcionaram'],
+  vid:   ['Vídeo de demonstração do projeto {co}', 'Cortes de 15 s com legendas', 'Exportar em 9:16 e 1:1', 'Legendar a demo do webinar'],
+  lexi:  ['Atualizar a fila de aprovações', 'Resolver 2 conflitos de canal', 'Marcar o que está bloqueado', 'Confirmar as peças prontas para a semana'],
+  recon: ['Alcance e leads por publicação', 'Ligar 12 leads à peça que os trouxe', 'Comparar com o mês anterior', 'Recomendar o que repetir no próximo mês'],
 };
 
-// keywords that route a typed task to the right agent inside the chosen department
+// palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
-  elead: ['summary', 'template', 'escalate', 'inbox'], cmail: ['client', 'customer', 'reply', 'scope', 'kickoff'],
-  imail: ['team', 'internal', 'staff', 'calendar', 'thread'], vmail: ['vendor', 'supplier', 'sla', 'renewal', 'quote'],
-  kmail: ['contractor', 'freelance', 'designer', 'developer', 'copywriter'],
-  lexi: ['pipeline', 'call list', 'rep', 'review', 'deal'], enzo: ['enrich', 'signup', 'verify', 'data'],
-  ilm: ['inbound', 'qualify', 'route', 'website lead', 'discovery'], pros: ['prospect', 'list', 'mine', 'find', 'companies', 'icp'],
-  piper: ['proposal', 'pricing', 'seat', 'quote'], folo: ['follow', 'chase', 'nudge', 'demo'],
-  mlead: ['content plan', 'calendar', 'budget', 'marketing summary', 'line-up'], riley: ['research', 'scan', 'trend', 'stat', 'source'], newt: ['newsletter', 'issue', 'subscriber', 'welcome'],
-  gfx: ['design', 'graphic', 'thumbnail', 'image', 'creative', 'banner', 'card', 'cover'], ada: ['ad', 'ads', 'meta', 'campaign', 'spend', 'budget', 'variant'],
-  iggy: ['instagram', 'post', 'hook', 'dm', 'story', 'carousel', 'schedule'], vid: ['video', 'reel', 'cut', 'render', 'edit', 'caption', 'clip', 'footage', 'teaser'],
-  olead: ['renewal', 'escalate', 'board pack', 'operations summary', 'checklist'], scout: ['intel', 'competitor', 'rival', 'market', 'memo'], legal: ['contract', 'msa', 'terms', 'legal', 'clause', 'agreement'],
-  comply: ['compliance', 'regulation', 'consent', 'privacy', 'retention', 'cookie'], report: ['report', 'kpi', 'board pack', 'roll-up', 'summary'],
-  dash: ['dashboard', 'chart', 'tile', 'metric', 'view'],
-  alead: ['cash', 'vendor', 'forecast', 'month-end', 'approve'], invo: ['invoice', 'overdue', 'credit note'],
-  apay: ['bill', 'pay', 'payable', 'charge', 'contractor', 'subscription'], recon: ['reconcile', 'bank', 'stripe', 'match', 'statement'],
-  dlead: ['risk', 'timeline', 'handover', 'staff', 'summary'], pco: ['plan', 'milestone', 'schedule', 'sign-off', 'hours'],
-  qa: ['qa', 'test', 'check', 'proof', 'bug', 'regression'], crep: ['report', 'status', 'results', 'monthly'],
-  cass: ['asset', 'file', 'portal', 'library', 'export', 'logo'], dasst: ['design', 'mock', 'template', 'banner', 'brand sheet', 'resize'],
-  ona: ['onboard', 'kickoff', 'checklist', 'welcome'],
+  elead: ['prioridade', 'prazo', 'atraso', 'coordena', 'resumo', 'aprova'],
+  imail: ['tarefa', 'distribui', 'calendário', 'agenda', 'prazo', 'responsável'],
+  report: ['relatório', 'kpi', 'números', 'desempenho', 'produtividade'],
+  dash: ['painel', 'gráfico', 'dashboard', 'indicador', 'bloco'],
+  comply: ['consentimento', 'rgpd', 'privacidade', 'permissão', 'aprovação', 'limite'],
+  pros: ['prospeção', 'leads', 'google maps', 'empresas', 'lista', 'icp', 'pontuar'],
+  enzo: ['enriquecer', 'e-mail', 'contacto', 'telemóvel', 'decisor', 'dados'],
+  ilm: ['pedido', 'site', 'qualificar', 'marcação', 'reunião', 'inbound'],
+  riley: ['pesquisa', 'tendência', 'mercado', 'fontes', 'notícia'],
+  scout: ['concorrente', 'rival', 'preços', 'concorrência', 'posicionamento'],
+  vmail: ['site', 'diagnóstico', 'https', 'velocidade', 'formulário', 'auditoria'],
+  olead: ['venda', 'fechar', 'negócio', 'objeção', 'reunião', 'abordagem', 'cliente'],
+  piper: ['proposta', 'orçamento', 'âmbito', 'preçário', 'opções'],
+  folo: ['seguimento', 'reativar', 'sem resposta', 'lembrete', 'segundo contacto'],
+  ona: ['onboarding', 'arranque', 'acessos', 'boas-vindas', 'integração'],
+  legal: ['contrato', 'termos', 'cláusula', 'jurídico', 'privacidade'],
+  cmail: ['e-mail', 'cliente', 'resposta', 'dúvida', 'prazo'],
+  gfx: ['briefing', 'estrutura', 'navegação', 'design system', 'conceito', 'identidade'],
+  dasst: ['ecrã', 'componente', 'interface', 'responsivo', 'ui', 'mock'],
+  alead: ['imagem', 'mockup', 'capa', 'visual', 'apresentação', 'arte'],
+  invo: ['ux', 'fluxo', 'texto', 'utilizador', 'pesquisa', 'sessão'],
+  dlead: ['construir', 'desenvolver', 'sistema', 'backend', 'frontend', 'arquitetura'],
+  pco: ['projeto', 'marco', 'prazo', 'plano', 'horas', 'capacidade'],
+  qa: ['teste', 'qa', 'erro', 'bug', 'verificação', 'regressão'],
+  crep: ['frontend', 'página', 'componente', 'velocidade', 'html'],
+  cass: ['integração', 'crm', 'pagamento', 'stripe', 'formulário', 'automação'],
+  apay: ['deploy', 'publicar', 'domínio', 'alojamento', 'monitorização'],
+  kmail: ['documentação', 'manual', 'notas', 'como funciona', 'arquivo'],
+  mlead: ['marketing', 'plano editorial', 'campanha', 'orçamento', 'calendário'],
+  newt: ['texto', 'legenda', 'newsletter', 'caso de estudo', 'publicação'],
+  ada: ['anúncio', 'meta', 'campanha', 'cpa', 'público', 'orçamento'],
+  iggy: ['instagram', 'linkedin', 'publicação', 'comentário', 'rede social', 'carrossel'],
+  vid: ['vídeo', 'reel', 'corte', 'legendas', 'demonstração', 'exportar'],
+  lexi: ['calendário editorial', 'aprovação', 'canal', 'fila', 'agendar'],
+  recon: ['alcance', 'analytics', 'tráfego', 'leads', 'resultados', 'métricas'],
 };
 
-// handoff chains — one piece of work passing desk to desk (the multi-agent story)
+// cadeias de passagem de trabalho — uma peça de trabalho a andar de mesa em mesa
 const CHAINS = [
-  [['mlead', 'Definir a programação de reels da próxima semana'], ['riley', 'Investigar ângulos para a programação'], ['iggy', 'Escrever os ganchos da programação']],
-  [['legal', 'Rever o {co} MSA'], ['olead', 'Decidir sobre o {co} cláusula, escalar se preciso']],
-  [['riley', 'Investigar ângulos de gancho para o próximo reel'], ['iggy', 'Escrever o guião do reel a partir da investigação'], ['vid', 'Cortar e renderizar o reel, com legendas']],
-  [['gfx', 'Criativo para o novo {segment} ad set'], ['ada', 'Lançar o {segment} ad set, 4 variants']],
-  [['pros', 'Build a {segment} prospect list'], ['ilm', 'Qualificar a {segment} lista, encaminhar os quentes'], ['lexi', 'Rever os leads encaminhados com os comerciais']],
-  [['enzo', 'Enriquecer os registos da noite'], ['ilm', 'Encaminhar o lote enriquecido para os comerciais']],
-  [['ilm', 'Qualified lead: {co} quer um orçamento'], ['piper', 'Proposta para {co}'], ['legal', 'Verificar o {co} terms']],
-  [['piper', 'Proposta aceite por {co}'], ['ona', 'Onboard {co}: kickoff call'], ['pco', 'Configurar o {co} project plan']],
-  [['cmail', 'Pedido de alteração de âmbito de {co}'], ['pco', 'Refazer o {co} milestones'], ['crep', 'Atualizar o {co} status report']],
-  [['dasst', 'Escrever o {co} asset set'], ['qa', 'Fazer o controlo de qualidade de {co} asset set'], ['cass', 'Publish the {co} recursos para o portal']],
-  [['scout', 'Alteração de preços do rival detetada, memorando'], ['piper', 'Atualizar a tabela de preços da proposta']],
-  [['invo', "Emitir as's invoices"], ['recon', 'Associar pagamentos às novas faturas']],
-  [['report', 'Consolidação mensal de KPI'], ['dash', 'Atualizar o painel de KPI'], ['alead', 'Incluir os KPI no pacote de fecho do mês']],
-  [['vmail', 'Vendor quote received for {co}'], ['apay', 'Verificar o orçamento do fornecedor']],
-  [['kmail', 'Dúvida sobre fatura de freelancer, do designer'], ['apay', 'Auditar a fatura do freelancer face ao contrato']],
-  [['imail', 'A equipa pede os números do 3.º trimestre'], ['dash', 'Atualizar o painel do 3.º trimestre']],
-  [['crep', 'Relatório de setembro pronto para {co}'], ['cmail', 'Enviar o {co} relatório com um resumo']],
+  [['pros', 'Lista de {segment}: 40 empresas sem site'], ['vmail', 'Diagnosticar os sites da lista de {segment}'], ['olead', 'Abordar os 6 leads com pior site']],
+  [['pros', 'Leads de {segment} encontrados'], ['enzo', 'Enriquecer os contactos da lista de {segment}'], ['olead', 'Primeiro contacto aos leads enriquecidos']],
+  [['ilm', 'Pedido de {co} recebido pelo site'], ['olead', 'Reunião de descoberta com {co}'], ['piper', 'Proposta para {co}']],
+  [['piper', 'Proposta aceite pela {co}'], ['legal', 'Rever os termos da {co}'], ['olead', 'Enviar contrato e fechar a {co}']],
+  [['olead', 'Cliente fechado: {co}'], ['ona', 'Arranque da {co}: acessos e expectativas'], ['gfx', 'Briefing da {co} para o site novo']],
+  [['gfx', 'Estrutura e design system da {co}'], ['dasst', 'Ecrãs da {co} em computador e telemóvel'], ['dlead', 'Construir o site da {co}']],
+  [['dlead', 'Site da {co} pronto para revisão'], ['qa', 'Testar o site da {co} antes do deploy'], ['apay', 'Publicar o site da {co} no domínio']],
+  [['qa', 'Site da {co} aprovado'], ['kmail', 'Documentar o projeto {co}'], ['crep', 'Fechar os últimos ajustes de frontend da {co}']],
+  [['mlead', 'Calendário editorial de outubro'], ['newt', 'Escrever o caso de estudo do projeto {co}'], ['iggy', 'Preparar a publicação no Instagram e LinkedIn']],
+  [['mlead', 'Tema do vídeo do mês definido'], ['vid', 'Vídeo de demonstração do projeto {co}'], ['iggy', 'Agendar o vídeo com legenda']],
+  [['recon', 'O que funcionou no mês passado'], ['mlead', 'Plano de conteúdo para o próximo mês'], ['newt', 'Reescrever os ganchos do próximo mês']],
+  [['pco', 'Plano de marcos da {co}'], ['crep', 'Página inicial da {co}'], ['qa', 'Testes antes da entrega da {co}']],
+  [['cass', 'Formulários da {co} ligados ao CRM'], ['apay', 'Publicar a integração da {co}'], ['pco', 'Fechar o marco de entrega da {co}']],
+  [['report', 'Números da semana consolidados'], ['dash', 'Atualizar o painel central'], ['elead', 'Decidir prioridades a partir dos números']],
+  [['scout', 'Rival subiu os preços, memorando'], ['olead', 'Ajustar os argumentos de venda'], ['piper', 'Atualizar as opções de proposta']],
+  [['folo', '3 propostas seguidas sem resposta'], ['olead', 'Tentar o fecho ou fechar como perdido']],
+  [['imail', 'A equipa pede o estado dos projetos'], ['report', 'Relatório de estado das seis salas'], ['elead', 'Revisão de prioridades com a direção']],
+  [['comply', 'Aprovação antes dos envios'], ['olead', 'Enviar depois do OK do proprietário']],
 ];
 
 applyTasks({ POOL, KEYS, CHAINS, SEGMENTS, AGENTS }); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
@@ -264,8 +282,8 @@ export function initTasks(ctx) {
 
   /* ---------- badge rows (far-zoom layer): DOING · NEXT · DONE per pod ---------- */
   function rowHTML(k) {
-    return `<div class="b-tasks" data-tkrow="${k}" title="show ${DEPTS[k].short} in the task panel">
-      <span>DOING<b data-tk="${k}-doing">${deptTasks(k, 'doing').length}</b></span>
+    return `<div class="b-tasks" data-tkrow="${k}" title="mostrar ${DEPTS[k].short} no painel de tarefas">
+      <span>A FAZER<b data-tk="${k}-doing">${deptTasks(k, 'doing').length}</b></span>
       <span>SEGUINTE<b data-tk="${k}-next">${deptTasks(k, 'next').length}</b></span>
       <span>CONCLUÍDO<b data-tk="${k}-done">${doneCount[k]}</b></span></div>`;
   }
@@ -319,7 +337,7 @@ export function initTasks(ctx) {
   P_.effort.addEventListener('change', () => { effortTouched = P_.effort.value !== officeEffort; P_.effort.classList.toggle('set', effortTouched); updateHint(); });
   P_.effort.addEventListener('keydown', e => e.stopPropagation());
   function setOfficeEffort(k) { officeEffort = normEffort(k) || ''; if (!effortTouched) P_.effort.value = officeEffort; }
-  const chosenEffort = () => (effortTouched ? (P_.effort.value || 'auto') : null); // 'auto' = the owner chose the model's own over the office's
+  const chosenEffort = () => (effortTouched ? (P_.effort.value || 'auto') : null); // 'auto' = o proprietário escolheu o do modelo em vez do do escritório
   const effortSend = () => { const e = chosenEffort(); return e && e !== 'auto' ? e : undefined; };
   function resetEffort() { effortTouched = false; P_.effort.value = officeEffort; P_.effort.classList.remove('set'); }
   const effortUsedFor = (mdl) => effortFor({ task: effortSend(), office: chosenEffort() === 'auto' ? '' : officeEffort, model: mdl }); // what a demo card will show
@@ -1008,7 +1026,7 @@ export function initTasks(ctx) {
   async function cancelScheduled(t) {
     if (!t || t.state !== 'scheduled') return false;
     if (live && t.sid) await fetch(`${API}/tasks/${t.sid}`, { method: 'APAGAR' }).catch(() => {});
-    tasks.splice(tasks.indexOf(t), 1); dirty = true; feedPush(R[t.agent], '✕', `Cancelled: ${t.title}`);
+    tasks.splice(tasks.indexOf(t), 1); dirty = true; feedPush(R[t.agent], '✕', `Cancelada: ${t.title}`);
     return true;
   }
   const calendar = initCalendar({ tasks, routines, agentOf, DEPTS, DEPT_KEYS, RT_DEPTS, rtRefuse, create: createScheduled, createRoutine: createRoutineAt, cancelTask: cancelScheduled, rtAct, openAgent: (id, tab) => openAgent && openAgent(id, tab), esc, isLive: () => live, officeModel: () => officeModel, MODEL_KEYS, modelName, business: () => document.title.replace(/ — Órbita$/, ''), currentDept: () => dept });

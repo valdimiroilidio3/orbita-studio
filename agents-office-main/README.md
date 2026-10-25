@@ -1,12 +1,12 @@
 # Órbita
 
-![Órbita — seis departamentos à volta do Cérebro, com o painel de Estado das Tarefas](assets/readme-hero.jpg)
+![Órbita — seis salas à volta do Cérebro, com o painel de Estado das Tarefas](assets/readme-hero.jpg)
 
 Um escritório isométrico 3D onde agentes de IA fazem trabalho real no teu próprio login do Claude.
 
 **Criado por Chelton Mahoze.**
 
-Seis departamentos, trinta e cinco agentes nas secretárias, uma barra de tarefas que encaminha o
+Seis salas, trinta e cinco agentes nas secretárias, uma barra de tarefas que encaminha o
 que escreves para a pessoa certa, e um Cérebro no centro que é a tua própria pasta de notas.
 Escreves uma tarefa, o escritório entrega-a a quem deve, essa pessoa lê as tuas notas, usa os
 conectores que já tens no Claude Code, faz o trabalho e arquiva o resultado de volta nas notas.
@@ -63,14 +63,14 @@ publicar, pagar, apagar ou alterar só quando tu pedires.
 
 ## Os 35 agentes
 
-| Departamento | Quem lá está |
+| Sala | Quem lá está |
 |---|---|
-| **E-mails** | Líder de E-mails · E-mails de Clientes · E-mails Internos · E-mails de Fornecedores · E-mails de Freelancers |
-| **Vendas** | Líder de Vendas · Enriquecedor de Leads · Gestor de Leads Recebidos · Prospetor · Propostas · Seguimentos |
-| **Marketing** | Líder de Marketing · Investigação · Newsletter · Designer Gráfico · Anúncios Meta · Instagram Orgânico · Editor de Vídeo |
-| **Operações** | Líder de Operações · Análise · Revisão Jurídica · Verificador de Conformidade · Relatórios Internos · Painéis Internos |
-| **Finanças** | Líder de Contabilidade · Faturação · Contas a Pagar · Reconciliação |
-| **Entregas** | Líder de Entregas · Coordenador de Projetos · Verificador de Qualidade · Relatórios de Clientes · Recursos de Clientes · Assistente de Design · Receção de Clientes |
+| **Comando** | ORBITA Director · Chefe de Gabinete · Analista de Resultados · Painel Central · Permissões e Conformidade |
+| **Prospeção** | Lead Hunter · Enriquecador · Qualificador · Inteligência de Mercado · Análise Competitiva · Auditor de Websites |
+| **Vendas** | Sales Closer · Propostas · Seguimentos · Receção de Clientes · Contratos · Comunicação com Clientes |
+| **Design Lab** | Creative Architect · UI e Design System · Direção de Arte · Pesquisa UX |
+| **Engenharia** | Systems Engineer · Gestor de Projetos · QA e Testes · Frontend · Backend e Integrações · Deploys e Infra · Documentação Técnica |
+| **Media** | Growth Publisher · Conteúdo e Newsletter · Anúncios Meta · Redes Sociais · Vídeo · Calendário Editorial · Analytics de Conteúdo |
 
 Cada agente tem: um papel, uma descrição do que faz, as ferramentas que pode usar, as
 competências que segue e um briefing com as tuas instruções permanentes. Tudo isso se edita em

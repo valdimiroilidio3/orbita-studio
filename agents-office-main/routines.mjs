@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, nextRun, valid } from './src/when.js';
 
-export const ALLOWED = ['emails', 'fin', 'sales'];
-export const NAMES = { emails: 'E-mails', fin: 'Contabilidade', sales: 'Vendas', marketing: 'Marketing', ops: 'Operações', delivery: 'Entregas' };
+export const ALLOWED = ['emails', 'sales', 'ops']; // Comando, Prospeção e Vendas
+export const NAMES = { emails: 'Comando', sales: 'Prospeção', ops: 'Vendas', fin: 'Design Lab', delivery: 'Engenharia', marketing: 'Media' };
 export const file = brainPath => path.join(brainPath, 'Órbita', 'routines.json');
 export const stateFile = dataDir => path.join(dataDir, 'routines.json');
 export const LATE_AFTER = 90 * 1000; // a run more than 90 s past its minute was missed (asleep, or the office was off) → runs once, marked LATE
@@ -29,7 +29,7 @@ const readJSON = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, '
 
 /** "As rotinas chegam ao Marketing numa versão futura. Nesta versão: E-mails, Contabilidade, Vendas." */
 export function refusal(dept) {
-  return `As rotinas chegam ${NAMES[dept] ? 'a ' + NAMES[dept] : 'a este departamento'} numa versão futura. Nesta versão: E-mails, Contabilidade e Vendas.`;
+  return `As rotinas chegam ${NAMES[dept] ? 'a ' + NAMES[dept] : 'a este departamento'} numa versão futura. Nesta versão: Comando, Prospeção e Vendas.`;
 }
 
 /** Normalise + check one routine against the roster. Returns { routine, problems }. Fixed fields are kept as given; bad ones are named. */

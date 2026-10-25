@@ -99,8 +99,8 @@ await step('interview: the lead asks five questions, then writes briefs + a skil
   const onboard = await import('./onboard.mjs'); const { loadRoster } = await import('./roster.mjs'); const { loadSkills } = await import('./skills.mjs'); const os = await import('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-onboard-')); const brain = path.join(tmp, 'brain'), data = path.join(tmp, 'data'); fs.mkdirSync(brain);
   const agents = loadRoster(brain).agents; const dept = agents.filter(a => a.department === 'sales'); const lead = dept.find(a => a.lead);
-  const stub = async () => JSON.stringify({ briefs: [{ id: 'lexi', brief: 'Every deal gets a next step with a date.' }, { id: 'piper', brief: 'Three options, recommend the middle.' }, { id: 'ghost', brief: 'x' }],
-    skill: { name: 'Wholesale Quote', description: 'How we quote a wholesale account', agents: ['piper'], body: '# Quoting a wholesale account\nUse this for any quote to a trade customer.\n## Steps\n1. Check the account in 30-Customers.\n## The shape\nFollow template.md.\n## Rules\n- Never discount.', template: '# Quote for {account}\n## Lines\n## Terms' }, try: 'quote Harbour Hardware for 40 units' });
+  const stub = async () => JSON.stringify({ briefs: [{ id: 'pros', brief: 'Every lead leaves with a score and a reason.' }, { id: 'enzo', brief: 'Empty beats invented.' }, { id: 'ghost', brief: 'x' }],
+    skill: { name: 'Wholesale Quote', description: 'How we quote a wholesale account', agents: ['enzo'], body: '# Quoting a wholesale account\nUse this for any quote to a trade customer.\n## Steps\n1. Check the account in 30-Customers.\n## The shape\nFollow template.md.\n## Rules\n- Never discount.', template: '# Quote for {account}\n## Lines\n## Terms' }, try: 'quote Harbour Hardware for 40 units' });
   const ctx = { dept: 'sales', deptName: 'Sales', lead, agents: dept, connected: ['Gmail'], brainPath: brain, dataDir: data, ask: stub, business: 'Test Co' };
   if (await onboard.handle('what are you working on?', ctx) !== null) throw new Error('ordinary chat was captured');
   const r0 = await onboard.handle('set up', ctx); if (!/Pergunta 1 de 5/.test(r0.reply) || !onboard.active(data, 'sales')) throw new Error('did not start: ' + r0.reply.slice(0, 80));
@@ -110,13 +110,13 @@ await step('interview: the lead asks five questions, then writes briefs + a skil
   if (onboard.active(data, 'sales')) throw new Error('interview still active after the last answer');
   if (!r5.wrote || r5.wrote.briefs.length !== 2 || !r5.wrote.skill || r5.wrote.skill.name !== 'wholesale-quote') throw new Error('write-up wrong: ' + JSON.stringify(r5.wrote));
   if (!r5.wrote.problems.some(p => /ghost/.test(p))) throw new Error('an agent outside the department was accepted');
-  const merged = loadRoster(brain); if (merged.agents.find(a => a.id === 'piper').brief !== 'Three options, recommend the middle.' || merged.problems.length) throw new Error('brief not merged into the brain roster: ' + merged.problems);
+  const merged = loadRoster(brain); if (merged.agents.find(a => a.id === 'enzo').brief !== 'Empty beats invented.' || merged.problems.length) throw new Error('brief not merged into the brain roster: ' + merged.problems);
   const sk = loadSkills(brain, merged.agents); const w = sk.skills.find(x => x.name === 'wholesale-quote');
-  if (!w || w.source !== 'brain' || !w.agents.includes('piper') || !w.files.some(f => f.name === 'template.md') || sk.problems.length) throw new Error('skill not loadable: ' + sk.problems);
+  if (!w || w.source !== 'brain' || !w.agents.includes('enzo') || !w.files.some(f => f.name === 'template.md') || sk.problems.length) throw new Error('skill not loadable: ' + sk.problems);
   if (!onboard.isSetUp(merged.agents, sk, 'sales') || onboard.isSetUp(merged.agents, sk, 'fin')) throw new Error('setUp flag wrong');
   const c = await onboard.handle('set up', ctx); await onboard.handle('cancel', ctx); if (onboard.active(data, 'sales')) throw new Error('cancel did not clear');
   fs.rmSync(tmp, { recursive: true, force: true });
-  return `5 questions · 2 briefs merged · skill wholesale-quote→piper with template · sales set up, fin not · cancel clears`;
+  return `5 perguntas · 2 briefs merged · skill wholesale-quote→enzo com template · sales set up, fin not · cancel clears`;
 });
 await step('connectors: claude mcp list parses', async () => {
   const m = await import('./mcp.mjs');
@@ -155,15 +155,15 @@ await step('routines: plain words become a schedule', async () => {
   if (w.untilText(now + 120000, now) !== 'daqui a 2 min' || w.untilText(w.fromPicker('fri', '16:00') && nx, now) !== 'Seg 09:00') throw new Error('countdown text');
   return `${cases.length} phrasings · asks back for a missing time or day · "morning" → 08:00 flagged`;
 });
-await step('routines: outside Emails, Accounting and Sales is refused, bad ones named', async () => {
+await step('routines: outside Comando, Prospeção e Vendas is refused, bad ones named', async () => {
   const rt = await import('./routines.mjs'); const { loadRoster } = await import('./roster.mjs'); const agents = loadRoster().agents;
   const bad = rt.validate({ id: 'x', dept: 'marketing', agent: 'iggy', text: 'post the reel', when: { kind: 'daily', at: '09:00' } }, agents);
   if (!bad.problems.some(p => /versão futura/.test(p))) throw new Error('marketing routine not refused: ' + bad.problems);
-  if (!/E-mails, Contabilidade e Vendas/.test(rt.refusal('ops'))) throw new Error('refusal sentence');
+  if (!/Comando, Prospeção e Vendas/.test(rt.refusal('marketing'))) throw new Error('refusal sentence');
   const wrong = rt.validate({ dept: 'fin', agent: 'ghost', text: 'x', when: { kind: 'weekly', days: [] } }, agents);
   if (!wrong.problems.some(p => /nenhum agente/.test(p)) || !wrong.problems.some(p => /não está completo/.test(p))) throw new Error('unknown agent / incomplete schedule not named: ' + wrong.problems);
-  const cross = rt.validate({ dept: 'fin', agent: 'lexi', text: 'x', when: { kind: 'daily', at: '09:00' } }, agents);
-  if (!cross.problems.some(p => /está em Vendas, não em Contabilidade/.test(p))) throw new Error('cross-department agent not named: ' + cross.problems);
+  const cross = rt.validate({ dept: 'fin', agent: 'pros', text: 'x', when: { kind: 'daily', at: '09:00' } }, agents);
+  if (!cross.problems.some(p => /está em Prospeção, não em Design Lab/.test(p))) throw new Error('cross-department agent not named: ' + cross.problems);
   const good = rt.validate({ dept: 'emails', agent: 'elead', text: 'Triage the overnight inbox', when: { kind: 'weekdays', at: '08:00' } }, agents);
   if (good.problems.length || good.routine.id !== 'triage-the-overnight-inbox' || good.routine.needsOk !== true) throw new Error('a good routine did not validate: ' + JSON.stringify(good));
   const dup = rt.validate({ id: 'triage-the-overnight-inbox', dept: 'emails', agent: 'elead', text: 'x', when: { kind: 'daily', at: '09:00' } }, agents, [good.routine]);
@@ -174,7 +174,7 @@ await step('routines: outside Emails, Accounting and Sales is refused, bad ones 
 await step('routines: due fires once, a missed run catches up marked LATE, then the clock moves on', async () => {
   const rt = await import('./routines.mjs'); const { loadRoster } = await import('./roster.mjs'); const os = await import('node:os');
   const agents = loadRoster().agents; const brain = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-routines-')); const data = path.join(brain, 'data');
-  rt.save(brain, [{ id: 'a', dept: 'emails', agent: 'elead', title: 'A', text: 'triage', when: { kind: 'weekdays', at: '08:00' } }, { id: 'p', dept: 'sales', agent: 'folo', title: 'P', text: 'chase', when: { kind: 'daily', at: '10:00' }, paused: true, needsOk: false }]);
+  rt.save(brain, [{ id: 'a', dept: 'emails', agent: 'elead', title: 'A', text: 'triage', when: { kind: 'weekdays', at: '08:00' } }, { id: 'p', dept: 'ops', agent: 'folo', title: 'P', text: 'chase', when: { kind: 'daily', at: '10:00' }, paused: true, needsOk: false }]);
   const l = rt.load(brain, agents); if (l.problems.length || l.routines.length !== 2) throw new Error('load: ' + l.problems);
   const st = rt.loadState(data); const now = Date.now();
   const { list } = rt.withState(l.routines, st, now); if (!(st.a.nextAt > now) || list.find(r => r.id === 'p').nextAt !== null) throw new Error('nextAt not set / paused not null');
@@ -212,7 +212,7 @@ await step('models: three names + five effort levels, one precedence, the right 
   if (r.agents.find(a => a.id === 'invo').model !== 'opus' || r.agents.find(a => a.id === 'lexi').model !== '' || !r.problems.some(x => /sonnet, opus or fable/.test(x))) throw new Error('roster model field');
   if (r.agents.find(a => a.id === 'invo').effort !== 'high' || r.agents.find(a => a.id === 'lexi').effort !== '' || !r.problems.some(x => /low, medium, high, xhigh or max/.test(x))) throw new Error('roster effort field');
   const rt = await import('./routines.mjs'); const { loadRoster } = await import('./roster.mjs');
-  const v = rt.validate({ dept: 'fin', agent: 'invo', text: 'x', when: { kind: 'daily', at: '09:00' }, model: 'Fable', effort: 'xhigh' }, loadRoster().agents); if (v.problems.length || v.routine.model !== 'fable' || v.routine.effort !== 'xhigh') throw new Error('routine model/effort field');
+  const v = rt.validate({ dept: 'ops', agent: 'piper', text: 'x', when: { kind: 'daily', at: '09:00' }, model: 'Fable', effort: 'xhigh' }, loadRoster().agents); if (v.problems.length || v.routine.model !== 'fable' || v.routine.effort !== 'xhigh') throw new Error('routine model/effort field');
   return 'sonnet · opus (effort high) · fable · task > routine > agent > office · roster and routines refuse anything else';
 });
 await step('usage: the gauge parses Claude\'s answer and the office\'s own count sits underneath', async () => {
@@ -256,12 +256,12 @@ await step('teams: the sentence says team, the plan is checked against the seats
 await step('teams: a team routine is kept and moved to the department lead', async () => {
   const { validate } = await import('./routines.mjs'); const { loadRoster } = await import('./roster.mjs');
   const agents = loadRoster().agents;
-  const v = validate({ id: 'wk', dept: 'sales', agent: 'piper', title: 'x', text: 'x', when: { kind: 'weekly', days: [1], at: '09:00' }, team: true }, agents);
+  const v = validate({ id: 'wk', dept: 'ops', agent: 'piper', title: 'x', text: 'x', when: { kind: 'weekly', days: [1], at: '09:00' }, team: true }, agents);
   if (v.problems.length) throw new Error(v.problems.join(' | '));
-  if (v.routine.team !== true || v.routine.agent !== 'lexi') throw new Error('agent ' + v.routine.agent + ' team ' + v.routine.team);
-  const w = validate({ id: 'wk2', dept: 'sales', agent: 'piper', title: 'x', text: 'x', when: { kind: 'weekly', days: [1], at: '09:00' } }, agents);
+  if (v.routine.team !== true || v.routine.agent !== 'olead') throw new Error('agent ' + v.routine.agent + ' team ' + v.routine.team);
+  const w = validate({ id: 'wk2', dept: 'ops', agent: 'piper', title: 'x', text: 'x', when: { kind: 'weekly', days: [1], at: '09:00' } }, agents);
   if (w.routine.team !== undefined || w.routine.agent !== 'piper') throw new Error('a plain routine changed');
-  return 'team:true → lexi (the Sales lead) · plain routine untouched';
+  return 'team:true → olead (líder de Vendas) · plain routine untouched';
 });
 await step('browser: tools.browser puts --chrome and the Chrome server in the agents\' hands; off means --no-chrome', async () => {
   const m = await import('./mcp.mjs');
@@ -316,7 +316,7 @@ else {
     await step('smoke: 35 agents at their desks', async () => { const n = await page.evaluate(() => Object.keys(window.CC.R).length); if (n !== 35) throw new Error('agents: ' + n); return n + ' agents'; });
     await step('smoke: six department cards + the Brain tag', async () => {
       const t = await page.evaluate(() => [...document.querySelectorAll('.badge .b-name')].map(e => e.textContent.trim()));
-      for (const k of ['EMAILS', 'SALES', 'MARKETING', 'OPERATIONS', 'FINANCE', 'DELIVERY', 'THE BRAIN']) if (!t.some(x => x.startsWith(k))) throw new Error('missing card ' + k);
+      for (const k of ['COMANDO', 'PROSPEÇÃO', 'VENDAS', 'DESIGN LAB', 'ENGENHARIA', 'MEDIA', 'O CÉREBRO']) if (!t.some(x => x.startsWith(k))) throw new Error('missing card ' + k);
     });
     await step('smoke: task panel has rows and counts', async () => {
       const n = await page.evaluate(() => document.querySelectorAll('.tp-row').length); if (n < 10) throw new Error('rows: ' + n);
@@ -480,17 +480,17 @@ else {
       return `${s.count} skills · piper: ${piper.skills.join(', ')}`;
     });
     await step('server: the lead offers the interview when a department is not set up', async () => {
-      const lead = up.agents.find(a => a.id === 'lexi'); if (lead.interviewer !== true) throw new Error('lexi is not the interviewer');
+      const lead = up.agents.find(a => a.id === 'pros'); if (lead.interviewer !== true) throw new Error('pros is not the interviewer');
       if (typeof up.setup?.sales !== 'boolean') throw new Error('no setup map');
       const r = await (await fetch(base + '/api/lessons')).json(); if (!Array.isArray(r.agents)) throw new Error('no lessons endpoint');
       return `sales set up: ${up.setup.sales} · lessons dir ${path.basename(r.dir)}`;
     });
     await step('server: /api/routines lists the timetable and names the departments', async () => {
-      const r = await (await fetch(base + '/api/routines')).json(); if (!Array.isArray(r.routines) || JSON.stringify(r.depts) !== '["emails","fin","sales"]') throw new Error(JSON.stringify(r).slice(0, 120));
+      const r = await (await fetch(base + '/api/routines')).json(); if (!Array.isArray(r.routines) || JSON.stringify(r.depts) !== '["emails","sales","ops"]') throw new Error(JSON.stringify(r).slice(0, 120));
       if (typeof up.routines?.count !== 'number') throw new Error('health has no routines');
       return `${r.routines.length} routines${r.routines.length ? ' · next ' + (r.routines.filter(x => x.nextAt).sort((a, b) => a.nextAt - b.nextAt)[0]?.title || '—') : ''} · ${path.basename(path.dirname(r.path))}/${path.basename(r.path)}`;
     });
-    await step('server: a routine outside Emails, Accounting and Sales is refused with a sentence', async () => {
+    await step('server: a routine outside Comando, Prospeção e Vendas is refused with a sentence', async () => {
       const r = await fetch(base + '/api/routines', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: 'marketing', text: 'every day at 9am post the reel' }) });
       const j = await r.json(); if (r.status !== 400 || !j.refused || !/versão futura/.test(j.error)) throw new Error(r.status + ' ' + JSON.stringify(j));
       const t = await fetch(base + '/api/routines', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: 'emails', text: 'every weekday, triage the inbox' }) });

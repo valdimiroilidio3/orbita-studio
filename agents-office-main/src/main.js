@@ -323,26 +323,25 @@ const kv = id => KPIS.find(k => k.id === id).val;
 let brainNotes = brain.state.notes;
 const BB_ROWS = profileRows() || {
   emails: [
-    ['E-MAILS ENVIADOS', () => STATS.emailsSent],
-    ['RESPOSTAS ESCRITAS', () => STATS.drafts]],
-  delivery: [
-    ['RELATÓRIOS ENVIADOS', () => STATS.reports],
-    ['DENTRO DO PRAZO', () => STATS.onTrack + ' / ' + STATS.projects]],
+    ['TAREFAS CONCLUÍDAS', () => Math.round(kv('tarefas'))],
+    ['AGENTES NA SALA', () => AGENTS.filter(a => a.dept === 'emails').length]],
   sales: [
-    ['CHAMADAS S·A·J', () => STATS.spencer + '·' + STATS.arwin + '·' + STATS.jack],
-    ['NOVOS GESTORES', () => STATS.managers],
-    ['INTEGRADOS AUTO.', () => STATS.autoOnb]],
-  marketing: [
-    ['NOVOS INSIGHTS', () => STATS.insMkt],
-    ['CUSTO POR UTILIZADOR', () => '$' + Math.round(STATS.cpa)]],
+    ['LEADS QUALIFICADOS', () => Math.round(kv('leads'))],
+    ['SITES DIAGNOSTICADOS', () => Math.round(kv('sites'))]],
   ops: [
-    ['PROPOSTAS FEITAS', () => Math.round(kv('proposals'))],
-    ['NOVOS INSIGHTS', () => STATS.insOps]],
+    ['PROPOSTAS ENVIADAS', () => Math.round(kv('propostas'))],
+    ['NEGÓCIOS ABERTOS', () => STATS.managers]],
   fin: [
-    ['FATURAS EMITIDAS', () => Math.round(kv('invoices'))],
-    ['CONTAS PAGAS', () => STATS.billsPaid]],
+    ['ECRÃS DESENHADOS', () => Math.round(kv('ecras'))],
+    ['BRIEFINGS ESTE MÊS', () => STATS.insMkt]],
+  delivery: [
+    ['PROJETOS NO AR', () => Math.round(kv('projetos'))],
+    ['DENTRO DO PRAZO', () => STATS.onTrack + ' / ' + STATS.projects]],
+  marketing: [
+    ['PUBLICAÇÕES APROVADAS', () => Math.round(kv('publicacoes'))],
+    ['LEADS DO CONTEÚDO', () => STATS.autoOnb]],
   brain: [
-    ['NOTAS INDEXADAS', () => brainNotes.toLocaleString('en-NZ')]],
+    ['NOTAS INDEXADAS', () => brainNotes.toLocaleString('pt-PT')]],
 };
 if (PROFILE && !BB_ROWS.brain) BB_ROWS.brain = [['NOTAS INDEXADAS', () => brainNotes.toLocaleString('en-NZ')]];
 for (const k of [...DEPT_KEYS, 'brain']) {
@@ -626,7 +625,7 @@ function renderChat(id) {
         ${m.mock ? `<div class="a-mock">${m.mock}</div>` : ''}
         ${m.pending
           ? '<div class="a-btns"><button class="a-yes">APROVAR</button><button class="a-no">REJEITAR</button></div>'
-          : `<div class="a-done">${m.approved ? '✓ Aprovado' : '✗ Rejeitado'} por AJ</div>`}
+          : `<div class="a-done">${m.approved ? '✓ Aprovado' : '✗ Rejeitado'} pelo proprietário</div>`}
       </div>`;
     return '';
   }).join('');
@@ -926,10 +925,10 @@ function mockupFor(id) {
       <div class="d-p">As avaliações deles no G2 já apontam falta de relação qualidade-preço. Argumento: preço fixo por 12 meses.</div></div>`;
     case 'enzo': return `<div class="mk mk-doc">
       <div class="d-brand">PURCHASE ORDER</div>
-      <div class="d-title">FullEnrich — 500 credits</div>
-      <div class="d-line"><span>Cost</span><b>$250 ($0.50/credit)</b></div>
-      <div class="d-line"><span>Saldo atual</span><b>38 credits — out tomorrow</b></div>
-      <div class="d-line"><span>Taxa de consumo</span><b>~90/week</b></div>
+      <div class="d-title">FullEnrich — 500 créditos</div>
+      <div class="d-line"><span>Custo</span><b>250 $ (0,50 $/crédito)</b></div>
+      <div class="d-line"><span>Saldo atual</span><b>38 créditos — acabam amanhã</b></div>
+      <div class="d-line"><span>Taxa de consumo</span><b>~90/semana</b></div>
       <div class="d-p">O mesmo cartão do mês passado. Sem créditos, o enriquecimento pára e o Líder de Vendas fica a seco.</div></div>`;
     default: {
       // generic: render the agent's own deliverable in a document frame

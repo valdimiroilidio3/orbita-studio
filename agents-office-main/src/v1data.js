@@ -17,765 +17,1287 @@ export const person = () => rnd(P.first)+' '+rnd(P.last);
 export const money = n => '$'+n.toLocaleString('en-NZ');
 /* ---------- KPIs ---------- */
 export const KPIS = [
-  { id:'leads',     label:'LEADS ENRIQUECIDOS',  val:47,   fmt:v=>v },
-  { id:'callhrs',   label:'HORAS DE CHAMADA ROTEADAS', val:9.5,  fmt:v=>v.toFixed(1)+'h' },
-  { id:'tickets',   label:'Tickets Resolved',val:31,   fmt:v=>v },
-  { id:'adspend',   label:'GASTO EM ANÚNCIOS HOJE',  val:684,  fmt:v=>money(Math.round(v)) },
-  { id:'proposals', label:'PROPOSTAS ENVIADAS',  val:6,    fmt:v=>v },
-  { id:'invoices',  label:'FATURAS EMITIDAS', val:23,  fmt:v=>v },
+  { id:'tarefas',     label:'TAREFAS CONCLUÍDAS',     val:128, fmt:v=>Math.round(v) },
+  { id:'leads',       label:'LEADS QUALIFICADOS',     val:47,  fmt:v=>Math.round(v) },
+  { id:'sites',       label:'SITES DIAGNOSTICADOS',   val:31,  fmt:v=>Math.round(v) },
+  { id:'propostas',   label:'PROPOSTAS ENVIADAS',     val:6,   fmt:v=>Math.round(v) },
+  { id:'ecras',       label:'ECRÃS DESENHADOS',       val:23,  fmt:v=>Math.round(v) },
+  { id:'projetos',    label:'PROJETOS NO AR',         val:9,   fmt:v=>Math.round(v) },
+  { id:'publicacoes', label:'PUBLICAÇÕES APROVADAS',  val:14,  fmt:v=>Math.round(v) },
 ];
 export const V1 = [
 /* ============ (Customer Support retired 5 Sep 2026 — see EMAILS below) ============ */
 /* ============ SALES ============ */
-{ id:'enzo', name:'ENRIQUECEDOR DE LEADS', dept:'sales', desk:[17,3], sit:[17,4], hair:'#1c1c2e', shirt:'#fbbf24',
-  role:'Agente de Enriquecimento de Contactos',
-  tagline:'Enriquece cada registo com o FullEnrich — cargo, dimensão da empresa, telemóvel, LinkedIn.',
-  tasks:['Enriching {count} overnight signups via FullEnrich','A verificar telemóveis do lote AU','A preencher a dimensão da empresa em 12 leads antigos','A repetir 3 enriquecimentos falhados','A pontuar o lote da manhã para o Líder de Vendas'],
+{ id:'enzo', name:'ENRIQUECEDOR', dept:'sales', desk:[17,3], sit:[17,4], hair:'#1c1c2e', shirt:'#fbbf24',
+  role:'Dados de contacto e enriquecimento',
+  tagline:'Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar.',
+  tasks:['A varrer o Google Maps à procura de empresas sem site','A analisar a presença digital de 20 empresas','A enriquecer os contactos do lote de hoje','A pontuar leads novos face ao ICP','A remover duplicados da lista'],
   ev:[
-    {i:'🔍', t:()=>`Enriched ${person()} @ ${rnd(P.co)} via FullEnrich — ${rnd(['Sales Manager','Diretor Comercial','Director','Founder','Ops Manager','GM'])}, ${ri(5,120)} staff, mobile verified ✓`, kpi:{id:'leads',n:1}, p:4},
-    {i:'📦', t:()=>`Lote concluído: ${ri(6,14)} registos enriquecidos, ${ri(85,97)}% de correspondência, entregues ao LÍDER DE VENDAS para distribuição`, kpi:{id:'leads',n:3}, p:2},
-    {i:'⚠', t:()=>`Correspondência de baixa confiança do FullEnrich em ${rnd(P.co)} — retida para verificação manual em vez de adivinhar`, p:1},
-    {i:'📚', t:()=>`Atualizei "Regras de pontuação de leads" no Cérebro — acrescentei a ponderação da dimensão da empresa`, brain:true, p:1},
+    {i:'📋', t:()=>`Enriquecer ${ri(8,40)} registos com decisor e e-mail — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Verificar os telemóveis do lote de hoje — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Preencher a dimensão de 12 empresas — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — verificar os telemóveis do lote de hoje`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: dados de contacto e enriquecimento — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: fullenrich, apollo — resultado registado`, p:1},
   ],
-  stats:[['Enriquecidos hoje',()=>ri(40,60)],['Match rate','93%'],['Avg fields filled','11 / 14'],['Retido para revisão','3']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Leads enriquecidos — últimos 7 dias', chart:[52,61,48,67,55,23,47],
-  greeting:`Bom dia AJ. Lote da noite concluído: 47 registos enriquecidos via FullEnrich com 93% de correspondência. Cada lead já tem cargo, dimensão da empresa, telemóvel verificado e LinkedIn antes de o Líder de Vendas lhe tocar. 3 correspondências de baixa confiança retidas para revisão — não adivinho.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Enriquece cada registo com o FullEnrich — cargo, dimensão da empresa, telemóvel, LinkedIn.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Enriquece cada registo com o FullEnrich — cargo, dimensão da empresa, telemóvel, LinkedIn. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ENRIQUECEDOR, na sala Prospeção. O meu trabalho: completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar. Neste momento: enriquecer ${ri(8,40)} registos com decisor e e-mail; verificar os telemóveis do lote de hoje.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Sou a razão pela qual nenhum lead chega a um comercial meio em branco. Pergunta pela minha taxa de correspondência, pelos leads retidos ou por como funciona a pontuação.`,`Experimenta «qual é a tua taxa de correspondência?», «alguns leads retidos?» ou «como funciona a pontuação?»`],
-  chips:['Qual é a tua taxa de correspondência?','Alguns leads retidos?','Como funciona a pontuação?'] },
+  fallback:[`Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'lexi', name:'LÍDER DE VENDAS', dept:'sales', desk:[20,3], sit:[20,4], hair:'#5a2d0c', shirt:'#f59e0b', lead:true,
-  role:'Agente Líder da Equipa de Vendas',
-  tagline:'Lidera a equipa de vendas — cinco agentes respondem-lhe — e é dono das listas de chamadas dos comerciais.',
-  tasks:['A rever o trabalho da equipa durante a noite antes de chegar aos comerciais','A construir as listas de chamadas de hoje para o Spencer, o Arwin e o Jack','A verificar taxas de atendimento por comercial e por hora','Chasing {count} deals sitting quiet past 14 days','A preparar a revisão semanal do pipeline para o AJ','A afinar o ICP com o Prospetor após 3 lotes fracos'],
+{ id:'lexi', name:'CALENDÁRIO EDITORIAL', dept:'marketing', desk:[20,3], sit:[20,4], hair:'#5a2d0c', shirt:'#f59e0b', 
+  role:'Planeamento de publicações',
+  tagline:'Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado.',
+  tasks:['A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn','A analisar alcance e leads gerados','A otimizar as campanhas pagas','A preparar o calendário editorial da semana'],
   ev:[
-    {i:'🧭', t:()=>`Revisão da equipa: ${ri(28,47)} leads enriquecidos, ${ri(20,40)} potenciais obtidos, ${ri(18,34)} em primeira abordagem, ${ri(7,14)} negócios parados em seguimento — ${rnd(['tudo limpo','1 lote devolvido para repontuação','2 duplicados removidos antes de chegarem a uma lista'])}`, p:3},
-    {i:'📞', t:()=>`Lista do ARWIN construída — ${ri(4,9)} leads, ${(ri(10,18)/10).toFixed(1)}h de chamadas na fila (${(ri(30,58)/10).toFixed(1)}h / meta de 6h por dia)`, kpi:{id:'callhrs',n:0.8}, p:3},
-    {i:'👔', t:()=>`${ri(2,5)} leads de chefia para o SPENCER — ${rnd(['Diretor Comercial','Sales Manager','GM','Director'])} @ ${rnd(P.co)} no topo`, kpi:{id:'callhrs',n:0.5}, p:2},
-    {i:'🎯', t:()=>`Pipeline: ${ri(3,7)} negócios passaram a ${rnd(['proposta','teste','negociação'])}, ${ri(1,3)} ${rnd(['ganhos','parados — reatribuídos','passou para a semana seguinte'])}`, p:2},
-    {i:'🎓', t:()=>`Coached PROSPECTOR — ${rnd(['ICP apertado para 5–200 funcionários','eliminadas as pesquisas de empresas com menos de 5 pessoas','acrescentada a regra «sem funcionários de concorrentes»'])}; next batch should score higher`, brain:true, p:1},
-    {i:'⚖', t:()=>`Reequilibrado: movi ${ri(2,6)} leads ${rnd(['Arwin→Jack','Jack→Arwin','transbordo→amanhã'])} para manter as filas na meta`, p:1},
+    {i:'📋', t:()=>`Atualizar a fila de aprovações — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Resolver 2 conflitos de canal — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Marcar o que está bloqueado — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — resolver 2 conflitos de canal`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: planeamento de publicações — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, googlecalendar — resultado registado`, p:1},
   ],
-  stats:[['Agentes a reportar','5'],['Reps covered','3'],['Call hrs queued','11.3h / 12h'],['Teste→pago (7 d)','31%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Horas de chamada em fila para os comerciais — últimos 7 dias', chart:[11,12,10,12,11,4,9],
-  greeting:`Olá AJ. As vendas estão a andar. Os meus cinco agentes entregaram durante a noite — 47 leads enriquecidos, 41 potenciais clientes obtidos, 214 em primeira abordagem, 11 conversas de integração abertas e 9 negócios parados em seguimento — e verifiquei o trabalho deles antes de chegar a um comercial. Listas de hoje: Spencer 2,8 h de leads de chefia, Arwin 5,6 h das 6, Jack 2,9 h das 3. Pergunta-me pela equipa, pelos comerciais ou pelo pipeline.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lidera a equipa de vendas — cinco agentes respondem-lhe — e é dono das listas de chamadas dos comerciais.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lidera a equipa de vendas — cinco agentes respondem-lhe — e é dono das listas de chamadas dos comerciais. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou CALENDÁRIO EDITORIAL, na sala Media. O meu trabalho: mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado. Neste momento: atualizar a fila de aprovações; resolver 2 conflitos de canal.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Lidero a equipa de vendas — três agentes abaixo de mim, três comerciais à minha frente. Pergunta pela equipa, pelas listas do Spencer/Arwin/Jack ou pelo pipeline.`,`Experimenta «como está a equipa?», «o que está no pipeline?» ou «como está a lista do Spencer?»`],
-  chips:['Como está a equipa?','O que está no pipeline?','How’s Spencer’s list?'] },
+  fallback:[`Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'ona', name:'RECEÇÃO DE CLIENTES', dept:'delivery', desk:[17,6], sit:[17,7], hair:'#0d0d0d', shirt:'#fcd34d',
-  role:'Concierge de Boas-Vindas (Alto Uso)',
-  tagline:'Envia mensagens aos novos utilizadores de alto uso e põe-nos a funcionar como faria uma pessoa.',
-  tasks:['Texting {person} about team-number setup','A explicar a gravação de chamadas a um utilizador de alto uso','A acompanhar 3 conversas de ontem','A agendar uma mensagem de acompanhamento para {co}','A rever que utilizadores em teste passaram a alto uso'],
+{ id:'ona', name:'RECEÇÃO DE CLIENTES', dept:'ops', desk:[17,6], sit:[17,7], hair:'#0d0d0d', shirt:'#fcd34d',
+  role:'Onboarding e relação inicial',
+  tagline:'Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia.',
+  tasks:['A preparar a abordagem para 6 leads quentes','A responder a propostas em aberto','A marcar reuniões com decisores','A seguir 8 conversas paradas','A fechar a proposta da Kea Logistics'],
   ev:[
-    {i:'📱', t:()=>`SMS enviado a ${person()} @ ${rnd(P.co)}: "${rnd(['Vi que registaste 12 chamadas ontem — queres que monte o placar da tua equipa?','Boa — o teu número está ligado. Queres ativar a gravação de chamadas?','Estás a voar! Dica rápida: fixa a tua melhor lista no marcador.'])}"`, p:3},
-    {i:'💬', t:()=>`${person()} respondeu — respondi à dúvida sobre ${rnd(['licenças de equipa','gravação de chamadas','portabilidade do número','cobertura na Austrália'])} em ${ri(1,4)} min`, p:2},
-    {i:'🤝', t:()=>`${rnd(P.co)} finished full onboarding via text — never needed a call`, kpi:{id:'tickets',n:1}, p:2},
-    {i:'🔥', t:()=>`Novo utilizador de alto uso sinalizado pelo TESTE GRATUITO — ${person()}, ${ri(8,20)} chamadas em 24h. A abrir conversa por mensagem`, p:1},
+    {i:'📋', t:()=>`Arranque da ${rnd(P.co)}: acessos e expectativas — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Lista de integração da ${rnd(P.co)} — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Apresentar o primeiro relatório à ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — lista de integração da ${rnd(P.co)}`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: onboarding e relação inicial — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: imessage, gmail — resultado registado`, p:1},
   ],
-  stats:[['Active text threads',()=>ri(9,14)],['Tempo médio de resposta','2 min'],['Integrados esta semana','17'],['Taxa de resposta','78%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Utilizadores integrados — últimos 7 dias', chart:[3,4,2,5,3,1,3],
-  greeting:`Olá AJ. 11 conversas por mensagem ativas. No momento em que o Free Trial sinaliza um utilizador de alto uso, abro uma conversa — a primeira mensagem sai em 10 minutos. 78% de respostas. Acham que é uma pessoa, e sinceramente, a qualidade da conversa é a razão.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Envia mensagens aos novos utilizadores de alto uso e põe-nos a funcionar como faria uma pessoa.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Envia mensagens aos novos utilizadores de alto uso e põe-nos a funcionar como faria uma pessoa. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou RECEÇÃO DE CLIENTES, na sala Vendas. O meu trabalho: acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia. Neste momento: arranque da ${rnd(P.co)}: acessos e expectativas; lista de integração da ${rnd(P.co)}.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Sou a camada humana e simpática para os teus melhores novos utilizadores. Pergunta como são as minhas mensagens, a minha taxa de resposta ou as integrações desta semana.`,`Experimenta «mostra-me um exemplo de mensagem», «qual é a tua taxa de resposta?» ou «quando passas para uma pessoa?»`],
-  chips:['Mostra-me um exemplo de mensagem','Qual é a tua taxa de resposta?','Quando passas para um humano?'] },
+  fallback:[`Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'pros', name:'PROSPETOR', dept:'sales', desk:[20,6], sit:[20,7], hair:'#2a1a0e', shirt:'#eab308',
-  role:'Agente de Prospeção Ativa',
-  tagline:'Constrói listas novas de prospeção segundo o ICP — verificadas antes de alguém telefonar.',
-  tasks:['A extrair {count} empresas de coberturas australianas para a lista de prospeção','A verificar telemóveis no lote de Christchurch','A pontuar 40 potenciais clientes face ao ICP','A cruzar novos contactos com os clientes atuais','A construir a lista de chamadas frias de amanhã para o Líder de Vendas'],
+{ id:'pros', name:'LEAD HUNTER', dept:'sales', lead:true, desk:[20,6], sit:[20,7], hair:'#2a1a0e', shirt:'#eab308',
+  role:'Prospeção e qualificação de empresas',
+  tagline:'Procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade.',
+  tasks:['A enriquecer os contactos do lote de hoje','A pontuar leads novos face ao ICP','A remover duplicados da lista','A entregar a lista qualificada ao Sales Closer','A varrer o Google Maps à procura de empresas sem site'],
   ev:[
-    {i:'⛏', t:()=>`Found ${ri(6,18)} new prospects — ${rnd(['AU trades','NZ property services','fitness studios','logistics SMEs','dental groups'])}, ICP-scored & verified`, kpi:{id:'leads',n:1}, p:3},
-    {i:'✅', t:()=>`Lote verificado: ${ri(20,40)} potenciais clientes, ${ri(84,96)}% de telemóveis válidos — entregues ao LÍDER DE VENDAS`, kpi:{id:'leads',n:2}, p:2},
-    {i:'🚫', t:()=>`Killed ${ri(3,9)} prospects — ${rnd(['already customers','competitor staff','fora do território','under 5 seats'])}. Quality over volume`, p:2},
-    {i:'📚', t:()=>`Atualizei o "ICP de Prospeção" no Cérebro — ${rnd(['acrescentei uma regra de exclusão','apertei a faixa de dimensão','nova etiqueta de setor'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Varrer o Google Maps: 60 empresas sem site em um setor — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Pontuar 40 empresas face ao ICP — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Remover duplicados da lista de ${ri(8,40)} leads — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — pontuar 40 empresas face ao ICP`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: prospeção e qualificação de empresas — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: territool, apollo, chrome — resultado registado`, p:1},
   ],
-  stats:[['Potenciais clientes encontrados hoje',()=>ri(30,55)],['ICP match rate','71%'],['Valid mobile rate','91%'],['Dupes blocked (7d)','48']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Potenciais clientes obtidos — últimos 7 dias', chart:[38,45,41,52,44,18,36],
-  greeting:`Olá AJ. Durante a noite obtive 41 potenciais clientes novos segundo o ICP — 91% com telemóvel verificado, duplicados e clientes atuais já removidos. Estão pontuados e na fila para as listas da manhã do Líder de Vendas. Pergunta de onde vieram ou o que rejeitei.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói listas novas de prospeção segundo o ICP — verificadas antes de alguém telefonar.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói listas novas de prospeção segundo o ICP — verificadas antes de alguém telefonar. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou LEAD HUNTER, na sala Prospeção. O meu trabalho: procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade. Neste momento: varrer o Google Maps: 60 empresas sem site em um setor; pontuar 40 empresas face ao ICP.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Encho o topo do funil de prospeção com contactos verificados e alinhados com o ICP. Pergunta de onde veio o lote de hoje, a especificação do ICP ou o que rejeitei.`,`Experimenta «de onde vieram estes?», «qual é o ICP?» ou «o que rejeitaste hoje?»`],
-  chips:['De onde vieram estes?','Qual é o ICP?','O que rejeitaste?'] },
+  fallback:[`Procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'folo', name:'SEGUIMENTOS', dept:'sales', desk:[20,9], sit:[20,10], hair:'#171717', shirt:'#fcd34d',
-  role:'Agente de Segundo Contacto e Reativação',
-  tagline:'Persegue tudo o que ficou em silêncio — chamadas sem resposta, silêncio depois da demo, negócios parados.',
-  tasks:['Chasing {count} deals quiet past 14 days','A acompanhar as chamadas sem resposta de ontem','Re-touching {co} after their demo','A reativar testes que terminaram sem uma chamada','A preparar a lista de «última chance» para o AJ ver','A registar por que morreu cada negócio perdido'],
+{ id:'folo', name:'SEGUIMENTOS', dept:'ops', desk:[20,9], sit:[20,10], hair:'#171717', shirt:'#fcd34d',
+  role:'Segundo contacto e reativação',
+  tagline:'Retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados.',
+  tasks:['A preparar a abordagem para 6 leads quentes','A responder a propostas em aberto','A marcar reuniões com decisores','A seguir 8 conversas paradas','A fechar a proposta da Kea Logistics'],
   ev:[
-    {i:'🔁', t:()=>`Voltei a ligar a ${ri(5,12)} chamadas sem resposta de ontem — ${ri(2,5)} atenderam à segunda tentativa`, kpi:{id:'callhrs',n:0.3}, p:3},
-    {i:'⏳', t:()=>`${rnd(P.co)} went quiet ${ri(14,26)} days after ${rnd(['a demo','a proposta','trial signup'])} — sent a ${rnd(['single-line nudge','resumo do que pediram','mensagem «devo fechar isto?»'])}`, p:3},
-    {i:'💚', t:()=>`Reativado: ${rnd(P.co)} respondeu depois de ${ri(15,40)} dias em silêncio — de volta ao pipeline, entregue a ${rnd(['SPENCER','ARWIN','JACK'])}`, kpi:{id:'leads',n:1}, p:2},
-    {i:'📕', t:()=>`Fechei ${ri(2,6)} negócios mortos — motivo registado (${rnd(['ficou com o incumbente','orçamento congelado','sem acesso ao decisor','afinal demasiado pequeno'])}); a Análise recebe o padrão`, brain:true, p:2},
-    {i:'📅', t:()=>`Teste expirado reengajado: ${rnd(P.co)} nunca recebeu uma chamada nos 14 dias — marquei uma para ${rnd(['amanhã às 9h','quinta','segunda de manhã'])}`, p:1},
+    {i:'📋', t:()=>`Retomar ${ri(8,40)} propostas sem resposta — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Segundo contacto para 8 leads frios — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Reativar quem testou e não avançou — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — segundo contacto para 8 leads frios`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: segundo contacto e reativação — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: gmail, imessage — resultado registado`, p:1},
   ],
-  stats:[['Negócios parados em seguimento',()=>ri(7,14)],['Revival rate','18%'],['Second-attempt connects','34%'],['Dead deals logged (7d)','11']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Negócios reativados — últimos 7 dias', chart:[2,3,1,4,2,0,2],
-  greeting:`Olá AJ. 9 negócios parados há mais de 14 dias e estou em todos. Tudo o que teve uma primeira chamada e ficou em silêncio é meu — chamadas sem resposta, silêncio depois da demo, propostas que ninguém assinou, testes que terminaram sem ninguém ligar. 18% voltam. O resto fecho como deve ser e registo porquê, porque um «não» limpo vale mais do que um talvez eterno no pipeline.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Persegue tudo o que ficou em silêncio — chamadas sem resposta, silêncio depois da demo, negócios parados.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Persegue tudo o que ficou em silêncio — chamadas sem resposta, silêncio depois da demo, negócios parados. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou SEGUIMENTOS, na sala Vendas. O meu trabalho: retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados. Neste momento: retomar ${ri(8,40)} propostas sem resposta; segundo contacto para 8 leads frios.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Tudo o que ficou em silêncio é meu — chamadas sem resposta, silêncio depois da demo, propostas paradas, testes terminados. Pergunta pela lista de seguimento, pela taxa de reativação ou por que morreram negócios.`,`Experimenta «o que ficou em silêncio?», «qual é a tua taxa de reativação?» ou «por que morrem negócios?»`],
-  chips:['O que ficou em silêncio?','Qual é a tua taxa de reativação?','Por que morrem os negócios?'] },
+  fallback:[`Retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ MARKETING ============ */
-{ id:'riley', name:'INVESTIGAÇÃO', dept:'marketing', desk:[4,12], sit:[4,13], hair:'#8a4a1f', shirt:'#f472b6',
-  role:'Agente de Investigação Diária',
-  tagline:'Varrе o setor de tecnologia de vendas e a concorrência todas as manhãs às 6h.',
-  tasks:['A compilar o varrimento setorial desta manhã','A resumir uma mudança de preços da concorrência','A ler {count} newsletters para não teres de ler','A atualizar a pasta de Concorrentes no Cérebro','A assinalar uma tendência que merece um post no LinkedIn'],
+{ id:'riley', name:'INTELIGÊNCIA DE MERCADO', dept:'sales', desk:[4,12], sit:[4,13], hair:'#8a4a1f', shirt:'#f472b6',
+  role:'Pesquisa de mercado e tendências',
+  tagline:'Faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte.',
+  tasks:['A pontuar leads novos face ao ICP','A remover duplicados da lista','A entregar a lista qualificada ao Sales Closer','A varrer o Google Maps à procura de empresas sem site','A analisar a presença digital de 20 empresas'],
   ev:[
-    {i:'📰', t:()=>`Varrimento da manhã feito: ${ri(30,60)} fontes lidas, 3 itens que merecem o teu tempo — briefing no Cérebro`, brain:true, p:3},
-    {i:'🕵', t:()=>`${rnd(P.competitor)} ${rnd(['subiu os preços 8%','lançou uma funcionalidade de resumo de chamadas com IA','mudou o teste gratuito para 7 dias','está a contratar 4 comerciais na Austrália','acabou com o desconto anual'])} — registado e sinalizado à Análise`, p:2},
-    {i:'📈', t:()=>`Trend: ${rnd(['«AI SDR» volta a subir este mês','regras de mensagens de voz a apertar na Austrália','LinkedIn outbound fatigue rising — SMS interest up','video prospecting cooling off'])}`, p:2},
-    {i:'📚', t:()=>`Atualizei "Panorama do Setor" no Cérebro — ${ri(2,5)} novas entradas`, brain:true, p:1},
+    {i:'📋', t:()=>`Varrimento diário de 47 fontes — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Extrair 3 tendências, com fonte — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Nota de mercado para o Sales Closer — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — extrair 3 tendências, com fonte`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: pesquisa de mercado e tendências — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: chrome, notion — resultado registado`, p:1},
   ],
-  stats:[['Fontes verificadas hoje','47'],['Items flagged','3'],['Competitor moves (7d)','5'],['Briefings this month','21']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Itens assinalados — últimos 7 dias', chart:[4,2,3,5,3,1,3],
-  greeting:`Bom dia AJ. Varrimento das 6h de hoje: 47 fontes, 3 coisas que merecem a tua atenção — a CallForge subiu os preços 8%, o volume de pesquisa por «AI SDR» está a subir outra vez e há uma nova decisão australiana sobre mensagens de voz. O briefing completo está no Cérebro em Investigação → Briefings Diários.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Varrе o setor de tecnologia de vendas e a concorrência todas as manhãs às 6h.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Varrе o setor de tecnologia de vendas e a concorrência todas as manhãs às 6h. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou INTELIGÊNCIA DE MERCADO, na sala Prospeção. O meu trabalho: faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte. Neste momento: varrimento diário de 47 fontes; extrair 3 tendências, com fonte.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Leio tudo para tu leres 3 pontos. Pede-me o briefing de hoje, os movimentos da concorrência ou as tendências que acompanho.`,`Experimenta «o que há no briefing de hoje?», «algum movimento da concorrência?» ou «que tendências acompanhas?»`],
-  chips:['Today’s briefing?','Competitor moves?','Que tendências acompanhas?'] },
+  fallback:[`Faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'newt', name:'NEWSLETTER', dept:'marketing', desk:[7,12], sit:[7,13], hair:'#26140a', shirt:'#ec4899',
-  role:'Agente de Criação de Newsletter',
-  tagline:'Escreve a newsletter mensal que os teus registados realmente abrem.',
-  tasks:['A escrever a edição de agosto — «A Regra das 10h»','Pulling last month’s open-rate report','A reescrever a linha de assunto de 6 maneiras','A arranjar um caso de cliente para a história principal','À espera da aprovação do AJ para o rascunho'],
+{ id:'newt', name:'CONTEÚDO E NEWSLETTER', dept:'marketing', desk:[7,12], sit:[7,13], hair:'#26140a', shirt:'#ec4899',
+  role:'Texto, casos de estudo e newsletter',
+  tagline:'Escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita.',
+  tasks:['A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn','A analisar alcance e leads gerados','A otimizar as campanhas pagas','A preparar o calendário editorial da semana'],
   ev:[
-    {i:'✍', t:()=>`August draft progressing — lead story: "${rnd(['A Regra das 10h: quando a taxa de atendimento duplica','Porque o guião do teu melhor comercial não escala','3 registos dizem-nos por que mudaram'])}"`, p:3},
-    {i:'📊', t:()=>`Números finais da edição de julho: ${ri(38,46)}% de abertura, ${ri(4,8)}% de cliques — o melhor foi a secção de casos de clientes`, p:2},
-    {i:'🧪', t:()=>`Lista final de linhas de assunto A/B pronta — 2 finalistas a caminho da tua fila de aprovações`, p:1},
-    {i:'📚', t:()=>`Retirei 3 casos de clientes das conversas de apoio (obrigado, Apoio Técnico) para o bloco de prova social`, brain:true, p:1},
+    {i:'📋', t:()=>`Newsletter mensal: caso de estudo — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Legenda para o vídeo da ${rnd(P.co)} — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Escrever o caso de estudo com números reais — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — legenda para o vídeo da ${rnd(P.co)}`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: texto, casos de estudo e newsletter — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: beehiiv, loops — resultado registado`, p:1},
   ],
-  stats:[['Taxa de abertura de julho','43%'],['July click rate','6.1%'],['Subscribers',()=>ri(2100,2400)],['Cancelamentos da última edição','4']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Taxa de abertura % — últimas 6 edições', chart:[31,34,38,36,41,43],
-  greeting:`Olá AJ. A edição de agosto está 80% escrita — a história principal é «A Regra das 10h» (porque a taxa de atendimento duplica a meio da manhã, com os nossos próprios dados anonimizados). Julho chegou a 43% de aberturas, o melhor até agora. O rascunho chega hoje à tua fila de aprovações; nada sai sem ti.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve a newsletter mensal que os teus registados realmente abrem.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve a newsletter mensal que os teus registados realmente abrem. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou CONTEÚDO E NEWSLETTER, na sala Media. O meu trabalho: escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita. Neste momento: newsletter mensal: caso de estudo; legenda para o vídeo da ${rnd(P.co)}.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Escrevo a newsletter mensal — e nada é enviado sem a tua aprovação. Pergunta pelo rascunho de agosto, pelos números de julho ou pelo teste A/B das linhas de assunto.`,`Experimenta «o que vem na próxima edição?», «como correu julho?» ou «mostra-me as linhas de assunto».`],
-  chips:['O que vem na próxima edição?','Como correu julho?','Mostra-me linhas de assunto'] },
+  fallback:[`Escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 { id:'ada', name:'ANÚNCIOS META', dept:'marketing', desk:[4,15], sit:[4,16], hair:'#101020', shirt:'#f9a8d4',
-  role:'Agente de Anúncios Meta',
-  tagline:'Watches every campaign hourly; flags what to scale, kill or fix.',
-  tasks:['Hourly check across {count} active ad sets','A acompanhar o novo criativo «ansiedade da chamada fria»','A preparar uma recomendação de mudança de orçamento','Pulling creative fatigue signals','Drafting Friday’s ads summary'],
+  role:'Publicidade paga',
+  tagline:'Corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir.',
+  tasks:['A preparar o calendário editorial da semana','A escrever o caso de estudo do último projeto','A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn','A analisar alcance e leads gerados'],
   ev:[
-    {i:'📣', t:()=>`Verificação de hora a hora: gasto de ${money(ri(20,60))} nesta hora, ${ri(2,7)} testes iniciados, CPA ${money(ri(28,55))}`, kpi:{id:'adspend',n:38}, p:3},
-    {i:'🚀', t:()=>`O criativo "${rnd(['ansiedade da chamada fria','40 000 chamadas','o funeral da folha de cálculo'])}" bate o CPA médio da conta em ${ri(15,40)}% — a recomendar escala`, p:2},
-    {i:'🪫', t:()=>`Saturação do criativo "${rnd(['dor do marcador antigo','painel do gestor','quadro antes/depois'])}" — frequência ${(ri(28,44)/10).toFixed(1)}, CTR a descer ${ri(15,35)}%. Desligar ou renovar`, p:2},
-    {i:'💸', t:()=>`Recomendação de orçamento na fila do AJ: mover ${money(ri(30,80))}/dia ${rnd(['prospeção→retargeting','conjunto saturado→novo criativo'])}`, approval:'budget', p:1},
+    {i:'📋', t:()=>`Renovar o conjunto de anúncios saturado — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Lançar 4 variantes do anúncio de um setor — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Relatório de CPA e do que aprendemos — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — lançar 4 variantes do anúncio de um setor`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: publicidade paga — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: meta — resultado registado`, p:1},
   ],
-  stats:[['Gasto hoje',()=>money(ri(600,780))],['Testes vindos de anúncios hoje',()=>ri(8,14)],['Blended CPA','$41','7d'],['Active ad sets','9']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'CPA $ — últimos 7 dias', chart:[52,48,45,49,43,40,41],
-  greeting:`Olá AJ. Gasto de hoje: ${money(684)} em 9 conjuntos de anúncios, 11 testes iniciados, CPA combinado ${money(41)} — a descer toda a semana. O criativo «ansiedade da chamada fria» é a história: 31% abaixo do CPA médio da conta. Deixei uma recomendação de mudança de orçamento na tua fila de aprovação.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Watches every campaign hourly; flags what to scale, kill or fix.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Watches every campaign hourly; flags what to scale, kill or fix. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ANÚNCIOS META, na sala Media. O meu trabalho: corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir. Neste momento: renovar o conjunto de anúncios saturado; lançar 4 variantes do anúncio de um setor.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Vigio cada euro que a Meta leva. Pergunta pelo gasto de hoje, pelo criativo vencedor ou pelo que está a saturar.`,`Experimenta «como estão os anúncios hoje?», «qual é o melhor criativo?» ou «algo saturado?»`],
-  chips:['Como estão os anúncios hoje?','Best creative?','Algo saturado?'] },
+  fallback:[`Corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'iggy', name:'INSTAGRAM ORGÂNICO', dept:'marketing', desk:[6,15], sit:[6,16], hair:'#1a1026', shirt:'#fb7185',
-  role:'Agente de Conteúdo Orgânico no Instagram',
-  tagline:'Runs the IG content engine — hooks, reels, carousels. Nothing posts without AJ.',
-  tasks:['A escrever 3 ganchos de reel com os casos desta semana','A escrever um reel de 30 s sobre a Regra das 10h','A briefar o Designer Gráfico sobre um carrossel de 6 slides','A analisar que ganchos seguraram espectadores mais de 3 segundos','A pôr a publicação de quinta na fila para aprovação do AJ'],
+{ id:'iggy', name:'REDES SOCIAIS', dept:'marketing', desk:[6,15], sit:[6,16], hair:'#1a1026', shirt:'#fb7185',
+  role:'Instagram, LinkedIn e comunidade',
+  tagline:'Prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa.',
+  tasks:['A preparar o calendário editorial da semana','A escrever o caso de estudo do último projeto','A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn','A analisar alcance e leads gerados'],
   ev:[
-    {i:'🎬', t:()=>`Guião de reel escrito: "${rnd(['chamadas antes das 10h são uma armadilha','o teu melhor comercial não escala — isto escala','vimos 40 000 chamadas frias','3 registos disseram-nos por que mudaram','o cemitério de CRM de que ninguém fala'])}" — gancho + tempos + CTA, na fila do AJ`, p:3},
-    {i:'📈', t:()=>`Post-mortem: last reel held ${ri(38,62)}% past 3s — ${rnd(['hook rewrite paying off','pattern-interrupt opener worked','caption gate lifted saves'])}`, p:2},
-    {i:'🖼', t:()=>`Briefed GRAPHICS DESIGNER: ${rnd(['carrossel de 6 slides sobre a Regra das 10h','cartão de citação de um caso de cliente','before/after dashboard visual'])}`, p:2},
-    {i:'📚', t:()=>`Registei o desempenho dos ganchos no "Manual do IG" no Cérebro — ${rnd(['ganchos de pergunta batem afirmações','texto no primeiro fotograma > cara a falar','poupa nos posts de listas'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Agendar 3 publicações no Instagram — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Responder a 14 mensagens diretas — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Preparar a publicação de LinkedIn da ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — responder a 14 mensagens diretas`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: instagram, linkedin e comunidade — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: meta, canva — resultado registado`, p:1},
   ],
-  stats:[['Posts queued','3'],['Avg 3-sec hold','54%'],['Guardados últimos 7 d',()=>ri(120,260)],['Follower growth (30d)','+8.2%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Taxa de interação % — últimas 7 publicações', chart:[3.2,4.1,3.8,5.6,4.4,6.2,5.1],
-  greeting:`Olá AJ. O motor de conteúdo está a andar — 3 publicações na fila para a tua aprovação esta semana. O último reel reteve 58% além dos 3 segundos, o melhor até agora (o gancho de quebra de padrão fez isso). Eu escrevo ganchos e guiões, o Designer Gráfico torna-os bonitos, e nada é publicado sem o teu OK.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Runs the IG content engine — hooks, reels, carousels. Nothing posts without AJ.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Runs the IG content engine — hooks, reels, carousels. Nothing posts without AJ. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou REDES SOCIAIS, na sala Media. O meu trabalho: prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa. Neste momento: agendar 3 publicações no Instagram; responder a 14 mensagens diretas.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Toco o Instagram de ponta a ponta, exceto carregar em publicar — isso é teu. Pergunta pelos ganchos desta semana, pelos números da última publicação ou pelo ciclo com o Design.`,`Experimenta «mostra-me os ganchos desta semana», «como se saiu o último reel?» ou «o que está na fila?»`],
-  chips:['Ganchos desta semana?','Como se saiu o último reel?','O que está na fila?'] },
+  fallback:[`Prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'vid', name:'EDITOR DE VÍDEO', dept:'marketing', desk:[3,15], sit:[3,16], hair:'#1b1b24', shirt:'#93c5fd',
-  role:'Agente de Edição de Vídeo',
-  tagline:'Edita todos os vídeos que o marketing entrega — reels, anúncios, demos — renderizados ao fotograma no HyperFrames.',
-  tasks:['A cortar o reel «Regra das 10h» a partir do guião do Instagram Orgânico','Rendering 3 aspect ratios of a demo cut (9:16, 1:1, 16:9)','A gravar legendas no conjunto de variantes dos Anúncios Meta','A montar b-roll para a promo do webinar','A re-renderizar o melhor reel da semana passada com um novo gancho'],
+{ id:'vid', name:'VÍDEO', dept:'marketing', desk:[3,15], sit:[3,16], hair:'#1b1b24', shirt:'#93c5fd',
+  role:'Vídeos, demonstrações e cortes',
+  tagline:'Produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal.',
+  tasks:['A otimizar as campanhas pagas','A preparar o calendário editorial da semana','A escrever o caso de estudo do último projeto','A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn'],
   ev:[
-    {i:'🎞', t:()=>`Renderizei ${rnd(['o reel «Regra das 10h» — 30 s, legendas gravadas','um corte de demo de 45 s — 3 formatos','o conjunto de variantes — mesmo corte, 3 ganchos','a promo do webinar — 60 s com cartões de capítulo'])} no HyperFrames`, p:3},
-    {i:'✂️', t:()=>`Prazo do corte: guião ${rnd(['esta manhã','às 9h','depois da reunião diária'])}, primeira renderização de volta em ${ri(20,50)} min`, p:2},
-    {i:'📐', t:()=>`Caption pass: ${rnd(['linha do gancho movida para cima da zona segura','sincronização palavra a palavra com a locução','tipografia da marca trocada a partir do kit'])}`, p:2},
-    {i:'📚', t:()=>`Registei as definições de renderização no "Kit de Vídeo" no Cérebro — ${rnd(['estilo de legendas fixado','zonas seguras 9:16 documentadas','predefinição de exportação v3 guardada'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Vídeo de demonstração do projeto ${rnd(P.co)} — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Cortes de 15 s com legendas — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Exportar em 9:16 e 1:1 — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — cortes de 15 s com legendas`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: vídeos, demonstrações e cortes — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: hyperframes — resultado registado`, p:1},
   ],
-  stats:[['Cuts shipped (7d)',()=>ri(6,12)],['Avg render turnaround','34 min'],['Re-cut rate','15%'],['Edições abertas','2']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Cortes entregues — últimos 7 dias', chart:[1,2,1,3,2,1,2],
-  greeting:`Olá AJ. 8 cortes prontos esta semana — o reel da Regra das 10h, a demo em três formatos e variantes legendadas para os Anúncios Meta. Tudo renderiza no HyperFrames, por isso um corte é código: muda-se uma linha, re-renderiza, igual em todo o lado. Duas edições abertas, ambas entregues hoje.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Edita todos os vídeos que o marketing entrega — reels, anúncios, demos — renderizados ao fotograma no HyperFrames.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Edita todos os vídeos que o marketing entrega — reels, anúncios, demos — renderizados ao fotograma no HyperFrames. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou VÍDEO, na sala Media. O meu trabalho: produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal. Neste momento: vídeo de demonstração do projeto ${rnd(P.co)}; cortes de 15 s com legendas.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Corto e renderizo todos os vídeos que o marketing entrega — o botão de publicar continua teu. Pergunta pela fila de edição, pelas regras de legendas ou por como funciona o ciclo do HyperFrames.`,`Experimenta «o que está na fila de edição?», «como funcionam as legendas?» ou «qual é o teu prazo?»`],
-  chips:['O que está na fila de edição?','Quanto tempo leva um recorte novo?','Why HyperFrames?'] },
+  fallback:[`Produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'gfx', name:'DESIGNER GRÁFICO', dept:'marketing', desk:[1,15], sit:[1,16], hair:'#0e0e16', shirt:'#f0abfc',
-  role:'Agente de Design de Marketing',
-  tagline:'Desenha tudo o que o marketing publica — anúncios, carrosséis, apresentações — com um único kit de marca.',
-  tasks:['A desenhar o carrossel da Regra das 10h para o Instagram Orgânico','A produzir 3 variantes de anúncio para os Anúncios Meta','A atualizar o modelo de capa da proposta','Exporting webinar slide backgrounds','A construir um conjunto de cartões de citação com casos de clientes'],
+{ id:'gfx', name:'CREATIVE ARCHITECT', dept:'fin', lead:true, desk:[1,15], sit:[1,16], hair:'#0e0e16', shirt:'#f0abfc',
+  role:'Estratégia digital, UX/UI e direção de arte',
+  tagline:'Lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável.',
+  tasks:['A desenhar a landing page de ${rnd(P.co)}','A preparar mockups para a apresentação','A escrever os textos de interface','A validar o fluxo de contacto com dados de uso','A entregar as especificações à Engenharia'],
   ev:[
-    {i:'🎨', t:()=>`Entreguei ${rnd(['um carrossel de 6 slides','3 variantes de criativo de anúncio','um conjunto de cartões de citação','a capa da proposta','slides de título do webinar'])} — no kit de marca, ${rnd(['primeira versão','v2 depois do feedback','final'])}`, p:3},
-    {i:'⚡', t:()=>`Prazo: briefing de ${rnd(['carrossel','conjunto de anúncios','uma página'])} ${rnd(['esta manhã','às 9h','depois da reunião diária'])}, entregue em ${ri(2,5)} horas`, p:2},
-    {i:'🧪', t:()=>`Teste de variantes preparado para os ANÚNCIOS META — mesmo texto, ${rnd(['3 layouts','2 esquemas de cor','moldura de dispositivo vs plano'])}`, p:2},
-    {i:'📚', t:()=>`Kit de marca atualizado no Cérebro — ${rnd(['novo estilo de gráfico','modelo de grelha para carrossel','zonas seguras do logótipo documentadas'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Briefing da ${rnd(P.co)}: problema, público e ação — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Definir a estrutura e a navegação do site novo — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Fechar o design system do projeto ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'ecras',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — definir a estrutura e a navegação do site novo`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: estratégia digital, ux/ui e direção de arte — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: canva, notion — resultado registado`, p:1},
   ],
-  stats:[['Assets shipped (7d)',()=>ri(12,20)],['Tempo médio de resposta','3.4 h'],['Revision rate','18%'],['Briefings abertos','2']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Recursos entregues — últimos 7 dias', chart:[2,3,2,4,3,1,2],
-  greeting:`Olá AJ. 14 recursos saíram esta semana — carrosséis para o Instagram Orgânico, variantes de anúncio para os Anúncios Meta e uma capa de proposta renovada para as Propostas. Tudo corre no único kit de marca do Cérebro, por isso parece tudo nosso. Dois briefings abertos, ambos dentro do prazo.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Desenha tudo o que o marketing publica — anúncios, carrosséis, apresentações — com um único kit de marca.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Desenha tudo o que o marketing publica — anúncios, carrosséis, apresentações — com um único kit de marca. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou CREATIVE ARCHITECT, na sala Design Lab. O meu trabalho: lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável. Neste momento: briefing da ${rnd(P.co)}: problema, público e ação; definir a estrutura e a navegação do site novo.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Se o marketing publica, fui eu que desenhei — anúncios, carrosséis, apresentações, capas. Pergunta pelos meus briefings abertos, pelo kit de marca ou pelas variantes de anúncio.`,`Experimenta «o que tens na fila?», «como manténs tudo dentro da marca?» ou «o que está a sair para a Meta?»`],
-  chips:['O que tens na fila?','Como manténs tudo dentro da marca?','O que está a sair para a Meta?'] },
+  fallback:[`Lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ OPERATIONS ============ */
-{ id:'piper', name:'PROPOSTAS', dept:'sales', desk:[15,12], sit:[15,13], hair:'#3a1d08', shirt:'#60a5fa',
-  role:'Agente de Propostas',
-  tagline:'Transforma o resumo de um negócio numa proposta e num e-mail pronto a enviar em minutos.',
-  tasks:['A construir uma proposta para {co} ({count} licenças)','A escrever o e-mail de apresentação para {person}','A atualizar as tabelas de preços a partir do Cérebro','À espera da aprovação do AJ para a proposta da {co}','A ver quais propostas foram abertas esta semana'],
+{ id:'piper', name:'PROPOSTAS', dept:'ops', desk:[15,12], sit:[15,13], hair:'#3a1d08', shirt:'#60a5fa',
+  role:'Propostas comerciais',
+  tagline:'Escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos.',
+  tasks:['A fechar a proposta da Kea Logistics','A registar o motivo dos negócios perdidos','A preparar a abordagem para 6 leads quentes','A responder a propostas em aberto','A marcar reuniões com decisores'],
   ev:[
-    {i:'📄', t:()=>`Proposta construída: ${rnd(P.co)} — ${ri(5,40)} licenças, plano ${rnd(P.plan)}, ${money(ri(400,3000))}/mês. E-mail escrito, na fila do AJ`, approval:'proposal', p:2},
-    {i:'👀', t:()=>`${rnd(P.co)} abriu a proposta ${ri(2,5)} vezes hoje — vale uma chamada enquanto está quente`, p:2},
-    {i:'✅', t:()=>`Proposta aceite 🎉 ${rnd(P.co)} — ${money(ri(500,2500))}/mês. A entregar à integração`, kpi:{id:'proposals',n:1}, p:1},
-    {i:'📚', t:()=>`Retirei do Cérebro os preços e o caso de estudo atuais para a proposta da ${rnd(P.co)}`, brain:true, p:2},
+    {i:'📋', t:()=>`Proposta para a ${rnd(P.co)}, três opções — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Atualizar o preçário de manutenção — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Reescrever o âmbito da ${rnd(P.co)} após a reunião — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — atualizar o preçário de manutenção`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: propostas comerciais — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: pandadoc, notion — resultado registado`, p:1},
   ],
-  stats:[['Propostas esta semana','9'],['Awaiting your approval','2'],['Open rate','89%'],['Aceites este mês','11']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Propostas enviadas — últimos 7 dias', chart:[2,3,1,4,2,0,2],
-  greeting:`Olá AJ. 9 propostas enviadas esta semana, mais 2 construídas à espera da tua aprovação — Kea Logistics (18 licenças) e UrbanNest Realty (7 licenças). A Ridgeline abriu a deles 4 vezes hoje; alguém devia ligar enquanto está quente. O Spencer já foi avisado.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Transforma o resumo de um negócio numa proposta e num e-mail pronto a enviar em minutos.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Transforma o resumo de um negócio numa proposta e num e-mail pronto a enviar em minutos. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou PROPOSTAS, na sala Vendas. O meu trabalho: escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos. Neste momento: proposta para a ${rnd(P.co)}, três opções; atualizar o preçário de manutenção.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Entra o briefing, sai a proposta e o e-mail, com a tua aprovação pelo meio. Pergunta o que está pendente, quem abriu a sua ou os ganhos deste mês.`,`Experimenta «o que está pendente?», «quem abriu a proposta?» ou «quantas foram aceites este mês?»`],
-  chips:['O que está pendente?','Who opened theirs?','Aceites este mês?'] },
+  fallback:[`Escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'scout', name:'ANÁLISE', dept:'ops', desk:[18,12], sit:[18,13], hair:'#141414', shirt:'#93c5fd',
-  role:'Agente de Análise de Concorrência e Setor',
-  tagline:'Transforma os achados da Investigação em «eis o que devemos fazer quanto a isto».',
-  tasks:['A avaliar a subida de preços da CallForge — memorando de oportunidade','A modelar o impacto da funcionalidade de IA da RingPilot','A atualizar os cartões de confronto no Cérebro','A rever {count} movimentos da concorrência vindos da Investigação','A preparar o relatório mensal de posição de mercado'],
+{ id:'scout', name:'ANÁLISE COMPETITIVA', dept:'sales', desk:[18,12], sit:[18,13], hair:'#141414', shirt:'#93c5fd',
+  role:'Concorrentes e posicionamento',
+  tagline:'Acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados.',
+  tasks:['A varrer o Google Maps à procura de empresas sem site','A analisar a presença digital de 20 empresas','A enriquecer os contactos do lote de hoje','A pontuar leads novos face ao ICP','A remover duplicados da lista'],
   ev:[
-    {i:'♟', t:()=>`Avaliação feita: ${rnd(P.competitor)} — ${rnd(['subida de preços','nova funcionalidade','mudança no teste','contratação na Austrália'])}; veredicto: ${rnd(['oportunidade, agir esta semana','monitorizar, sem ação','precisa de movimento defensivo'])}. Memorando no Cérebro`, brain:true, p:3},
-    {i:'🃏', t:()=>`Cartão de confronto atualizado: "vs ${rnd(P.competitor)}" — novos argumentos para ${rnd(['preço','funcionalidades de IA','qualidade do apoio','termos do contrato'])}`, brain:true, p:2},
-    {i:'🚨', t:()=>`Sinalizado ao AJ: ${rnd(P.competitor)} ${rnd(['está a mirar o nosso conjunto exato de palavras-chave na Meta','mencionou expansão para a Nova Zelândia num podcast','levou o líder de vendas australiano de um rival'])} — nota breve na fila`, p:1},
-    {i:'📊', t:()=>`Monthly market-position report ${ri(40,80)}% complete`, p:1},
+    {i:'📋', t:()=>`Comparar os preços dos 3 estúdios rivais — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Memorando: subida de preços do concorrente — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Atualizar os argumentos de venda com 2 factos — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — memorando: subida de preços do concorrente`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: concorrentes e posicionamento — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: chrome, notion — resultado registado`, p:1},
   ],
-  stats:[['Avaliações esta semana','5'],['Battlecards current','5 / 5'],['Action items raised','2'],['Threat level','LOW-MED']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Movimentos da concorrência avaliados — últimos 7 dias', chart:[1,2,0,2,1,0,1],
-  greeting:`AJ — quadro de ameaças atual: BAIXO-MÉDIO. A subida de preços da CallForge é a nossa maior oportunidade do mês (o meu memorando recomenda uma campanha de comparação em 2 semanas, enquanto os clientes deles estão irritados). A Quotient a contratar 4 comerciais na Austrália é o que vigiar. Todos os cartões de confronto estão atualizados.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Transforma os achados da Investigação em «eis o que devemos fazer quanto a isto».'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Transforma os achados da Investigação em «eis o que devemos fazer quanto a isto». Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ANÁLISE COMPETITIVA, na sala Prospeção. O meu trabalho: acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados. Neste momento: comparar os preços dos 3 estúdios rivais; memorando: subida de preços do concorrente.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`A Investigação encontra os factos; eu digo-te o que fazer com eles. Pergunta pela oportunidade CallForge, pela lista de ameaças ou pelos cartões de confronto.`,`Experimenta «qual é a maior ameaça?», «a questão da CallForge?» ou «os cartões estão atualizados?»`],
-  chips:['A maior ameaça neste momento?','A oportunidade CallForge?','Battlecards current?'] },
+  fallback:[`Acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'legal', name:'REVISÃO JURÍDICA', dept:'ops', desk:[15,15], sit:[15,16], hair:'#20242e', shirt:'#a78bfa',
-  role:'Agente de Revisão de Contratos',
-  tagline:'Lê todos os contratos antes de saírem e dá-lhes um segundo olhar.',
-  tasks:['A rever o MSA alterado da {co}','Diffing {co}’s redlines against our standard terms','A assinalar {count} cláusulas para o AJ decidir','A verificar os termos do novo modelo de proposta','A atualizar a biblioteca de cláusulas no Cérebro','A reler um contrato de fornecedor antes da renovação'],
+{ id:'legal', name:'CONTRATOS', dept:'ops', desk:[15,15], sit:[15,16], hair:'#20242e', shirt:'#a78bfa',
+  role:'Revisão de contratos e termos',
+  tagline:'Lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco.',
+  tasks:['A responder a propostas em aberto','A marcar reuniões com decisores','A seguir 8 conversas paradas','A fechar a proposta da Kea Logistics','A registar o motivo dos negócios perdidos'],
   ev:[
-    {i:'⚖', t:()=>`Reviewed ${rnd(['MSA','order form','NDA','supplier contract','reseller agreement'])} — ${rnd(P.co)}: ${rnd(['no changes needed','2 clauses flagged','1 clause flagged, low risk','alterações aceites tal como estavam'])}`, p:3},
-    {i:'🚩', t:()=>`Sinalizado ao AJ: ${rnd(['responsabilidade ilimitada — o nosso padrão limita a 12 meses de honorários','renovação automática com 90 dias de aviso','o contrato deles reivindica PI nos dados de configuração','prazos de pagamento esticados para 60 dias','a indemnização é unilateral a favor deles'])} (${rnd(P.co)})`, p:3},
-    {i:'📑', t:()=>`Diffed ${rnd(P.co)}'s redlines against our standard terms — ${ri(3,11)} changes, ${ri(1,3)} material`, p:2},
-    {i:'📚', t:()=>`Biblioteca de cláusulas atualizada no Cérebro — acrescentei o texto de ${rnd(['limite de responsabilidade','residência de dados','rescisão sem justa causa','privacidade na Austrália'])} que acordámos`, brain:true, p:2},
-    {i:'✅', t:()=>`Libertei ${rnd(['a nota de encomenda','o NDA'])} da ${rnd(P.co)} — termos padrão, nada para escalar; de volta às PROPOSTAS`, p:1},
+    {i:'📋', t:()=>`Rever o contrato da ${rnd(P.co)}, 2 cláusulas — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Verificar os termos da proposta aceite — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Política de privacidade, revisão anual — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — verificar os termos da proposta aceite`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: revisão de contratos e termos — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: pandadoc, notion — resultado registado`, p:1},
   ],
-  stats:[['Agreements reviewed (7d)',()=>ri(9,16)],['Assinalado ao AJ','3'],['Tempo médio de resposta','11 min'],['Clause library','64 entries']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Contratos revistos — últimos 7 dias', chart:[3,2,4,1,3,0,2],
-  greeting:`Olá AJ. Leio todos os contratos antes de saírem do edifício — 12 esta semana, 3 assinalados para ti. Sou um segundo olhar, não sou advogado, e digo-o claramente: apanho os padrões que acordámos importarem e digo-te o que mudou e por que merece a tua atenção. O que for genuinamente novo escalo em vez de adivinhar.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lê todos os contratos antes de saírem e dá-lhes um segundo olhar.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lê todos os contratos antes de saírem e dá-lhes um segundo olhar. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou CONTRATOS, na sala Vendas. O meu trabalho: lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco. Neste momento: rever o contrato da ${rnd(P.co)}, 2 cláusulas; verificar os termos da proposta aceite.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Leio contratos e dou-lhes um segundo olhar antes de saírem. Pergunta pelas sinalizações abertas, por como revejo ou pelo que está na biblioteca de cláusulas.`,`Experimenta «o que está assinalado?», «como revês?» ou «o que está na biblioteca de cláusulas?»`],
-  chips:['O que está assinalado?','Como revês?','És advogado?'] },
+  fallback:[`Lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'comply', name:'VERIFICADOR DE CONFORMIDADE', dept:'ops', desk:[18,15], sit:[18,16], hair:'#5a3a1a', shirt:'#c4b5fd',
-  role:'Agente de Vigilância Regulamentar',
-  tagline:'Vigia diariamente sites do governo e dos reguladores e reporta o que mudou.',
-  tasks:['Diffing {count} government pages against yesterday’s snapshot','A ler as novas orientações da Lei de Privacidade','A verificar as páginas de licenciamento estado a estado na Austrália','A resumir uma atualização do regulador para o Cérebro','A acompanhar uma consulta que fecha na próxima semana','A reverificar a página do IRD neozelandês após uma mudança de layout'],
+{ id:'comply', name:'PERMISSÕES E CONFORMIDADE', dept:'emails', desk:[18,15], sit:[18,16], hair:'#5a3a1a', shirt:'#c4b5fd',
+  role:'Aprovações, consentimento e RGPD',
+  tagline:'Verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação.',
+  tasks:['A rever as prioridades do dia com as seis salas','A assinalar tarefas atrasadas e agentes parados','A atualizar o painel central da empresa','A fechar o resumo de resultados da semana','A confirmar as aprovações à espera do proprietário'],
   ev:[
-    {i:'🏛', t:()=>`Swept ${ri(28,44)} government + regulator pages — ${rnd(['3 changed','1 changed','no changes','2 changed'])} since yesterday's snapshot`, p:3},
-    {i:'📌', t:()=>`Alteração detetada: ${rnd(['orientações dos Princípios de Privacidade Australianos','página de incidentes notificáveis da WorkSafe NZ','regras anti-spam da ACMA para SMS','limiares de entrega de GST do IRD','regras de registo da Fair Work'])} — comparado e resumido`, brain:true, p:3},
-    {i:'⏳', t:()=>`Consulta fecha ${rnd(['em 9 dias','em 3 semanas','na próxima sexta'])}: ${rnd(['revisão de comunicações não solicitadas','limiares de reporte para pequenas empresas','prazo de notificação de violação de dados'])} — assinalado caso queiramos opinar`, p:2},
-    {i:'🔕', t:()=>`Filtrei ${ri(4,12)} alterações de página como ruído — ${rnd(['reorganização do menu','só a data','departamento não relacionado'])}; ninguém precisa de ler isso`, p:2},
-    {i:'📤', t:()=>`Enviei o resumo regulatório semanal — ${ri(1,4)} itens que nos afetam de facto, o resto suprimido`, p:1},
+    {i:'📋', t:()=>`Auditar o consentimento dos formulários — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Confirmar a aprovação antes de 2 envios — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Revisar a lista de contactos com consentimento — à espera do OK do proprietário`, p:2, kpi:{id:'tarefas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — confirmar a aprovação antes de 2 envios`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: aprovações, consentimento e rgpd — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, gmail — resultado registado`, p:1},
   ],
-  stats:[['Sources watched','41'],['Alterações esta semana','3'],['Noise filtered (7d)','38'],['Último varrimento completo','06:15 today']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Alterações reais detetadas — últimos 7 dias', chart:[1,0,2,1,0,0,1],
-  greeting:`Bom dia AJ. 41 fontes governamentais e reguladoras verificadas às 6:15 — três alterações reais esta semana, e filtrei 38 edições de página que eram só datas e menus. A que importa: a página de regras anti-spam da ACMA mudou as orientações sobre registos de consentimento por SMS, o que toca em como a Prospeção e a Receção registam consentimentos.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Vigia diariamente sites do governo e dos reguladores e reporta o que mudou.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Vigia diariamente sites do governo e dos reguladores e reporta o que mudou. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou PERMISSÕES E CONFORMIDADE, na sala Comando. O meu trabalho: verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação. Neste momento: auditar o consentimento dos formulários; confirmar a aprovação antes de 2 envios.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Vigio diariamente sites do governo e dos reguladores e digo-te só o que mudou de facto. Pergunta o que mudou, o que vigio ou o que vem aí.`,`Experimenta «o que mudou esta semana?», «o que vigias?» ou «algo a fechar em breve?»`],
-  chips:['O que mudou esta semana?','O que vigias?','Algo a fechar em breve?'] },
+  fallback:[`Verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'report', name:'RELATÓRIOS INTERNOS', dept:'ops', desk:[21,15], sit:[21,16], hair:'#2e2118', shirt:'#8b5cf6',
-  role:'Agente de Relatórios da Empresa',
-  tagline:'Constrói os relatórios e mantém todos os painéis da empresa atualizados.',
-  tasks:['A construir o relatório de segunda para a direção','A atualizar o painel da empresa','A pressionar {count} indicadores que deixaram de atualizar','A escrever o resumo semanal geral','Reconciling sales numbers against Finance’s','A adicionar a vista de churn que o AJ pediu'],
+{ id:'report', name:'ANALISTA DE RESULTADOS', dept:'emails', desk:[21,15], sit:[21,16], hair:'#2e2118', shirt:'#8b5cf6',
+  role:'Relatórios de estado e desempenho',
+  tagline:'Escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou.',
+  tasks:['A atualizar o painel central da empresa','A fechar o resumo de resultados da semana','A confirmar as aprovações à espera do proprietário','A distribuir o trabalho novo pelas salas','A rever as prioridades do dia com as seis salas'],
   ev:[
-    {i:'📊', t:()=>`Dashboard refreshed — ${ri(18,31)} metrics across ${rnd(['Sales, Support, Marketing, Finance','all five departments'])}; ${rnd(['all sources healthy','1 source stale, chasing'])}`, p:3},
-    {i:'📰', t:()=>`Pacote semanal escrito: secção ${rnd(['receita + pipeline','carga de apoio + CSAT','custo de aquisição + testes','posição de tesouraria + antiguidade'])} pronta — ${ri(3,6)} de 6`, p:3},
-    {i:'🔍', t:()=>`Discrepância apanhada: ${rnd(['pipeline de vendas','conversão de testes','MRR'])} divergia de ${rnd(['Finanças','o CRM','o Stripe'])} em ${rnd(['2%','340 $','4 contas'])} — atribuído a ${rnd(['um corte de fuso horário','um registo duplicado','uma mudança de plano a meio do mês'])}`, p:2},
-    {i:'📈', t:()=>`Nova vista acrescentada: ${rnd(['churn por coorte','receita por hora de agente','teste→pago por origem do lead','custo de apoio por cliente'])} — fixada no painel da empresa`, brain:true, p:2},
-    {i:'📤', t:()=>`Monthly summary sent — ${rnd(['uma página, 6 números, 3 frases de justificação','a versão curta que o AJ pediu'])}`, p:1},
+    {i:'📋', t:()=>`Relatório semanal: vendas, leads e projetos — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Consolidar os números do mês no Cérebro — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Comparar a produtividade das seis salas — à espera do OK do proprietário`, p:2, kpi:{id:'tarefas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — consolidar os números do mês no Cérebro`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: relatórios de estado e desempenho — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, clarity — resultado registado`, p:1},
   ],
-  stats:[['Painéis ativos','6'],['Metrics tracked','28'],['Sources healthy','5 / 5'],['relatório para a direção','Mondays 07:00']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Relatórios e atualizações entregues — últimos 7 dias', chart:[6,7,5,8,6,2,4],
-  greeting:`Olá AJ. Todos os painéis estão atualizados há 20 minutos — 28 indicadores nos cinco departamentos, as cinco fontes saudáveis. O relatório de segunda para a direção está 4 de 6 secções pronto. Uma coisa que merece o teu olho: teste→pago e o CRM discordavam em 4 contas esta manhã, e era um corte de fuso horário, não uma falha real.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói os relatórios e mantém todos os painéis da empresa atualizados.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói os relatórios e mantém todos os painéis da empresa atualizados. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ANALISTA DE RESULTADOS, na sala Comando. O meu trabalho: escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou. Neste momento: relatório semanal: vendas, leads e projetos; consolidar os números do mês no Cérebro.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Construo os relatórios e mantenho todos os painéis da empresa atualizados. Pergunta o que está ativo, pelo relatório para a direção, ou pede-me uma vista nova.`,`Experimenta «os painéis estão atualizados?», «o que está no relatório para a direção?» ou «como estamos globalmente?»`],
-  chips:['Os painéis estão atualizados?','O que vai no relatório para a direção?','Como estamos globalmente?'] },
+  fallback:[`Escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ FINANCE — ACCOUNTING TEAM ============ */
-{ id:'alead', name:'LÍDER DE CONTABILIDADE', dept:'fin', desk:[21,12], sit:[21,13], hair:'#1f1f1f', shirt:'#60a5fa', lead:true,
-  role:'Agente Líder de Contabilidade',
-  tagline:'Lidera a equipa de contabilidade: Faturação, Contas a Pagar e Reconciliação respondem-lhe.',
-  tasks:['A rever exceções da equipa de contabilidade','A acompanhar o progresso do fecho do mês','Checking {count} flagged transactions','A preparar o resumo semanal de tesouraria para o AJ','A auditar uma fatura de freelancer assinalada antes de chegar ao AJ'],
+{ id:'alead', name:'DIREÇÃO DE ARTE', dept:'fin', desk:[21,12], sit:[21,13], hair:'#1f1f1f', shirt:'#60a5fa', 
+  role:'Imagem, mockups e identidade',
+  tagline:'Cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita.',
+  tasks:['A entregar as especificações à Engenharia','A definir a estrutura e o design system do novo site','A desenhar a landing page de ${rnd(P.co)}','A preparar mockups para a apresentação','A escrever os textos de interface'],
   ev:[
-    {i:'🗂', t:()=>`Reviewed team output: ${ri(4,9)} invoices, ${ri(2,6)} bills, ${ri(10,30)} transactions matched — ${rnd(['no exceptions','1 exception, handled','2 exceptions, investigating'])}`, p:3},
-    {i:'📊', t:()=>`Month-end close: ${ri(55,90)}% complete, tracking ${rnd(['dentro do prazo','1 day ahead'])}`, p:2},
-    {i:'🔎', t:()=>`Exception resolved: ${rnd(['fatura de fornecedor duplicada apanhada pelas CONTAS A PAGAR','depósito não conciliado atribuído a uma atualização de plano','invoice rounding mismatch corrected'])}`, p:2},
-    {i:'💼', t:()=>`Resumo semanal de tesouraria escrito para o AJ — na tua fila ${rnd(['esta noite','amanhã às 8h'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Mockups do site da ${rnd(P.co)} para apresentação — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Capa e peças do caso de estudo — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Três conceitos visuais para a ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'ecras',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — capa e peças do caso de estudo`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: imagem, mockups e identidade — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: canva, higgsfield — resultado registado`, p:1},
   ],
-  stats:[['Débito da equipa (7 d)','214 items'],['Exceções abertas','1'],['Close progress','72%'],['Posição de tesouraria','healthy']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Exceções apanhadas — últimos 7 dias', chart:[2,1,3,1,2,0,1],
-  greeting:`AJ — a equipa de contabilidade está limpa. Esta semana: 214 itens processados em Faturação, Contas a Pagar e Reconciliação, com uma exceção aberta (um depósito não conciliado que estou a rastrear — parece uma atualização de plano paga manualmente). O fecho do mês está 72% feito, dentro do prazo. Nada precisa de ti hoje.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lidera a equipa de contabilidade: Faturação, Contas a Pagar e Reconciliação respondem-lhe.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lidera a equipa de contabilidade: Faturação, Contas a Pagar e Reconciliação respondem-lhe. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou DIREÇÃO DE ARTE, na sala Design Lab. O meu trabalho: cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita. Neste momento: mockups do site da ${rnd(P.co)} para apresentação; capa e peças do caso de estudo.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Lidero a equipa de contabilidade para não teres de pensar nisso. Pergunta por exceções, pelo fecho do mês ou pelo débito da equipa.`,`Experimenta «alguma exceção?», «como está o fecho do mês?» ou «como está a nossa tesouraria?»`],
-  chips:['Alguma exceção?','How’s month-end?','Como está a nossa tesouraria?'] },
+  fallback:[`Cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'invo', name:'FATURAÇÃO', dept:'fin', desk:[17,15], sit:[17,16], hair:'#4a2c14', shirt:'#7ab8f7',
-  role:'Agente de Faturação',
-  tagline:'Emite todas as faturas e persegue todos os atrasos — com educação e sem descanso.',
-  tasks:['A emitir faturas dos registos de ontem','A executar a sequência de lembretes de atraso','A emitir uma nota de crédito para {co}','A verificar as linhas de GST no lote AU','A confirmar um pagamento manual com {co}'],
+{ id:'invo', name:'PESQUISA UX', dept:'fin', desk:[17,15], sit:[17,16], hair:'#4a2c14', shirt:'#7ab8f7',
+  role:'Pesquisa, fluxos e validação',
+  tagline:'Mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas.',
+  tasks:['A definir a estrutura e o design system do novo site','A desenhar a landing page de ${rnd(P.co)}','A preparar mockups para a apresentação','A escrever os textos de interface','A validar o fluxo de contacto com dados de uso'],
   ev:[
-    {i:'🧾', t:()=>`Invoice issued: ${rnd(P.co)} — ${money(ri(90,1400))} (${rnd(P.plan)} plan), GST correct, sent ✓`, kpi:{id:'invoices',n:1}, p:4},
-    {i:'⏰', t:()=>`Lembrete ${ri(1,3)} de 3 enviado a ${rnd(P.co)} — ${money(ri(120,900))} agora com ${ri(3,21)} dias de atraso`, p:2},
-    {i:'💰', t:()=>`Paid ✓ ${rnd(P.co)} settled ${money(ri(120,1400))} after reminder ${ri(1,2)} — DSO improving`, p:2},
-    {i:'🚩', t:()=>`${rnd(P.co)} com ${ri(30,45)} dias de atraso — escalado ao LÍDER DE CONTABILIDADE`, p:1},
+    {i:'📋', t:()=>`Mapear o percurso de contacto do site — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Escrever os textos de interface — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Validar o fluxo com 40 sessões gravadas — à espera do OK do proprietário`, p:2, kpi:{id:'ecras',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — escrever os textos de interface`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: pesquisa, fluxos e validação — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, clarity — resultado registado`, p:1},
   ],
-  stats:[['Faturas esta semana',()=>ri(30,45)],['Overdue book',()=>money(ri(1800,4200))],['DSO','21 days (↓4)'],['Collection rate','96%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Faturas emitidas — últimos 7 dias', chart:[7,9,6,11,8,2,5],
-  greeting:`Olá AJ. 38 faturas emitidas esta semana, todas certas em GST. O saldo em atraso é ${money(2400)} em 5 contas — a minha sequência de 3 lembretes baixou o DSO para 21 dias, 4 melhor que no mês passado. Uma conta passou os 30 dias e está com o Líder de Contabilidade.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Emite todas as faturas e persegue todos os atrasos — com educação e sem descanso.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Emite todas as faturas e persegue todos os atrasos — com educação e sem descanso. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou PESQUISA UX, na sala Design Lab. O meu trabalho: mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas. Neste momento: mapear o percurso de contacto do site; escrever os textos de interface.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Faturas rápido a sair, dinheiro mais rápido a entrar. Pergunta pelo saldo em atraso, pelo DSO ou pelo volume desta semana.`,`Experimenta «o que está em atraso?», «como está o DSO?» ou «alguma nota de crédito?»`],
-  chips:['O que está em atraso?','How’s DSO?','Volume desta semana?'] },
+  fallback:[`Mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'apay', name:'CONTAS A PAGAR', dept:'fin', desk:[20,15], sit:[20,16], hair:'#111', shirt:'#4d94e8',
-  role:'Agente de Contas a Pagar',
-  tagline:'Audita cada movimento de cartão e cada fatura de freelancer face ao que realmente acordámos pagar.',
-  tasks:['A associar os movimentos de cartão desta semana às subscrições','A conferir a fatura n.º 218 com o contrato de design','A verificar um movimento de cartão que parece duplicado','A assinalar renovações devidas no cartão este trimestre','A atualizar os registos de fornecedores no Cérebro'],
+{ id:'apay', name:'DEPLOYS E INFRA', dept:'delivery', desk:[20,15], sit:[20,16], hair:'#111', shirt:'#4d94e8',
+  role:'Publicação, domínios e manutenção',
+  tagline:'Publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar.',
+  tasks:['A ligar o formulário ao CRM','A testar responsividade e velocidade','A corrigir erros da última entrega','A publicar o site no domínio do cliente','A escrever a documentação técnica'],
   ev:[
-    {i:'📥', t:()=>`Card charge matched: ${rnd(['ANÚNCIOS META','FullEnrich','Xero','AWS','o fornecedor de SMS','Canva'])} — ${money(ri(40,900))}, expected amount ✓`, p:3},
-    {i:'🛑', t:()=>`Duplicado apanhado: ${rnd(['um fornecedor cobrou o cartão duas vezes','a mesma fatura enviada por e-mail duas vezes'])} — ${money(ri(80,600))} NÃO pagos duas vezes`, p:2},
-    {i:'📋', t:()=>`Invoice audited: ${rnd(['freelancer n.º 218 — valor acima do contrato, RETIDO para o AJ','contractor hours vs brief — checks out, cleared','uma renovação 12% acima do ano passado — assinalada'])}`, approval:'payment', p:1},
-    {i:'🤝', t:()=>`Nota de poupança: ${rnd(['o pré-pagamento anual pouparia 8% no fornecedor de SMS','possível descida de nível no FullEnrich — uso abaixo do plano'])} — sinalizado ao LÍDER DE CONTABILIDADE`, p:1},
+    {i:'📋', t:()=>`Publicar o site da ${rnd(P.co)} no domínio — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Configurar a cópia de segurança semanal — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Verificar certificado e monitorização — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — configurar a cópia de segurança semanal`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: publicação, domínios e manutenção — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: webflow, chrome — resultado registado`, p:1},
   ],
-  stats:[['Charges matched (7d)',()=>ri(14,24)],['Duplicates caught (30d)','3'],['Retido para revisão','1'],['Surprise charges','0']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Movimentos auditados — últimos 7 dias', chart:[3,4,2,5,3,0,2],
-  greeting:`Olá AJ. 18 movimentos de cartão conciliados esta semana — todas as subscrições cobraram o que deviam. Uma coisa está retida: a fatura n.º 218 do designer de design veio a 110 $/h contra os 85 $/h que assinámos em março. Nada acima do contrato é pago sem tu veres. Sempre.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Audita cada movimento de cartão e cada fatura de freelancer face ao que realmente acordámos pagar.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Audita cada movimento de cartão e cada fatura de freelancer face ao que realmente acordámos pagar. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou DEPLOYS E INFRA, na sala Engenharia. O meu trabalho: publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar. Neste momento: publicar o site da ${rnd(P.co)} no domínio; configurar a cópia de segurança semanal.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Cada movimento conciliado, cada fatura conferida com o seu contrato — nada acima do acordado é pago sem ti. Pergunta pela fatura n.º 218, por duplicados ou por poupanças que encontrei.`,`Experimenta «o que está retido?», «apanhaste duplicados?» ou «alguma poupança?»`],
-  chips:['O que está retido agora?','Apanhaste duplicados?','Alguma poupança encontrada?'] },
+  fallback:[`Publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'recon', name:'RECONCILIAÇÃO', dept:'fin', desk:[23,15], sit:[23,16], hair:'#3a2a1a', shirt:'#a5cdf7',
-  role:'Agente de Reconciliação de Contas',
-  tagline:'Associa cada linha bancária a uma fatura ou conta. O que não bate é investigado.',
-  tasks:['A conciliar o extrato bancário desta manhã','A investigar um depósito não conciliado','A reconciliar o lote de pagamentos Stripe','A preparar o pacote de fecho do mês','A procurar um recibo em falta via FATURAÇÃO'],
+{ id:'recon', name:'ANALYTICS DE CONTEÚDO', dept:'marketing', desk:[23,15], sit:[23,16], hair:'#3a2a1a', shirt:'#a5cdf7',
+  role:'Alcance, tráfego e leads',
+  tagline:'Mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe.',
+  tasks:['A escrever o caso de estudo do último projeto','A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn','A analisar alcance e leads gerados','A otimizar as campanhas pagas'],
   ev:[
-    {i:'🔗', t:()=>`Bank feed matched: ${ri(8,24)} transactions auto-reconciled, ${rnd(['0 unmatched','1 unmatched — investigating'])}`, p:4},
-    {i:'🧩', t:()=>`Mystery solved: ${rnd(['o depósito não conciliado era uma transferência manual para uma atualização de plano','lote de pagamentos líquido de taxas — conciliado com 6 faturas','uma diferença de arredondamento de 0,02 $ — corrigida'])}`, p:2},
-    {i:'📚', t:()=>`Pacote de fecho do mês ${ri(40,85)}% construído — cada linha terá casa antes do dia 1`, p:2},
-    {i:'🚩', t:()=>`Não conciliado ${money(ri(80,500))} com mais de 48h — escalado ao LÍDER DE CONTABILIDADE com as minhas notas`, p:1},
+    {i:'📋', t:()=>`Alcance e leads por publicação — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Ligar 12 leads à peça que os trouxe — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Comparar com o mês anterior — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — ligar 12 leads à peça que os trouxe`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: alcance, tráfego e leads — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: clarity, meta — resultado registado`, p:1},
   ],
-  stats:[['Conciliados esta semana',()=>ri(80,140)],['Auto-match rate','94%'],['Não conciliados em aberto','1'],['Oldest unmatched','36h']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Transações conciliadas — últimos 7 dias', chart:[22,18,25,19,24,6,14],
-  greeting:`Olá AJ. O extrato bancário está limpo — 118 transações conciliadas esta semana com 94% de conciliação automática. Um item aberto: um depósito de ${money(340)} de ontem que estou a rastrear com a Faturação (parece uma transferência manual para uma atualização). Nada fica por conciliar mais de 48 horas sem o Líder de Contabilidade saber.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Associa cada linha bancária a uma fatura ou conta. O que não bate é investigado.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Associa cada linha bancária a uma fatura ou conta. O que não bate é investigado. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ANALYTICS DE CONTEÚDO, na sala Media. O meu trabalho: mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe. Neste momento: alcance e leads por publicação; ligar 12 leads à peça que os trouxe.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Cada euro no banco fica associado a uma razão. Pergunta pelo item não conciliado, pela minha taxa de conciliação ou pelo fecho do mês.`,`Experimenta «algo não conciliado?», «qual é a tua taxa de conciliação?» ou «como está o pacote de fecho?»`],
-  chips:['Algo não conciliado?','Auto-match rate?','Como está o pacote de fecho?'] },
+  fallback:[`Mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ EMAILS (V3.1, 5 Sep 2026 — replaced Customer Support) ============ */
-{ id:'elead', name:'LÍDER DE E-MAILS', dept:'emails', desk:[7,6], sit:[7,7], hair:'#2b2b2b', shirt:'#2dd4bf', lead:true,
-  role:'Líder da Caixa de Entrada',
-  tagline:'Runs the whole inbox: routes every email to the right desk, checks tone, and escalates only what needs AJ.',
-  tasks:['A encaminhar a caixa da noite — {count} e-mails','A rever o tom das respostas antes de saírem','A escalar uma conversa da {co} para o AJ','A atualizar os modelos de resposta','A escrever o resumo semanal da caixa de entrada'],
+{ id:'elead', name:'ORBITA DIRECTOR', dept:'emails', desk:[7,6], sit:[7,7], hair:'#2b2b2b', shirt:'#2dd4bf', lead:true,
+  role:'Direção e coordenação de agentes',
+  tagline:'Coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa.',
+  tasks:['A fechar o resumo de resultados da semana','A confirmar as aprovações à espera do proprietário','A distribuir o trabalho novo pelas salas','A rever as prioridades do dia com as seis salas','A assinalar tarefas atrasadas e agentes parados'],
   ev:[
-    {i:'📬', t:()=>`Encaminhei ${ri(28,60)} e-mails da noite — ${ri(2,4)} assinalados ao AJ, o resto tratado pelas secretárias`, p:3},
-    {i:'✍', t:()=>`Revisão de tom numa resposta a ${rnd(P.co)} — suavizei uma linha, enviada`, p:2},
-    {i:'⬆', t:()=>`Escalei uma conversa da ${rnd(P.co)} — disputa de preços, o AJ tem de ver`, p:1},
+    {i:'📋', t:()=>`Rever as prioridades do dia com as seis salas — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Assinalar 3 tarefas atrasadas e reagendar — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Fechar o relatório de estado da empresa — à espera do OK do proprietário`, p:2, kpi:{id:'tarefas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — assinalar 3 tarefas atrasadas e reagendar`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: direção e coordenação de agentes — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, googlecalendar, slack — resultado registado`, p:1},
   ],
-  stats:[['E-mails encaminhados hoje',()=>ri(60,140)],['Média da primeira resposta',()=>ri(9,22)+' min'],['Escalado ao AJ','3'],['Templates live','18']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'E-mails tratados — últimos 7 dias', chart:[118,131,96,142,127,88,121],
-  greeting:`Bom dia AJ. A caixa está limpa — ${ri(60,120)} e-mails encaminhados desde a noite, 3 contigo (duas perguntas de preço, uma disputa com um freelancer). Pergunta-me o que quiseres sobre a caixa, tempos de resposta ou o que está à tua espera.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Runs the whole inbox: routes every email to the right desk, checks tone, and escalates only what needs AJ.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Runs the whole inbox: routes every email to the right desk, checks tone, and escalates only what needs AJ. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou ORBITA DIRECTOR, na sala Comando. O meu trabalho: coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa. Neste momento: rever as prioridades do dia com as seis salas; assinalar 3 tarefas atrasadas e reagendar.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Toco a caixa de entrada — encaminhamento, tom, escalonamento. Pergunta o que está à tua espera, com que rapidez respondemos ou por qualquer conversa.`,`Experimenta «o que está à minha espera?», «com que rapidez respondemos?» ou «mostra-me as conversas com clientes».`],
-  chips:['O que está à minha espera?','Com que rapidez estamos a responder?','Alguma escalada?'] },
+  fallback:[`Coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'cmail', name:'E-MAILS DE CLIENTES', dept:'emails', desk:[4,3], sit:[4,4], hair:'#3b2b1d', shirt:'#2dd4bf',
-  role:'Agente de E-mails de Clientes',
-  tagline:'Responde a todos os e-mails de clientes a partir do Cérebro — âmbito, prazos, resultados — e nunca deixa nenhum mais de uma hora sem resposta.',
-  tasks:['A responder à {co} sobre o calendário','A enviar o resumo de arranque à {co}','A responder a {count} e-mails de clientes da noite','A escrever o aviso de aumento de preços','A pressionar {person} pela aprovação do briefing'],
+{ id:'cmail', name:'COMUNICAÇÃO COM CLIENTES', dept:'ops', desk:[4,3], sit:[4,4], hair:'#3b2b1d', shirt:'#2dd4bf',
+  role:'E-mail de clientes',
+  tagline:'Responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta.',
+  tasks:['A marcar reuniões com decisores','A seguir 8 conversas paradas','A fechar a proposta da Kea Logistics','A registar o motivo dos negócios perdidos','A preparar a abordagem para 6 leads quentes'],
   ev:[
-    {i:'📨', t:()=>`Respondi a ${person()} @ ${rnd(P.co)} — pergunta de calendário, respondida a partir do plano de projeto`, p:3},
-    {i:'📚', t:()=>`Retirei do Cérebro o âmbito da ${rnd(P.co)} para responder a um e-mail de «isto está incluído?»`, brain:true, p:2},
-    {i:'⏸', t:()=>`Aviso de aumento de preços escrito para ${ri(90,140)} clientes — à espera do AJ`, p:1},
+    {i:'📋', t:()=>`Responder aos 9 e-mails de clientes da noite — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Explicar o prazo novo à ${rnd(P.co)} — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Enviar o resumo de arranque à ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — explicar o prazo novo à ${rnd(P.co)}`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: e-mail de clientes — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: gmail, slack — resultado registado`, p:1},
   ],
-  stats:[['E-mails de clientes hoje',()=>ri(18,40)],['Média de resposta',()=>ri(8,20)+' min'],['Conversas abertas','4'],['Happy replies (7d)','92%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'E-mails de clientes respondidos — últimos 7 dias', chart:[31,28,36,24,39,22,30],
-  greeting:`Olá AJ. ${ri(18,40)} e-mails de clientes respondidos hoje, 4 conversas ainda abertas — todas à espera do cliente, não de nós. O aviso de aumento de preços está escrito e na tua fila de aprovação.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Responde a todos os e-mails de clientes a partir do Cérebro — âmbito, prazos, resultados — e nunca deixa nenhum mais de uma hora sem resposta.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Responde a todos os e-mails de clientes a partir do Cérebro — âmbito, prazos, resultados — e nunca deixa nenhum mais de uma hora sem resposta. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou COMUNICAÇÃO COM CLIENTES, na sala Vendas. O meu trabalho: responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta. Neste momento: responder aos 9 e-mails de clientes da noite; explicar o prazo novo à ${rnd(P.co)}.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Trato dos e-mails de clientes. Pergunta pelas conversas abertas, pelos tempos de resposta ou pelo aviso de preços.`,`Experimenta «alguma conversa aberta?», «o que pediu ${rnd(P.co)}?» ou «estado do aviso de preços».`],
-  chips:['Alguma conversa aberta?','Estado do aviso de preços?','Quão rápidas são as respostas?'] },
+  fallback:[`Responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'imail', name:'E-MAILS INTERNOS', dept:'emails', desk:[7,3], sit:[7,4], hair:'#111', shirt:'#14b8a6',
-  role:'Agente de E-mails Internos',
-  tagline:'Mantém a caixa interna em movimento — triagem, resumos de conversas longas, reservas de agenda e os números semanais em circulação.',
-  tasks:['Triaging {count} internal emails','A resumir uma conversa de 40 mensagens','A fazer circular os números da semana','A marcar a revisão com o cliente','A responder à equipa sobre o plano do 3.º trimestre'],
+{ id:'imail', name:'CHEFE DE GABINETE', dept:'emails', desk:[7,3], sit:[7,4], hair:'#111', shirt:'#14b8a6',
+  role:'Coordenação de tarefas e prioridades',
+  tagline:'Transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo.',
+  tasks:['A atualizar o painel central da empresa','A fechar o resumo de resultados da semana','A confirmar as aprovações à espera do proprietário','A distribuir o trabalho novo pelas salas','A rever as prioridades do dia com as seis salas'],
   ev:[
-    {i:'🗂', t:()=>`Triei ${ri(10,24)} e-mails internos — ${ri(1,3)} precisam de decisão, o resto arquivado`, p:3},
-    {i:'📝', t:()=>`Resumi a conversa ${rnd(['do plano do 3.º trimestre','do site','da contratação','dos preços'])} — ${ri(22,48)} mensagens em 6 linhas`, p:2},
-    {i:'📅', t:()=>`Marquei a revisão da ${rnd(P.co)} — quinta às 11h, convite enviado`, p:1},
+    {i:'📋', t:()=>`Transformar 6 pedidos em tarefas com dono e prazo — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Atualizar a lista de tarefas paradas — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Marcar as revisões semanais no calendário — à espera do OK do proprietário`, p:2, kpi:{id:'tarefas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — atualizar a lista de tarefas paradas`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: coordenação de tarefas e prioridades — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, slack, googlecalendar — resultado registado`, p:1},
   ],
-  stats:[['E-mails internos hoje',()=>ri(20,50)],['Threads summarised','3'],['Decisions needed','2'],['Calendar holds','5']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'E-mails internos triados — últimos 7 dias', chart:[42,38,51,29,46,18,40],
-  greeting:`Olá AJ. A caixa interna está arrumada — ${ri(20,50)} e-mails internos triados, dois precisam de uma decisão tua (o plano do 3.º trimestre e a contratação). Ambos resumidos em seis linhas cada.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mantém a caixa interna em movimento — triagem, resumos de conversas longas, reservas de agenda e os números semanais em circulação.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mantém a caixa interna em movimento — triagem, resumos de conversas longas, reservas de agenda e os números semanais em circulação. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou CHEFE DE GABINETE, na sala Comando. O meu trabalho: transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo. Neste momento: transformar 6 pedidos em tarefas com dono e prazo; atualizar a lista de tarefas paradas.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Toco a caixa interna — triagem, resumos, calendário. Pergunta o que precisa de decisão ou o que disse uma conversa.`,`Experimenta «o que precisa de decisão?», «resume a conversa do 3.º trimestre» ou «o que está marcado esta semana?».`],
-  chips:['O que precisa de uma decisão?','Resume a conversa do 3.º trimestre','O que está marcado esta semana?'] },
+  fallback:[`Transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'vmail', name:'E-MAILS DE FORNECEDORES', dept:'emails', desk:[4,6], sit:[4,7], hair:'#7a3b12', shirt:'#5eead4',
-  role:'Agente de E-mails de Fornecedores',
-  tagline:'Trata de todas as conversas com fornecedores — orçamentos, renovações, SLA, falhas — e assinala tudo o que mude o que pagamos.',
-  tasks:['A resumir a revisão do SLA do fornecedor','A pedir orçamento ao fornecedor de impressão','A pressionar o fornecedor de alojamento sobre o relatório de avaria','A confirmar a data de renovação com {co}','A responder ao fornecedor de SMS sobre o nível do plano'],
+{ id:'vmail', name:'AUDITOR DE WEBSITES', dept:'sales', desk:[4,6], sit:[4,7], hair:'#7a3b12', shirt:'#5eead4',
+  role:'Diagnóstico da presença digital',
+  tagline:'Abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente.',
+  tasks:['A pontuar leads novos face ao ICP','A remover duplicados da lista','A entregar a lista qualificada ao Sales Closer','A varrer o Google Maps à procura de empresas sem site','A analisar a presença digital de 20 empresas'],
   ev:[
-    {i:'📦', t:()=>`Orçamento recebido do fornecedor de ${rnd(['impressão','alojamento','SMS','dados'])} — ${money(ri(300,2400))}, enviado às Contas a Pagar para conferir com o orçamento`, p:3},
-    {i:'🔍', t:()=>`SLA revision summarised — ${ri(1,3)} changes, one affects response time, flagged`, p:2},
-    {i:'📆', t:()=>`Aviso de renovação: ${rnd(['FullEnrich','o fornecedor de SMS','o alojamento','o Canva'])} renova em ${ri(5,20)} dias`, p:1},
+    {i:'📋', t:()=>`Diagnosticar 15 sites da lista — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Testar HTTPS e velocidade de 10 sites — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Registar o que está mal no site da ${rnd(P.co)} — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — testar HTTPS e velocidade de 10 sites`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: diagnóstico da presença digital — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: playwright, chrome — resultado registado`, p:1},
   ],
-  stats:[['Conversas com fornecedores abertas','6'],['Quotes this week','3'],['Renewals in 30 days','2'],['Flagged to Finance','2']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'E-mails de fornecedores tratados — últimos 7 dias', chart:[9,12,7,14,10,4,11],
-  greeting:`Olá AJ. Seis conversas com fornecedores abertas, três orçamentos esta semana — todos passados às Contas a Pagar. Uma revisão de SLA precisa do teu olhar: o fornecedor de alojamento mudou a cláusula de tempo de resposta.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Trata de todas as conversas com fornecedores — orçamentos, renovações, SLA, falhas — e assinala tudo o que mude o que pagamos.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Trata de todas as conversas com fornecedores — orçamentos, renovações, SLA, falhas — e assinala tudo o que mude o que pagamos. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou AUDITOR DE WEBSITES, na sala Prospeção. O meu trabalho: abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente. Neste momento: diagnosticar 15 sites da lista; testar HTTPS e velocidade de 10 sites.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Trato do e-mail com fornecedores — orçamentos, renovações, SLA. Pergunta por qualquer conversa ou pelo que está a mudar nos custos.`,`Experimenta «alguma renovação a chegar?», «o que mudou o fornecedor de alojamento?» ou «orçamentos esta semana».`],
-  chips:['Alguma renovação a chegar?','O que mudou no SLA?','Orçamentos esta semana?'] },
+  fallback:[`Abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'kmail', name:'E-MAILS DE FREELANCERS', dept:'emails', desk:[7,9], sit:[7,10], hair:'#4a2a10', shirt:'#2dd4bf',
-  role:'Agente de E-mails de Freelancers',
-  tagline:'Fala com os freelancers — briefings enviados, horas recebidas e dúvidas de faturas respondidas à luz do contrato.',
-  tasks:['A enviar o briefing ao redator','A confirmar as horas do designer nesta semana','A responder a uma dúvida de fatura do programador','A pressionar o freelancer de vídeo pelo prazo','A responder sobre o valor do contrato'],
+{ id:'kmail', name:'DOCUMENTAÇÃO TÉCNICA', dept:'delivery', desk:[7,9], sit:[7,10], hair:'#4a2a10', shirt:'#2dd4bf',
+  role:'Manuais, notas e entrega técnica',
+  tagline:'Escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro.',
+  tasks:['A publicar o site no domínio do cliente','A escrever a documentação técnica','A construir a página inicial do novo projeto','A ligar o formulário ao CRM','A testar responsividade e velocidade'],
   ev:[
-    {i:'📤', t:()=>`Briefing enviado ao ${rnd(['redator','designer','programador','freelancer de vídeo'])} — prazo ${rnd(['sexta','terça','na próxima quarta'])}, valor conforme o contrato`, p:3},
-    {i:'🧾', t:()=>`Dúvida de fatura do ${rnd(['designer','programador'])} — respondida com o valor assinado, ${rnd(['sem alterações','uma linha corrigida'])}`, p:2},
-    {i:'⏰', t:()=>`Verificação de prazo: o ${rnd(['freelancer de vídeo','redator'])} está ${rnd(['dentro do prazo','um dia atrasado — pressionado'])}`, p:1},
+    {i:'📋', t:()=>`Manual de manutenção do site da ${rnd(P.co)} — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Documentar as decisões do projeto ${rnd(P.co)} — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Arquivar a documentação no Cérebro — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — documentar as decisões do projeto ${rnd(P.co)}`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: manuais, notas e entrega técnica — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, googledrive — resultado registado`, p:1},
   ],
-  stats:[['Contractors active','5'],['Briefs out this week','4'],['Invoice queries','2'],['Late deliverables','1']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'E-mails de freelancers — últimos 7 dias', chart:[7,11,9,13,8,3,10],
-  greeting:`Olá AJ. Cinco freelancers ativos, quatro briefings enviados esta semana. Uma dúvida de fatura do designer — o valor na fatura n.º 218 não bate com o contrato, por isso está nas Contas a Pagar. O freelancer de vídeo está um dia atrasado e já pressionei.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Fala com os freelancers — briefings enviados, horas recebidas e dúvidas de faturas respondidas à luz do contrato.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Fala com os freelancers — briefings enviados, horas recebidas e dúvidas de faturas respondidas à luz do contrato. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou DOCUMENTAÇÃO TÉCNICA, na sala Engenharia. O meu trabalho: escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro. Neste momento: manual de manutenção do site da ${rnd(P.co)}; documentar as decisões do projeto ${rnd(P.co)}.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Trato do e-mail com freelancers — briefings, horas, faturas. Pergunta quem está atrasado, o que está fora ou por uma dúvida de fatura.`,`Experimenta «quem está atrasado?», «envia um briefing ao redator» ou «a fatura do designer».`],
-  chips:['Who’s late?','Briefings enviados esta semana?','Sobre a fatura do designer'] },
+  fallback:[`Escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ SALES additions (V3.1) ============ */
-{ id:'ilm', name:'GESTOR DE LEADS RECEBIDOS', dept:'sales', desk:[20,3], sit:[20,4], hair:'#26140a', shirt:'#fbbf24',
-  role:'Gestor de Leads Recebidos',
-  tagline:'É dono de cada lead que nos chega — qualifica-o na primeira hora, encaminha os quentes para um comercial e marca as chamadas.',
-  tasks:['A qualificar {count} leads recebidos pelo site','A encaminhar 6 leads quentes para os comerciais','A responder à {co} dentro da hora','A marcar uma chamada de apresentação com {co}','A limpar 12 duplicados da fila de entrada'],
+{ id:'ilm', name:'QUALIFICADOR', dept:'sales', desk:[20,3], sit:[20,4], hair:'#26140a', shirt:'#fbbf24',
+  role:'Leads recebidos e marcações',
+  tagline:'Responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe.',
+  tasks:['A remover duplicados da lista','A entregar a lista qualificada ao Sales Closer','A varrer o Google Maps à procura de empresas sem site','A analisar a presença digital de 20 empresas','A enriquecer os contactos do lote de hoje'],
   ev:[
-    {i:'🔥', t:()=>`Lead quente: ${person()} @ ${rnd(P.co)} — ${rnd(['pediu preços','marcou uma chamada','respondeu à newsletter'])}, encaminhado para ${rnd(['Spencer','Arwin','Jack'])}`, p:3},
-    {i:'✅', t:()=>`Qualifiquei ${ri(4,12)} leads recebidos — ${ri(1,4)} quentes, ${ri(2,6)} em nutrir, o resto não encaixa`, p:3},
-    {i:'📅', t:()=>`Chamada de apresentação marcada com ${rnd(P.co)} — ${rnd(['amanhã às 10h','quinta às 14h','sexta às 11h'])}`, p:2},
+    {i:'📋', t:()=>`Qualificar ${ri(8,40)} pedidos recebidos pelo site — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Marcar 3 reuniões com o Sales Closer — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Responder a ${rnd(P.co)} na primeira hora — à espera do OK do proprietário`, p:2, kpi:{id:'leads',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Vendas — marcar 3 reuniões com o Sales Closer`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: leads recebidos e marcações — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: gmail, googlecalendar — resultado registado`, p:1},
   ],
-  stats:[['Entradas hoje',()=>ri(8,24)],['Qualified hot',()=>ri(2,6)],['Avg response',()=>ri(6,30)+' min'],['Chamadas marcadas (7 d)','11']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Leads recebidos qualificados — últimos 7 dias', chart:[14,11,19,16,22,8,17],
-  greeting:`Olá AJ. ${ri(8,24)} leads recebidos hoje, ${ri(2,6)} quentes e já com os comerciais. Resposta média em ${ri(6,30)} minutos. Pergunta-me o que está quente, quem está marcado ou como funcionam as regras de encaminhamento.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['É dono de cada lead que nos chega — qualifica-o na primeira hora, encaminha os quentes para um comercial e marca as chamadas.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['É dono de cada lead que nos chega — qualifica-o na primeira hora, encaminha os quentes para um comercial e marca as chamadas. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou QUALIFICADOR, na sala Prospeção. O meu trabalho: responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe. Neste momento: qualificar ${ri(8,40)} pedidos recebidos pelo site; marcar 3 reuniões com o Sales Closer.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Trato dos leads recebidos — qualificar, encaminhar, marcar. Pergunta o que está quente, quem está marcado ou as regras de encaminhamento.`,`Experimenta «o que está quente hoje?», «quem está marcado esta semana?» ou «como encaminhas?».`],
-  chips:['O que está quente hoje?','Who’s booked?','Como encaminhas?'] },
+  fallback:[`Responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ OPERATIONS additions (V3.1) ============ */
-{ id:'dash', name:'PAINÉIS INTERNOS', dept:'ops', desk:[18,18], sit:[18,19], hair:'#0d0d0d', shirt:'#a78bfa',
-  role:'Agente de Painéis',
-  tagline:'Constrói e mantém os painéis internos honestos — cada bloco remete para um número do Cérebro, atualizado a horas.',
-  tasks:['A atualizar o painel de vendas','A acrescentar o bloco de entregas dentro do prazo','A corrigir o gráfico de receita — período errado','A construir a vista de tempos de resposta da caixa de entrada','A executar a verificação semanal da saúde dos painéis'],
+{ id:'dash', name:'PAINEL CENTRAL', dept:'emails', desk:[18,18], sit:[18,19], hair:'#0d0d0d', shirt:'#a78bfa',
+  role:'Dashboard da empresa',
+  tagline:'Constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro.',
+  tasks:['A atualizar o painel central da empresa','A fechar o resumo de resultados da semana','A confirmar as aprovações à espera do proprietário','A distribuir o trabalho novo pelas salas','A rever as prioridades do dia com as seis salas'],
   ev:[
-    {i:'📊', t:()=>`Atualizei o painel de ${rnd(['vendas','entregas','marketing','finanças'])} — ${ri(6,14)} blocos, todos com fonte`, p:3},
-    {i:'🔧', t:()=>`Fixed a tile: ${rnd(['revenue chart used last month','conversion rate double-counted trials','% dentro do prazo falhou 2 projetos'])}`, p:2},
-    {i:'🆕', t:()=>`Nova vista: ${rnd(['tempo de resposta da caixa','taxa de ganho de propostas','gasto com freelancers'])} — pedida por ${rnd(['o Líder de Vendas','o Líder de Entregas','o AJ'])}`, p:1},
+    {i:'📋', t:()=>`Atualizar o painel de leads e propostas — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Acrescentar o bloco de entregas dentro do prazo — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Corrigir o gráfico de vendas, período errado — à espera do OK do proprietário`, p:2, kpi:{id:'tarefas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — acrescentar o bloco de entregas dentro do prazo`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: dashboard da empresa — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: clarity, notion — resultado registado`, p:1},
   ],
-  stats:[['Painéis ativos','7'],['Tiles','61'],['Refresh','hourly'],['Broken tiles','0']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Vistas de painel — últimos 7 dias', chart:[48,52,61,45,70,22,58],
-  greeting:`Bom dia AJ. Sete painéis ativos, 61 blocos, nada avariado. Esta semana adicionei o bloco de entregas dentro do prazo e corrigi o gráfico de receita que mostrava o mês passado. Pergunta o que significa um número ou pede uma vista nova.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói e mantém os painéis internos honestos — cada bloco remete para um número do Cérebro, atualizado a horas.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói e mantém os painéis internos honestos — cada bloco remete para um número do Cérebro, atualizado a horas. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou PAINEL CENTRAL, na sala Comando. O meu trabalho: constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro. Neste momento: atualizar o painel de leads e propostas; acrescentar o bloco de entregas dentro do prazo.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Mantenho os painéis honestos. Pergunta o que significa um número, pede uma vista nova ou o que mudou esta semana.`,`Experimenta «o que significa o bloco dentro do prazo?», «cria-me uma vista para a taxa de ganho de propostas» ou «algo avariado?».`],
-  chips:['O que mudou esta semana?','Cria-me uma vista nova','Algo avariado?'] },
+  fallback:[`Constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 /* ============ DELIVERY (V3.1, 5 Sep 2026 — new department) ============ */
-{ id:'mlead', name:'LÍDER DE MARKETING', dept:'marketing', desk:[3,0], sit:[3,1], hair:'#2a1a0e', shirt:'#f87171', lead:true,
-  role:'Líder de Marketing',
-  tagline:'Lidera a equipa de marketing — seis agentes respondem-lhe — é dono do calendário de conteúdos e do orçamento de anúncios, e reporta semanalmente ao AJ o que funcionou.',
-  tasks:['A rever o conteúdo da semana antes de sair','A reequilibrar o orçamento de anúncios para o vencedor','A definir a programação de reels da próxima semana','A escrever o resumo semanal de marketing','A briefar a Investigação sobre o próximo ângulo'],
+{ id:'mlead', name:'GROWTH PUBLISHER', dept:'marketing', desk:[3,0], sit:[3,1], hair:'#2a1a0e', shirt:'#f87171', lead:true,
+  role:'Marketing, conteúdo e distribuição',
+  tagline:'Dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados.',
+  tasks:['A otimizar as campanhas pagas','A preparar o calendário editorial da semana','A escrever o caso de estudo do último projeto','A montar o vídeo de demonstração','A agendar publicações no Instagram e LinkedIn'],
   ev:[
-    {i:'🧭', t:()=>`Team review: ${ri(3,6)} reels cut, newsletter issue ${ri(30,34)} ${rnd(['scheduled','em rascunho','sent'])}, ad set ${rnd(['refreshed','held','scaled'])} — ${rnd(['tudo conforme o plano','um reel devolvido por precisar de um gancho mais forte','two creatives swapped'])}`, p:3},
-    {i:'📈', t:()=>`Números da semana: alcance ${rnd(['a subir','estável','a descer'])} ${ri(4,28)}%, ${ri(2,5)} publicações acima do múltiplo de base, CPA ${ri(24,38)} $`, p:2},
-    {i:'🎓', t:()=>`Coached ${rnd(['INSTAGRAM ORGÂNICO','NEWSLETTER','ANÚNCIOS META'])} — ${rnd(['hook first, promise second','one idea per reel','desligar mais cedo a variante abaixo da base'])}`, brain:true, p:1},
+    {i:'📋', t:()=>`Plano editorial de outubro — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Fechar o calendário da próxima semana — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Rever o que funcionou no Instagram — à espera do OK do proprietário`, p:2, kpi:{id:'publicacoes',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à direção — fechar o calendário da próxima semana`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: marketing, conteúdo e distribuição — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: meta, notion — resultado registado`, p:1},
   ],
-  stats:[['Publicações esta semana','6'],['Above baseline','2'],['GASTO EM ANÚNCIOS HOJE','$684'],['Taxa de abertura da newsletter','41%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Publicações acima da linha de base — últimas 8 semanas', chart:[1,2,1,3,2,2,3,2],
-  greeting:`Bom dia AJ. Seis publicações esta semana, duas acima do múltiplo de base. O CPA da Meta está firme nos ${ri(26,32)} $; pedi aos Anúncios Meta para passar 50 $ por dia para o vencedor. O plano de conteúdo de outubro está na tua fila de aprovação.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lidera a equipa de marketing — seis agentes respondem-lhe — é dono do calendário de conteúdos e do orçamento de anúncios, e reporta semanalmente ao AJ o que funcionou.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lidera a equipa de marketing — seis agentes respondem-lhe — é dono do calendário de conteúdos e do orçamento de anúncios, e reporta semanalmente ao AJ o que funcionou. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou GROWTH PUBLISHER, na sala Media. O meu trabalho: dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados. Neste momento: plano editorial de outubro; fechar o calendário da próxima semana.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Lidero o marketing — o plano, o orçamento, o que funcionou. Pergunta pela próxima semana, pelos anúncios ou pelos números.`,`Experimenta «qual é o plano para a próxima semana?», «como estão a correr os anúncios?» ou «o que funcionou?».`],
-  chips:['Qual é o plano para a próxima semana?','Como estão a correr os anúncios?','O que funcionou?'] },
+  fallback:[`Dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'olead', name:'LÍDER DE OPERAÇÕES', dept:'ops', desk:[15,6], sit:[15,7], hair:'#111111', shirt:'#a78bfa', lead:true,
-  role:'Líder de Operações',
-  tagline:'Lidera as operações — cinco agentes respondem-lhe — mantém contratos, conformidade, análise e relatórios a andar, e só escala o que precisa do AJ.',
-  tasks:['A rever os contratos e as sinalizações de conformidade da semana','A priorizar os achados da Análise para a equipa','A pressionar as {count} renovações de fornecedores abertas','A escrever o resumo semanal de operações','A preparar as secções do relatório para a direção'],
+{ id:'olead', name:'SALES CLOSER', dept:'ops', desk:[15,6], sit:[15,7], hair:'#111111', shirt:'#a78bfa', lead:true,
+  role:'Vendas, negociação e fecho',
+  tagline:'Transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho.',
+  tasks:['A responder a propostas em aberto','A marcar reuniões com decisores','A seguir 8 conversas paradas','A fechar a proposta da Kea Logistics','A registar o motivo dos negócios perdidos'],
   ev:[
-    {i:'🧭', t:()=>`Ops review: ${ri(2,5)} agreements reviewed, ${ri(0,2)} compliance flags, ${ri(1,3)} intel memos — ${rnd(['nada para o AJ','one clause escalated','uma renovação retida à espera de melhor valor'])}`, p:3},
-    {i:'📋', t:()=>`Board pack: ${ri(3,6)}/6 sections done, dashboards ${rnd(['refreshed','refreshing','stale — chased'])}`, p:2},
-    {i:'⚠', t:()=>`Escalated: ${rnd(['limite de responsabilidade no MSA da Kea Logistics','AU privacy wording change','vendor SLA missed twice'])} — needs AJ`, p:1},
+    {i:'📋', t:()=>`Preparar a abordagem de 6 leads quentes — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Fechar a proposta da ${rnd(P.co)} — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Responder às objeções de 3 negócios abertos — à espera do OK do proprietário`, p:2, kpi:{id:'propostas',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — fechar a proposta da ${rnd(P.co)}`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: vendas, negociação e fecho — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: gmail, googlecalendar, pandadoc — resultado registado`, p:1},
   ],
-  stats:[['Contratos este mês','9'],['Open flags','1'],['Renewals due','3'],['relatório para a direção','5 / 6']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Contratos revistos — últimas 8 semanas', chart:[2,1,3,2,2,3,2,3],
-  greeting:`Bom dia AJ. Semana calma nas operações: nove contratos revistos, uma cláusula escalada para ti, nenhuma sinalização de conformidade aberta. Três renovações de fornecedores este mês — retive uma à espera de melhor valor. A lista do 4.º trimestre está na tua fila de aprovação.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Lidera as operações — cinco agentes respondem-lhe — mantém contratos, conformidade, análise e relatórios a andar, e só escala o que precisa do AJ.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Lidera as operações — cinco agentes respondem-lhe — mantém contratos, conformidade, análise e relatórios a andar, e só escala o que precisa do AJ. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou SALES CLOSER, na sala Vendas. O meu trabalho: transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho. Neste momento: preparar a abordagem de 6 leads quentes; fechar a proposta da ${rnd(P.co)}.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Lidero as operações — contratos, conformidade, análise, relatórios. Pergunta o que foi escalado, o que é devido ou como está o relatório para a direção.`,`Experimenta «algo escalado?», «o que é devido este mês?» ou «como está o relatório para a direção?».`],
-  chips:['Algo escalado?','O que é devido este mês?','Como está o relatório para a direção?'] },
+  fallback:[`Transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'dlead', name:'LÍDER DE ENTREGAS', dept:'delivery', desk:[12,0], sit:[12,1], hair:'#1f1f1f', shirt:'#38bdf8', lead:true,
-  role:'Líder de Entregas',
-  tagline:'Owns every live project end to end — risk, timelines, staffing, handovers — and reports the state of play to AJ weekly.',
-  tasks:['A rever {count} projetos em curso quanto a risco','A refazer o calendário da {co}','A aprovar a entrega da {co}','A atribuir pessoal ao projeto {co}','A escrever o resumo semanal de entregas'],
+{ id:'dlead', name:'SYSTEMS ENGINEER', dept:'delivery', desk:[12,0], sit:[12,1], hair:'#1f1f1f', shirt:'#38bdf8', lead:true,
+  role:'Desenvolvimento, sistemas e qualidade',
+  tagline:'Constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação.',
+  tasks:['A testar responsividade e velocidade','A corrigir erros da última entrega','A publicar o site no domínio do cliente','A escrever a documentação técnica','A construir a página inicial do novo projeto'],
   ev:[
-    {i:'🧭', t:()=>`Project review: ${ri(10,14)} live, ${ri(9,13)} dentro do prazo, ${rnd(['1 em risco — deriva de âmbito','1 em risco — à espera de recursos do cliente','nenhum em risco'])}`, p:3},
-    {i:'✅', t:()=>`Entrega aprovada: ${rnd(P.co)} — controlo de qualidade limpo, recursos no portal, relatório enviado`, p:2},
-    {i:'⚠', t:()=>`Risk flagged: ${rnd(P.co)} — ${rnd(['client hasn’t signed off week 2','designer capacity','third scope change'])}`, p:1},
+    {i:'📋', t:()=>`Construir a página inicial do projeto ${rnd(P.co)} — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Ligar o formulário ao CRM — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Rever a arquitetura da área de clientes — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — ligar o formulário ao CRM`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: desenvolvimento, sistemas e qualidade — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: webflow, playwright — resultado registado`, p:1},
   ],
-  stats:[['Projetos em curso','12'],['DENTRO DO PRAZO','11'],['Entregas este mês','4'],['Avg days to deliver','23']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Projetos entregues — últimas 8 semanas', chart:[2,3,2,4,3,3,5,4],
-  greeting:`Bom dia AJ. Doze projetos em curso, onze dentro do prazo. Um em risco: ${rnd(P.co)} está na terceira alteração de âmbito — preferia prolongar uma semana a apressar o controlo de qualidade, está na tua fila de aprovação. Quatro entregas este mês, todas limpas.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Owns every live project end to end — risk, timelines, staffing, handovers — and reports the state of play to AJ weekly.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Owns every live project end to end — risk, timelines, staffing, handovers — and reports the state of play to AJ weekly. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou SYSTEMS ENGINEER, na sala Engenharia. O meu trabalho: constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação. Neste momento: construir a página inicial do projeto ${rnd(P.co)}; ligar o formulário ao CRM.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Lidero as entregas — projetos, risco, entregas. Pergunta o que está em risco, o que saiu ou pela capacidade.`,`Experimenta «algo em risco?», «o que saiu este mês?» ou «temos capacidade?».`],
-  chips:['Algo em risco?','O que saiu este mês?','Temos capacidade?'] },
+  fallback:[`Constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'pco', name:'COORDENADOR DE PROJETOS', dept:'delivery', desk:[9,3], sit:[9,4], hair:'#3d2814', shirt:'#7dd3fc',
-  role:'Coordenador de Projetos',
-  tagline:'Mantém cada plano de projeto fiel — marcos, aprovações, horas — e move as coisas antes de ficarem atrasadas.',
-  tasks:['A atualizar o plano de projeto da {co}','A mover 3 marcos após a alteração de âmbito','Chasing {count} overdue client sign-offs','A agendar a revisão da {co}','A registar as horas desta semana por projeto'],
+{ id:'pco', name:'GESTOR DE PROJETOS', dept:'delivery', desk:[9,3], sit:[9,4], hair:'#3d2814', shirt:'#7dd3fc',
+  role:'Planos, prazos e capacidade',
+  tagline:'Mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda.',
+  tasks:['A publicar o site no domínio do cliente','A escrever a documentação técnica','A construir a página inicial do novo projeto','A ligar o formulário ao CRM','A testar responsividade e velocidade'],
   ev:[
-    {i:'📋', t:()=>`Plan updated: ${rnd(P.co)} — ${ri(1,3)} milestones moved, client informed`, p:3},
-    {i:'⏳', t:()=>`Pressionei ${rnd(P.co)} pela aprovação — ${ri(2,6)} dias de atraso, a bloquear o design`, p:2},
-    {i:'🕒', t:()=>`Horas registadas: ${ri(40,110)} esta semana em ${ri(6,12)} projetos`, p:1},
+    {i:'📋', t:()=>`Plano da ${rnd(P.co)}: marcos e datas — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Refazer 3 marcos após alteração de âmbito — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Registar as horas da semana por projeto — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — refazer 3 marcos após alteração de âmbito`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: planos, prazos e capacidade — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: notion, googlecalendar — resultado registado`, p:1},
   ],
-  stats:[['Planos mantidos','12'],['Marcos esta semana','9'],['Overdue sign-offs','2'],['Hours logged (wk)','84']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Marcos atingidos — últimos 7 dias', chart:[2,1,3,2,1,0,2],
-  greeting:`Olá AJ. Doze planos atualizados, nove marcos esta semana, duas aprovações de clientes em atraso (ambas cobradas). O plano da ${rnd(P.co)} foi refeito depois da alteração de âmbito — três marcos movidos, cliente avisado.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mantém cada plano de projeto fiel — marcos, aprovações, horas — e move as coisas antes de ficarem atrasadas.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mantém cada plano de projeto fiel — marcos, aprovações, horas — e move as coisas antes de ficarem atrasadas. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou GESTOR DE PROJETOS, na sala Engenharia. O meu trabalho: mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda. Neste momento: plano da ${rnd(P.co)}: marcos e datas; refazer 3 marcos após alteração de âmbito.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Mantenho os planos de projeto verdadeiros. Pergunta o que está atrasado, o que mudou ou as horas de um projeto.`,`Experimenta «o que está atrasado?», «o que mudou esta semana?» ou «horas na ${rnd(P.co)}?».`],
-  chips:['O que está em atraso?','O que mudou esta semana?','Horas esta semana?'] },
+  fallback:[`Mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'qa', name:'VERIFICADOR DE QUALIDADE', dept:'delivery', desk:[12,3], sit:[12,4], hair:'#101820', shirt:'#bae6fd',
-  role:'Verificador de Qualidade',
-  tagline:'Nada chega a um cliente sem passar: ligações, ortografia, regras de marca, números e os fluxos que o cliente vai mesmo clicar.',
-  tasks:['Passagem de controlo de qualidade na entrega do site da {co}','A verificar o pacote de relatórios da {co} quanto a erros','A testar o início de sessão do portal do cliente','A rever o conjunto de recursos segundo as regras de marca','Teste de regressão no formulário de reserva'],
+{ id:'qa', name:'QA E TESTES', dept:'delivery', desk:[12,3], sit:[12,4], hair:'#101820', shirt:'#bae6fd',
+  role:'Testes funcionais, responsivos e de desempenho',
+  tagline:'Testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto.',
+  tasks:['A construir a página inicial do novo projeto','A ligar o formulário ao CRM','A testar responsividade e velocidade','A corrigir erros da última entrega','A publicar o site no domínio do cliente'],
   ev:[
-    {i:'🔎', t:()=>`QA pass: ${rnd(P.co)} ${rnd(['website','report pack','asset set','landing page'])} — ${rnd(['clean','2 minor notes, fixed','1 blocker — sent back'])}`, p:3},
-    {i:'🐛', t:()=>`Caught: ${rnd(['uma ligação quebrada na página de preços','um mês errado no cabeçalho do relatório','uma cor fora da marca nos banners','um formulário que saltou a validação'])}`, p:2},
-    {i:'✅', t:()=>`Aprovei a entrega da ${rnd(P.co)} — ${ri(40,90)} verificações, tudo verde`, p:1},
+    {i:'📋', t:()=>`Testar o site da ${rnd(P.co)} em telemóvel e computador — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Corrigir 4 erros do último deploy — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Teste de regressão no formulário de reserva — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — corrigir 4 erros do último deploy`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: testes funcionais, responsivos e de desempenho — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: playwright, chrome — resultado registado`, p:1},
   ],
-  stats:[['Verificações hoje',()=>ri(60,140)],['Issues caught (7d)','14'],['Blockers','1'],['Pass rate first time','78%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Problemas apanhados — últimos 7 dias', chart:[3,1,2,4,2,0,2],
-  greeting:`Olá AJ. ${ri(60,140)} verificações hoje, 14 problemas apanhados esta semana, um bloqueio (uma ligação quebrada na página de preços da ${rnd(P.co)} — devolvida, corrigida, reverificada). A entrega do site está aprovada com duas notas menores para ti.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Nada chega a um cliente sem passar: ligações, ortografia, regras de marca, números e os fluxos que o cliente vai mesmo clicar.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Nada chega a um cliente sem passar: ligações, ortografia, regras de marca, números e os fluxos que o cliente vai mesmo clicar. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou QA E TESTES, na sala Engenharia. O meu trabalho: testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto. Neste momento: testar o site da ${rnd(P.co)} em telemóvel e computador; corrigir 4 erros do último deploy.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Verifico tudo antes de sair. Pergunta o que apanhei, o que está bloqueado ou se algo está aprovado.`,`Experimenta «o que apanhaste esta semana?», «algo bloqueado?» ou «a entrega está aprovada?».`],
-  chips:['O que apanhaste?','Algo bloqueado?','A entrega está aprovada?'] },
+  fallback:[`Testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'crep', name:'RELATÓRIOS DE CLIENTES', dept:'delivery', desk:[9,6], sit:[9,7], hair:'#6b3410', shirt:'#7dd3fc',
-  role:'Agente de Relatórios de Clientes',
-  tagline:'Escreve todos os relatórios de estado e resultados de clientes a partir dos números do Cérebro — mesmo formato, todos os meses, a horas.',
-  tasks:['Relatório de estado de setembro para {co}','Monthly report pack — {count} clients','A acrescentar a secção de resultados ao relatório da {co}','A fazer o gráfico dos números de leads da {co}','A enviar o relatório da {co} com 2 sinalizações'],
+{ id:'crep', name:'FRONTEND', dept:'delivery', desk:[9,6], sit:[9,7], hair:'#6b3410', shirt:'#7dd3fc',
+  role:'Implementação de interface',
+  tagline:'Implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect.',
+  tasks:['A construir a página inicial do novo projeto','A ligar o formulário ao CRM','A testar responsividade e velocidade','A corrigir erros da última entrega','A publicar o site no domínio do cliente'],
   ev:[
-    {i:'📈', t:()=>`Report ready: ${rnd(P.co)} — ${rnd(['leads up 18%','3 milestones hit','dentro do orçamento e do prazo','one risk flagged'])}`, p:3},
-    {i:'📦', t:()=>`Pacote mensal: ${ri(6,14)}/14 relatórios escritos, controlo de qualidade em curso`, p:2},
-    {i:'📚', t:()=>`Retirei os resultados da ${rnd(P.co)} do Cérebro — registo de números, com data de ontem`, brain:true, p:1},
+    {i:'📋', t:()=>`Página de serviços fiel ao design aprovado — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Otimizar a velocidade da página inicial — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Componentes reutilizáveis da área de clientes — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — otimizar a velocidade da página inicial`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: implementação de interface — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: webflow, playwright — resultado registado`, p:1},
   ],
-  stats:[['Relatórios este mês','14'],['Drafted','9'],['Sent','6'],['Avg pages','4']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Relatórios enviados — últimas 8 semanas', chart:[3,4,2,5,4,3,6,4],
-  greeting:`Bom dia AJ. Pacote de setembro: 9 de 14 relatórios escritos, 6 enviados, o resto no controlo de qualidade. Dois clientes recebem uma sinalização de «vamos falar» este mês — ${rnd(P.co)} (resultados caíram) e ${rnd(P.co)} (âmbito cresceu). O pacote está na tua fila de aprovação.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Escreve todos os relatórios de estado e resultados de clientes a partir dos números do Cérebro — mesmo formato, todos os meses, a horas.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Escreve todos os relatórios de estado e resultados de clientes a partir dos números do Cérebro — mesmo formato, todos os meses, a horas. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou FRONTEND, na sala Engenharia. O meu trabalho: implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect. Neste momento: página de serviços fiel ao design aprovado; otimizar a velocidade da página inicial.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Escrevo os relatórios de clientes. Pergunta o que está assinalado, o que vai num relatório ou onde está o pacote mensal.`,`Experimenta «alguma sinalização este mês?», «o que vai no relatório da ${rnd(P.co)}?» ou «estado do pacote».`],
-  chips:['Alguma sinalização este mês?','Estado do pacote?','O que vai num relatório?'] },
+  fallback:[`Implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'cass', name:'RECURSOS DE CLIENTES', dept:'delivery', desk:[12,6], sit:[12,7], hair:'#141414', shirt:'#bae6fd',
-  role:'Agente de Recursos de Clientes',
-  tagline:'Cada logótipo, ficheiro, exportação e final vive no sítio certo, com o nome certo, sincronizado com o portal do cliente.',
-  tasks:['A sincronizar os recursos da {co} para o portal','A organizar a biblioteca de recursos da {co}','A exportar o conjunto de logótipos em 4 formatos','A arquivar os ficheiros acabados da {co}','A etiquetar {count} recursos por campanha'],
+{ id:'cass', name:'BACKEND E INTEGRAÇÕES', dept:'delivery', desk:[12,6], sit:[12,7], hair:'#141414', shirt:'#bae6fd',
+  role:'Dados, CRM e automações',
+  tagline:'Liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual.',
+  tasks:['A construir a página inicial do novo projeto','A ligar o formulário ao CRM','A testar responsividade e velocidade','A corrigir erros da última entrega','A publicar o site no domínio do cliente'],
   ev:[
-    {i:'🗃', t:()=>`Sincronizei ${ri(8,40)} recursos para o portal da ${rnd(P.co)} — com a nomenclatura e as versões certas`, p:3},
-    {i:'📤', t:()=>`Exportei o conjunto de logótipos da ${rnd(P.co)} — SVG, PNG, PDF, favicon`, p:2},
-    {i:'🧹', t:()=>`Archived ${ri(30,120)} finished files — ${rnd(P.co)} project closed`, p:1},
+    {i:'📋', t:()=>`Ligar os pagamentos Stripe ao projeto ${rnd(P.co)} — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Garantir que cada formulário entra no CRM — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Teste de integração das automações — à espera do OK do proprietário`, p:2, kpi:{id:'projetos',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho a Media — garantir que cada formulário entra no CRM`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: dados, crm e automações — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: stripe, notion — resultado registado`, p:1},
   ],
-  stats:[['Assets managed','2,140'],['Sincronizados hoje',()=>ri(20,80)],['Portais ativos','12'],['Missing files','0']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Recursos sincronizados — últimos 7 dias', chart:[64,48,91,37,72,12,58],
-  greeting:`Olá AJ. 2 140 recursos sob gestão, ${ri(20,80)} sincronizados hoje, zero em falta. A biblioteca da ${rnd(P.co)} está organizada e no portal deles; o conjunto de logótipos da ${rnd(P.co)} saiu em quatro formatos.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Cada logótipo, ficheiro, exportação e final vive no sítio certo, com o nome certo, sincronizado com o portal do cliente.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Cada logótipo, ficheiro, exportação e final vive no sítio certo, com o nome certo, sincronizado com o portal do cliente. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou BACKEND E INTEGRAÇÕES, na sala Engenharia. O meu trabalho: liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual. Neste momento: ligar os pagamentos Stripe ao projeto ${rnd(P.co)}; garantir que cada formulário entra no CRM.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Cuido dos ficheiros dos clientes e dos portais. Pergunta onde está algo, o que sincronizou ou o que está arquivado.`,`Experimenta «onde está o logótipo da ${rnd(P.co)}?», «o que sincronizou hoje?» ou «estado do arquivo».`],
-  chips:['Onde está um ficheiro?','O que sincronizou hoje?','Estado do portal?'] },
+  fallback:[`Liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
-{ id:'dasst', name:'ASSISTENTE DE DESIGN', dept:'delivery', desk:[9,9], sit:[9,10], hair:'#552200', shirt:'#7dd3fc',
-  role:'Assistente de Design',
-  tagline:'Tira ao designer o trabalho de design de rotina — modelos, redimensionamentos, maquetas, folhas de marca — sempre dentro da marca.',
-  tasks:['A escrever os modelos sociais da {co}','A redimensionar os banners da {co} para 6 tamanhos','A fazer a maqueta da landing page da {co}','A preparar a folha de marca da {co}','A desenhar a capa do relatório da {co}'],
+{ id:'dasst', name:'UI E DESIGN SYSTEM', dept:'fin', desk:[9,9], sit:[9,10], hair:'#552200', shirt:'#7dd3fc',
+  role:'Interfaces e componentes',
+  tagline:'Constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita.',
+  tasks:['A escrever os textos de interface','A validar o fluxo de contacto com dados de uso','A entregar as especificações à Engenharia','A definir a estrutura e o design system do novo site','A desenhar a landing page de ${rnd(P.co)}'],
   ev:[
-    {i:'🎨', t:()=>`Entreguei: ${rnd(P.co)} ${rnd(['modelos sociais (6)','conjunto de banners, 6 tamanhos','maqueta da landing page','capa de relatório'])} — segundo o kit de marca`, p:3},
-    {i:'🖼', t:()=>`Maqueta v2 para ${rnd(P.co)} — ${rnd(['herói mais apertado','texto do Cérebro inserido','CTA movido para cima da dobra'])}`, p:2},
-    {i:'📐', t:()=>`Folha de marca preparada para ${rnd(P.co)} — cores, tipografia, espaçamento, fazer/não fazer`, p:1},
+    {i:'📋', t:()=>`Ecrãs do site da ${rnd(P.co)}, computador e telemóvel — em curso · ${ri(20,90)} min`, p:3},
+    {i:'✅', t:()=>`Fechar os componentes do design system — concluído às ${rnd(['8h30','10h','11h15','14h','16h40'])}`},
+    {i:'⏳', t:()=>`Versões responsivas da página de preços — à espera do OK do proprietário`, p:2, kpi:{id:'ecras',n:0.2}},
+    {i:'🤝', t:()=>`Passou o trabalho à Engenharia — fechar os componentes do design system`, p:2},
+    {i:'🧠', t:()=>`Nota escrita no Cérebro: interfaces e componentes — o que ficou decidido e porquê`, brain:true, p:1},
+    {i:'🧰', t:()=>`Ferramentas usadas: canva, webflow — resultado registado`, p:1},
   ],
-  stats:[['Peças esta semana','14'],['Resizes','36'],['Mockups','3'],['QA first-time pass','85%']],
+  stats:[['Tarefas esta semana',()=>ri(8,26)],['Em curso',()=>ri(1,4)],['À tua espera',()=>ri(0,3)],['Tempo médio',()=>ri(6,40)+' min']],
   chartLbl:'Peças de design entregues — últimos 7 dias', chart:[3,2,4,1,3,0,2],
-  greeting:`Olá AJ. 14 peças esta semana — modelos, redimensionamentos, três maquetas — 85% passaram o controlo de qualidade à primeira. A maqueta da landing da ${rnd(P.co)} está em v2 com o texto vindo do Cérebro. A capacidade está apertada esta semana.`,
-  chat:[
-    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Tira ao designer o trabalho de design de rotina — modelos, redimensionamentos, maquetas, folhas de marca — sempre dentro da marca.'] },
-    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Tira ao designer o trabalho de design de rotina — modelos, redimensionamentos, maquetas, folhas de marca — sempre dentro da marca. Trabalho a partir do Cérebro e da caixa do escritório; diz-me o que queres saber.'] },
+  greeting:`Bom dia. Sou UI E DESIGN SYSTEM, na sala Design Lab. O meu trabalho: constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita. Neste momento: ecrãs do site da ${rnd(P.co)}, computador e telemóvel; fechar os componentes do design system.`,  chat:[
+    { k:['secretária','tarefa','trabalho','fila','estado'], r:['Constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita.'] },
+    { k:['ajuda','podes','fazer','ferramenta','como'], r:['Constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita. Trabalho a partir do Cérebro; diz-me o que queres saber.'] },
   ],
-  fallback:[`Faço o trabalho de design de rotina. Pergunta o que foi entregue, o que está em maqueta ou pela capacidade.`,`Experimenta «o que entregaste?», «estado da maqueta» ou «estás muito ocupado?».`],
-  chips:['O que entregaste?','Estado da maqueta?','Estás muito ocupado?'] },
+  fallback:[`Constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita. Pergunta-me pelo que estou a fazer, pelo que está à espera de aprovação ou pelo último resultado.`,`Experimenta «o que estás a fazer?», «o que está à espera?» ou «mostra o último resultado».`],
+  chips:['O que estás a fazer?','O que está à espera de aprovação?','Mostra o último resultado'] },
 
 ];
 export const STATS = { emailsSent:128, drafts:41, reports:9, projects:12, onTrack:11, chats:11, insMkt:3, insOps:5, cpa:41.0, spencer:14, arwin:31, jack:16, managers:5, autoOnb:17, billsPaid:14 };
 export const FILE_GEN = {
-  pros: ()=>({ icon:'⛏', name:'outbound-batch-'+clockStr().replace(':','')+'.csv', meta:'verified prospects · handed to o Líder de Vendas · click to view',
-    content:`company,city,headcount,contact,title,mobile,icp_score\n${rnd(P.co)},${rnd(P.city)},${ri(8,60)},${person()},${rnd(['Diretor Comercial','Sales Manager','GM','Founder'])},verified ✓,${ri(70,94)}\n${rnd(P.co)},${rnd(P.city)},${ri(8,60)},${person()},${rnd(['Sales Manager','Director','Founder'])},verified ✓,${ri(70,94)}\n${rnd(P.co)},${rnd(P.city)},${ri(8,60)},${person()},${rnd(['GM','Diretor Comercial'])},verified ✓,${ri(70,94)}\n…${ri(24,38)} rows · dupes stripped · existing customers excluded` }),
-  iggy: ()=>({ icon:'🎬', name:'reel-script-'+rnd(['10am-rule','40000-calls','switch-story'])+'.md', meta:'draft · awaiting AJ approval · click to view',
-    content:`REEL SCRIPT — 30 sec\n\nHOOK (0–3s, text on frame 1):\n  "chamadas antes das 10h são uma armadilha"\n\nPROOF (3–15s):\n  Our data across 40,000 dials — connect rates\n  nearly DOUBLE between 10:00 and 11:30am.\n  (chart overlay from Graphics Designer)\n\nPAYOFF (15–25s):\n  Stack your call block mid-morning. Protect it\n  like a meeting with your best customer.\n\nCTA (25–30s, soft):\n  "follow for more from our call data"\n\nstatus: queued for AJ — does not post without approval` }),
-  vid: ()=>({ icon:'🎞', name:rnd(['reel-10am-rule-v2','demo-45s','ad-variants-captioned'])+'.mp4', meta:'Render HyperFrames · à espera da aprovação do AJ · clica para ver',
-    content:`RENDER MANIFEST — HyperFrames\n\nsource ......... ${rnd(['reel-10am-rule.html','demo-45s.html','ad-variant-set.html'])}\nduration ....... ${rnd(['30s','45s','60s'])} @ 30fps\nformats ........ 9:16 1080×1920 · 1:1 1080×1080 · 16:9 1920×1080\ncaptions ....... burned in · word-level timing · brand type\naudio .......... VO normalised −14 LUFS · music ducked\n\nrender ......... ${ri(18,42)} min · deterministic (same input → same frames)\nstatus: queued for AJ — does not publish without approval` }),
-  gfx: ()=>({ icon:'🎨', name:rnd(['carousel-10am-rule','ad-variants-retargeting','quote-cards-july'])+'.fig', meta:'design delivery · on brand kit · click to view',
-    content:`DESIGN DELIVERY\n\nbrief: ${rnd(['carrossel de 6 slides para o IG — a Regra das 10h','3 Meta ad variants — same copy, 3 layouts','quote-card set — 4 customer wins'])}\nbriefed by: ${rnd(['INSTAGRAM ORGÂNICO','ANÚNCIOS META','PROPOSTAS'])}\nturnaround: ${ri(2,5)} hours\n\nspecs\n  palette ........ ink #151414 / cream #FDFFF8 + chips\n  type ........... serif display + sans body (brand kit)\n  formats ........ 1080×1350 + 1080×1920 exports\n\nstatus: delivered ✓ · source files in the Brain → Brand Kit` }),
-  piper: ()=>{ const co=rnd(P.co), n=ri(6,28), pl=rnd(P.plan), m=ri(500,2400);
-    return { icon:'📄', name:`proposal-${slug(co)}.pdf`, meta:'proposal draft · awaiting AJ approval · click to view',
-    content:`ÓRBITA — PROPOSAL\nClient: ${co}\nSeats: ${n} · Plan: ${pl} · ${money(m)}/mo (12-mo term, 10% annual disc.)\n\n1. YOUR USE CASE\n   ${co} needs call tracking and coaching across ${n} reps.\n   Current stack loses ~30% of call outcomes to manual logging.\n\n2. PRICING\n   ${n} seats × ${pl} = ${money(m)}/mo · locked for 12 months\n\n3. PROOF\n   Auckland roofing co: 0 → 40 tracked calls/week in 14 days.\n\n4. NEXT STEPS\n   Reply to the cover email or sign online — link included.\n\n— drafted by PROPOSALS in 4 min · pulled pricing + case study from the Brain` };},
-  newt: ()=>({ icon:'✍', name:'newsletter-august-draft.md', meta:'draft v3 · awaiting AJ approval · click to view',
-    content:`SUBJECT A: chamadas antes das 10h são uma armadilha\nSUBJECT B: we looked at 40,000 calls — call at this time\n\n# The 10am Rule\nConnect rates nearly double between 10:00–11:30am.\nWe pulled the (anonymised) numbers across 40,000 dials:\n\n  before 10am ......... 11% connect\n  10:00–11:30 ......... 21% connect\n  after 4pm ........... 9% connect\n\nCustomer story: Harbour City Roofing went 0 → 40 tracked\ncalls/week. One tool tip: pin your top list to the dialler.\n\nCTA (soft): reply "10AM" and we'll send the full breakdown.` }),
-  ada: ()=>{ const sp=ri(600,780);
-    return { icon:'📣', name:'meta-ads-hourly-report.txt', meta:'auto-generated hourly · click to view',
-    content:`META ADS — HOURLY CHECK ${clockStr()}\n─────────────────────────────\nspend today .......... ${money(sp)}\ntrials today ......... ${ri(8,14)}\nblended CPA .......... ${money(Math.round(STATS.cpa))}\n\nBY CREATIVE\n  cold call anxiety ... CPA $29 ↑scale (queued for AJ)\n  40,000 calls ........ CPA $38 hold\n  manager dashboard ... CPA $71 ⚠ fatigued (freq 3.8)\n\nnext check in 60 min · rules: never move budget without AJ` };},
-  riley: ()=>({ icon:'📰', name:'daily-briefing-'+clockStr().replace(':','')+'.md', meta:'6am scan · 47 sources · click to view',
-    content:`DAILY BRIEFING — worth your time (3)\n\n1. CallForge raised prices 8% — customers grumbling on\n   LinkedIn. Window for a comparison campaign. → INTEL\n2. "AI SDR" searches +22% MoM — our messaging doesn't\n   use the phrase anywhere. Positioning gap?\n3. AU voicemail-drop guidance updated — no impact today.\n\nscanned: 47 sources · 6 newsletters · 40 tracked voices\neverything else did not meet the bar.` }),
-  tess: ()=>{ const co=rnd(P.co);
-    return { icon:'🛠', name:`fix-note-${ri(4200,4900)}.md`, meta:'resolved ticket write-up · saved to the Brain · click to view',
-    content:`FIX NOTE — ${co}\nissue: call audio dropping on Bluetooth headsets\ncause: firmware A2DP toggle defaults off after app update\nfix:   Settings → Audio → "Prefer headset codec" ON\ntime to resolve: 6 min · customer confirmed ✓\n\nwritten back to Brain → Troubleshooting — Call Audio\nso Billing, Free Trial and I never solve this twice.` };},
-  bill: ()=>{ const co=rnd(P.co);
-    return { icon:'💳', name:`refund-check-${slug(co)}.txt`, meta:'verification complete · over $500 → needs AJ · click to view',
-    content:`REFUND VERIFICATION — ${co}\namount: ${money(680)}\nreason: double payment across two cards at checkout\n\nchecks\n  txn #1 ......... verified ✓\n  txn #2 ......... verified ✓ (duplicate)\n  account age ..... 14 months, good standing\n  refund history .. none\n\nverdict: legit — released the moment AJ approves.\n(auto-limit is $500; this one is above my authority)` };},
-  tria: ()=>({ icon:'🌱', name:'stalled-trials.csv', meta:'8 rows · re-engagement play running · click to view',
-    content:`company,days_quiet,blocker,play\n${rnd(P.co)},2,no lead import,email+sms step-1\n${rnd(P.co)},3,no lead import,email+sms step-1\n${rnd(P.co)},2,no lead import,email+sms step-1\n${rnd(P.co)},4,stopped after import,→ ONBOARDER\n${rnd(P.co)},2,no lead import,email+sms step-1\n${rnd(P.co)},3,stopped after import,→ ONBOARDER\n${rnd(P.co)},2,no lead import,email+sms step-1\n${rnd(P.co)},5,no number connected,final nudge` }),
-  enzo: ()=>{ const p=person(), co=rnd(P.co);
-    return { icon:'🔍', name:`lead-${slug(p)}.json`, meta:'FullEnrich · 11/14 campos · clica para ver',
-    content:`{\n  "name": "${p}",\n  "company": "${co}",\n  "title": "${rnd(['Diretor Comercial','Sales Manager','Founder','GM'])}",\n  "headcount": ${ri(5,120)},\n  "mobile": "+64 2• ••• •${ri(100,999)}",  // verified ✓\n  "linkedin": "in/${slug(p)}",\n  "city": "${rnd(P.city)}",\n  "score": ${ri(62,94)},\n  "route": "${rnd(['SPENCER (manager+)','ARWIN','JACK'])}",\n  "confidence": "${ri(81,97)}%"\n}` };},
-  lexi: ()=>({ icon:'📞', name:'call-list-arwin-'+clockStr().replace(':','')+'.csv', meta:'freshest first · 6h target · click to view',
-    content:`rank,lead,company,score,age\n1,${person()},${rnd(P.co)},91,4h\n2,${person()},${rnd(P.co)},88,7h\n3,${person()},${rnd(P.co)},84,1d\n4,${person()},${rnd(P.co)},81,1d\n5,${person()},${rnd(P.co)},78,2d\n6,${person()},${rnd(P.co)},74,2d\n…31 rows · 5.6h of calling queued` }),
-  ona: ()=>{ const p=rnd(P.first);
-    return { icon:'📱', name:`sms-thread-${slug(p)}.txt`, meta:'live conversation · reply rate 78% · click to view',
-    content:`[me]  Hey ${p}, AJ's team here 👋 Saw you logged 14 calls\n      on day 1 — love it. Want me to switch on call\n      recording so you can review your best pitches?\n      Takes 30 sec, I'll do it for you.\n[${p}] yes please!\n[me]  Done ✓ It's recording from your next call. One more\n      thing — pin your top list to the dialler and you'll\n      save ~10 min a day. Want the 20-sec walkthrough?\n[${p}] this is great service btw\n[me]  We try 😄` };},
-  scout: ()=>({ icon:'♟', name:'memo-callforge-opportunity.md', meta:'assessment · recommends action this week · click to view',
-    content:`OPPORTUNITY MEMO — CallForge +8% price rise\n\nwhat happened\n  +8% across all plans, no new value added.\n  G2 reviews already flag value-for-money.\n\nrecommended play (2–3 week window)\n  1. comparison landing page ("switching?")\n  2. META ADS: retargeting angle at their audience\n  3. sales talk-track: 12-month price lock\n\nstatus: awaiting AJ's go. META ADS + PROPOSALS briefed.` }),
-  slead: ()=>({ icon:'🧭', name:'routing-report-'+clockStr().replace(':','')+'.md', meta:'queue health snapshot · click to view',
-    content:`SUPPORT ROUTING — SNAPSHOT ${clockStr()}\n\nqueues\n  TECH SUPPORT ... 2 open · avg 6 min\n  BILLING ........ 1 open · avg 4 min\n  FREE TRIAL ..... 3 open · avg 7 min\n\nrouted today: 21 · misroutes: 0\npattern watch: CSV import (5 this week) → Brain article requested\nQA: 41 replies sampled · 1 tone fix suggested` }),
-  alead: ()=>({ icon:'💼', name:'weekly-cash-summary.md', meta:'prepared for AJ · click to view',
-    content:`WEEKLY CASH SUMMARY — prepared by ACCOUNTING LEAD\n\nin\n  collections .......... ahead of last month (DSO 21d, ↓4)\n  invoices issued ....... 38, all clean GST\nout\n  card charges ......... 18/18 matched, no surprises\n  invoice #218 ......... HELD · +${money(350)} over contract rate\n  duplicates blocked .... ${money(340)} saved this week\n\nexceptions: 1 open (unmatched ${money(340)} deposit — tracing)\nmonth-end close: 72% · dentro do prazo for the 1st\nverdict: healthy. one decision waiting: invoice #218.` }),
-  invo: ()=>{ const co=rnd(P.co);
-    return { icon:'🧾', name:`invoice-${slug(co)}-${ri(1040,1090)}.pdf`, meta:'issued + sent · click to view',
-    content:`TAX INVOICE #${ri(1040,1090)}\n${co}\n\n  ${rnd(P.plan)} plan — ${ri(3,20)} seats     ${money(ri(150,1400))}\n  GST (15%)                        included\n  due: 7 days · payment link included\n\nstatus: sent ✓ · reminder sequence armed (day 3 / 10 / 21)\nreason code: renewal · auto-reconciles on payment` };},
-  apay: ()=>({ icon:'📋', name:'invoice-218-audit.md', meta:'rate variance · held for AJ · click to view',
-    content:`INVOICE AUDIT — #218 (design contractor)\n\ninvoiced ......... 14 hrs × $110/hr = ${money(1540)}\ncontract ......... $85/hr · signed 12 Mar\nvariance ......... +${money(350)} ⚠ no signed variation\n\nchecks\n  hours vs brief ....... ✓ matches\n  scope ................ ✓ matches\n  duplicate ............ ✓ clear\n\nrecommendation: HOLD · query the rate before paying\ncard charges this week: 18/18 matched, no surprises` }),
-  recon: ()=>({ icon:'🔗', name:'rec-status-'+clockStr().replace(':','')+'.md', meta:'bank feed status · click to view',
-    content:`RECONCILIATION STATUS — ${clockStr()}\n\nthis week\n  matched .............. 118 transactions\n  auto-match rate ...... 94%\n  stripe payouts ....... 4 split & matched (23 invoices)\n\nopen items (1)\n  ${money(340)} deposit, 36h old — theory: manual transfer\n  for a plan upgrade. INVOICING confirming with customer.\n  escalates to ACCOUNTING LEAD at 48h per rule.` }),
-};
+  elead: ()=>{ const co=rnd(P.co); return { icon:'🧭', name:`plano-de-prioridades-${clockStr().replaceAll(":", "")}.md`, meta:'decisões do dia · aprovações pedidas', content:`ENTREGA — ORBITA DIRECTOR
+sala: Comando · agente: ORBITA DIRECTOR · ${clockStr()}
 
+objetivo
+  Coordena as seis salas da Órbita, distribui o trabalho e mantém toda a operação orientada a resultados: prioridades do dia, tarefas atrasadas, agentes parados e o estado geral da empresa.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, googlecalendar, slack
+
+resultado
+  6 tarefas atribuídas · 2 atrasadas reagendadas · 1 bloco à espera do proprietário
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  imail: ()=>{ const co=rnd(P.co); return { icon:'🗂', name:`quadro-de-tarefas-${clockStr().replaceAll(":", "")}.md`, meta:'tarefas com dono e prazo', content:`ENTREGA — CHEFE DE GABINETE
+sala: Comando · agente: CHEFE DE GABINETE · ${clockStr()}
+
+objetivo
+  Transforma o pedido do proprietário em tarefas concretas, escolhe a sala e o agente certos, marca prazos e avisa quando algo está parado ou fora do prazo.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, slack, googlecalendar
+
+resultado
+  tarefas criadas com responsável · 3 sem dono fechadas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  report: ()=>{ const co=rnd(P.co); return { icon:'📊', name:`relatorio-de-estado-${clockStr().replaceAll(":", "")}.md`, meta:'números do Cérebro · semanal', content:`ENTREGA — ANALISTA DE RESULTADOS
+sala: Comando · agente: ANALISTA DE RESULTADOS · ${clockStr()}
+
+objetivo
+  Escreve o relatório de estado da empresa — vendas, leads, projetos e produtividade — com os números do Cérebro, e diz o que melhorou e o que piorou.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, clarity
+
+resultado
+  vendas, leads, projetos e produtividade, com a variação da semana
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  dash: ()=>{ const co=rnd(P.co); return { icon:'📈', name:`painel-central-spec.md`, meta:'painel central · ligação ao Cérebro', content:`ENTREGA — PAINEL CENTRAL
+sala: Comando · agente: PAINEL CENTRAL · ${clockStr()}
+
+objetivo
+  Constrói e mantém o painel central: leads, propostas, projetos em curso, entregas e vendas, cada bloco ligado a um número do Cérebro.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: clarity, notion
+
+resultado
+  5 blocos · todos com número de origem
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  comply: ()=>{ const co=rnd(P.co); return { icon:'⚖', name:`verificacao-de-permissoes-${clockStr().replaceAll(":", "")}.md`, meta:'aprovações antes de sair', content:`ENTREGA — PERMISSÕES E CONFORMIDADE
+sala: Comando · agente: PERMISSÕES E CONFORMIDADE · ${clockStr()}
+
+objetivo
+  Verifica o que pode sair para fora: consentimento de contactos, limites de abordagem, dados pessoais e aprovação humana antes de qualquer envio ou publicação.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, gmail
+
+resultado
+  4 envios retidos · 2 aprovados pelo proprietário
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  pros: ()=>{ const co=rnd(P.co); return { icon:'⛏', name:`lista-de-leads-${clockStr().replaceAll(":", "")}.csv`, meta:'empresas sem site · pontuadas', content:`ENTREGA — LEAD HUNTER
+sala: Prospeção · agente: LEAD HUNTER · ${clockStr()}
+
+objetivo
+  Procura empresas que precisam de website ou sistema — Google Maps, diretórios públicos e pesquisa web —, analisa a presença digital, elimina duplicados e pontua cada oportunidade.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: territool, apollo, chrome
+
+resultado
+  empresas listadas · duplicados removidos · pontuação 0–100 com a razão
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  enzo: ()=>{ const co=rnd(P.co); return { icon:'🔎', name:`lote-enriquecido-${clockStr().replaceAll(":", "")}.csv`, meta:'decisor, e-mail e telemóvel', content:`ENTREGA — ENRIQUECEDOR
+sala: Prospeção · agente: ENRIQUECEDOR · ${clockStr()}
+
+objetivo
+  Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: fullenrich, apollo
+
+resultado
+  registos completados · 4 retidos por correspondência baixa
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  ilm: ()=>{ const co=rnd(P.co); return { icon:'📥', name:`pedidos-qualificados-${clockStr().replaceAll(":", "")}.md`, meta:'recebidos pelo site · primeira hora', content:`ENTREGA — QUALIFICADOR
+sala: Prospeção · agente: QUALIFICADOR · ${clockStr()}
+
+objetivo
+  Responde a quem chega pelo site ou pelas redes na primeira hora, qualifica a necessidade e marca reunião com o Sales Closer quando há encaixe.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: gmail, googlecalendar
+
+resultado
+  3 reuniões marcadas · 5 pedidos fora do ICP
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  riley: ()=>{ const co=rnd(P.co); return { icon:'📰', name:`nota-de-mercado-${clockStr().replaceAll(":", "")}.md`, meta:'varrimento de 47 fontes', content:`ENTREGA — INTELIGÊNCIA DE MERCADO
+sala: Prospeção · agente: INTELIGÊNCIA DE MERCADO · ${clockStr()}
+
+objetivo
+  Faz o varrimento diário de fontes, tendências e novidades do setor, e entrega três pontos que merecem atenção com a fonte.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: chrome, notion
+
+resultado
+  3 tendências, cada uma com fonte
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  scout: ()=>{ const co=rnd(P.co); return { icon:'♟', name:`analise-competitiva-${clockStr().replaceAll(":", "")}.md`, meta:'preços e posicionamento', content:`ENTREGA — ANÁLISE COMPETITIVA
+sala: Prospeção · agente: ANÁLISE COMPETITIVA · ${clockStr()}
+
+objetivo
+  Acompanha os estúdios e agências concorrentes: preços, portefólio, posicionamento e campanhas, e mantém os argumentos de venda atualizados.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: chrome, notion
+
+resultado
+  3 rivais · 2 argumentos de venda atualizados
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  vmail: ()=>{ const co=rnd(P.co); return { icon:'🔬', name:`diagnostico-de-sites-${clockStr().replaceAll(":", "")}.md`, meta:'presença digital · o que está mal', content:`ENTREGA — AUDITOR DE WEBSITES
+sala: Prospeção · agente: AUDITOR DE WEBSITES · ${clockStr()}
+
+objetivo
+  Abre o site de cada empresa da lista e regista o que está mal: sem HTTPS, lento, não responsivo, sem formulário, desatualizado ou inexistente.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: playwright, chrome
+
+resultado
+  15 sites · HTTPS, velocidade, formulário e responsividade
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  olead: ()=>{ const co=rnd(P.co); return { icon:'🤝', name:`abordagem-e-proposta-${clockStr().replaceAll(":", "")}.md`, meta:'leads quentes · próximo passo com data', content:`ENTREGA — SALES CLOSER
+sala: Vendas · agente: SALES CLOSER · ${clockStr()}
+
+objetivo
+  Transforma leads qualificados em reuniões, propostas e clientes: abordagem personalizada, resposta a objeções, proposta, seguimento e fecho.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: gmail, googlecalendar, pandadoc
+
+resultado
+  6 abordagens · 2 objeções respondidas · 1 proposta em fecho
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  piper: ()=>{ const co=rnd(P.co); return { icon:'📄', name:`proposta-${slug(co)}.pdf`, meta:'três opções · sem desconto', content:`ENTREGA — PROPOSTAS
+sala: Vendas · agente: PROPOSTAS · ${clockStr()}
+
+objetivo
+  Escreve e envia propostas a partir do preçário e dos casos do Cérebro: âmbito, opções, preço, prazo e próximos passos.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: pandadoc, notion
+
+resultado
+  âmbito, preço, prazo e exclusões explícitas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  folo: ()=>{ const co=rnd(P.co); return { icon:'🔁', name:`seguimentos-${clockStr().replaceAll(":", "")}.md`, meta:'conversas paradas retomadas', content:`ENTREGA — SEGUIMENTOS
+sala: Vendas · agente: SEGUIMENTOS · ${clockStr()}
+
+objetivo
+  Retoma conversas paradas: propostas sem resposta, reuniões adiadas, testes terminados e contactos frios autorizados.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: gmail, imessage
+
+resultado
+  propostas seguidas · 1 fechada como perdida, com motivo
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  ona: ()=>{ const co=rnd(P.co); return { icon:'🫱', name:`arranque-de-cliente-${clockStr().replaceAll(":", "")}.md`, meta:'boas-vindas, acessos e expectativas', content:`ENTREGA — RECEÇÃO DE CLIENTES
+sala: Vendas · agente: RECEÇÃO DE CLIENTES · ${clockStr()}
+
+objetivo
+  Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: imessage, gmail
+
+resultado
+  pontos de contacto e data do primeiro resultado
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  legal: ()=>{ const co=rnd(P.co); return { icon:'📜', name:`revisao-de-contrato-${clockStr().replaceAll(":", "")}.md`, meta:'segundo olhar, não parecer jurídico', content:`ENTREGA — CONTRATOS
+sala: Vendas · agente: CONTRATOS · ${clockStr()}
+
+objetivo
+  Lê contratos, propostas aceites e termos de serviço antes de saírem, e assinala cláusulas de risco.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: pandadoc, notion
+
+resultado
+  2 cláusulas assinaladas com o risco explicado
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  cmail: ()=>{ const co=rnd(P.co); return { icon:'✉️', name:`resposta-a-cliente-${clockStr().replaceAll(":", "")}.md`, meta:'âmbito e prazos do Cérebro', content:`ENTREGA — COMUNICAÇÃO COM CLIENTES
+sala: Vendas · agente: COMUNICAÇÃO COM CLIENTES · ${clockStr()}
+
+objetivo
+  Responde aos clientes a partir do Cérebro: âmbito, prazos, resultados e o que não está incluído. Nada fica mais de uma hora sem resposta.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: gmail, slack
+
+resultado
+  respondido dentro de uma hora · sem promessas novas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  gfx: ()=>{ const co=rnd(P.co); return { icon:'🎨', name:`briefing-e-design-system-${clockStr().replaceAll(":", "")}.md`, meta:'estrutura, navegação e identidade', content:`ENTREGA — CREATIVE ARCHITECT
+sala: Design Lab · agente: CREATIVE ARCHITECT · ${clockStr()}
+
+objetivo
+  Lê o briefing do cliente, define estrutura, navegação, identidade visual e design system, e transforma a necessidade comercial num conceito digital defensável.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: canva, notion
+
+resultado
+  problema, público, ação principal e componentes
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  dasst: ()=>{ const co=rnd(P.co); return { icon:'🧩', name:`ecras-${slug(co)}.md`, meta:'computador e telemóvel', content:`ENTREGA — UI E DESIGN SYSTEM
+sala: Design Lab · agente: UI E DESIGN SYSTEM · ${clockStr()}
+
+objetivo
+  Constrói os ecrãs e o design system: grelha, tipografia, componentes, estados e versões responsivas, tudo dentro da identidade da Órbita.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: canva, webflow
+
+resultado
+  grelha, componentes e estados · tudo no kit de marca
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  alead: ()=>{ const co=rnd(P.co); return { icon:'🖼', name:`mockups-${slug(co)}.md`, meta:'apresentação e redes', content:`ENTREGA — DIREÇÃO DE ARTE
+sala: Design Lab · agente: DIREÇÃO DE ARTE · ${clockStr()}
+
+objetivo
+  Cria a camada visual dos projetos: imagens, mockups de website, capas e peças de apresentação coerentes com a identidade premium da Órbita.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: canva, higgsfield
+
+resultado
+  3 formatos por peça · licenças verificadas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  invo: ()=>{ const co=rnd(P.co); return { icon:'🔍', name:`pesquisa-ux-${clockStr().replaceAll(":", "")}.md`, meta:'fluxos, textos e validação', content:`ENTREGA — PESQUISA UX
+sala: Design Lab · agente: PESQUISA UX · ${clockStr()}
+
+objetivo
+  Mapeia o percurso do utilizador, escreve os textos de interface e valida as decisões com dados de uso e sessões gravadas.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, clarity
+
+resultado
+  percurso de contacto + 40 sessões revistas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  dlead: ()=>{ const co=rnd(P.co); return { icon:'🛠', name:`entrega-tecnica-${clockStr().replaceAll(":", "")}.md`, meta:'o que foi construído e o que falta', content:`ENTREGA — SYSTEMS ENGINEER
+sala: Engenharia · agente: SYSTEMS ENGINEER · ${clockStr()}
+
+objetivo
+  Constrói websites e aplicações a partir das especificações aprovadas: frontend, backend, base de dados, integrações, testes e publicação.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: webflow, playwright
+
+resultado
+  frontend, backend e integrações · pronto para QA
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  pco: ()=>{ const co=rnd(P.co); return { icon:'🗓', name:`plano-de-projeto-${slug(co)}.md`, meta:'marcos, datas e capacidade', content:`ENTREGA — GESTOR DE PROJETOS
+sala: Engenharia · agente: GESTOR DE PROJETOS · ${clockStr()}
+
+objetivo
+  Mantém os planos de projeto verdadeiros: marcos, prazos, horas e dependências, e avisa cedo quando algo muda.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, googlecalendar
+
+resultado
+  marcos definidos · dependências e horas por semana
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  qa: ()=>{ const co=rnd(P.co); return { icon:'✅', name:`relatorio-de-testes-${clockStr().replaceAll(":", "")}.md`, meta:'telemóvel, computador e velocidade', content:`ENTREGA — QA E TESTES
+sala: Engenharia · agente: QA E TESTES · ${clockStr()}
+
+objetivo
+  Testa cada entrega antes de sair: ligações, formulários, responsividade, velocidade, acessibilidade e fluxos de compra ou contacto.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: playwright, chrome
+
+resultado
+  verificações feitas · 0 bloqueios · 4 notas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  crep: ()=>{ const co=rnd(P.co); return { icon:'💻', name:`frontend-${slug(co)}.md`, meta:'fiel ao design aprovado', content:`ENTREGA — FRONTEND
+sala: Engenharia · agente: FRONTEND · ${clockStr()}
+
+objetivo
+  Implementa os ecrãs aprovados em código limpo e rápido, fiel ao design system e às especificações do Creative Architect.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: webflow, playwright
+
+resultado
+  componentes reutilizáveis e velocidade medida
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  cass: ()=>{ const co=rnd(P.co); return { icon:'🔌', name:`integracoes-${slug(co)}.md`, meta:'formulários, CRM e pagamentos', content:`ENTREGA — BACKEND E INTEGRAÇÕES
+sala: Engenharia · agente: BACKEND E INTEGRAÇÕES · ${clockStr()}
+
+objetivo
+  Liga formulários, CRM, pagamentos e automações, e garante que cada contacto chega ao sítio certo sem intervenção manual.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: stripe, notion
+
+resultado
+  cada ligação com um teste que prova que funciona
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  apay: ()=>{ const co=rnd(P.co); return { icon:'🚀', name:`checklist-de-deploy-${slug(co)}.md`, meta:'domínio, cópia e monitorização', content:`ENTREGA — DEPLOYS E INFRA
+sala: Engenharia · agente: DEPLOYS E INFRA · ${clockStr()}
+
+objetivo
+  Publica os projetos, configura domínios, cópias de segurança e monitorização, e mantém o que está no ar a funcionar.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: webflow, chrome
+
+resultado
+  publicado depois do OK do QA e do proprietário
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  kmail: ()=>{ const co=rnd(P.co); return { icon:'📚', name:`documentacao-${slug(co)}.md`, meta:'como funciona e como se mantém', content:`ENTREGA — DOCUMENTAÇÃO TÉCNICA
+sala: Engenharia · agente: DOCUMENTAÇÃO TÉCNICA · ${clockStr()}
+
+objetivo
+  Escreve a documentação de cada projeto — como está feito, como se mantém, o que foi decidido — e arquiva-a no Cérebro.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, googledrive
+
+resultado
+  o que é, como se muda, o que não se deve tocar
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  mlead: ()=>{ const co=rnd(P.co); return { icon:'📅', name:`plano-editorial-${clockStr().replaceAll(":", "")}.md`, meta:'objetivo, público e canal', content:`ENTREGA — GROWTH PUBLISHER
+sala: Media · agente: GROWTH PUBLISHER · ${clockStr()}
+
+objetivo
+  Dirige a divulgação da Órbita e dos projetos dos clientes: plano editorial, calendário, canais, orçamento e resultados.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: meta, notion
+
+resultado
+  peças planeadas · uma por dia · aprovação pedida antes de sair
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  newt: ()=>{ const co=rnd(P.co); return { icon:'✍', name:`caso-de-estudo-${slug(co)}.md`, meta:'números reais do Cérebro', content:`ENTREGA — CONTEÚDO E NEWSLETTER
+sala: Media · agente: CONTEÚDO E NEWSLETTER · ${clockStr()}
+
+objetivo
+  Escreve legendas, publicações, casos de estudo e a newsletter mensal, com a voz da Órbita.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: beehiiv, loops
+
+resultado
+  problema, o que fizemos, resultado e citação
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  ada: ()=>{ const co=rnd(P.co); return { icon:'📣', name:`relatorio-meta-${clockStr().replaceAll(":", "")}.md`, meta:'CPA e o que aprendemos', content:`ENTREGA — ANÚNCIOS META
+sala: Media · agente: ANÚNCIOS META · ${clockStr()}
+
+objetivo
+  Corre as campanhas pagas: criativos, públicos, orçamento e otimização, e diz o que escalar, cortar ou corrigir.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: meta
+
+resultado
+  orçamento intocado sem aprovação · um teste de cada vez
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  iggy: ()=>{ const co=rnd(P.co); return { icon:'📱', name:`calendario-social-${clockStr().replaceAll(":", "")}.md`, meta:'Instagram e LinkedIn', content:`ENTREGA — REDES SOCIAIS
+sala: Media · agente: REDES SOCIAIS · ${clockStr()}
+
+objetivo
+  Prepara e agenda publicações para Instagram e LinkedIn, responde a comentários e mensagens dentro do tom da casa.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: meta, canva
+
+resultado
+  publicações prontas · comentários no tom da casa
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  vid: ()=>{ const co=rnd(P.co); return { icon:'🎞', name:`video-${slug(co)}.md`, meta:'demonstração com legendas', content:`ENTREGA — VÍDEO
+sala: Media · agente: VÍDEO · ${clockStr()}
+
+objetivo
+  Produz vídeos curtos e demonstrações dos projetos: guião, montagem, legendas e exportação para cada canal.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: hyperframes
+
+resultado
+  9:16 e 1:1 · gancho nos primeiros 3 s
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  lexi: ()=>{ const co=rnd(P.co); return { icon:'🗒', name:`fila-de-aprovacoes-${clockStr().replaceAll(":", "")}.md`, meta:'o que sai, onde e quando', content:`ENTREGA — CALENDÁRIO EDITORIAL
+sala: Media · agente: CALENDÁRIO EDITORIAL · ${clockStr()}
+
+objetivo
+  Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: notion, googlecalendar
+
+resultado
+  peças prontas · 2 bloqueadas
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+  recon: ()=>{ const co=rnd(P.co); return { icon:'📉', name:`analytics-de-conteudo-${clockStr().replaceAll(":", "")}.md`, meta:'alcance, tráfego e leads', content:`ENTREGA — ANALYTICS DE CONTEÚDO
+sala: Media · agente: ANALYTICS DE CONTEÚDO · ${clockStr()}
+
+objetivo
+  Mede o que o conteúdo traz: alcance, interações, tráfego para o site e leads gerados, e liga cada lead à peça que o trouxe.
+
+o que foi feito
+  · o trabalho do dia, registado passo a passo
+  · ferramentas usadas: clarity, meta
+
+resultado
+  comparação com o período anterior + 1 decisão recomendada
+
+estado: à espera do OK do proprietário antes de sair
+` };},
+};
 // INDUSTRY PROFILE (12 Sep 2026): the fake world + every persona come from the profile in a per-industry demo file. No-op otherwise.
 applyV1({ P, V1, FILE_GEN, clockStr });

@@ -1,7 +1,7 @@
 ---
 name: client-reply
 description: Como respondemos a um e-mail de cliente
-departments: [emails]
+departments: [ops]
 ---
 # Responder a um cliente
 
