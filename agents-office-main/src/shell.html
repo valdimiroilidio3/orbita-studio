@@ -741,6 +741,53 @@
   .tp-team:hover { border-color: var(--ink); color: var(--ink); }
   .tp-team.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
   .tp-team[hidden] { display: none; }
+  /* V4 (25 out 2026) o motor de IA: um botão que diz quem está a responder, e uma gaveta com todos */
+  .tp-ai { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; font-weight: 700; background: none; border: 1px solid var(--hairline); color: var(--grey);
+    border-radius: 99px; padding: 4px 7px; cursor: pointer; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; transition: all .3s var(--ease); }
+  .tp-ai:hover { border-color: var(--ink); color: var(--ink); }
+  .tp-ai.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  .tp-ai.dead { color: #B4391E; border-color: rgba(180,57,30,.45); }
+  .tp-ai.dead::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #B4391E; margin-right: 5px; vertical-align: 1px; }
+  .tp-mode.off { color: #B4391E; border-color: rgba(180,57,30,.45); }
+  #aiPop { position: absolute; z-index: 60; right: 14px; bottom: 96px; width: 372px; max-height: 62vh; overflow: hidden;
+    background: #fff; border: 1px solid var(--ink); border-radius: 14px; box-shadow: 0 22px 60px rgba(21,20,20,.16);
+    display: flex; flex-direction: column; }
+  #aiPop[hidden] { display: none; }
+  .ai-h { display: flex; align-items: baseline; gap: 8px; padding: 11px 13px 8px; border-bottom: 1px solid var(--ink); }
+  .ai-h .lab { font-family: var(--serif); font-size: 17px; letter-spacing: .03em; }
+  .ai-h .now { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; font-weight: 700; text-transform: uppercase; color: #1E9070; }
+  .ai-h .now.dead { color: #B4391E; }
+  .ai-h .sp { flex: 1; }
+  .ai-h button { background: none; border: 1px solid var(--hairline); border-radius: 99px; font-family: var(--ui); font-size: 8.5px;
+    letter-spacing: .12em; font-weight: 700; color: var(--grey); padding: 3px 8px; cursor: pointer; }
+  .ai-h button:hover { border-color: var(--ink); color: var(--ink); }
+  .ai-list { overflow-y: auto; padding: 8px 9px 10px; display: flex; flex-direction: column; gap: 5px; scrollbar-width: thin; }
+  .ai-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 9px; align-items: start; border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 7px 9px; }
+  .ai-row.act { border-color: var(--ink); background: rgba(21,20,20,.03); }
+  .ai-row.dead { opacity: .62; }
+  .ai-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; background: #B4391E; }
+  .ai-row.ok .ai-dot { background: #1E9070; }
+  .ai-n { font-family: var(--ui); font-size: 9.5px; letter-spacing: .1em; font-weight: 700; text-transform: uppercase; color: var(--ink); }
+  .ai-k { font-family: var(--ui); font-size: 7.5px; letter-spacing: .14em; font-weight: 700; color: var(--grey); border: 1px solid var(--hairline);
+    border-radius: 99px; padding: 0 4px; margin-left: 5px; vertical-align: 1px; }
+  .ai-why { font-family: var(--ui); font-size: 9px; line-height: 1.45; color: var(--grey); margin-top: 2px; }
+  .ai-why.bad { color: #B4391E; }
+  .ai-more { font-family: var(--ui); font-size: 9px; line-height: 1.5; color: var(--grey); padding: 8px 13px 11px; border-top: 1px solid var(--hairline); }
+  .ai-more code { font-family: var(--ui); font-size: 9px; background: rgba(21,20,20,.05); border-radius: 4px; padding: 1px 4px; }
+  .ai-bt { display: flex; gap: 4px; align-items: center; }
+  .ai-bt button { background: none; border: 1px solid var(--hairline); border-radius: 99px; font-family: var(--ui); font-size: 8px;
+    letter-spacing: .12em; font-weight: 700; color: var(--grey); padding: 3px 7px; cursor: pointer; white-space: nowrap; }
+  .ai-bt button:hover:not([disabled]) { border-color: var(--ink); color: var(--ink); }
+  .ai-bt button.use { border-color: var(--ink); color: var(--ink); }
+  .ai-bt button[disabled] { opacity: .4; cursor: not-allowed; }
+  .ai-bt .res { font-family: var(--ui); font-size: 8px; letter-spacing: .1em; font-weight: 700; color: #1E9070; }
+  .ai-bt .res.bad { color: #B4391E; }
+  body.dark #aiPop { background: #1E1F24; box-shadow: 0 22px 60px rgba(0,0,0,.6); }
+  body.dark .ai-row.act { background: rgba(236,234,227,.05); }
+  body.dark .ai-more code { background: rgba(236,234,227,.08); }
+  body.dark .tp-ai { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
+  body.dark .tp-ai.on { background: var(--ink); color: var(--cream); }
   .tp-team-chip { font-size: 7.5px; letter-spacing: .12em; font-weight: 700; border: 1px solid var(--ink); color: var(--ink); border-radius: 99px; padding: 0 5px; vertical-align: 1px; }
   .tp-row.piece .tp-t::before { content: '↳ '; color: var(--grey); }
   body.dark .tp-team { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
@@ -1138,6 +1185,7 @@
       <select class="tp-effort" title="quanto esforço aplica: Automático é o nível do próprio modelo; Baixo a Máximo como o Claude Code os designa"></select>
       <button class="tp-rep" title="repetir segundo um horário (ou diz quando: todos os dias úteis às 8h, …)">REPETIR</button>
       <button class="tp-team" title="uma equipa: o líder do departamento divide a tarefa pelas secretárias, trabalham ao mesmo tempo e o líder escreve a versão final (ou diz “em equipa”)">EQUIPA</button>
+      <button class="tp-ai" title="o motor de IA que está a responder — Claude Code, Codex, Gemini ou qualquer API; clica para ver, testar e trocar">IA</button>
       <span class="sp"></span>
       <button class="tp-add">ADICIONAR</button>
     </div>
@@ -1152,6 +1200,14 @@
   <div class="tp-chips"></div>
   <div class="tp-next" hidden></div>
   <div class="tp-rows"></div>
+  <!-- V4: os motores — quem está ligado, quem falta, e um teste real de cada um -->
+  <div id="aiPop" hidden>
+    <div class="ai-h"><span class="lab">Motores</span><span class="now">—</span><span class="sp"></span>
+      <button class="ai-refresh" title="voltar a ver o que está instalado (deteta CLIs e chaves)">REVER</button>
+      <button class="ai-close" title="fechar (Esc)">✕</button></div>
+    <div class="ai-list"></div>
+    <div class="ai-more">Um CLI dá mãos ao agente (ferramentas MCP e Chrome). Uma API responde só com texto — honesto: o agente escreve, não mexe. A escolha fica em <code>data/ai.json</code>; <code>AO_AI</code> ganha-lhe.</div>
+  </div>
 </div>
 <!-- V3.7: the big editor — the task box with room for a brief -->
 <div id="tpBig">

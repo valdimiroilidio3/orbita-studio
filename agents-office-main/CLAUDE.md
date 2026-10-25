@@ -133,6 +133,30 @@ Os agentes só recebem servidores ligados (mais a web quando ativa, mais o naveg
 
 Quando o proprietário diz «em equipa», «põe a equipa nisto», «cria três colegas para…», ou carrega em EQUIPA na barra, o **líder** do departamento assume a tarefa e divide-a em duas a `teams.max` peças independentes nas secretárias cujo `does` ou competências se encaixam; as peças correm ao mesmo tempo, um processo Claude cada; os colegas podem deixar notas de uma linha (`@lider: …`, `@<id>: …`) que chegam ao líder; o líder escreve o resultado final a partir das peças. Esta é a construção própria do escritório da forma (líder · colegas · lista partilhada de peças · notas) a partir de sessões Claude sem interface separadas — as equipas de agentes do próprio Claude Code só nascem num terminal interativo, por isso não são o que corre aqui. Não há nada a escrever para uma tarefa de equipa; é o mesmo plantel, os mesmos briefings e as mesmas competências. Para tornar uma secretária melhor colega, melhora o `does` (o líder divide por ele) e as competências. Uma rotina de equipa é `"team": true` em `routines.json` com o líder como `agent`.
 
+## Os motores de IA (e ligar outro)
+
+O escritório já não assume o Claude Code. `providers.mjs` descreve os motores — `claude-cli`,
+`codex-cli`, `gemini-cli`, `cli` (genérica) e as APIs `anthropic`, `openai`, `openrouter`, `groq`,
+`mistral`, `deepseek`, `xai`, `gemini`, `ollama`, `lmstudio`, `openai-compatible` — e `resolve()`
+escolhe o primeiro que está mesmo utilizável: o pedido em `AO_AI`, depois `data/ai.json` (o que o
+proprietário trocou na gaveta **IA**), depois `office.config.json` → `ai.provider`, depois
+`ai.fallback`, depois os presets. `makeRunner()` faz o turno; `summary()` alimenta `/api/health` e
+`/api/ai`. Lê **[AI.md](AI.md)** antes de mexer nisto.
+
+Regras que não se quebram:
+
+- **Nada é instalado por nós.** Falta o binário ou a chave? O motor sai da lista com uma frase em
+  português a dizer o que falta — nunca um estoiro, nunca um silêncio.
+- **Só o CLI do Claude tem mãos.** `tools: true` é exclusivo de `claude-cli` (MCP + Chrome). Todos os
+  outros devolvem texto e `tools` fica vazio; a UI diz «SÓ TEXTO».
+- **As chaves vivem no ambiente.** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
+  `GROQ_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`, `AO_AI_KEY`.
+  Nunca num ficheiro versionado.
+- **Trocar não reinicia.** `POST /api/ai/switch` valida, grava `data/ai.json` e reconstrói o runner;
+  as tarefas seguintes correm no motor novo. `GET /api/ai?refresh=1` volta a detetar o que existe.
+- **Um motor novo** é um preset em `providers.mjs` (com `kind`, `bin`/`baseUrl`, `model` e `hint`) e
+  uma linha em `AI.md` — mais nada.
+
 ## Tudo o resto
 
 - `npm run check` é o ciclo. Corre-o depois de qualquer alteração ao código; corrige o que estiver a vermelho.

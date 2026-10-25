@@ -50,6 +50,7 @@ import * as onboard from './onboard.mjs';
 import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
+import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
@@ -82,13 +83,13 @@ const refreshSkills = () => { reloadRoster(); const s = loadSkills(BRAIN, AGENTS
 const leadOf = dept => AGENTS.find(a => a.department === dept && a.lead) || AGENTS.find(a => a.department === dept);
 const setupMap = () => Object.fromEntries(DEPT_KEYS.map(k => [k, onboard.isSetUp(AGENTS, skills, k)]));
 
-let backend = 'claude-cli', sdk = null;
-if (process.env.ANTHROPIC_API_KEY) {
-  try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
-    sdk = new Anthropic(); backend = 'anthropic-sdk';
-  } catch (e) { console.warn('SDK não instalado (npm install @anthropic-ai/sdk) — a usar a CLI do Claude:', e.message.split('\n')[0]); }
-}
+/* ---------- o motor de IA (providers.mjs) ----------
+   O escritório já não está preso ao Claude Code: resolve() escolhe, por ordem, o primeiro motor
+   que está realmente utilizável nesta máquina — CLI no PATH ou chave no ambiente. A escolha do
+   proprietário (office.config.json → ai, AO_AI, ou data/ai.json) ganha; o resto é failover. */
+let AI = ai.resolve(cfg, DATA);
+await ai.probe(AI, 900); // os servidores locais (Ollama, LM Studio) só contam se responderem
+let runner = null, backend = AI.active?.id || 'nenhum';
 
 /* ---------- storage ---------- */
 const load = () => { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return []; } };
@@ -118,48 +119,58 @@ function ranOn(mu, want) {
   const fam = normModel(want) || cfg.model;
   return keys.find(k => k.includes(fam)) || keys.filter(k => !/haiku/.test(k)).sort((a, b) => (mu[b].outputTokens || 0) - (mu[a].outputTokens || 0))[0] || keys[0];
 }
-async function askX(system, user, { maxTokens = 4000, tools = true, timeout = RUN_TIMEOUT, model = cfg.model, effort = null } = {}) { // model: sonnet · opus · fable · effort: low…max or null = the model's own (src/models.js)
-  if (sdk) {
-    const res = await sdk.messages.create({ model: modelId(model), max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] });
-    if (res.stop_reason === 'refusal') throw new Error('O Claude recusou este pedido');
-    bumpUsage(res.usage);
-    return { text: res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(), tools: [], usage: res.usage, modelId: res.model };
-  }
-  fs.mkdirSync(CLI_CWD, { recursive: true });
-  const allowed = tools ? mcp.allowedTools() : [];
-  const args = ['-p', user, '--output-format', 'stream-json', '--verbose', '--no-session-persistence', '--system-prompt', system,
-    '--disallowedTools', 'Bash,Edit,Write,Read,Glob,Grep,Agent,NotebookEdit,Task' + (allowed.includes('WebFetch') ? '' : ',WebFetch,WebSearch')];
-  if (allowed.length) args.push('--allowedTools', allowed.join(','));
-  args.push(...(tools ? mcp.cliArgs() : ['--no-chrome'])); // V3.2 (16 Sep): the owner's Chrome, when tools.browser is on
-  args.push(...modelArgs(model, effort));
-  const env = { ...process.env }; delete env.CLAUDECODE; // the CLI refuses to nest inside another Claude Code session
-  return new Promise((resolve, reject) => {
-    const p = spawn('claude', args, { cwd: CLI_CWD, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '', err = '', text = '', used = [], gotResult = false, usageOut = null, modelUsed = null;
-    const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error(`O Claude demorou mais de ${timeout / 1000} s`)); }, timeout);
-    const feed = line => {
-      if (!line.trim()) return;
-      let j; try { j = JSON.parse(line); } catch { return; }
-      if (j.type === 'system' && j.subtype === 'init') mcp.fromInit(j);
-      if (j.type === 'assistant' && j.message?.content) for (const b of j.message.content) if (b.type === 'tool_use' && b.name && !used.includes(b.name)) used.push(b.name);
-      if (j.type === 'result') { gotResult = true; text = String(j.result || '').trim(); if (j.is_error && !text) text = ''; usageOut = j.usage || null; modelUsed = ranOn(j.modelUsage, model); }
-    };
-    p.stdout.on('data', d => { out += d; let i; while ((i = out.indexOf('\n')) >= 0) { feed(out.slice(0, i)); out = out.slice(i + 1); } });
-    p.stderr.on('data', d => { err += d; });
-    p.on('error', e => { clearTimeout(timer); reject(new Error(e.code === 'ENOENT' ? 'O Claude Code não está instalado (claude não encontrado no PATH)' : e.message)); });
-    p.on('close', code => {
-      clearTimeout(timer); feed(out);
-      if (code !== 0 && !gotResult) return reject(new Error(`claude exited ${code}${err ? ': ' + err.trim().slice(0, 300) : ''}`));
-      if (!gotResult) { try { text = String(JSON.parse(out).result || '').trim(); } catch { text = out.trim(); } }
-      bumpUsage(usageOut);
-      resolve({ text, tools: used, usage: usageOut, modelId: modelUsed });
-    });
+/** O Claude Code, com tudo o que já sabia fazer (ferramentas MCP, Chrome, modelo e esforço). */
+function askClaudeCli(d, { system, user, maxTokens = 4000, tools = true, timeout = RUN_TIMEOUT, model = cfg.model, effort = null }) {
+  return ai.askClaudeCli(d, { system, user, maxTokens, tools, timeout, model, effort }, {
+    allowedTools: mcp.allowedTools, modelArgs, ranOn, cliArgs: mcp.cliArgs, fromInit: mcp.fromInit,
   });
 }
+
+function buildRunner() {
+  runner = ai.makeRunner(AI.active, cfg, { askClaudeCli });
+  backend = AI.active?.id || 'nenhum';
+  return runner;
+}
+buildRunner();
+
+// Troca de motor a quente: só aceita um motor que exista e responda; guarda a escolha em
+// data/ai.json (o sítio que ganha ao office.config.json) e reconstrói o runner sem reiniciar.
+async function switchProvider(id) {
+  if (!ai.IDS.includes(id)) return { error: `não conheço o motor "${id}" — os que existem: ${ai.IDS.join(', ')}` };
+  const next = ai.resolve({ ...cfg, ai: { ...(cfg.ai || {}), provider: id } }, DATA);
+  await ai.probe(next, 900);
+  const target = next.candidates.find(c => c.id === id);
+  if (!target) return { error: `não conheço o motor "${id}"`, known: ai.IDS };
+  if (!target.available) return { error: target.reason, refused: true, provider: id };
+  AI = next; buildRunner();
+  try {
+    fs.mkdirSync(DATA, { recursive: true });
+    fs.writeFileSync(path.join(DATA, 'ai.json'), JSON.stringify({ provider: id, at: new Date().toISOString() }, null, 2));
+  } catch (e) { return { warning: 'motor trocado, mas não consegui gravar data/ai.json: ' + e.message, active: describeAi() }; }
+  console.log(`  ia: motor trocado para ${target.label} (${id})`);
+  return { ok: true, active: describeAi() };
+}
+function describeAi() {
+  const a = AI.active;
+  return a ? { id: a.id, label: a.label, model: a.model, tools: !!a.tools } : null;
+}
+
+// askX → { text, tools }: tools = as ferramentas que o agente realmente chamou (só no CLI do
+// Claude). Nos outros motores o texto é a resposta e as ferramentas ficam vazias — é a diferença
+// honesta entre um agente com mãos e um modelo que escreve.
+async function askX(system, user, { maxTokens = 4000, tools = true, timeout = RUN_TIMEOUT, model = cfg.model, effort = null } = {}) {
+  if (!runner) throw new Error('Nenhum motor de IA disponível — vê GET /api/ai');
+  const res = await runner.askX({ system, user, maxTokens, tools, timeout, model, effort });
+  if (res?.usage) bumpUsage(res.usage);
+  return res;
+}
 const ask = async (system, user, opts) => (await askX(system, user, { tools: false, ...opts })).text;
-function parseJSON(text) {
-  const s = text.replace(/```json|```/g, ''); const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  return JSON.parse(s.slice(a, b + 1));
+function parseJSON(text, what = 'a resposta') {
+  const s = String(text ?? '').replace(/```json|```/g, '');
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) throw new Error(`${runner?.label || 'o motor'} não devolveu ${what} em JSON — respondeu: "${s.trim().slice(0, 120) || '(vazio)'}"`);
+  try { return JSON.parse(s.slice(a, b + 1)); }
+  catch (e) { throw new Error(`${runner?.label || 'o motor'} devolveu JSON inválido em ${what} (${e.message}) — respondeu: "${s.trim().slice(0, 120)}"`); }
 }
 
 /* ---------- the brain: graph + context ---------- */
@@ -224,7 +235,7 @@ Pedido do proprietário: "${text}"
 
 ` +
     'Devolve: {"agent":"<id da lista>","title":"<título de tarefa imperativo e limpo, máx. 70 caracteres>","plan":["<passo>","<passo>","<passo>"],"eta_minutes":<inteiro>,"why":"<uma frase curta>","needs_ok":<true se isto implicar enviar, publicar, pagar, apagar ou alterar algo fora desta máquina; false se só ler e relatar>}';
-  const j = parseJSON(await ask(system, user, { maxTokens: 800, timeout: 150000, model: 'sonnet' })); // routing is a one-line JSON job: always Sonnet
+  const j = parseJSON(await ask(system, user, { maxTokens: 800, timeout: 150000, model: 'sonnet' }), 'o encaminhamento'); // routing is a one-line JSON job: always Sonnet
   const valid = AGENTS.find(a => a.id === j.agent && a.department === dept);
   const agent = valid ? valid.id : (AGENTS.find(a => a.department === dept && a.lead) || AGENTS.find(a => a.department === dept)).id;
   return { agent, title: String(j.title || text).slice(0, 90), plan: Array.isArray(j.plan) ? j.plan.slice(0, 4).map(String) : [],
@@ -475,12 +486,42 @@ const server = http.createServer(async (req, res) => {
       const page = fs.readFileSync(HTML, 'utf8');
       return res.end(url.pathname === '/dark' ? page.replace('<body>', '<body class="dark">') : page); // /dark: the same file, opened in dark mode
     }
-    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
-      agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: backend === 'claude-cli', mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
+    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
+      agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
     if (url.pathname === '/api/skills') return json(res, 200, refreshSkills().summary()); // reloads from disk: edit a skill, hit this, see it
     if (url.pathname === '/api/lessons') return json(res, 200, { dir: learn.dir(BRAIN), agents: AGENTS.map(a => ({ id: a.id, name: a.name, ...learn.read(BRAIN, a.id) })).filter(x => x.rules.length || x.oneOffs.length) });
-    if (url.pathname === '/api/mcp') { if (url.searchParams.get('refresh') === '1') await mcp.discover(); else await discovering; return json(res, 200, { ...mcp.summary(), tools: backend === 'claude-cli' }); }
+    if (url.pathname === '/api/mcp') { if (url.searchParams.get('refresh') === '1') await mcp.discover(); else await discovering; return json(res, 200, { ...mcp.summary(), tools: !!runner?.tools }); }
+    // ---- motores de IA: ver, testar e trocar (25 out 2026) ----
+    if (url.pathname === '/api/ai' && req.method === 'GET') {
+      if (url.searchParams.get('refresh') === '1') { AI = ai.resolve(cfg, DATA); await ai.probe(AI, 900); buildRunner(); }
+      return json(res, 200, { ...ai.summary(AI, cfg), activeId: AI.active?.id || null, saved: AI.saved, env: { AO_AI: process.env.AO_AI || null, AO_AI_MODEL: process.env.AO_AI_MODEL || null } });
+    }
+    if (url.pathname === '/api/ai/test' && req.method === 'POST') {
+      const b = await body(req).catch(() => ({}));
+      const id = b.provider || AI.active?.id;
+      const res2 = ai.resolve({ ...cfg, ai: { ...(cfg.ai || {}), provider: id } }, DATA);
+      await ai.probe(res2, 900); // um servidor local pode estar a responder agora
+      const target = res2.candidates.find(c => c.id === id);
+      if (!target) return json(res, 404, { ok: false, error: `não conheço o motor "${id}"`, known: ai.IDS });
+      if (!target.available) return json(res, 400, { ok: false, provider: id, refused: true, error: target.reason });
+      const probe = ai.makeRunner(target, cfg, { askClaudeCli });
+      const t0 = Date.now();
+      try {
+        const r = await probe.askX({
+          system: 'Respondes sempre em português de Portugal, numa frase curta.',
+          user: 'Diz apenas: o motor está ligado.',
+          maxTokens: 40, tools: false, timeout: Math.min(RUN_TIMEOUT, 60000), model: cfg.model,
+        });
+        return json(res, 200, { ok: true, provider: id, label: target.label, model: r.modelId || target.model, ms: Date.now() - t0, text: String(r.text || '').slice(0, 300), tools: r.tools || [] });
+      } catch (e) { return json(res, 502, { ok: false, provider: id, label: target.label, ms: Date.now() - t0, error: e.message }); }
+    }
+    if (url.pathname === '/api/ai/switch' && req.method === 'POST') {
+      const b = await body(req);
+      if (!b.provider) return json(res, 400, { error: 'falta o campo provider' });
+      const out = await switchProvider(String(b.provider));
+      return json(res, out.error ? 400 : 200, { ...out, ai: ai.summary(AI, cfg) });
+    }
     if (url.pathname === '/api/brain') return json(res, 200, graph);
     if (url.pathname === '/api/usage') return json(res, 200, await getUsage(url.searchParams.get('refresh') === '1')); // V3.6: the plan's gauge (never a 500: unavailable is an answer)
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
@@ -583,13 +624,16 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(cfg.port, () => {
   console.log(`Órbita ${version} → http://localhost:${cfg.port}`);
-  console.log(`  empresa: ${cfg.name}   cérebro: ${BRAIN} (${graph.notes} notas, ${graph.links.length} ligações)   claude: ${backend} · ${modelName(cfg.model)}${cfg.effort ? ' · esforço ' + cfg.effort : ''} por omissão (encaminhamento no Sonnet)`);
+  const avail = AI.candidates.filter(c => c.available).map(c => c.label);
+  console.log(`  empresa: ${cfg.name}   cérebro: ${BRAIN} (${graph.notes} notas, ${graph.links.length} ligações)`);
+  console.log(`  ia: ${AI.active ? AI.active.label + ' (' + backend + (AI.active.model ? ' · ' + AI.active.model : '') + ')' : 'NENHUM MOTOR DISPONÍVEL'} · ${modelName(cfg.model)}${cfg.effort ? ' · esforço ' + cfg.effort : ''} por omissão (encaminhamento no Sonnet)`);
+  console.log(`  motores disponíveis: ${avail.length ? avail.join(' · ') : 'nenhum'}${AI.unavailable.length ? '   · indisponíveis: ' + AI.unavailable.slice(0, 3).join(' · ') : ''}`);
   getUsage(true).then(u => console.log(u.source === 'claude' ? `  utilização: sessão ${u.session?.percent ?? '—'}% · semana ${u.week?.percent ?? '—'}% (o teu plano Claude, como o Claude Code o mostra)` : `  utilização: medidor do Claude indisponível (${u.reason}) — a mostrar a contagem do próprio escritório`)).catch(() => {});
   console.log(`  tarefas: ${FILE}   notas escritas pelos agentes: ${NOTES_DIR}`);
   const rl = loadRoutines(); const nx = rl.filter(r => !r.paused && r.nextAt).sort((a, b) => a.nextAt - b.nextAt)[0];
   console.log(`  rotinas: ${rl.length} carregadas${rl.some(r => r.paused) ? ' (' + rl.filter(r => r.paused).length + ' em pausa)' : ''}${nx ? ' · próxima ' + untilText(nx.nextAt) + ' ' + nx.title.toUpperCase() + ' (' + nx.agent + ')' : ''} · ${rlist.path}`);
   setInterval(tickRoutines, 20000); tickRoutines(); // the clock: every 20 s; the first tick catches up anything missed while the office was off (once, marked LATE)
-  console.log(`  agentes: 35 (${roster.customised} personalizados${roster.briefed ? ', ' + roster.briefed + ' com briefing' : ''}${roster.files.length ? ' via ' + roster.files.join(' + ') : ''})   ferramentas: ${backend === 'claude-cli' ? 'servidores MCP ligados' + (cfg.tools?.web === false ? '' : ' + web') + (mcp.browserOn() ? ' + o Chrome do proprietário (' + (mcp.browserState().installed ? 'extensão emparelhada' + (mcp.browserState().device ? ': ' + mcp.browserState().device : '') : 'extensão NÃO emparelhada — corre `claude --chrome` uma vez') + ')' : '') : 'nenhuma no backend API'}`);
+  console.log(`  agentes: 35 (${roster.customised} personalizados${roster.briefed ? ', ' + roster.briefed + ' com briefing' : ''}${roster.files.length ? ' via ' + roster.files.join(' + ') : ''})   ferramentas: ${runner?.tools ? 'servidores MCP ligados' + (cfg.tools?.web === false ? '' : ' + web') + (mcp.browserOn() ? ' + o Chrome do proprietário (' + (mcp.browserState().installed ? 'extensão emparelhada' + (mcp.browserState().device ? ': ' + mcp.browserState().device : '') : 'extensão NÃO emparelhada — corre `claude --chrome` uma vez') + ')' : '') : (AI.active ? 'nenhuma neste motor — ' + AI.active.id + ' devolve texto, não mexe' : 'nenhuma — não há motor de IA')}`);
   console.log(`  equipas: ${TEAMS.enabled ? 'ligadas — EQUIPA na barra ou «em equipa» na frase; o líder divide por até ' + TEAMS.max + ' secretárias' : 'desligadas (teams.enabled em office.config.json)'}`);
   const sk = skills.summary(); const setup = setupMap(); const notYet = DEPT_KEYS.filter(k => !setup[k]);
   console.log(`  competências: ${sk.count} (${sk.shipped} incluídas em skills/, ${sk.brain} em ${path.join(NOTES_DIR, 'skills')})${sk.problems.length ? '   ⚠ ' + sk.problems.length + ' problema' + (sk.problems.length > 1 ? 's' : '') + ' — ver npm run check' : ''}`);

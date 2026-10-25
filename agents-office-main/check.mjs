@@ -457,7 +457,35 @@ else {
   const up = await (async () => { for (let i = 0; i < 40; i++) { try { const r = await fetch(base + '/api/health'); if (r.ok) return await r.json(); } catch {} await new Promise(r => setTimeout(r, 250)); } return null; })();
   if (!up) bad('server: starts', log.trim().split('\n').slice(-2).join(' | ') || 'no health response');
   else {
-    ok('server: starts', `${up.name} · ${up.backend} · brain ${up.notes} notes`);
+    const AI_IDS = (await import('./providers.mjs')).IDS;
+    if (!AI_IDS.includes(up.backend) && up.backend !== 'nenhum') bad('server: starts', `motor desconhecido: ${up.backend}`);
+    ok('server: starts', `${up.name} · ${up.ai ? up.ai.label + ' (' + up.backend + ')' : 'SEM MOTOR'} · brain ${up.notes} notes`);
+    await step('server: /api/ai diz o que está instalado, o que falta e porquê', async () => {
+      const a = await (await fetch(base + '/api/ai')).json();
+      if (!Array.isArray(a.providers) || !a.providers.length) throw new Error('no providers');
+      const okc = a.providers.filter(p => p.available && !p.pending), dead = a.providers.filter(p => !p.available || p.pending);
+      if (dead.some(p => !p.reason)) throw new Error('um motor indisponível sem explicação');
+      if (!!a.active !== (okc.length > 0)) throw new Error('active não bate com os disponíveis');
+      for (const id of AI_IDS) if (!a.providers.some(p => p.id === id)) throw new Error('falta o preset ' + id);
+      return `${a.providers.length} motores · ${okc.length} ligados${okc.length ? ' (' + okc.map(p => p.label).join(' · ') + ')' : ''} · ativo: ${a.active ? a.active.id : 'nenhum'}`;
+    });
+    await step('server: /api/ai/test recusa com uma razão, não com um estoiro', async () => {
+      const a = await (await fetch(base + '/api/ai')).json();
+      const deadOne = a.providers.find(p => !p.available && !p.pending) || a.providers.find(p => p.reason);
+      if (!deadOne) return 'todos disponíveis — nada a recusar';
+      const r = await fetch(base + '/api/ai/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: deadOne.id }) });
+      const j = await r.json();
+      if (j.ok) throw new Error('disse que testou um motor indisponível');
+      if (!j.error) throw new Error('recusou sem dizer porquê');
+      return `${deadOne.id}: ${String(j.error).slice(0, 70)}`;
+    });
+    await step('server: trocar para um motor que não existe é recusado com a lista', async () => {
+      const r = await fetch(base + '/api/ai/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: 'motor-imaginario' }) });
+      const j = await r.json();
+      if (r.status === 200 || j.ok) throw new Error('aceitou um motor que não existe');
+      if (!/motor-imaginario/.test(j.error || '')) throw new Error('não explicou: ' + JSON.stringify(j).slice(0, 120));
+      return 'recusado · ' + String(j.error).slice(0, 60);
+    });
     await step('server: serves the office', async () => { const r = await fetch(base + '/'); const t = await r.text(); if (!/ÓRBITA/.test(t)) throw new Error('html missing'); });
     await step('server: /api/brain has the live graph', async () => { const g = await (await fetch(base + '/api/brain')).json(); if (!g.nodes.length) throw new Error('empty'); return `${g.nodes.length} linked notes`; });
     await step('server: /api/mcp lists this machine\'s connectors', async () => {
@@ -591,7 +619,7 @@ else {
           const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
           const errs = []; page.on('pageerror', e => errs.push(e.message));
           await page.goto(base + '/'); await page.waitForTimeout(3500);
-          const mode = await page.evaluate(() => document.querySelector('.tp-mode').textContent); if (!/LIVE/.test(mode)) throw new Error('panel not live: ' + mode);
+          const mode = await page.evaluate(() => document.querySelector('.tp-mode').textContent); if (!/LIVE|SEM MOTOR/i.test(mode)) throw new Error('panel not live: ' + mode);
           const before = await page.evaluate(() => window.CC.brain.nodes.length);
           const known = await page.evaluate(() => window.CC.tasks.tasks.filter(t => t.live).map(t => t.id));
           await page.click('.tp-dd'); await page.click('.tp-menu button[data-k="marketing"]');

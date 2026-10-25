@@ -20,6 +20,11 @@ export function loadConfig() {
   c.mcp = { allow: [], deny: [], departments: {}, ...(base.mcp || {}), ...(local.mcp || {}) };
   c.tools = { web: true, browser: true, ...(base.tools || {}), ...(local.tools || {}) }; // V3.2 (16 Sep): browser = Claude in Chrome
   c.teams = { enabled: true, max: 4, ...(base.teams || {}), ...(local.teams || {}) }; // V3.2 (16 Sep): Agent Teams
+  // V4 (25 out 2026): `ai` escolhe o motor — provider · fallback · models · providers (ver providers.mjs e AI.md)
+  c.ai = { provider: 'auto', fallback: [], models: {}, providers: {}, ...(base.ai || {}), ...(local.ai || {}) };
+  c.ai.models = { ...(base.ai?.models || {}), ...(local.ai?.models || {}) };
+  c.ai.providers = { ...(base.ai?.providers || {}), ...(local.ai?.providers || {}) };
+  if (process.env.AO_AI) c.ai.provider = process.env.AO_AI;
   if (process.env.AO_NAME) c.name = process.env.AO_NAME;
   if (process.env.AO_BRAIN) c.brain = process.env.AO_BRAIN;
   if (process.env.PORT) c.port = +process.env.PORT;

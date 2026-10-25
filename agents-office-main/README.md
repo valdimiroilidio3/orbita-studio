@@ -111,6 +111,21 @@ Sonnet, Opus ou Fable — por tarefa, por rotina, por agente ou para o escritór
 menu de esforço (Baixo a Máximo). A barra do topo mostra a sessão e a semana do teu plano quando o
 Claude Code as expõe; sem login, mostra a contagem do próprio escritório.
 
+## Integrar outra IA (Codex, Gemini, qualquer API)
+
+O escritório não está preso ao Claude Code. O botão **IA**, ao lado de EQUIPA no painel de tarefas,
+mostra o motor que está a responder; clica e vês todos os que existem nesta máquina — **Claude Code**,
+**Codex**, **Gemini**, uma **CLI personalizada**, e as APIs **Claude, OpenAI, OpenRouter, Groq,
+Mistral, DeepSeek, xAI, Gemini, Ollama e LM Studio**, mais **qualquer endpoint compatível com OpenAI**.
+Cada linha diz se está ligado ou o que lhe falta («`codex` não está no PATH — instala com
+`npm i -g @openai/codex`»), tem **TESTAR** (um turno curto a sério, com o texto e os milissegundos)
+e **USAR** (troca a quente, sem reiniciar).
+
+A diferença é honesta: o **Claude Code** é o único que dá mãos ao agente (ferramentas MCP e Chrome);
+os outros devolvem texto. As chaves vivem no ambiente, nunca em ficheiros. Nada é instalado por ti.
+O detalhe — tabela de motores, `ai.*` no `office.config.json`, ordem de escolha (`AO_AI` →
+`data/ai.json` → `ai.provider` → `ai.fallback`) e as rotas `/api/ai` — está em **[AI.md](AI.md)**.
+
 ## Ensinar os agentes
 
 - **Entrevista**: abre a conversa de um líder e diz `configurar`. Ele faz-te cinco perguntas e
@@ -136,12 +151,16 @@ opcionalmente, `departments`/`agents`) e o procedimento em markdown. As tuas viv
   "model": "sonnet",
   "mcp": { "allow": [], "deny": [], "departments": {} },
   "tools": { "web": true, "browser": true },
-  "teams": { "enabled": true, "max": 4 }
+  "teams": { "enabled": true, "max": 4 },
+  "ai": { "provider": "auto", "fallback": ["claude-cli", "codex-cli", "gemini-cli", "anthropic", "openai"] }
 }
 ```
 
-Variáveis de ambiente: `AO_MODEL` (modelo), `ANTHROPIC_API_KEY` (usa a API em vez da CLI),
-`AO_PORT`. Alterações locais vão para `office.config.local.json` (ignorado pelo git).
+Variáveis de ambiente: `AO_MODEL` (modelo da casa), `AO_PORT`, `AO_AI` (motor de IA: `claude-cli`,
+`codex-cli`, `gemini-cli`, `anthropic`, `openai`, `ollama`, …), `AO_AI_MODEL` (modelo desse motor) e
+as chaves de cada API (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`,
+`MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`, `AO_AI_KEY`). Alterações
+locais vão para `office.config.local.json` (ignorado pelo git). Ver [AI.md](AI.md).
 
 ## API
 
@@ -154,11 +173,14 @@ Variáveis de ambiente: `AO_MODEL` (modelo), `ANTHROPIC_API_KEY` (usa a API em v
 | POST | `/api/tasks/:id/run` · `/revise` · `/approve` · `/reject` | correr, rever, aprovar, rejeitar |
 | GET/POST | `/api/routines` | ler / criar rotinas |
 | POST | `/api/chat` | falar com um agente |
+| GET | `/api/ai` | os motores de IA: o que está ligado, o que falta e porquê |
+| POST | `/api/ai/test` | um turno curto a um motor (`{"provider":"codex-cli"}`) |
+| POST | `/api/ai/switch` | trocar de motor a quente (`{"provider":"anthropic"}`) |
 
 ## Verificação
 
 ```bash
-npm run check         # 34 verificações locais (build, elenco, competências, rotinas, servidor)
+npm run check         # 38 verificações locais (build, elenco, competências, rotinas, servidor)
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```
 
@@ -169,6 +191,7 @@ A única verificação que falha numa máquina sem Chrome instalado é a do nave
 
 ```
 serve.mjs            servidor local + API
+providers.mjs        os motores de IA: CLIs e APIs (ver AI.md)
 src/                 a página: cena 3D, painel, calendário, cérebro
 brain/               as tuas notas (o Cérebro)
 skills/              competências incluídas

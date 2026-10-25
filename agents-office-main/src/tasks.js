@@ -312,6 +312,8 @@ export function initTasks(ctx) {
     rep: panel.querySelector('.tp-rep'), repRow: panel.querySelector('.tp-rep-row'), cad: panel.querySelector('.tp-cad'), at: panel.querySelector('.tp-at'), okc: panel.querySelector('.tp-okc'), next: panel.querySelector('.tp-next'),
     model: panel.querySelector('.tp-model'), effort: panel.querySelector('.tp-effort'),
     bigBtn: panel.querySelector('.tp-big-btn'), team: panel.querySelector('.tp-team'),
+    ai: panel.querySelector('.tp-ai'),
+    aiPop: document.getElementById('aiPop'),
   };
   // V3.7: the box grows with the text (one line at rest, six at most) and the big editor mirrors it
   const big = document.getElementById('tpBig');
@@ -359,6 +361,102 @@ export function initTasks(ctx) {
   const asTeam = text => teamsCfg.enabled && (teamOn || teamIntent(text));
   const leadOf = k => AGENTS.find(x => x.dept === k && x.lead) || AGENTS.filter(x => x.dept === k)[0];
   P_.team.addEventListener('click', () => { teamOn = !teamOn; P_.team.classList.toggle('on', teamOn); updateHint(); if (teamOn) P_.input.focus(); });
+  /* ---------- V4 (25 out 2026) o motor de IA ----------
+     O escritório não está preso a um fornecedor: GET /api/ai diz o que está realmente instalado
+     nesta máquina (CLIs no PATH, chaves no ambiente, servidores locais a responder), o que falta e
+     porquê. Aqui vê-se, testa-se com um turno a sério, e troca-se a quente (POST /api/ai/switch). */
+  const AI_ = { state: null, busy: false };
+  const aiLabel = () => {
+    const a = AI_.state?.active;
+    if (!a) return { text: 'SEM IA', dead: true, title: 'Nenhum motor de IA disponível — clica para ver o que falta' };
+    return { text: String(a.label || a.id).toUpperCase(), dead: false,
+      title: `${a.label} (${a.id}) · ${a.tools ? 'com ferramentas' : 'só texto'} — clica para ver, testar ou trocar de motor` };
+  };
+  function paintAiButton() {
+    if (!P_.ai) return;
+    const l = aiLabel();
+    P_.ai.textContent = l.text; P_.ai.title = l.title;
+    P_.ai.classList.toggle('dead', l.dead);
+  }
+  function aiRowHTML(p) {
+    const act = AI_.state?.active?.id === p.id;
+    const ok = p.available && !p.pending;
+    const why = p.reason && !ok ? `<div class="ai-why ${p.pending ? '' : 'bad'}">${esc(p.reason)}</div>` : '';
+    const kind = p.kind === 'cli' ? 'CLI' : 'API';
+    const bit = p.tools ? `<span class="ai-k" title="o agente recebe ferramentas MCP e o Chrome">FERRAMENTAS</span>` : `<span class="ai-k" title="responde texto: sem ferramentas nem Chrome">SÓ TEXTO</span>`;
+    const res = AI_.state?.tested?.[p.id];
+    const resBit = res ? `<span class="res ${res.ok ? '' : 'bad'}" title="${esc(res.text || res.error || '')}">${res.ok ? 'OK · ' + res.ms + 'ms' : 'FALHOU'}</span>` : '';
+    return `<div class="ai-row ${ok ? 'ok' : 'dead'}${act ? ' act' : ''}" data-prov="${p.id}">
+      <span class="ai-dot"></span>
+      <div><div class="ai-n">${esc(p.label)}<span class="ai-k">${kind}</span>${bit}${act ? '<span class="ai-k">A RESPONDER</span>' : ''}</div>
+      <div class="ai-why">${esc(p.model || 'modelo por omissão')}${p.keyEnv ? ' · ' + esc(p.keyEnv) : ''}${p.baseUrl ? ' · ' + esc(p.baseUrl) : ''}</div>${why}</div>
+      <div class="ai-bt">${resBit}<button data-ai="test" ${ok ? '' : 'disabled'}>TESTAR</button><button class="use" data-ai="use" ${ok && !act ? '' : 'disabled'}>USAR</button></div>
+    </div>`;
+  }
+  function paintAiPop() {
+    if (!P_.aiPop) return;
+    const st = AI_.state;
+    const now = P_.aiPop.querySelector('.now');
+    if (!st) { now.textContent = 'A LER…'; now.classList.remove('dead'); P_.aiPop.querySelector('.ai-list').innerHTML = `<div class="ai-more">a perguntar ao servidor…</div>`; return; }
+    const a = st.active;
+    now.textContent = a ? `AGORA · ${String(a.label).toUpperCase()}${a.tools ? '' : ' · SÓ TEXTO'}` : 'NENHUM MOTOR DISPONÍVEL';
+    now.classList.toggle('dead', !a);
+    P_.aiPop.querySelector('.ai-list').innerHTML = st.providers.map(aiRowHTML).join('');
+  }
+  async function loadAi(refresh = false) {
+    try {
+      const r = await fetch(`${API}/ai${refresh ? '?refresh=1' : ''}`);
+      AI_.state = await r.json();
+      if (AI_.state) AI_.state.tested = AI_.state.tested || {};
+      paintAiButton(); paintAiPop();
+    } catch { AI_.state = null; paintAiButton(); }
+  }
+  async function testAi(id) {
+    AI_.state.tested = { ...(AI_.state?.tested || {}), [id]: { ok: false, ms: 0, text: 'a testar…' } };
+    paintAiPop();
+    const row = P_.aiPop.querySelector(`[data-prov="${id}"] .res`);
+    if (row) row.textContent = 'A TESTAR…';
+    try {
+      const r = await fetch(`${API}/ai/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: id }) });
+      const j = await r.json();
+      AI_.state.tested[id] = { ok: !!j.ok, ms: j.ms || 0, text: j.text || '', error: j.error || '' };
+    } catch (e) { AI_.state.tested[id] = { ok: false, ms: 0, error: e.message }; }
+    paintAiPop();
+  }
+  async function useAi(id) {
+    AI_.state.tested = AI_.state.tested || {};
+    try {
+      const r = await fetch(`${API}/ai/switch`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: id }) });
+      const j = await r.json();
+      if (!r.ok || j.error) { say(`Não troquei: ${esc(j.error || r.status)}`, 'err'); return; }
+      AI_.state.active = j.active;
+      const full = await (await fetch(`${API}/ai`)).json();
+      full.tested = AI_.state.tested;
+      AI_.state = full;
+      paintAiButton(); paintAiPop();
+      const mode = panel.querySelector('.tp-mode');
+      if (mode && j.active) { mode.textContent = 'AO VIVO · ' + String(j.active.label).toUpperCase(); mode.classList.add('live'); mode.classList.remove('off'); }
+      say(`Motor trocado: <b>${esc(j.active?.label || id)}</b>${j.active?.tools ? ' · com ferramentas' : ' · só texto'}. As próximas tarefas correm aqui.`);
+    } catch (e) { say(`Não troquei: ${esc(e.message)}`, 'err'); }
+  }
+  if (P_.ai) {
+    P_.ai.addEventListener('click', () => {
+      const show = P_.aiPop.hasAttribute('hidden');
+      P_.aiPop.toggleAttribute('hidden', !show);
+      P_.ai.classList.toggle('on', show);
+      if (show) loadAi(true);
+    });
+    P_.aiPop.querySelector('.ai-close').addEventListener('click', () => { P_.aiPop.hidden = true; P_.ai.classList.remove('on'); });
+    P_.aiPop.querySelector('.ai-refresh').addEventListener('click', () => loadAi(true));
+    P_.aiPop.addEventListener('click', e => {
+      const b = e.target.closest('button[data-ai]'); if (!b) return;
+      const id = b.closest('[data-prov]')?.dataset.prov;
+      if (!id) return;
+      b.dataset.ai === 'test' ? testAi(id) : useAi(id);
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !P_.aiPop.hidden) { P_.aiPop.hidden = true; P_.ai.classList.remove('on'); } });
+    loadAi();
+  }
   function resetTeam() { teamOn = false; P_.team.classList.remove('on'); }
   const teamBit = t => t.team?.members?.length ? ` · <span class="tp-team-chip">TEAM ${t.team.members.length + 1}</span>` : t.piece ? ' · <span class="tp-team-chip">PIECE</span>' : '';
   const membersText = t => (t.team?.members || []).map(id => agentOf(id)?.name || id).join(', ');
@@ -691,7 +789,18 @@ export function initTasks(ctx) {
       live = true; setOfficeModel(h.model); setOfficeEffort(h.effort);
       if (h.teams) { teamsCfg = { enabled: h.teams.enabled !== false, max: h.teams.max || 4 }; P_.team.hidden = !teamsCfg.enabled; }
       const mode = panel.querySelector('.tp-mode');
-      if (mode) { mode.hidden = false; mode.textContent = 'AO VIVO · ' + (h.backend === 'anthropic-sdk' ? 'API CLAUDE' : 'CLAUDE'); mode.classList.add('live'); mode.title = `${h.name} · ${h.backend} · ${modelName(h.model)} por omissão · brain: ${h.brain}`; }
+      // o selo diz o motor que está mesmo a responder — e se não houver nenhum, diz isso
+      if (mode) {
+        const a = h.ai || null;
+        const name = a ? String(a.label || a.id).toUpperCase() : 'SEM MOTOR';
+        mode.hidden = false;
+        mode.textContent = a ? 'AO VIVO · ' + name : 'SEM MOTOR DE IA';
+        mode.classList.toggle('live', !!a);
+        mode.classList.toggle('off', !a);
+        mode.title = a
+          ? `${h.name} · ${a.label} (${a.id})${a.tools ? ' · com ferramentas' : ' · só texto'} · ${modelName(h.model)} por omissão · brain: ${h.brain}`
+          : `${h.name} · nenhum motor de IA disponível nesta máquina — vê o painel de motores (AI.md)`;
+      }
       if (brain) { try { brain.setGraph(await (await fetch(API + '/brain')).json()); } catch {} }
       const list = await (await fetch(API + '/tasks')).json();
       for (const st of list) {

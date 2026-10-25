@@ -1,0 +1,77 @@
+# Ligar outro motor de IA
+
+O escritório deixou de estar preso ao Claude Code. Fala com qualquer motor que aceite um *system
+prompt*, um pedido, e devolva texto — uma CLI instalada na máquina ou uma API com chave. A
+diferença entre eles é dita sem rodeios: **um CLI dá mãos ao agente** (ferramentas MCP, Chrome,
+ficheiros), **uma API dá-lhe voz** (escreve, não mexe em nada).
+
+Nada é instalado por ti. Se falta o binário ou a chave, o motor aparece como indisponível e a razão
+está escrita em português, na gaveta **IA** do painel de tarefas.
+
+## O que já está ligado
+
+| Motor | Como é chamado | Precisa de |
+|---|---|---|
+| `claude-cli` **Claude Code** | `claude -p … --output-format stream-json` | `npm i -g @anthropic-ai/claude-code` e entrar uma vez |
+| `codex-cli` **Codex** | `codex exec --skip-git-repo-check --model {model} {prompt}` | `npm i -g @openai/codex` e `codex` uma vez |
+| `gemini-cli` **Gemini** | `gemini -p {prompt} --model {model}` | `npm i -g @google/gemini-cli` e `gemini` uma vez |
+| `cli` **CLI personalizada** | o que puseres em `ai.providers.cli` | um binário, `args` com `{prompt}` `{system}` `{model}` |
+| `anthropic` **Claude (API)** | `POST /v1/messages` | `ANTHROPIC_API_KEY` |
+| `openai` · `openrouter` · `groq` · `mistral` · `deepseek` · `xai` · `gemini` | `POST /chat/completions` | `OPENAI_API_KEY` · `OPENROUTER_API_KEY` · `GROQ_API_KEY` · `MISTRAL_API_KEY` · `DEEPSEEK_API_KEY` · `XAI_API_KEY` · `GEMINI_API_KEY` |
+| `ollama` · `lmstudio` **locais** | `POST /chat/completions` em `127.0.0.1` | o servidor local a responder |
+| `openai-compatible` **qualquer endpoint** | `POST /chat/completions` | `baseUrl` + `model` (+ `AO_AI_KEY` se pedir chave) |
+
+As chaves vivem **só** no ambiente. Nada de segredos em ficheiros versionados.
+
+## Ver, testar e trocar
+
+Na barra do painel de tarefas, ao lado de EQUIPA, o botão **IA** diz quem está a responder (ou
+`SEM IA`, a vermelho, quando não há nenhum). Clica: a gaveta lista todos os motores, o que falta a
+cada um, e dois botões por linha — **TESTAR** faz um turno curto a sério e devolve o texto e os
+milissegundos; **USAR** troca a quente, sem reiniciar.
+
+O mesmo por API:
+
+```bash
+curl -s localhost:4520/api/ai        # o que está instalado, o que falta e porquê
+curl -s -X POST localhost:4520/api/ai/test   -H 'content-type: application/json' -d '{"provider":"codex-cli"}'
+curl -s -X POST localhost:4520/api/ai/switch -H 'content-type: application/json' -d '{"provider":"codex-cli"}'
+```
+
+`/api/health` passa a trazer `backend` (o id) e `ai` (o motor ativo); `/api/mcp` e o campo `tools`
+dizem se os agentes recebem ferramentas neste momento.
+
+## Escolher por ficheiro
+
+`office.config.json` (ou `office.config.local.json`, que ganha):
+
+```json
+{
+  "ai": {
+    "provider": "auto",
+    "fallback": ["claude-cli", "codex-cli", "gemini-cli", "anthropic", "openai"],
+    "models": { "openai": "gpt-5.1", "openrouter": "anthropic/claude-sonnet-5" },
+    "providers": {
+      "openai-compatible": {
+        "baseUrl": "https://a-tua-empresa.example/v1",
+        "keyEnv": "A_MINHA_CHAVE",
+        "model": "modelo-da-casa"
+      }
+    }
+  }
+}
+```
+
+A ordem é esta: **`AO_AI`** (ambiente) → **`data/ai.json`** (o que trocaste na UI) → **`ai.provider`**
+→ **`ai.fallback[]`** → os presets. Com `"provider": "auto"`, ganha o primeiro que estiver mesmo
+utilizável nesta máquina. `AO_AI_MODEL` força o modelo de qualquer motor.
+
+Modelos: cada motor tem os seus, mapeados a partir dos nomes da casa (`sonnet`, `opus`, `fable`).
+O `ai.models` do ficheiro de configuração e o `AO_AI_MODEL` sobrepõem-se ao mapa.
+
+## Sem motor nenhum
+
+O escritório abre na mesma — mostra as salas, o Cérebro e as tarefas guardadas — e diz a verdade no
+selo: `SEM MOTOR DE IA`. Uma tarefa nova responde com a razão exata (`Claude Code: 'claude' não está
+no PATH — instala com …`), não com um estoiro. Quando ligares um motor, o botão **REVER** da gaveta
+deteta-o sem reiniciares o servidor.
