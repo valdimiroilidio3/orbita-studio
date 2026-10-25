@@ -955,7 +955,7 @@ function requestApproval(id, ask) {
   if (tasks) tasks.onStuck(id, r.ask);
   syncApprovals();
 }
-// V3.5: a routine's draft is waiting for the owner's OK — the agent stands and waves like any approval; the chat already holds the draft card
+// V3.5: a routine o rascunho está à espera do proprietário's OK — the agent stands and waves like any approval; the chat already holds the draft card
 function setStuckLive(id, ask, sid) {
   const r = R[id]; if (!r) return;
   r.state = 'stuck'; r.ask = ask; r.liveSid = sid; r.warn.visible = true;
