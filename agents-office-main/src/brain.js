@@ -29,107 +29,6 @@ const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 const timeStr = ts => new Date(ts).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 const agentOf = id => AGENTS.find(a => a.id === id);
 
-// a composição da folha, isolada para poder ser desenhada fora do escritório (testes, imagens)
-export function drawBrainSheet(ctx, o) {
-  const { nodes, links, onFloor, pt, ink, dark, PX, PY, notes } = o;
-  const C = o.C ?? PX / 2, CY = o.CY ?? Math.round(PY * 0.447);
-  const P = pt;
-  const darkSheet = !!dark;
-  const rounded = (x, y, w, h, r) => {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  };
-  const tracked = (text, x, y, sp, align = 'left') => {
-    const w = [...text].reduce((s2, ch) => s2 + ctx.measureText(ch).width + sp, 0) - sp;
-    let cx = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
-    for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + sp; }
-  };
-    ctx.clearRect(0, 0, PX, PY);
-    const L = 26, T = 26, R = PX - 26, B = PY - 26, RAD = 36;
-
-    // a folha
-    rounded(L, T, R - L, B - T, RAD);
-    const sheet = ctx.createLinearGradient(0, T, 0, B);
-    if (darkSheet) {
-      sheet.addColorStop(0, 'rgba(46,49,45,.90)'); sheet.addColorStop(.55, 'rgba(26,28,25,.84)'); sheet.addColorStop(1, 'rgba(18,20,18,.88)');
-    } else {
-      sheet.addColorStop(0, 'rgba(255,255,255,.88)'); sheet.addColorStop(.58, 'rgba(252,253,248,.74)'); sheet.addColorStop(1, 'rgba(243,246,238,.82)');
-    }
-    ctx.fillStyle = sheet; ctx.fill();
-
-    // bloom interior, dentro da folha
-    ctx.save(); rounded(L, T, R - L, B - T, RAD); ctx.clip();
-    const bl = ctx.createRadialGradient(C, CY - 6, 30, C, CY - 6, 430);
-    bl.addColorStop(0, darkSheet ? 'rgba(209,222,205,.18)' : 'rgba(86,116,92,.11)');
-    bl.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = bl; ctx.fillRect(L, T, R - L, B - T);
-    ctx.restore();
-
-    // contorno: hairline exterior + brilho interior em cima
-    rounded(L, T, R - L, B - T, RAD);
-    ctx.lineWidth = 2; ctx.strokeStyle = `rgba(${ink},.17)`; ctx.stroke();
-    rounded(L + 3, T + 3, R - L - 6, B - T - 6, RAD - 3);
-    ctx.lineWidth = 2; ctx.strokeStyle = darkSheet ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.85)'; ctx.stroke();
-    // sombra interior em baixo — dá espessura ao vidro
-    ctx.save(); rounded(L, T, R - L, B - T, RAD); ctx.clip();
-    const sh = ctx.createLinearGradient(0, B - 190, 0, B);
-    sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, darkSheet ? 'rgba(0,0,0,.22)' : 'rgba(30,40,32,.07)');
-    ctx.fillStyle = sh; ctx.fillRect(L, B - 190, R - L, 190);
-    ctx.restore();
-
-    // arestas — curvas, hairline; as que tocam num hub ficam um tom mais firmes
-    for (const [a, b] of links) {
-      if (!onFloor(nodes[a]) || !onFloor(nodes[b])) continue;
-      const [x1, y1] = P(nodes[a]), [x2, y2] = P(nodes[b]);
-      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
-      const bow = Math.min(13, len * 0.055);
-      const qx = (x1 + x2) / 2 - (dy / len) * bow, qy = (y1 + y2) / 2 + (dx / len) * bow;
-      const strong = nodes[a].d >= 4 || nodes[b].d >= 4;
-      ctx.strokeStyle = `rgba(${ink},${strong ? .17 : .10})`;
-      ctx.lineWidth = strong ? 1.6 : 1;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(qx, qy, x2, y2); ctx.stroke();
-    }
-
-    // nós — halos nos hubs, pontos nas folhas, verde nos de hoje
-    const drawn = nodes.filter(onFloor).sort((a, b) => a.d - b.d);
-    for (const n of drawn) {
-      const [x, y] = P(n);
-      const r = n.d >= 6 ? 5.6 : n.d >= 4 ? 4.4 : n.d >= 3 ? 3.4 : 2.6;
-      if (n.d >= 4) {
-        const halo = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
-        halo.addColorStop(0, n.fresh ? 'rgba(30,144,112,.28)' : `rgba(${ink},.10)`);
-        halo.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(x, y, r * 5, 0, 7); ctx.fill();
-      }
-      ctx.fillStyle = n.fresh ? '#1E9070' : `rgba(${ink},${n.d >= 4 ? .62 : .38})`;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
-      if (n.d >= 4) { // anel na cor da pasta — a única cor da folha, e com significado
-        ctx.strokeStyle = (GROUP_COL[n.g] || '#B0ADA3');
-        ctx.globalAlpha = n.d >= 6 ? 0.85 : 0.55;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath(); ctx.arc(x, y, r + 4.6, 0, 7); ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // legenda
-    ctx.strokeStyle = `rgba(${ink},.11)`; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(L + 52, B - 96); ctx.lineTo(R - 52, B - 96); ctx.stroke();
-    ctx.fillStyle = '#1E9070'; ctx.beginPath(); ctx.arc(L + 33, B - 58, 5.2, 0, 7); ctx.fill();
-    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    ctx.fillStyle = `rgba(${ink},.74)`; ctx.font = '500 30px Georgia, "Times New Roman", serif';
-    tracked('O Cérebro', L + 52, B - 57, 5.5);
-    ctx.fillStyle = `rgba(${ink},.34)`; ctx.font = '500 19px ui-monospace, Menlo, monospace';
-    tracked('GRAFO DE NOTAS', R - 52, B - 57, 3.6, 'right');
-    ctx.fillStyle = `rgba(${ink},.26)`; ctx.font = '500 17px ui-monospace, Menlo, monospace';
-    tracked(`${notes ?? nodes.length} NOTAS · ${links.length} LIGAÇÕES`, (L + R) / 2, B - 57, 3.2, 'center');
-  }
-
 export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCamera }) {
   /* ---------- data ---------- */
   let nodes = BRAIN.nodes.map((n, i) => ({ ...n, i }));
@@ -151,83 +50,241 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   }
 
 
-  /* ---------- o Cérebro: uma folha de vidro suspensa ----------
-     Passagem «restrição Apple» (25 out 2026). O grafo deixou de ser tinta a flutuar no ar: vive
-     dentro de uma folha de vidro fosco virada para a câmara — hairline, brilho interior em cima,
-     uma bloom radial por trás do desenho, arestas ligeiramente curvas, halo nos nós que mais ligam
-     e uma legenda com letra espaçada ao longo da base. Respira devagar; nada mais se mexe. */
-  const BW = 11.5, BH = 6.9;                 // tamanho da folha no mundo
-  const PX = 1200, PY = 720;                 // tela (5:3)
+  /* ---------- o Cérebro: um orbe de notas, em 3D ----------
+     Segunda passagem (25 out 2026). O grafo é um objecto, não um desenho: os nós são esferas
+     dentro de uma lente — hubs ao centro, notas na superfície —, as arestas são curvas que
+     passam pelo interior do orbe, cada hub leva um anel na cor da pasta e um halo difuso.
+     O orbe roda devagar: é a rotação que dá a profundidade que um desenho plano não tem. */
   const CENTRE = new THREE.Vector3(0, 4.05, 0);
-  const FX = 470, FY = 250;                  // px de tela por unidade do grafo
-  const C = PX / 2, CY = 322;
-  let darkSheet = false;
+  const RAD = 4.2;                       // raio do orbe
+  const LENS = 0.88;                     // achatamento em Z
+  let darkOrb = false;
 
-  let floorPos = new Map(BRAIN.floor.map(([x, y], i) => [i, { x, y }]));
-  // centrar e caber: o layout vem do cofre com folga irregular — a folha exige composição
-  function fitFloor() {
-    const pts = [...floorPos.values()];
-    if (!pts.length) return;
-    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-    const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
-    const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
-    // anisotrópico de propósito: o layout vem de uma projecção e é mais alto que largo;
-    // esticar cada eixo até à margem da folha é o que faz a composição respirar
-    const kx = 1.92 / ((maxx - minx) || 1), ky = 1.32 / ((maxy - miny) || 1);
-    for (const p of pts) { p.x = (p.x - cx) * kx; p.y = (p.y - cy) * ky; }
+  const orb = new THREE.Group();
+  orb.position.copy(CENTRE);
+  orb.rotation.x = -0.16;                // inclinação fixa: o topo mostra o interior
+  orb.userData.dept = 'brain';
+  brainGroup.add(orb);
+  const spin = new THREE.Group();        // o que roda com o tempo
+  orb.add(spin);
+
+  let pos = new Map();                   // índice → Vector3 local ao orbe
+  // O orbe é um arquipélago: cada pasta é um aglomerado na superfície, com o hub no meio e as
+  // notas à volta. As ligações ficam curtas e radiais — é isso que faz ler «cérebro» e não «nuvem».
+  function layout3() {
+    pos = new Map();
+    const folders = [...new Set(nodes.map(n => n.g))];
+    const NF = Math.max(1, folders.length);
+    const GA = Math.PI * (3 - Math.sqrt(5));
+    folders.forEach((f, fi) => {
+      const group = nodes.filter(n => n.g === f);
+      const lat0 = Math.asin(-1 + 2 * ((fi + 0.5) / NF));
+      const lon0 = fi * GA;
+      const d0 = new THREE.Vector3(Math.cos(lat0) * Math.cos(lon0), Math.sin(lat0), Math.cos(lat0) * Math.sin(lon0)).normalize();
+      // dois eixos tangentes ao ponto do aglomerado
+      const up = Math.abs(d0.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const ax = new THREE.Vector3().crossVectors(up, d0).normalize();
+      const ay = new THREE.Vector3().crossVectors(d0, ax).normalize();
+      const hub = group.reduce((best, n) => (n.d > best.d ? n : best), group[0]);
+      group.forEach((n, j) => {
+        const deg = Math.min(1, (n.d || 1) / 8);
+        const rad = RAD * (0.99 - 0.12 * deg);
+        let dir;
+        if (n === hub) dir = d0.clone();
+        else {
+          const k = j + 1;
+          const theta = 0.34 * Math.sqrt(k / group.length) * (0.9 + 0.2 * Math.sin(n.i * 5.3));
+          const phi = k * 2.39996;
+          dir = d0.clone().multiplyScalar(Math.cos(theta))
+            .addScaledVector(ax, Math.sin(theta) * Math.cos(phi))
+            .addScaledVector(ay, Math.sin(theta) * Math.sin(phi)).normalize();
+        }
+        const v = dir.multiplyScalar(rad);
+        v.z *= LENS;
+        pos.set(n.i, v);
+      });
+    });
   }
-  fitFloor();
-  const onFloor = n => floorPos.has(n.i);
-  const FP = n => floorPos.get(n.i);
-  const cv = document.createElement('canvas'); cv.width = PX; cv.height = PY;
-  const ctx = cv.getContext('2d');
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  board.scale.set(BW, BH, 1); board.position.copy(CENTRE); board.renderOrder = 6;
-  board.userData.dept = 'brain';
-  brainGroup.add(board);
-
-  const P = n => { const f = FP(n); return [C + f.x * FX, CY + f.y * FY]; };
-  const _r = new THREE.Vector3(), _u = new THREE.Vector3();
-  const W = n => { // unidade → mundo, no plano da folha (direita e cima da câmara)
-    const f = FP(n) || { x: n.x, y: n.y }; const cam = getCamera();
-    _r.setFromMatrixColumn(cam.matrixWorld, 0).normalize(); _u.setFromMatrixColumn(cam.matrixWorld, 1).normalize();
-    return CENTRE.clone()
-      .addScaledVector(_r, (f.x * FX) * (BW / PX))
-      .addScaledVector(_u, -(f.y * FY) * (BH / PY));
+  layout3();
+  const onFloor = n => pos.has(n.i);
+  const W = n => {                       // posição no mundo (o orbe roda, por isso o mundo muda)
+    const v = pos.get(n.i);
+    if (!v) return CENTRE.clone();
+    spin.updateMatrixWorld(true);
+    return spin.localToWorld(v.clone());
   };
 
-  // a bloom por trás da folha — levanta-a do fundo em vez de a colar lá
+  // texturas suaves: um disco radial branco, tingido pelo material de cada sprite
+  function radialTex(stops) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(64, 64, 1, 64, 64, 62);
+    for (const [at, col] of stops) g.addColorStop(at, col);
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  const haloTex = radialTex([[0, 'rgba(255,255,255,.95)'], [.30, 'rgba(255,255,255,.42)'], [1, 'rgba(255,255,255,0)']]);
+  const coreTex = radialTex([[0, 'rgba(255,255,255,1)'], [.55, 'rgba(255,255,255,.92)'], [.78, 'rgba(255,255,255,.25)'], [1, 'rgba(255,255,255,0)']]);
+
+  // núcleo luminoso: a luz que se vê através do vidro — é isto que dá a sensação de volume
+  const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: haloTex, color: new THREE.Color('#C9DCC4'), transparent: true, opacity: 0.34,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  coreGlow.scale.set(RAD * 1.15, RAD * 1.15, 1);
+  coreGlow.renderOrder = 0; coreGlow.userData.dept = 'brain';
+  spin.add(coreGlow);
+
+  // a lente: uma casca de vidro com orla de Fresnel — só as bordas apanham luz, como uma esfera
+  // de vidro de verdade. É o que dá o volume ao orbe sem o fechar.
+  const shellMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.FrontSide,
+    uniforms: {
+      uRim: { value: new THREE.Color('#9FB79E') },
+      uTint: { value: new THREE.Color('#FFFFFF') },
+      uPow: { value: 2.6 },
+      uOpacity: { value: 1 },
+      uDark: { value: 0 },
+    },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vV;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uRim; uniform vec3 uTint; uniform float uPow; uniform float uOpacity; uniform float uDark;
+      varying vec3 vN; varying vec3 vV;
+      void main() {
+        float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPow);
+        // uma luz suave a vir de cima, como nas lentes da Apple
+        float top = clamp(vN.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 col = mix(uTint, uRim, 0.55) * (0.35 + 0.65 * top);
+        float a = (f * 0.55 + f * f * 0.45) * uOpacity * (uDark > 0.5 ? 0.85 : 0.65);
+        gl_FragColor = vec4(col, a);
+      }`,
+  });
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(RAD * 1.005, 64, 40), shellMat);
+  shell.userData.dept = 'brain'; shell.renderOrder = 7;
+  orb.add(shell);
+  // e uma segunda casca por dentro, muito ténue, para o interior não ficar vazio
+  const shellIn = new THREE.Mesh(
+    new THREE.SphereGeometry(RAD * 0.86, 40, 26),
+    new THREE.MeshBasicMaterial({ color: '#D8E4D4', transparent: true, opacity: 0.035, side: THREE.BackSide, depthWrite: false })
+  );
+  shellIn.userData.dept = 'brain'; shellIn.renderOrder = 1;
+  orb.add(shellIn);
+
+  // o halo por trás do orbe: o objecto acende a relva em vez de a cobrir
   const bloomTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-    const g = x.createRadialGradient(128, 128, 8, 128, 128, 126);
-    g.addColorStop(0, 'rgba(210,224,206,.85)'); g.addColorStop(.45, 'rgba(198,214,194,.30)'); g.addColorStop(1, 'rgba(198,214,194,0)');
+    const g = x.createRadialGradient(128, 128, 6, 128, 128, 126);
+    g.addColorStop(0, 'rgba(214,228,210,.90)'); g.addColorStop(.42, 'rgba(198,214,194,.26)'); g.addColorStop(1, 'rgba(198,214,194,0)');
     x.fillStyle = g; x.fillRect(0, 0, 256, 256);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   })();
-  const bloom = new THREE.Sprite(new THREE.SpriteMaterial({ map: bloomTex, transparent: true, opacity: 0.30, depthWrite: false, blending: THREE.AdditiveBlending }));
-  bloom.scale.set(BW * 1.85, BH * 2.05, 1); bloom.position.copy(CENTRE).add(new THREE.Vector3(0, -0.1, -0.05));
-  bloom.renderOrder = 2; bloom.userData.dept = 'brain';
+  const bloom = new THREE.Sprite(new THREE.SpriteMaterial({ map: bloomTex, transparent: true, opacity: 0.26, depthWrite: false, blending: THREE.AdditiveBlending }));
+  bloom.scale.set(RAD * 3.1, RAD * 3.1, 1); bloom.position.copy(CENTRE);
+  bloom.renderOrder = 0; bloom.userData.dept = 'brain';
   brainGroup.add(bloom);
 
-  // o anel de luz na base — o «stand» do objecto
+  // dois anéis de luz na relva — o «stand» do objecto
   const ring = new THREE.Mesh(
-    new THREE.RingGeometry(3.34, 3.44, 128),
-    new THREE.MeshBasicMaterial({ color: '#8FA98F', transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })
+    new THREE.RingGeometry(RAD * 1.02, RAD * 1.05, 128),
+    new THREE.MeshBasicMaterial({ color: '#8FA98F', transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false })
   );
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; ring.renderOrder = 3; ring.userData.dept = 'brain';
   brainGroup.add(ring);
   const ring2 = new THREE.Mesh(
-    new THREE.RingGeometry(4.5, 4.53, 128),
-    new THREE.MeshBasicMaterial({ color: '#A9BBA8', transparent: true, opacity: 0.20, side: THREE.DoubleSide, depthWrite: false })
+    new THREE.RingGeometry(RAD * 1.36, RAD * 1.385, 128),
+    new THREE.MeshBasicMaterial({ color: '#A9BBA8', transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })
   );
   ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.15; ring2.renderOrder = 3; ring2.userData.dept = 'brain';
   brainGroup.add(ring2);
 
-  function etch() {
-    drawBrainSheet(ctx, { nodes, links, onFloor, pt: P, ink: INK, dark: darkSheet, PX, PY, C, CY, notes: state.notes });
-    tex.needsUpdate = true;
+  let nodeVis = [];
+  function clearGroup(g) {
+    if (g === spin) nodeVis = [];
+    for (const o of [...g.children]) {
+      g.remove(o);
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map && o.material.map !== haloTex && o.material.map !== coreTex) o.material.map.dispose(); o.material.dispose(); }
+    }
   }
+
+  function buildOrb() {
+    clearGroup(spin);
+    const inkCol = new THREE.Color(darkOrb ? '#ECEADF' : '#1B1A18');
+    const edgeCol = new THREE.Color(darkOrb ? '#CBD3C8' : '#6F776E');
+
+    // ── arestas: curvas que passam pelo interior do orbe. Curta = firme, longa = quase sussurro
+    const near = [], mid_ = [], far = [];
+    const CEN = CENTRE.clone();
+    for (const [a, b] of links) {
+      const pa = pos.get(a), pb = pos.get(b);
+      if (!pa || !pb) continue;
+      const len = pa.distanceTo(pb) / (RAD * 2);          // 0 … 1
+      // o arco abraça a superfície em vez de mergulhar no centro: sem o nó de aranhas ao meio
+      const mid = pa.clone().add(pb).multiplyScalar(0.5).sub(CEN);
+      if (mid.lengthSq() < 1e-6) mid.set(0, 1, 0);
+      mid.normalize().multiplyScalar(RAD * 1.02).add(CEN);
+      const curve = new THREE.QuadraticBezierCurve3(pa, mid, pb);
+      const pts = curve.getPoints(16);
+      const target = len < 0.30 ? near : len < 0.62 ? mid_ : far;
+      for (let i = 0; i < pts.length - 1; i++) target.push(pts[i], pts[i + 1]);
+    }
+    const k0 = darkOrb ? 1.0 : 1.0;
+    for (const [pts, op, order] of [[near, (darkOrb ? 0.42 : 0.34) * k0, 3], [mid_, darkOrb ? 0.20 : 0.16, 2], [far, darkOrb ? 0.09 : 0.07, 1]]) {
+      if (!pts.length) continue;
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: edgeCol, transparent: true, opacity: op, depthWrite: false });
+      const ls = new THREE.LineSegments(geo, mat);
+      ls.renderOrder = order; ls.userData.dept = 'brain';
+      spin.add(ls);
+    }
+
+    // ── nós: halo difuso + núcleo + anel na cor da pasta para os hubs
+    const sorted = nodes.filter(onFloor).sort((x, y) => x.d - y.d);
+    for (const n of sorted) {
+      const p = pos.get(n.i);
+      const deg = Math.min(1, (n.d || 1) / 8);
+      const col = new THREE.Color(n.fresh ? '#1E9070' : (GROUP_COL[n.g] || '#B0ADA3'));
+
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: haloTex, color: col, transparent: true,
+        opacity: (n.d >= 6 ? 0.44 : n.d >= 4 ? 0.30 : 0.14) * (darkOrb ? 1.15 : 1),
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      const hs = 0.85 + deg * 0.95;
+      halo.scale.set(hs, hs, 1); halo.position.copy(p); halo.renderOrder = 5;
+      halo.userData.dept = 'brain'; spin.add(halo);
+
+      const neutral = GROUP_COL[n.g] === '#B0ADA3';
+      const core = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: coreTex, color: n.fresh ? new THREE.Color('#1E9070') : (n.d >= 4 && !neutral ? col : inkCol),
+        transparent: true, opacity: n.d >= 4 ? 0.95 : 0.78, depthWrite: false,
+      }));
+      const cs = 0.34 + deg * 0.40;
+      core.scale.set(cs, cs, 1); core.position.copy(p); core.renderOrder = 6;
+      core.userData.dept = 'brain'; spin.add(core);
+
+      let torus = null;
+      const neutralRing = GROUP_COL[n.g] === '#B0ADA3';
+      if (n.d >= 3) { // anel 3D: cada um numa inclinação própria, para ler como órbita
+        const ringGeo = new THREE.TorusGeometry(0.34 + deg * 0.30, 0.016, 8, 56);
+        const ringMat = new THREE.MeshBasicMaterial({ color: neutralRing ? new THREE.Color('#8C8A82') : col, transparent: true, opacity: n.d >= 4 ? 0.72 : 0.4, depthWrite: false });
+        torus = new THREE.Mesh(ringGeo, ringMat);
+        torus.position.copy(p);
+        torus.rotation.set(1.1 + n.i * 0.7, n.i * 0.9, 0.5 + n.i * 0.35);
+        torus.renderOrder = 4; torus.userData.dept = 'brain';
+        spin.add(torus);
+      }
+      nodeVis.push({ p, halo, core, torus, hOp: (n.d >= 6 ? 0.44 : n.d >= 4 ? 0.30 : 0.14), cOp: n.d >= 4 ? 0.95 : 0.72, tOp: torus ? torus.material.opacity : 0 });
+    }
+  }
+  function etch() { buildOrb(); }
   etch();
   const pulses = [];
   let nextPulse = performance.now() + 2500;
@@ -287,9 +344,12 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     if (byId.has(id)) { glint(nodes[byId.get(id)]); return; }
     const ang = Math.random() * Math.PI * 2, dist = 0.10 + Math.random() * 0.06;
     const n = { id, g: folder, d: 1, x: Math.max(-0.95, Math.min(0.95, hub.x + Math.cos(ang) * dist)), y: Math.max(-0.95, Math.min(0.95, hub.y + Math.sin(ang) * dist)), i: nodes.length, fresh: true };
-    const hf = FP(hub) || { x: hub.x, y: hub.y };
-    floorPos.set(n.i, { x: Math.max(-0.98, Math.min(0.98, hf.x + Math.cos(ang) * 0.09)), y: Math.max(-0.98, Math.min(0.98, hf.y + Math.sin(ang) * 0.09)) });
     nodes.push(n); byId.set(id, n.i); adj.push(new Set([hub.i])); adj[hub.i].add(n.i); links.push([hub.i, n.i]); hub.d++;
+    layout3();
+    { // a nota nova nasce colada ao hub dela, não no sítio que a espiral lhe deu
+      const hv = pos.get(hub.i), nv = pos.get(n.i);
+      if (hv && nv) nv.copy(hv).add(new THREE.Vector3(Math.cos(ang) * 0.62, Math.sin(ang) * 0.45, Math.cos(ang * 1.7) * 0.55));
+    }
     state.notes++; state.newToday++;
     state.written.set(id, { agent: a.name, task: title, ts: Date.now() });
     etch(); glint(n);
@@ -303,8 +363,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     links = g.links.map(([a, b]) => [a, b]);
     adj = nodes.map(() => new Set()); for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
     byId = new Map(nodes.map(n => [n.id, n.i])); hubs = nodes.slice(0, 8);
-    floorPos = new Map((g.floor || []).map(([x, y], i) => [i, { x, y }]));
-    fitFloor();
+    layout3();
     state.notes = g.notes; sel = null;
     etch(); updateStrip();
   }
@@ -316,18 +375,34 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     state.lastRead = { note: name, agent: a.name, ts: Date.now() }; state.reads.set(name, { agent: a.name, ts: Date.now() });
     updateStrip();
   }
+  let lastSpin = performance.now();
   function tick(now) {
-    // a folha respira: 0,4 % de escala e 6 cm de deriva — o suficiente para se ler como objecto
-    const br = 1 + Math.sin(now / 2600) * 0.004;
-    board.scale.set(BW * br, BH * br, 1);
-    board.position.y = CENTRE.y + Math.sin(now / 3400) * 0.06;
-    bloom.position.y = CENTRE.y - 0.1 + Math.sin(now / 3400) * 0.06;
+    // o orbe roda devagar — uma volta a cada ~62 s, com um balanço lateral quase imperceptível
+    const dt = Math.min(0.06, (now - lastSpin) / 1000); lastSpin = now;
+    spin.rotation.y += dt * 0.101;
+    orb.rotation.z = Math.sin(now / 11000) * 0.03;
+    orb.position.y = CENTRE.y + Math.sin(now / 5200) * 0.05;
+
+    // profundidade: quem está atrás esbate-se. Sem isto o orbe lê-se plano.
+    if (nodeVis.length) {
+      const cam = getCamera();
+      const cz = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 2).normalize();   // eixo para a câmara
+      spin.updateMatrixWorld(true);
+      for (const v of nodeVis) {
+        const wp = v.p.clone().applyMatrix4(spin.matrixWorld).sub(CENTRE);
+        const t = THREE.MathUtils.clamp(wp.dot(cz) / (RAD * LENS), -1, 1);   // −1 (fundo) … 1 (frente)
+        const k = 0.42 + 0.58 * ((t + 1) / 2);
+        v.halo.material.opacity = v.hOp * (0.45 + 0.55 * k) * (darkOrb ? 1.15 : 1);
+        v.core.material.opacity = v.cOp * (0.55 + 0.45 * k);
+        if (v.torus) v.torus.material.opacity = v.tOp * (0.35 + 0.65 * k);
+      }
+    }
     if (now > nextPulse && !quiet) { flatPulse(nodes[0]); nextPulse = now + 6000; } // o brilho de 6 s no hub maior (só demonstração)
     for (let i = pulses.length - 1; i >= 0; i--) {
       const p = pulses[i], k = (now - p.born) / 2000;
       if (k >= 1) { scene.remove(p.m); p.m.material.dispose(); pulses.splice(i, 1); continue; }
       const a = Math.sin(k * Math.PI);
-      p.m.material.opacity = 0.55 * a; const r = (0.5 + 0.75 * k) * BW / 130 * 4; p.m.scale.set(r, r, 1);
+      p.m.material.opacity = 0.55 * a; const r = 0.9 + 2.4 * k; p.m.scale.set(r, r, 1);
     }
     for (let i = labels.length - 1; i >= 0; i--) {
       const l = labels[i], k = (now - l.born) / 2600;
@@ -459,10 +534,15 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
 
   function setTheme(dark) {
     INK = dark ? '236,234,227' : '21,20,20';
-    darkSheet = !!dark;
-    bloom.material.opacity = dark ? 0.16 : 0.30;
-    ring.material.opacity = dark ? 0.55 : 0.42;
-    ring2.material.opacity = dark ? 0.28 : 0.20;
+    darkOrb = !!dark;
+    bloom.material.opacity = dark ? 0.14 : 0.26;
+    ring.material.opacity = dark ? 0.5 : 0.34;
+    ring2.material.opacity = dark ? 0.24 : 0.16;
+    coreGlow.material.opacity = dark ? 0.24 : 0.34;
+    eqMat.opacity = dark ? 0.2 : 0.16;
+    coreGlow.material.color.set(dark ? '#A9C2A4' : '#C9DCC4');
+    shellMat.uniforms.uDark.value = dark ? 1 : 0;
+    shellMat.uniforms.uRim.value.set(dark ? '#B9CBB4' : '#9FB79E');
     etch();
   }
   return { read, readNote, write, setGraph, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow, state, get nodes() { return nodes; }, get links() { return links; } };
