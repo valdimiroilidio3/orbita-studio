@@ -1,7 +1,7 @@
 // v1 data extracted VERBATIM from command-centre.html (lines 646-666, 671-1095, 2176, 2975-3021).
 import { applyV1 } from './profile.js';
 // Do not hand-edit agent content here — it is the single source of truth shared with v1.
-export const clockStr = () => new Date().toLocaleTimeString("en-NZ",{hour:"2-digit",minute:"2-digit",hour12:false});
+export const clockStr = () => new Date().toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit",hour12:false}); // 24 horas
 export const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-");
 export const P = {
   first:['Sarah','Mike','Priya','Tom','Aroha','Ben','Chloe','Dev','Emma','Finn','Grace','Hemi','Isla','Jake','Kiri','Liam','Mia','Nikau','Olivia','Pete','Ruby','Sam','Tane','Zoe','Harper','Josh','Nina','Ravi','Sofia','Callum'],

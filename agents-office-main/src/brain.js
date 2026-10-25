@@ -10,6 +10,7 @@ import { BRAIN as BRAIN0 } from './braingraph.js';
 import { PROFILE } from './profile.js';
 const BRAIN = (PROFILE && PROFILE.graph && PROFILE.graph.nodes && PROFILE.graph.nodes.length) ? PROFILE.graph : BRAIN0; // INDUSTRY PROFILE: the demo company's own graph
 import { AGENTS } from './data.js';
+import { fmtTime } from './time.js';
 
 const GROUP_COL = {
   '40-Marketing': '#E69393', '50-Products': '#98A5EF', '60-Sales': '#EADC8F', '70-Delivery': '#8FD3F4',
@@ -26,7 +27,7 @@ const DEPT_FOLDERS = {
 let INK = '21,20,20'; // dark mode swaps this for the cream ink (setTheme)
 const GREEN = '#1E9070';
 const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42);
-const timeStr = ts => new Date(ts).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+const timeStr = ts => fmtTime(ts); // 24 horas, sempre (src/time.js)
 const agentOf = id => AGENTS.find(a => a.id === id);
 
 export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCamera }) {

@@ -11,6 +11,8 @@ import {
   makeRoomWalls,
 } from './builders.js';
 import { initMcp } from './mcp.js';
+import { fmtClock } from './time.js'; // 24 horas, sempre
+import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
 import { initBrain } from './brain.js';
@@ -1340,7 +1342,7 @@ function tickLOD() {
 function tickClock() {
   const d = new Date();
   document.getElementById('clock').textContent =
-    d.toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    fmtClock(d); // 13:05:42 — 24 horas, sempre
 }
 setInterval(tickClock, 1000); tickClock();
 
@@ -1389,6 +1391,7 @@ tasks = initTasks({
   getFocused: () => focused, getZoom: () => view.zoom, getFocusDim: () => focusDim,
   toScreen: (p) => toScreen(p), reframe,
 });
+initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
 view.target.set(...overviewPos());
 addEventListener('resize', () => { if (!focused && !tween && !HERO) view.target.set(...overviewPos()); });
 const hero = HERO ? initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_KEYS, view, camera, spawnEmote, isBusy: () => !!focused || !!tween || !!drag }) : null;

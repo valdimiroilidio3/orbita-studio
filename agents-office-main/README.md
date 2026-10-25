@@ -111,7 +111,22 @@ Sonnet, Opus ou Fable — por tarefa, por rotina, por agente ou para o escritór
 menu de esforço (Baixo a Máximo). A barra do topo mostra a sessão e a semana do teu plano quando o
 Claude Code as expõe; sem login, mostra a contagem do próprio escritório.
 
-## Integrar outra IA (Codex, Gemini, qualquer API)
+## Pesquisa real: leads da Google
+
+O botão **◈ LEADS**, na barra do topo, procura empresas **verdadeiras** na Google Places API (New):
+nome, morada, telefone, site, avaliação e link do mapa, com uma nota de oportunidade explicada
+(sem site pesa muito). Escreve «clínicas dentárias» e «Lisboa», prime PROCURAR — o que aparece fica
+guardado em `data/leads.json`, sem duplicados. **→ TAREFA** transforma os melhores numa tarefa para
+o Lead Hunter.
+
+A **Prospeção** e as **Vendas** leem os oito melhores leads por contactar no início de cada tarefa e
+escrevem com nomes e cidades reais — sem inventar contactos. Enviar continua a exigir o teu OK.
+
+Precisa de uma chave: `GOOGLE_MAPS_API_KEY` (leads) e, se quiseres pesquisa web com o Programmable
+Search, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`. Sem chave o escritório diz exatamente o que falta — não
+inventa resultados. Guia completo, quotas e cuidados em **[PESQUISA.md](PESQUISA.md)**.
+
+## Integrar outra IA (Codex, Antigravity, qualquer API)
 
 O escritório não está preso ao Claude Code. O botão **IA**, ao lado de EQUIPA no painel de tarefas,
 mostra o motor que está a responder; clica e vês todos os que existem nesta máquina — **Claude Code**,
@@ -159,8 +174,12 @@ opcionalmente, `departments`/`agents`) e o procedimento em markdown. As tuas viv
 Variáveis de ambiente: `AO_MODEL` (modelo da casa), `AO_PORT`, `AO_AI` (motor de IA: `claude-cli`,
 `codex-cli`, `gemini-cli`, `anthropic`, `openai`, `ollama`, …), `AO_AI_MODEL` (modelo desse motor) e
 as chaves de cada API (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`,
-`MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`, `AO_AI_KEY`). Alterações
-locais vão para `office.config.local.json` (ignorado pelo git). Ver [AI.md](AI.md).
+`MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`, `AO_AI_KEY`) e as da pesquisa
+(`GOOGLE_MAPS_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_CSE_ID`). Alterações locais vão para
+`office.config.local.json` (ignorado pelo git). Ver [AI.md](AI.md) e [PESQUISA.md](PESQUISA.md).
+
+As horas em todo o escritório são de **24 horas** (`00:00`–`23:59`), nunca AM/PM — o campo de hora
+mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 
 ## API
 
@@ -176,11 +195,15 @@ locais vão para `office.config.local.json` (ignorado pelo git). Ver [AI.md](AI.
 | GET | `/api/ai` | os motores de IA: o que está ligado, o que falta e porquê |
 | POST | `/api/ai/test` | um turno curto a um motor (`{"provider":"codex-cli"}`) |
 | POST | `/api/ai/switch` | trocar de motor a quente (`{"provider":"anthropic"}`) |
+| GET | `/api/google` | estado da pesquisa (Places + Programmable Search) |
+| POST | `/api/google/search` | procurar empresas ou web (`{"kind":"places","what":"ginásios","where":"Porto"}`) |
+| GET | `/api/leads` | a lista de leads guardada, por nota |
+| POST | `/api/leads/status` | mudar o estado de um lead |
 
 ## Verificação
 
 ```bash
-npm run check         # 38 verificações locais (build, elenco, competências, rotinas, servidor)
+npm run check         # 43 verificações locais (build, elenco, competências, rotinas, servidor)
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```
 
@@ -192,6 +215,7 @@ A única verificação que falha numa máquina sem Chrome instalado é a do nave
 ```
 serve.mjs            servidor local + API
 providers.mjs        os motores de IA: CLIs e APIs (ver AI.md)
+google.mjs           a pesquisa real: Places (leads) e Programmable Search (ver PESQUISA.md)
 src/                 a página: cena 3D, painel, calendário, cérebro
 brain/               as tuas notas (o Cérebro)
 skills/              competências incluídas

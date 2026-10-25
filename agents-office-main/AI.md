@@ -14,7 +14,8 @@ está escrita em português, na gaveta **IA** do painel de tarefas.
 |---|---|---|
 | `claude-cli` **Claude Code** | `claude -p … --output-format stream-json` | `npm i -g @anthropic-ai/claude-code` e entrar uma vez |
 | `codex-cli` **Codex** | `codex exec --skip-git-repo-check --model {model} {prompt}` | `npm i -g @openai/codex` e `codex` uma vez |
-| `gemini-cli` **Gemini** | `gemini -p {prompt} --model {model}` | `npm i -g @google/gemini-cli` e `gemini` uma vez |
+| `antigravity` **Antigravity** | `agy --print-timeout 15m -p {prompt}` (o system prompt entra no prompt; a resposta JSON é desembrulhada) | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, e `agy` uma vez para entrar |
+| `gemini-cli` **Gemini** | `gemini -p {prompt} --model {model}` | `npm i -g @google/gemini-cli` e `gemini` uma vez — **substituído pelo Antigravity em junho de 2026**; fica por compatibilidade |
 | `cli` **CLI personalizada** | o que puseres em `ai.providers.cli` | um binário, `args` com `{prompt}` `{system}` `{model}` |
 | `anthropic` **Claude (API)** | `POST /v1/messages` | `ANTHROPIC_API_KEY` |
 | `openai` · `openrouter` · `groq` · `mistral` · `deepseek` · `xai` · `gemini` | `POST /chat/completions` | `OPENAI_API_KEY` · `OPENROUTER_API_KEY` · `GROQ_API_KEY` · `MISTRAL_API_KEY` · `DEEPSEEK_API_KEY` · `XAI_API_KEY` · `GEMINI_API_KEY` |
@@ -22,6 +23,9 @@ está escrita em português, na gaveta **IA** do painel de tarefas.
 | `openai-compatible` **qualquer endpoint** | `POST /chat/completions` | `baseUrl` + `model` (+ `AO_AI_KEY` se pedir chave) |
 
 As chaves vivem **só** no ambiente. Nada de segredos em ficheiros versionados.
+
+O `agy` instala-se em `~/.local/bin`, que muitas vezes não está no PATH do servidor: o escritório
+procura também em `~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt/homebrew/bin` e `/snap/bin`.
 
 ## Ver, testar e trocar
 

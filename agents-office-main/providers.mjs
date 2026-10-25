@@ -38,11 +38,19 @@ export const PRESETS = {
     models: { sonnet: '', opus: '', fable: '' },   // vazio = o modelo que o próprio Codex tiver configurado
     hint: 'instala com `npm i -g @openai/codex` e corre `codex` uma vez para entrar',
   },
+  'antigravity': {
+    // Google Antigravity CLI — o binário é `agy`, um executável Go (não é npm). É o sucessor do
+    // Gemini CLI. Não tem --system-prompt: o system prompt entra no próprio prompt.
+    label: 'Antigravity', kind: 'cli', bin: 'agy', tools: false, noSystemFlag: true,
+    args: ['--print-timeout', '15m', '-p', '{prompt}'], // o prompt fica por último, como o `agy` espera
+    models: { sonnet: '', opus: '', fable: '' },
+    hint: 'instala com `curl -fsSL https://antigravity.google/cli/install.sh | bash` (~/.local/bin/agy) e corre `agy` uma vez para entrar',
+  },
   'gemini-cli': {
     label: 'Gemini', kind: 'cli', bin: 'gemini', tools: false,
     args: ['-p', '{prompt}', '--model', '{model}'],
     models: { sonnet: '', opus: '', fable: '' },
-    hint: 'instala com `npm i -g @google/gemini-cli` e corre `gemini` uma vez para entrar',
+    hint: 'instala com `npm i -g @google/gemini-cli` e corre `gemini` uma vez para entrar (o Gemini CLI foi substituído pelo Antigravity em junho de 2026)',
   },
   'cli': {
     label: 'CLI personalizada', kind: 'cli', bin: '', tools: false,
@@ -112,11 +120,12 @@ export const PRESETS = {
 export const IDS = Object.keys(PRESETS);
 
 /* ---------- utilidades ---------- */
+const EXTRA_BIN = [path.join(os.homedir(), '.local', 'bin'), path.join(os.homedir(), 'bin'), '/usr/local/bin', '/opt/homebrew/bin', '/snap/bin'];
 const onPath = bin => {
   if (!bin) return null;
   if (bin.includes('/')) return fs.existsSync(bin) ? bin : null;
-  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
-    if (!dir) continue;
+  const dirs = [...String(process.env.PATH || '').split(path.delimiter).filter(Boolean), ...EXTRA_BIN];
+  for (const dir of dirs) {
     const p = path.join(dir, bin);
     try { fs.accessSync(p, fs.constants.X_OK); return p; } catch { /* segue */ }
   }
@@ -284,13 +293,32 @@ async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, mo
   } finally { clearTimeout(timer); }
 }
 
+/** O texto de uma CLI. Algumas (agy, gemini, codex) embrulham a resposta num envelope JSON —
+ *  se o stdout inteiro for JSON com um campo de texto, é esse campo que interessa. */
+function cliText(out) {
+  const raw = String(out || '').trim();
+  if (!raw.startsWith('{')) return raw;
+  try {
+    const j = JSON.parse(raw);
+    for (const k of ['result', 'response', 'text', 'content', 'output', 'message']) {
+      const v = j?.[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (v && typeof v === 'object' && typeof v.content === 'string') return v.content.trim();
+    }
+  } catch { /* é texto normal que começa por chaveta */ }
+  return raw;
+}
+
 /** Arranca um binário e devolve o texto. `{prompt}`, `{system}` e `{model}` são substituídos nos
  *  argumentos; se o modelo de argumentos não tiver `{prompt}`, o pedido vai pelo stdin. */
 function askCli(d, { system, user, timeout = 300000, model }) {
   fs.mkdirSync(CLI_CWD, { recursive: true }); // sem isto o spawn rebenta com ENOENT (cwd inexistente)
   const want = model || d.model || '';
+  // as CLIs sem bandeira de system prompt (agy) recebem-no dentro do próprio prompt
+  const hasSystemFlag = (d.args || []).some(a => String(a).includes('{system}'));
+  const prompt = d.noSystemFlag && system ? `${system}\n\n---\n\n${user}` : user;
   const args = (d.args || ['{prompt}']).map(a => String(a)
-    .replaceAll('{prompt}', user).replaceAll('{system}', system || '').replaceAll('{model}', want))
+    .replaceAll('{prompt}', prompt).replaceAll('{system}', system || '').replaceAll('{model}', want))
     .filter(a => a !== '' || true);
   const viaStdin = !(d.args || []).some(a => String(a).includes('{prompt}'));
   const bin = onPath(d.bin) || d.bin;
@@ -308,7 +336,7 @@ function askCli(d, { system, user, timeout = 300000, model }) {
     p.on('close', code => {
       clearTimeout(timer);
       if (code !== 0 && !out.trim()) return reject(new Error(`${d.bin} saiu com ${code}${err ? ': ' + err.trim().slice(0, 300) : ''}`));
-      resolve({ text: out.trim(), tools: [], modelId: want || d.bin });
+      resolve({ text: cliText(out), tools: [], modelId: want || d.bin });
     });
   });
 }

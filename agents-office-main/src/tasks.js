@@ -25,6 +25,7 @@ import { P, rnd, ri } from './v1data.js';
 import { applyTasks, PROFILE, titleCase } from './profile.js';
 import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
+import { fmtTime, fmtDate, fmtDateTime, normaliseHour } from './time.js';
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
 
 const SEGMENTS = ['construção', 'climatização', 'clínicas dentárias', 'logística', 'ginásios', 'imobiliário', 'jardinagem', 'advocacia'];
@@ -133,7 +134,7 @@ applyTasks({ POOL, KEYS, CHAINS, SEGMENTS, AGENTS }); // INDUSTRY PROFILE (12 Se
 function fill(s, v) { return s.replace('{co}', v.co).replace('{n}', v.n).replace('{segment}', v.segment); }
 function vars() { return { co: rnd(P.co), n: ri(6, 40), segment: rnd(SEGMENTS) }; }
 function timeStr(ts) {
-  return new Date(ts).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  return fmtTime(ts); // 24 horas, sempre (src/time.js)
 }
 function span(ms) { // "4 min" · "1 h 12 m" · "3 h"
   const m = Math.max(0, Math.round(ms / 60000));
@@ -350,11 +351,12 @@ export function initTasks(ctx) {
   // the REPEAT picker (B1): cadence + time; "precisa do meu OK" defaults on (D1)
   let repeat = false;
   P_.cad.innerHTML = [['weekdays', 'Todos os dias úteis'], ['daily', 'todos os dias'], ['mon', 'Mondays'], ['tue', 'Tuesdays'], ['wed', 'Wednesdays'], ['thu', 'Thursdays'], ['fri', 'Fridays'], ['sat', 'Saturdays'], ['sun', 'Sundays'], ['hourly', 'De hora a hora, 9h–17h, dias úteis']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  P_.at.addEventListener('blur', () => { const h = normaliseHour(P_.at.value); if (h) P_.at.value = h; }); // 9:5 → 09:05
   P_.rep.addEventListener('click', () => { repeat = !repeat; P_.rep.classList.toggle('on', repeat); P_.repRow.hidden = !repeat; updateHint(); if (repeat) P_.input.focus(); });
   P_.cad.addEventListener('change', () => { P_.at.disabled = P_.cad.value === 'hourly'; updateHint(); });
   P_.at.addEventListener('change', updateHint);
   [P_.cad, P_.at, P_.okc].forEach(el => el.addEventListener('keydown', e => e.stopPropagation()));
-  const routineIntent = text => repeat ? { when: fromPicker(P_.cad.value, P_.at.value), text, picker: true } : parseWhen(text);
+  const routineIntent = text => repeat ? { when: fromPicker(P_.cad.value, normaliseHour(P_.at.value) || '08:00'), text, picker: true } : parseWhen(text);
   // V3.2 (16 Sep) Agent Teams: the TEAM toggle — the department lead splits the task across its desks, they work at once, the lead writes the final
   let teamOn = false, teamsCfg = { enabled: true, max: 4 };
   const teamIntent = text => /\b(em equipa|team up|team this|get the (whole )?team|the (whole )?team (on|to|should|can)|with the team|(spawn|use|get) (\d+|two|three|four|five|a few|some) teammates?|\d+ teammates|split (it|this|the work) (up|across|between)|teammates|team:|whole department)\b/i.test(text);
@@ -850,7 +852,7 @@ export function initTasks(ctx) {
       }
       case 'doing': return `${who}${t.live ? (t.approved === undefined && t.draftAt ? ' · a enviar com Claude' : t.team?.members?.length ? ' · a liderar a equipa com Claude' : ' · a trabalhar com Claude') : t.agent === 'vid' ? ' · rendering' : t.teamHold ? ' · à espera das partes' : ''}${t.routine ? ' · routine' : ''}${teamBit(t)}${modelBit(t)}`;
       case 'waiting': return `<span class="tp-amber">à espera há ${span(now - t.changedAt)} do teu OK</span> · ${who}${t.routine ? ' · rascunho de rotina' : ''}${teamBit(t)}${modelBit(t)}`;
-      case 'scheduled': return `${who} · corre ${esc(untilText(t.dueAt))} · ${new Date(t.dueAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr(t.dueAt)}${t.needsOk ? ' · espera pelo teu OK' : ''}${teamBit(t)}${modelBit(t)}`;
+      case 'scheduled': return `${who} · corre ${esc(untilText(t.dueAt))} · ${fmtDate(t.dueAt, { weekday: 'short' })} ${timeStr(t.dueAt)}${t.needsOk ? ' · espera pelo teu OK' : ''}${teamBit(t)}${modelBit(t)}`;
       case 'done': return `${who} · concluída ${timeStr(t.doneAt)}${t.approved ? (t.live ? ' · enviado após o teu OK' : ' · aprovado') : ''}${t.late ? ' · <span class="tp-late">atrasada</span>' : ''}${teamBit(t)}${modelBit(t)}${t.live ? (t.error ? ' · <span class="tp-amber">falhou</span>' : ' · <span class="tp-res">resultado pronto →</span>') : ''}`;
     }
     return who;
@@ -1106,14 +1108,14 @@ export function initTasks(ctx) {
         const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, at, model: normModel(model) || undefined, team: asTeam(text) || undefined }) });
         const st = await r.json(); if (!r.ok) throw new Error(st.error || r.statusText);
         const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, state: 'scheduled', dueAt: st.dueAt, needsOk: !!st.needsOk, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', team: st.team ? { lead: st.team.lead, members: [] } : undefined });
-        touch(t, 'scheduled'); spawnEmote(R[t.agent], '⏱'); feedPush(R[t.agent], '⏱', `Agendada para ${new Date(at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}: ${t.title}`);
+        touch(t, 'scheduled'); spawnEmote(R[t.agent], '⏱'); feedPush(R[t.agent], '⏱', `Agendada para ${fmtDateTime(at)}: ${t.title}`);
         return { ok: true, task: t };
       } catch (e) { return { ok: false, error: e.message }; }
     }
     const { agent: a } = route(k, text);
     const title = (text.charAt(0).toUpperCase() + text.slice(1)).slice(0, 90);
     const t = mk({ agent: a.id, title, text, by: 'you', state: 'scheduled', dueAt: at, needsOk: guessOk(text), modelUsed: normModel(model) || officeModel, modelFrom: model ? 'task' : 'office' });
-    touch(t, 'scheduled'); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `Agendada para ${new Date(at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}: ${title}`);
+    touch(t, 'scheduled'); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `Agendada para ${fmtDateTime(at)}: ${title}`);
     return { ok: true, task: t };
   }
   async function createRoutineAt({ dept: k, text, when, needsOk, model }) { // a routine from a date (when.start)

@@ -51,6 +51,8 @@ import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
+import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
+import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
@@ -185,6 +187,15 @@ function vaultIndex() { // name → text (vault notes + live office notes)
   for (const n of readOfficeNotes(BRAIN)) m.set(n.name, n.text);
   return m;
 }
+// V4 (25 out 2026): os agentes de Prospeção e Vendas leem os leads reais encontrados no Google.
+// Só nesses dois departamentos — não faz sentido pôr uma lista de empresas à frente do designer.
+function leadBlock(a) {
+  if (!['sales', 'ops'].includes(a.department)) return '';
+  try {
+    const block = google.contextForAgent({ dir: DATA, limit: 8 });
+    return block ? `\n\n${block}` : '';
+  } catch (e) { return `\n\n(A lista de leads não pôde ser lida: ${e.message})`; }
+}
 function businessContext(index) {
   const bits = [];
   for (const k of ['CLAUDE', 'index', 'business-model', 'voice']) if (index.has(k)) bits.push(`--- ${k}.md ---\n${index.get(k).slice(0, 1200)}`);
@@ -248,7 +259,7 @@ function agentSystem(a, index, read, { extra = '', words = 260 } = {}) {
     'Escreve o próprio trabalho final, não uma descrição do que farias. Texto simples: um título curto e depois secções curtas ou tópicos. ' +
     `No máximo ${words} palavras, salvo se uma competência ou as instruções do proprietário definirem outra forma — essas ganham. Sem preâmbulo, sem despedida. Fundamenta no contexto da empresa abaixo; onde faltar um facto, assume algo razoável e marca (assumido).` +
     'Se usaste uma ferramenta, di-lo numa linha no fim ("Usado: Gmail — procurei a conversa com o cliente").\n\n' +
-    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}\n\nNOTAS QUE LESTE PARA ESTA TAREFA\n${contextText(index, read)}`;
+    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}${leadBlock(a)}\n\nNOTAS QUE LESTE PARA ESTA TAREFA\n${contextText(index, read)}`;
 }
 const modeLineFor = (mode, task) => mode === 'draft' ? '\nPrepara tudo, mas envia, publica, paga ou altera NADA fora desta máquina: o proprietário lê isto primeiro e aprova. Termina com uma linha a dizer exatamente o que vai sair quando for aprovado (ou que nada tem de sair).'
   : mode === 'approve' ? `
@@ -273,8 +284,8 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const index = vaultIndex();
   const read = relevantNotes(index, a.department, task.title + ' ' + task.text);
   const system = agentSystem(a, index, read);
-  const routineLine = task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}${task.late ? `; this run is late, it was due ${new Date(task.due).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}. Faz o trabalho agora.`
-    : task.dueAt ? `\nEsta tarefa foi agendada para ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} e está a correr agora; o proprietário não está ao teclado${task.late ? ' e esta execução está atrasada' : ''}. Faz o trabalho agora.` : '';
+  const routineLine = task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${fmtDateTimeLong()}${task.late ? `; esta execução está atrasada, era devida às ${fmtTime(task.due)}` : ''}. Faz o trabalho agora.`
+    : task.dueAt ? `\nEsta tarefa foi agendada para ${fmtDateTimeLong(task.dueAt)} e está a correr agora; o proprietário não está ao teclado${task.late ? ' e esta execução está atrasada' : ''}. Faz o trabalho agora.` : '';
   const modeLine = modeLineFor(mode, task);
   const user = `Tarefa: ${task.title}\nPedido do proprietário: ${task.text}` + (task.plan?.length ? `\nPlano acordado: ${task.plan.join(' → ')}` : '') + routineLine + modeLine +
     (feedback && mode !== 'approve' ? `\n\nO proprietário reviu a tua versão anterior e pediu alterações: "${feedback}"\nVersão anterior:\n${task.result}` : '');
@@ -286,8 +297,8 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
 
 /* ---------- V3.2 (16 Sep) Agent Teams: the lead plans, the desks work at once, the lead writes the final ---------- */
 const nameOf = id => id === 'lead' ? 'o líder' : (AGENTS.find(a => a.id === id)?.name || id);
-const routineLineFor = task => task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${new Date().toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Faz o trabalho agora.`
-  : task.dueAt ? `\nEsta tarefa foi agendada para ${new Date(task.dueAt).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} e está a correr agora; o proprietário não está ao teclado. Faz o trabalho agora.` : '';
+const routineLineFor = task => task.routine ? `\nIsto é uma rotina (${task.when}): corre no relógio do escritório e o proprietário não está ao teclado. Agora são ${fmtDateTimeLong()}. Faz o trabalho agora.`
+  : task.dueAt ? `\nEsta tarefa foi agendada para ${fmtDateTimeLong(task.dueAt)} e está a correr agora; o proprietário não está ao teclado. Faz o trabalho agora.` : '';
 async function runTeam(task, mode) {
   const lead = AGENTS.find(x => x.id === task.agent), dept = lead.department;
   refreshSkills();
@@ -383,7 +394,7 @@ function fire(r, { due = Date.now(), late = false, by = 'routine' } = {}) { // t
   const task = { id: nid(), dept: r.dept, agent: r.agent, title: r.title, text: r.text, plan: r.plan || [], eta: 15, why: '', state: 'next', addedAt: Date.now(), by, routine: r.id, when: r.desc || describe(r.when), needsOk: r.needsOk, due, late, routineModel: r.model || undefined, routineEffort: r.effort || undefined, team: r.team && TEAMS.enabled ? { lead: r.agent, asked: 'routine' } : undefined };
   const list = load(); list.push(task); save(list);
   routines.advance(RSTATE, r, Date.now(), task.id, late); routines.saveState(DATA, RSTATE);
-  console.log(`⏱ ${task.id} → ${task.agent}: ${task.title}${late ? ' (ATRASADA · era para ' + new Date(due).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
+  console.log(`⏱ ${task.id} → ${task.agent}: ${task.title}${late ? ' (ATRASADA · era para ' + fmtTime(due) + ')' : ''}`);
   enqueue(() => runServerTask(task.id));
   return task;
 }
@@ -414,7 +425,7 @@ function tickScheduled() { // V3.2.1: a task scheduled for a date fires on its m
   for (const t of list) {
     if (t.state !== 'scheduled' || !(t.dueAt <= now)) continue;
     t.state = 'next'; t.due = t.dueAt; t.late = now - t.dueAt > routines.LATE_AFTER; t.addedAt = now; changed = true;
-    console.log(`⏱ ${t.id} scheduled task fires → ${t.agent}: ${t.title}${t.late ? ' (ATRASADA · era para ' + new Date(t.dueAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) + ')' : ''}`);
+    console.log(`⏱ ${t.id} scheduled task fires → ${t.agent}: ${t.title}${t.late ? ' (ATRASADA · era para ' + fmtDateTime(t.dueAt) + ')' : ''}`);
     enqueue(() => runServerTask(t.id));
   }
   if (changed) save(list);
@@ -475,6 +486,10 @@ const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'appli
 const body = req => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; }); req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } }); });
 
 await rebuildGraph();
+{
+  const g = google.state(), ls = google.stats(DATA);
+  console.log(`  pesquisa google: ${g.places.available ? 'Places ligado' : 'Places sem chave (' + g.places.env + ')'} · ${g.web.available ? 'pesquisa web ligada' : 'pesquisa web sem chave'} · ${ls.total} leads guardados${ls.total ? ' (' + ls.noSite + ' sem site)' : ''}`);
+}
 const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list)`); return l; });
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
@@ -486,7 +501,7 @@ const server = http.createServer(async (req, res) => {
       const page = fs.readFileSync(HTML, 'utf8');
       return res.end(url.pathname === '/dark' ? page.replace('<body>', '<body class="dark">') : page); // /dark: the same file, opened in dark mode
     }
-    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
+    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
     if (url.pathname === '/api/skills') return json(res, 200, refreshSkills().summary()); // reloads from disk: edit a skill, hit this, see it
@@ -521,6 +536,35 @@ const server = http.createServer(async (req, res) => {
       if (!b.provider) return json(res, 400, { error: 'falta o campo provider' });
       const out = await switchProvider(String(b.provider));
       return json(res, out.error ? 400 : 200, { ...out, ai: ai.summary(AI, cfg) });
+    }
+    // ---- pesquisa real da Google: empresas (Places) e web (Programmable Search) ----
+    if (url.pathname === '/api/google' && req.method === 'GET') {
+      return json(res, 200, { ...google.state(), leads: google.stats(DATA) });
+    }
+    if (url.pathname === '/api/google/search' && req.method === 'POST') {
+      const b = await body(req);
+      const kind = b.kind === 'web' ? 'web' : 'places';
+      const limit = Math.max(1, Math.min(20, +b.limit || 10));
+      const t0 = Date.now();
+      try {
+        const found = kind === 'places'
+          ? await google.searchPlaces({ what: b.what, where: b.where, limit, lang: b.lang || 'pt-PT', region: b.region || 'PT' })
+          : await google.searchWeb({ q: b.q || [b.what, b.where].filter(Boolean).join(' '), limit });
+        const saved = b.save === false ? { added: 0, updated: 0, total: google.stats(DATA).total, leads: found } : google.saveAll(found, DATA);
+        console.log(`🔎 ${kind === 'places' ? 'Places' : 'Pesquisa web'}: "${[b.what, b.where].filter(Boolean).join(' em ') || b.q}" → ${found.length} resultados · +${saved.added} novos`);
+        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, results: found.slice(0, limit) });
+      } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
+    }
+    if (url.pathname === '/api/leads' && req.method === 'GET') {
+      const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));
+      const status = url.searchParams.get('status') || null;
+      return json(res, 200, { ok: true, google: google.state(), stats: google.stats(DATA), ...google.list({ limit, status }, DATA) });
+    }
+    if (url.pathname === '/api/leads/status' && req.method === 'POST') {
+      const b = await body(req);
+      if (!b.id || !b.status) return json(res, 400, { error: 'faltam id e status' });
+      const l = google.setStatus(String(b.id), String(b.status), DATA);
+      return l ? json(res, 200, { ok: true, lead: l }) : json(res, 404, { error: 'não há lead com esse id' });
     }
     if (url.pathname === '/api/brain') return json(res, 200, graph);
     if (url.pathname === '/api/usage') return json(res, 200, await getUsage(url.searchParams.get('refresh') === '1')); // V3.6: the plan's gauge (never a 500: unavailable is an answer)

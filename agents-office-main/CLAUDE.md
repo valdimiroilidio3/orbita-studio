@@ -136,7 +136,7 @@ Quando o proprietário diz «em equipa», «põe a equipa nisto», «cria três 
 ## Os motores de IA (e ligar outro)
 
 O escritório já não assume o Claude Code. `providers.mjs` descreve os motores — `claude-cli`,
-`codex-cli`, `gemini-cli`, `cli` (genérica) e as APIs `anthropic`, `openai`, `openrouter`, `groq`,
+`codex-cli`, `antigravity` (`agy`, sucessor do Gemini CLI), `gemini-cli`, `cli` (genérica) e as APIs `anthropic`, `openai`, `openrouter`, `groq`,
 `mistral`, `deepseek`, `xai`, `gemini`, `ollama`, `lmstudio`, `openai-compatible` — e `resolve()`
 escolhe o primeiro que está mesmo utilizável: o pedido em `AO_AI`, depois `data/ai.json` (o que o
 proprietário trocou na gaveta **IA**), depois `office.config.json` → `ai.provider`, depois
@@ -156,6 +156,28 @@ Regras que não se quebram:
   as tarefas seguintes correm no motor novo. `GET /api/ai?refresh=1` volta a detetar o que existe.
 - **Um motor novo** é um preset em `providers.mjs` (com `kind`, `bin`/`baseUrl`, `model` e `hint`) e
   uma linha em `AI.md` — mais nada.
+
+## A pesquisa real (Google) e os leads
+
+`google.mjs` liga duas APIs: **Places API (New)** — `places:searchText`, que devolve empresas reais
+(nome, morada, telefone, site, avaliação, mapa) — e **Programmable Search** — resultados web com
+excertos. Chaves: `GOOGLE_MAPS_API_KEY`, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`, só no ambiente. Guia em
+**[PESQUISA.md](PESQUISA.md)**.
+
+- `scoreLead()` em `google.mjs` explica a nota de cada lead (sem site = +40). Não inventes números:
+  se mudares a pontuação, muda a tabela do PESQUISA.md e o teste em `check.mjs`.
+- `saveAll()` grava em `data/leads.json` sem duplicar — domínio → telefone → nome+morada — e preserva
+  o `status` e as notas do proprietário.
+- `leadBlock()` no `serve.mjs` injeta os oito melhores leads **só** na Prospeção e nas Vendas.
+- Rotas: `GET /api/google`, `POST /api/google/search`, `GET /api/leads`, `POST /api/leads/status`.
+- Sem chave, tudo diz que falta a chave. Nunca devolver resultados inventados, nem fingir sucesso.
+
+## As horas são de 24 horas
+
+`src/time.js` é o único sítio que formata horas e datas: `00:00`–`23:59`, `hour12: false` explícito,
+nomes de dias e meses em português escritos à mão (o ICU devolve `weekday:'short'` como "domingo" e
+`day+month` como "25/10" em pt-PT, o que não serve). Os campos de hora são texto com a lista
+`#hours24`, não `input[type=time]` — o browser mostraria AM/PM com o sistema em inglês.
 
 ## Tudo o resto
 

@@ -29,6 +29,25 @@ await step('build: braingraph + bundle', async () => {
   if (!/ÓRBITA/.test(html)) throw new Error('shell missing');
   return out.trim().split('\n').pop();
 });
+await step('horas: 00:00–23:59 em todo o lado, nunca AM/PM', async () => {
+  const t = await import('./src/time.js');
+  const d = new Date(2026, 9, 25, 13, 5, 42);
+  const midnight = new Date(2026, 9, 25, 0, 5);
+  const late = new Date(2026, 9, 25, 23, 59);
+  const got = [t.fmtTime(d), t.fmtClock(d), t.fmtTime(midnight), t.fmtTime(late), t.fmtDateTime(d), t.fmtDate(d)];
+  if (got[0] !== '13:05') throw new Error('13:05 esperado, veio ' + got[0]);
+  if (got[1] !== '13:05:42') throw new Error('13:05:42 esperado, veio ' + got[1]);
+  if (got[2] !== '00:05') throw new Error('meia-noite devia ser 00:05, veio ' + got[2]);
+  if (got[3] !== '23:59') throw new Error('23:59 esperado, veio ' + got[3]);
+  if (!/13:05$/.test(got[4])) throw new Error('data+hora sem hora a 24 h: ' + got[4]);
+  if (/AM|PM/i.test(got.join(' '))) throw new Error('apareceu AM/PM: ' + got.join(' · '));
+  if (t.normaliseHour('9:5') !== '09:05' || t.normaliseHour('24:00') !== '00:00') throw new Error('normaliseHour falha');
+  const dist = fs.readFileSync(path.join(ROOT, 'dist/command-centre-v2.html'), 'utf8');
+  if (/toLocaleTimeString\('en-NZ'/.test(dist) || /hour:\s*'numeric'/.test(dist)) throw new Error('o bundle ainda tem formatação de 12 horas');
+  if (!/hours24/.test(dist)) throw new Error('o bundle não tem o relógio de 24 horas (datalist hours24)');
+  return got.slice(0, 4).join(' · ') + ' · bundle a 24 h';
+});
+
 await step('build: graph has linked notes', async () => {
   const { BRAIN } = await import('./src/braingraph.js?' + Date.now());
   if (!BRAIN.nodes.length || !BRAIN.links.length) throw new Error('empty graph');
@@ -485,6 +504,36 @@ else {
       if (r.status === 200 || j.ok) throw new Error('aceitou um motor que não existe');
       if (!/motor-imaginario/.test(j.error || '')) throw new Error('não explicou: ' + JSON.stringify(j).slice(0, 120));
       return 'recusado · ' + String(j.error).slice(0, 60);
+    });
+    await step('server: o Antigravity (agy) está na lista de motores, com a instalação certa', async () => {
+      const a = await (await fetch(base + '/api/ai')).json();
+      const agy = a.providers.find(p => p.id === 'antigravity');
+      if (!agy) throw new Error('não há provider antigravity');
+      if (agy.bin !== 'agy') throw new Error('bin devia ser agy: ' + agy.bin);
+      if (!/antigravity\.google/.test(agy.reason || agy.hint || '')) throw new Error('não diz como instalar');
+      return `antigravity · bin ${agy.bin} · ${agy.available ? 'ligado' : 'indisponível (explica porquê)'}`;
+    });
+    await step('server: /api/google diz o que falta, sem inventar', async () => {
+      const g = await (await fetch(base + '/api/google')).json();
+      if (!g.places || !g.web) throw new Error('sem places/web');
+      for (const k of ['places', 'web']) if (!g[k].available && !g[k].reason) throw new Error(k + ' indisponível sem razão');
+      if (g.any && !(g.places.available || g.web.available)) throw new Error('any não bate com as chaves');
+      return `${g.places.available ? 'Places ligado' : 'Places sem chave'} · ${g.web.available ? 'web ligada' : 'web sem chave'} · ${g.leads?.total || 0} leads`;
+    });
+    await step('server: procurar sem chave da Google é recusado com a frase certa', async () => {
+      const g = await (await fetch(base + '/api/google')).json();
+      if (g.places.available) return 'há chave — nada a recusar';
+      const r = await fetch(base + '/api/google/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'places', what: 'clínicas dentárias', where: 'Lisboa' }) });
+      const j = await r.json();
+      if (j.ok) throw new Error('disse que procurou sem chave');
+      if (!/chave/.test(j.error || '')) throw new Error('não falou de chave: ' + JSON.stringify(j).slice(0, 120));
+      return String(j.error).slice(0, 70);
+    });
+    await step('server: /api/leads devolve a lista guardada (mesmo vazia)', async () => {
+      const l = await (await fetch(base + '/api/leads')).json();
+      if (!l.ok || !Array.isArray(l.leads)) throw new Error('sem lista');
+      if (typeof l.stats?.total !== 'number') throw new Error('sem contagem');
+      return `${l.leads.length} leads · ${l.stats.total} no total`;
     });
     await step('server: serves the office', async () => { const r = await fetch(base + '/'); const t = await r.text(); if (!/ÓRBITA/.test(t)) throw new Error('html missing'); });
     await step('server: /api/brain has the live graph', async () => { const g = await (await fetch(base + '/api/brain')).json(); if (!g.nodes.length) throw new Error('empty'); return `${g.nodes.length} linked notes`; });

@@ -12,13 +12,14 @@
 //        createRoutine({ dept, text, when, needsOk, model }) → Promise<{ ok, routine, error }>
 //        cancelTask(t) · rtAct(id, act) · openAgent(id, tab) · esc · isLive() · officeModel() · MODEL_KEYS · modelName · business()
 import { occurrences, describe, untilText, fromPicker, shortDate } from './when.js';
+import { fmtTime, fmtDate, fmtDateTimeLong, normaliseHour } from './time.js';
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']; // the week starts on Monday (AU/NZ/UK)
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY = 864e5;
 const pad = n => String(n).padStart(2, '0');
 const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const hm = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const hm = ts => fmtTime(ts); // 24 horas (src/time.js)
 const startOfDay = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const mondayOf = ts => { const d = new Date(startOfDay(ts)); const k = (d.getDay() + 6) % 7; d.setDate(d.getDate() - k); return d.getTime(); };
 const CADENCES = [['daily', 'todos os dias'], ['weekdays', 'Todos os dias úteis'], ['mon', 'Mondays'], ['tue', 'Tuesdays'], ['wed', 'Wednesdays'], ['thu', 'Thursdays'], ['fri', 'Fridays'], ['sat', 'Saturdays'], ['sun', 'Sundays'], ['hourly', 'De hora a hora, 9h–17h, dias úteis']];
@@ -121,7 +122,7 @@ export function initCalendar(ctx) {
     const d = new Date(dayKey + 'T00:00:00'), past = d.getTime() < startOfDay(Date.now());
     E.pop.innerHTML = `<div class="cv-pop-h"><span class="lab">AGENDAR PARA</span><b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()]}</b><span class="sp"></span><button class="cv-x" data-act="close">✕</button></div>
       ${past ? '<div class="cv-note">Esse dia já passou — escolhe hoje ou um dia seguinte.</div>' : ''}
-      <div class="cv-row"><select class="cv-dept">${DEPT_KEYS.map(k => `<option value="${k}"${k === lastDept ? ' selected' : ''}>${DEPTS[k].name}</option>`).join('')}</select><input type="time" class="cv-time" value="09:00"><select class="cv-model" title="que modelo o corre"><option value="">${esc(modelName(officeModel()).toUpperCase())}</option>${MODEL_KEYS.filter(k => k !== officeModel()).map(k => `<option value="${k}">${esc(modelName(k).toUpperCase())}</option>`).join('')}</select></div>
+      <div class="cv-row"><select class="cv-dept">${DEPT_KEYS.map(k => `<option value="${k}"${k === lastDept ? ' selected' : ''}>${DEPTS[k].name}</option>`).join('')}</select><input type="text" class="cv-time" value="09:00" list="hours24" inputmode="numeric" autocomplete="off" spellcheck="false" title="a que horas, das 00:00 às 23:59 (24 horas)"><select class="cv-model" title="que modelo o corre"><option value="">${esc(modelName(officeModel()).toUpperCase())}</option>${MODEL_KEYS.filter(k => k !== officeModel()).map(k => `<option value="${k}">${esc(modelName(k).toUpperCase())}</option>`).join('')}</select></div>
       <textarea class="cv-text" rows="3" placeholder="O que deve acontecer nesse dia?"></textarea>
       <div class="cv-row"><button class="cv-rep" data-act="rep">REPETIR</button><select class="cv-cad" hidden>${CADENCES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select><label class="cv-ok" hidden><input type="checkbox" class="cv-okc" checked> precisa do meu OK</label><span class="sp"></span><button class="cv-go" data-act="go"${past ? ' disabled' : ''}>ADICIONAR</button></div>
       <div class="cv-hint">${past ? '' : 'Uma tarefa para este dia — corre a essa hora e aparece no painel. REPETIR torna-a uma rotina a partir desta data.'}</div>`;
@@ -131,7 +132,7 @@ export function initCalendar(ctx) {
     const hint = () => {
       if (past) return;
       const k = P.dept.value; lastDept = k;
-      if (repeat) { const w = fromPicker(P.cad.value, P.time.value, dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · primeira execução ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Claude names the agent' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
+      if (repeat) { const w = fromPicker(P.cad.value, normaliseHour(P.time.value) || '09:00', dayKey); const first = occurrences(w, Date.now(), Date.now() + 400 * DAY, 1)[0]; P.hint.innerHTML = RT_DEPTS.includes(k) ? `Routine · <b>${esc(describe(w))}</b> · primeira execução ${esc(first ? new Date(first).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + hm(first) : '—')}${isLive() ? ' · Claude names the agent' : ''}` : `<span class="amber">${esc(rtRefuse(k))}</span>`; P.go.disabled = !RT_DEPTS.includes(k); }
       else { P.hint.innerHTML = `Tarefa para <b>${DOW[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)} · ${esc(P.time.value)}</b>${isLive() ? ' · o Claude nomeia o agente agora e corre depois' : ''}`; P.go.disabled = false; }
     };
     P.rep.addEventListener('click', () => { repeat = !repeat; P.rep.classList.toggle('on', repeat); P.cad.hidden = !repeat; P.ok.hidden = !repeat; if (repeat) { const dow = (d.getDay() + 6) % 7; P.cad.value = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][dow]; } hint(); });
@@ -176,7 +177,7 @@ export function initCalendar(ctx) {
     E.pop.innerHTML = `<div class="cv-pop-h"><span class="lab">ROTINA</span><span class="sp"></span><button class="cv-x" data-act="close">✕</button></div>
       <div class="cv-pop-t">${esc(r.title)}</div>
       <div class="cv-pop-m">${av(r.agent)} ${esc(a ? a.name : r.agent)} · ${esc(r.desc || describe(r.when))}${r.needsOk ? ' · espera pelo teu OK' : ' · só leitura'}${r.paused ? ' · <span class="cv-paused">EM PAUSA</span>' : ''}</div>
-      <div class="cv-pop-p">Esta execução: ${esc(new Date(at).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }))}${r.nextAt ? ` · next ${esc(untilText(r.nextAt))}` : ''}${r.lastAt ? ` · last ran ${esc(new Date(r.lastAt).toLocaleDateString([], { day: 'numeric', month: 'short' }))}` : ''}</div>
+      <div class="cv-pop-p">Esta execução: ${esc(fmtDateTimeLong(at))}${r.nextAt ? ` · next ${esc(untilText(r.nextAt))}` : ''}${r.lastAt ? ` · última execução ${esc(fmtDate(r.lastAt))}` : ''}</div>
       <div class="cv-row"><button class="cv-btn" data-act="run">EXECUTAR AGORA</button><button class="cv-btn" data-act="${r.paused ? 'resume' : 'pause'}">${r.paused ? 'RETOMAR' : 'PAUSAR'}</button><button class="cv-btn" data-act="only">SÓ ISTO</button><span class="sp"></span><button class="cv-btn warn" data-act="delete">APAGAR</button></div>`;
     E.pop.hidden = false; place(E.pop, el);
     E.pop.querySelectorAll('.cv-btn').forEach(b => b.addEventListener('click', async () => {

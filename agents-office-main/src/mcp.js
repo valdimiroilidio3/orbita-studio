@@ -11,6 +11,7 @@
 // Opened as a file (no server) the demo list below still plays.
 import * as THREE from 'three';
 import { MCP_LOGOS, MCP_BY_DEPT } from './mcplogos.js';
+import { fmtTime, fmtDateTime } from './time.js';
 import { applyAgentTools, profileShared } from './profile.js';
 
 // agent → tools they'd plausibly be driving (falls back to any connector in the dept's dock)
@@ -338,7 +339,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     if (!topmodels) return;
     if (modelImgs.chatgpt) { modelImgs.chatgpt.remove(); delete modelImgs.chatgpt; const w = mwires.chatgpt; if (w) { w.path.setAttribute('d', ''); w.dot.setAttribute('opacity', 0); delete mwires.chatgpt; } }
     if (!usageEl) { usageEl = document.createElement('span'); usageEl.className = 'tm-usage'; topmodels.appendChild(usageEl); }
-    const when = ts => ts ? new Date(ts).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '—';
+    const when = ts => (ts ? fmtDateTime(ts) : '—'); // 24 horas (src/time.js)
     const bar = (lab, x) => { if (!x) return ''; const cls = x.percent >= 90 ? 'c' : x.percent >= 75 ? 'w' : ''; return `<span>${lab}</span><span class="ub"><i class="${cls}" style="width:${x.percent}%"></i></span><b>${x.percent >= 100 ? 'LIMIT' : x.percent + '%'}</b>`; };
     if (u && u.ok && u.source === 'claude') {
       usageEl.className = 'tm-usage';
@@ -347,7 +348,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     } else if (u && u.ok && u.source === 'office') {
       const w = u.window || {}; const n = w.tokens || 0; const tok = n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
       usageEl.className = 'tm-usage off';
-      usageEl.innerHTML = `<span>ESTA JANELA</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>EXECUÇÕES</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${new Date(w.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</b>` : '');
+      usageEl.innerHTML = `<span>ESTA JANELA</span><b>${tok}</b><span>TOKENS</span><span class="sep">·</span><b>${w.runs || 0}</b><span>EXECUÇÕES</span>` + (w.resetsAt ? `<span class="sep">·</span><span>RESETS</span><b>${fmtTime(w.resetsAt)}</b>` : '');
       usageEl.title = `O medidor de utilização do Claude não está disponível (${u.reason || 'sem resposta'}). Esta é a contagem do próprio escritório para a janela atual de cinco horas.`;
     } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>UTILIZAÇÃO INDISPONÍVEL</span>'; usageEl.title = (u && u.reason) || ''; }
   }
