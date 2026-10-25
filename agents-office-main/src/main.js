@@ -8,6 +8,7 @@ import { PROFILE, profileRows, profileTickKpi, profileMockup, applyTopbar } from
 import {
   PLINTH_H, mat, rbox, makePlinth, makeFloorTitle, makeDesk, makeChair,
   makePerson, posePerson, poseWork, makePlant, makeServerRack, makeMeetingTable, makeWalkway, makeWarnSprite,
+  makeRoomWalls,
 } from './builders.js';
 import { initMcp } from './mcp.js';
 import { loadConnectors } from './connectors.js';
@@ -137,9 +138,20 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   plinth.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
   plinth.children[0].userData.part = 'plinth'; plinth.children[1].userData.part = 'floor'; plinth.children[1].userData.chip = dept.chip; // dark mode re-tints these
 
+  // walls (25 out 2026): every sala gets a real room — an L of solid base + glass above,
+  // on the two sides away from the camera, open at the corner the walkway arrives on.
+  let walls = null;
+  if (key_ !== 'brain') {
+    try {
+      walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short);
+      walls.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
+      g.add(walls);
+    } catch (e) { walls = null; console.warn('paredes: ' + key_ + ' — ' + e.message); }
+  }
+
   // no floor titles — the billboards name each department (AJ's call, M2.3)
   scene.add(g);
-  deptRT[key_] = { group: g, L };
+  deptRT[key_] = { group: g, L, walls };
 }
 
 // brain centre (V3.6, AJ 6 Sep 2026): the particle nebula is RETIRED. The vault's wiki-link graph
@@ -529,7 +541,7 @@ function setCam(on) { document.body.classList.toggle('cam', !!on); }
 // forces it, /dark on the server opens in it. The chrome follows the CSS tokens; the scene
 // re-tints its shared materials (plinths, floors, walkways), relights, and the Brain/wires swap ink.
 let darkOn = false;
-const DARK = { plinth: 0x2c2d2b, walkway: 0x303230, ground: 0x1b1c1a };
+const DARK = { plinth: 0x2c2d2b, walkway: 0x303230, ground: 0x1b1c1a, wall: 0x33342f };
 function mix(hex, base, k) { const a = new THREE.Color(hex), b = new THREE.Color(base); return b.lerp(a, k); }
 function setDark(on) {
   darkOn = !!on;
@@ -541,6 +553,7 @@ function setDark(on) {
     if (o.userData.part === 'plinth') m.color.set(darkOn ? DARK.plinth : m.userData.base);
     else if (o.userData.part === 'walkway') m.color.set(darkOn ? DARK.walkway : m.userData.base);
     else if (o.userData.part === 'floor') m.color.copy(darkOn ? mix(o.userData.chip, '#1b1c1a', o.userData.dept === 'brain' ? 0.07 : 0.22) : m.userData.base); // the Brain's pale sage needs a lighter touch
+    else if (o.userData.part === 'wall') m.color.set(darkOn ? DARK.wall : m.userData.base);
   });
   hemi.color.set(darkOn ? 0x8e95a3 : 0xfdfff8); hemi.groundColor.set(darkOn ? 0x14151a : 0xd8d4c8); hemi.intensity = darkOn ? 0.75 : 0.85;
   key.color.set(darkOn ? 0xe4e9f2 : 0xfff1dd); key.intensity = darkOn ? 1.5 : 2.2;

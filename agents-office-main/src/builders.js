@@ -653,3 +653,98 @@ export function makeWalkway(from, to) {
   g.rotation.y = -Math.atan2(dz, dx);
   return g;
 }
+
+/* ---------- room walls: a solid base plus a glass upper band, in an L on the two sides
+   that face away from the camera. The corner nearest the Cérebro stays open — that is
+   where the walkway arrives, so every sala has a doorway without a door. ---------- */
+export function makeWallSign(text, inkColor, width) {
+  const c = document.createElement('canvas');
+  const W = 1024, H = 128; c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, W, H);
+  x.font = '700 64px Georgia, "Times New Roman", serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  const sp = 10;
+  let total = 0;
+  for (const ch of text) total += x.measureText(ch).width + sp;
+  let cx0 = (W - total + sp) / 2;
+  x.fillStyle = inkColor;
+  for (const ch of text) {
+    const cw = x.measureText(ch).width;
+    x.fillText(ch, cx0 + cw / 2, H / 2 + 4);
+    cx0 += cw + sp;
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const h = width * (H / W);
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(width, h),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.9, depthWrite: false })
+  );
+}
+
+export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
+  const base = opts.base ?? 2.8;      // solid part, up to the desk top
+  const glass = opts.glass ?? 2.6;    // glass band on top of it
+  const t = opts.t ?? 0.34;           // wall thickness
+  const H = base + glass;             // total wall height
+  const g = new THREE.Group();
+
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#F4F3ED', roughness: 0.94, metalness: 0 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: chip, roughness: 0.72, metalness: 0.02 });
+  const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.55, metalness: 0.1 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: chip, roughness: 0.12, metalness: 0.05,
+    transparent: true, opacity: 0.17, depthWrite: false, side: THREE.DoubleSide,
+  });
+
+  const add = (mesh, part) => {
+    mesh.userData.part = part;
+    mesh.castShadow = part !== 'wallGlass';
+    mesh.receiveShadow = true;
+    g.add(mesh);
+    return mesh;
+  };
+
+  // back wall — runs along X on the far -Z edge
+  const backZ = -d / 2 + t / 2;
+  const backBase = rbox(w, t, base, wallMat, 0.1); backBase.position.set(0, 0, backZ); add(backBase, 'wall');
+  const backSkirt = rbox(w, t + 0.12, 0.42, trimMat, 0.06); backSkirt.position.set(0, 0, backZ); add(backSkirt, 'wallTrim');
+  const backGlass = rbox(w, 0.08, glass, glassMat, 0.03); backGlass.position.set(0, base, backZ); add(backGlass, 'wallGlass');
+  const backCap = rbox(w + 0.08, t + 0.16, 0.16, capMat, 0.05); backCap.position.set(0, H - 0.16, backZ); add(backCap, 'wallCap');
+  const backRail = rbox(w, t + 0.06, 0.1, capMat, 0.03); backRail.position.set(0, base - 0.1, backZ); add(backRail, 'wallCap');
+
+  // side wall — runs along Z on the far -X edge
+  const sideX = -w / 2 + t / 2;
+  const sideBase = rbox(t, d, base, wallMat, 0.1); sideBase.position.set(sideX, 0, 0); add(sideBase, 'wall');
+  const sideSkirt = rbox(t + 0.12, d, 0.42, trimMat, 0.06); sideSkirt.position.set(sideX, 0, 0); add(sideSkirt, 'wallTrim');
+  const sideGlass = rbox(0.08, d, glass, glassMat, 0.03); sideGlass.position.set(sideX, base, 0); add(sideGlass, 'wallGlass');
+  const sideCap = rbox(t + 0.16, d + 0.08, 0.16, capMat, 0.05); sideCap.position.set(sideX, H - 0.16, 0); add(sideCap, 'wallCap');
+  const sideRail = rbox(t + 0.06, d, 0.1, capMat, 0.03); sideRail.position.set(sideX, base - 0.1, 0); add(sideRail, 'wallCap');
+
+  // mullions in the glass band — they read as a studio partition
+  for (const zz of [d / 2 - 0.8, 0]) {
+    const mul = rbox(0.14, t + 0.1, glass, capMat, 0.03); mul.position.set(0, base, zz); add(mul, 'wallCap');
+  }
+  for (const xx of [-w / 2 + 0.8, 0]) {
+    const mul = rbox(t + 0.1, 0.14, glass, capMat, 0.03); mul.position.set(xx, base, 0); add(mul, 'wallCap');
+  }
+
+  // end posts where the walls stop, so the open corner reads as a doorway
+  const posts = [[w / 2 - 0.3, backZ], [sideX, d / 2 - 0.3], [-w / 2 + 0.3, backZ]];
+  for (const [px, pz] of posts) {
+    const post = rbox(0.54, 0.54, H, wallMat, 0.1); post.position.set(px, 0, pz); add(post, 'wall');
+    const postCap = rbox(0.62, 0.62, 0.14, capMat, 0.05); postCap.position.set(px, H - 0.14, pz); add(postCap, 'wallCap');
+  }
+
+  // the room's name, drawn small on the inside of the back wall
+  if (label) {
+    const signW = Math.min(w * 0.34, 6.6);
+    const sign = makeWallSign(String(label).toUpperCase(), ink, signW);
+    sign.position.set(w / 2 - signW / 2 - 0.95, 2.28, backZ + t / 2 + 0.03);
+    sign.userData.part = 'wallSign';
+    g.add(sign);
+  }
+  return g;
+}
