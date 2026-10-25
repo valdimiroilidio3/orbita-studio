@@ -1,4 +1,4 @@
-// Órbita V3.6 — the Brain as an etched floor (AJ, 6 Sep 2026: option B + the panel strip).
+// Órbita — o Cérebro como folha de vidro suspensa (25 out 2026; antes era o grafo em tinta no ar).
 // The particle nebula is gone. The vault's wiki-link graph (src/braingraph.js, baked by
 // graph-build.mjs) is drawn into the floor of the centre pod as faint ink line-work: texture at
 // overview, a graph when you lean in. It moves only when an agent READS (a note glints green and a
@@ -29,6 +29,107 @@ const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 const timeStr = ts => new Date(ts).toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
 const agentOf = id => AGENTS.find(a => a.id === id);
 
+// a composição da folha, isolada para poder ser desenhada fora do escritório (testes, imagens)
+export function drawBrainSheet(ctx, o) {
+  const { nodes, links, onFloor, pt, ink, dark, PX, PY, notes } = o;
+  const C = o.C ?? PX / 2, CY = o.CY ?? Math.round(PY * 0.447);
+  const P = pt;
+  const darkSheet = !!dark;
+  const rounded = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+  const tracked = (text, x, y, sp, align = 'left') => {
+    const w = [...text].reduce((s2, ch) => s2 + ctx.measureText(ch).width + sp, 0) - sp;
+    let cx = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+    for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + sp; }
+  };
+    ctx.clearRect(0, 0, PX, PY);
+    const L = 26, T = 26, R = PX - 26, B = PY - 26, RAD = 36;
+
+    // a folha
+    rounded(L, T, R - L, B - T, RAD);
+    const sheet = ctx.createLinearGradient(0, T, 0, B);
+    if (darkSheet) {
+      sheet.addColorStop(0, 'rgba(46,49,45,.90)'); sheet.addColorStop(.55, 'rgba(26,28,25,.84)'); sheet.addColorStop(1, 'rgba(18,20,18,.88)');
+    } else {
+      sheet.addColorStop(0, 'rgba(255,255,255,.88)'); sheet.addColorStop(.58, 'rgba(252,253,248,.74)'); sheet.addColorStop(1, 'rgba(243,246,238,.82)');
+    }
+    ctx.fillStyle = sheet; ctx.fill();
+
+    // bloom interior, dentro da folha
+    ctx.save(); rounded(L, T, R - L, B - T, RAD); ctx.clip();
+    const bl = ctx.createRadialGradient(C, CY - 6, 30, C, CY - 6, 430);
+    bl.addColorStop(0, darkSheet ? 'rgba(209,222,205,.18)' : 'rgba(86,116,92,.11)');
+    bl.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bl; ctx.fillRect(L, T, R - L, B - T);
+    ctx.restore();
+
+    // contorno: hairline exterior + brilho interior em cima
+    rounded(L, T, R - L, B - T, RAD);
+    ctx.lineWidth = 2; ctx.strokeStyle = `rgba(${ink},.17)`; ctx.stroke();
+    rounded(L + 3, T + 3, R - L - 6, B - T - 6, RAD - 3);
+    ctx.lineWidth = 2; ctx.strokeStyle = darkSheet ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.85)'; ctx.stroke();
+    // sombra interior em baixo — dá espessura ao vidro
+    ctx.save(); rounded(L, T, R - L, B - T, RAD); ctx.clip();
+    const sh = ctx.createLinearGradient(0, B - 190, 0, B);
+    sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, darkSheet ? 'rgba(0,0,0,.22)' : 'rgba(30,40,32,.07)');
+    ctx.fillStyle = sh; ctx.fillRect(L, B - 190, R - L, 190);
+    ctx.restore();
+
+    // arestas — curvas, hairline; as que tocam num hub ficam um tom mais firmes
+    for (const [a, b] of links) {
+      if (!onFloor(nodes[a]) || !onFloor(nodes[b])) continue;
+      const [x1, y1] = P(nodes[a]), [x2, y2] = P(nodes[b]);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const bow = Math.min(13, len * 0.055);
+      const qx = (x1 + x2) / 2 - (dy / len) * bow, qy = (y1 + y2) / 2 + (dx / len) * bow;
+      const strong = nodes[a].d >= 4 || nodes[b].d >= 4;
+      ctx.strokeStyle = `rgba(${ink},${strong ? .17 : .10})`;
+      ctx.lineWidth = strong ? 1.6 : 1;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(qx, qy, x2, y2); ctx.stroke();
+    }
+
+    // nós — halos nos hubs, pontos nas folhas, verde nos de hoje
+    const drawn = nodes.filter(onFloor).sort((a, b) => a.d - b.d);
+    for (const n of drawn) {
+      const [x, y] = P(n);
+      const r = n.d >= 6 ? 5.6 : n.d >= 4 ? 4.4 : n.d >= 3 ? 3.4 : 2.6;
+      if (n.d >= 4) {
+        const halo = ctx.createRadialGradient(x, y, 0, x, y, r * 5);
+        halo.addColorStop(0, n.fresh ? 'rgba(30,144,112,.28)' : `rgba(${ink},.10)`);
+        halo.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(x, y, r * 5, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = n.fresh ? '#1E9070' : `rgba(${ink},${n.d >= 4 ? .62 : .38})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      if (n.d >= 4) { // anel na cor da pasta — a única cor da folha, e com significado
+        ctx.strokeStyle = (GROUP_COL[n.g] || '#B0ADA3');
+        ctx.globalAlpha = n.d >= 6 ? 0.85 : 0.55;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.arc(x, y, r + 4.6, 0, 7); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // legenda
+    ctx.strokeStyle = `rgba(${ink},.11)`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L + 52, B - 96); ctx.lineTo(R - 52, B - 96); ctx.stroke();
+    ctx.fillStyle = '#1E9070'; ctx.beginPath(); ctx.arc(L + 33, B - 58, 5.2, 0, 7); ctx.fill();
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillStyle = `rgba(${ink},.74)`; ctx.font = '500 30px Georgia, "Times New Roman", serif';
+    tracked('O Cérebro', L + 52, B - 57, 5.5);
+    ctx.fillStyle = `rgba(${ink},.34)`; ctx.font = '500 19px ui-monospace, Menlo, monospace';
+    tracked('GRAFO DE NOTAS', R - 52, B - 57, 3.6, 'right');
+    ctx.fillStyle = `rgba(${ink},.26)`; ctx.font = '500 17px ui-monospace, Menlo, monospace';
+    tracked(`${notes ?? nodes.length} NOTAS · ${links.length} LIGAÇÕES`, (L + R) / 2, B - 57, 3.2, 'center');
+  }
+
 export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCamera }) {
   /* ---------- data ---------- */
   let nodes = BRAIN.nodes.map((n, i) => ({ ...n, i }));
@@ -49,47 +150,82 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     return cands[0];
   }
 
-  /* ---------- the Brain, as the approved mock shows it ----------
-     The mock's graph faces the camera: an upright ink drawing hovering over the pod (that is what
-     reads as a 3D object in the artifact). So the drawing lives on a camera-facing sprite, 15.4 ×
-     9.2 world units, centred above the slab — the 90 most linked notes in their own compact layout
-     (BRAIN.floor), edges rgba(ink,.224) at W/260, dots rgba(ink,.44) sized (0.8 + √links·0.28)·W/130,
-     the layout squashed to 0.6 vertically as the mock's sq .58 was. Every 6 s the biggest hub
-     pulses green for 2 s — the mock's glint. Colour and names live in the overlay. */
-  const BW = 17, BH = BW * 0.6;            // world size of the billboard
-  const PX = 1024, PY = Math.round(PX * 0.6);
-  const CENTRE = new THREE.Vector3(0, 1.3, 0);   // centred on the slab, as in the mock
+
+  /* ---------- o Cérebro: uma folha de vidro suspensa ----------
+     Passagem «restrição Apple» (25 out 2026). O grafo deixou de ser tinta a flutuar no ar: vive
+     dentro de uma folha de vidro fosco virada para a câmara — hairline, brilho interior em cima,
+     uma bloom radial por trás do desenho, arestas ligeiramente curvas, halo nos nós que mais ligam
+     e uma legenda com letra espaçada ao longo da base. Respira devagar; nada mais se mexe. */
+  const BW = 11.5, BH = 6.9;                 // tamanho da folha no mundo
+  const PX = 1200, PY = 720;                 // tela (5:3)
+  const CENTRE = new THREE.Vector3(0, 4.05, 0);
+  const FX = 470, FY = 250;                  // px de tela por unidade do grafo
+  const C = PX / 2, CY = 322;
+  let darkSheet = false;
+
   let floorPos = new Map(BRAIN.floor.map(([x, y], i) => [i, { x, y }]));
+  // centrar e caber: o layout vem do cofre com folga irregular — a folha exige composição
+  function fitFloor() {
+    const pts = [...floorPos.values()];
+    if (!pts.length) return;
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+    const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
+    // anisotrópico de propósito: o layout vem de uma projecção e é mais alto que largo;
+    // esticar cada eixo até à margem da folha é o que faz a composição respirar
+    const kx = 1.92 / ((maxx - minx) || 1), ky = 1.32 / ((maxy - miny) || 1);
+    for (const p of pts) { p.x = (p.x - cx) * kx; p.y = (p.y - cy) * ky; }
+  }
+  fitFloor();
   const onFloor = n => floorPos.has(n.i);
   const FP = n => floorPos.get(n.i);
   const cv = document.createElement('canvas'); cv.width = PX; cv.height = PY;
   const ctx = cv.getContext('2d');
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  board.scale.set(BW, BH, 1); board.position.copy(CENTRE); board.renderOrder = 4;
+  board.scale.set(BW, BH, 1); board.position.copy(CENTRE); board.renderOrder = 6;
   board.userData.dept = 'brain';
   brainGroup.add(board);
-  const FS = PX * 0.64, C = PX / 2, CY = PY / 2;                       // the mock filled its diamond; the sprite clips the spill
-  const P = n => { const f = FP(n); return [C + f.x * FS, CY + f.y * FS * 0.6]; };  // unit → canvas
+
+  const P = n => { const f = FP(n); return [C + f.x * FX, CY + f.y * FY]; };
   const _r = new THREE.Vector3(), _u = new THREE.Vector3();
-  const W = n => { // unit → world, on the billboard plane (screen right / screen up from the camera)
+  const W = n => { // unidade → mundo, no plano da folha (direita e cima da câmara)
     const f = FP(n) || { x: n.x, y: n.y }; const cam = getCamera();
     _r.setFromMatrixColumn(cam.matrixWorld, 0).normalize(); _u.setFromMatrixColumn(cam.matrixWorld, 1).normalize();
-    return CENTRE.clone().addScaledVector(_r, f.x * 0.64 * BW / 2).addScaledVector(_u, -f.y * 0.64 * 0.6 * BW / 2);
+    return CENTRE.clone()
+      .addScaledVector(_r, (f.x * FX) * (BW / PX))
+      .addScaledVector(_u, -(f.y * FY) * (BH / PY));
   };
+
+  // a bloom por trás da folha — levanta-a do fundo em vez de a colar lá
+  const bloomTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    const g = x.createRadialGradient(128, 128, 8, 128, 128, 126);
+    g.addColorStop(0, 'rgba(210,224,206,.85)'); g.addColorStop(.45, 'rgba(198,214,194,.30)'); g.addColorStop(1, 'rgba(198,214,194,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const bloom = new THREE.Sprite(new THREE.SpriteMaterial({ map: bloomTex, transparent: true, opacity: 0.30, depthWrite: false, blending: THREE.AdditiveBlending }));
+  bloom.scale.set(BW * 1.85, BH * 2.05, 1); bloom.position.copy(CENTRE).add(new THREE.Vector3(0, -0.1, -0.05));
+  bloom.renderOrder = 2; bloom.userData.dept = 'brain';
+  brainGroup.add(bloom);
+
+  // o anel de luz na base — o «stand» do objecto
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(3.34, 3.44, 128),
+    new THREE.MeshBasicMaterial({ color: '#8FA98F', transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; ring.renderOrder = 3; ring.userData.dept = 'brain';
+  brainGroup.add(ring);
+  const ring2 = new THREE.Mesh(
+    new THREE.RingGeometry(4.5, 4.53, 128),
+    new THREE.MeshBasicMaterial({ color: '#A9BBA8', transparent: true, opacity: 0.20, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.15; ring2.renderOrder = 3; ring2.userData.dept = 'brain';
+  brainGroup.add(ring2);
+
   function etch() {
-    ctx.clearRect(0, 0, PX, PY);
-    ctx.lineWidth = PX / 260; ctx.strokeStyle = `rgba(${INK},.224)`;
-    for (const [a, b] of links) {
-      if (!onFloor(nodes[a]) || !onFloor(nodes[b])) continue;
-      const [x1, y1] = P(nodes[a]), [x2, y2] = P(nodes[b]); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    }
-    for (const n of nodes) {
-      if (!onFloor(n)) continue;
-      const [x, y] = P(n); const r = (0.8 + Math.sqrt(n.d) * 0.28) * PX / 130;
-      ctx.fillStyle = n.fresh ? GREEN : `rgba(${INK},.44)`;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
-    }
+    drawBrainSheet(ctx, { nodes, links, onFloor, pt: P, ink: INK, dark: darkSheet, PX, PY, C, CY, notes: state.notes });
     tex.needsUpdate = true;
   }
   etch();
@@ -168,6 +304,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     adj = nodes.map(() => new Set()); for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
     byId = new Map(nodes.map(n => [n.id, n.i])); hubs = nodes.slice(0, 8);
     floorPos = new Map((g.floor || []).map(([x, y], i) => [i, { x, y }]));
+    fitFloor();
     state.notes = g.notes; sel = null;
     etch(); updateStrip();
   }
@@ -180,7 +317,12 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     updateStrip();
   }
   function tick(now) {
-    if (now > nextPulse && !quiet) { flatPulse(nodes[0]); nextPulse = now + 6000; } // the mock's 6-second glint on the biggest hub (demo only)
+    // a folha respira: 0,4 % de escala e 6 cm de deriva — o suficiente para se ler como objecto
+    const br = 1 + Math.sin(now / 2600) * 0.004;
+    board.scale.set(BW * br, BH * br, 1);
+    board.position.y = CENTRE.y + Math.sin(now / 3400) * 0.06;
+    bloom.position.y = CENTRE.y - 0.1 + Math.sin(now / 3400) * 0.06;
+    if (now > nextPulse && !quiet) { flatPulse(nodes[0]); nextPulse = now + 6000; } // o brilho de 6 s no hub maior (só demonstração)
     for (let i = pulses.length - 1; i >= 0; i--) {
       const p = pulses[i], k = (now - p.born) / 2000;
       if (k >= 1) { scene.remove(p.m); p.m.material.dispose(); pulses.splice(i, 1); continue; }
@@ -315,6 +457,13 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   document.getElementById('bvClose').addEventListener('click', close);
   addEventListener('resize', () => { if (openNow) draw(); });
 
-  function setTheme(dark) { INK = dark ? '236,234,227' : '21,20,20'; etch(); }
+  function setTheme(dark) {
+    INK = dark ? '236,234,227' : '21,20,20';
+    darkSheet = !!dark;
+    bloom.material.opacity = dark ? 0.16 : 0.30;
+    ring.material.opacity = dark ? 0.55 : 0.42;
+    ring2.material.opacity = dark ? 0.28 : 0.20;
+    etch();
+  }
   return { read, readNote, write, setGraph, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow, state, get nodes() { return nodes; }, get links() { return links; } };
 }

@@ -375,7 +375,7 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   });
   if (k === 'brain') { // V3.6: a small tag names the etched floor and opens the graph (the big card stays retired)
     b.className = 'badge brainTag';
-    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>O CÉREBRO<b>${brain.state.notes.toLocaleString('en-NZ')}</b>NOTES</div>`;
+    b.innerHTML = `<div class="b-name"><span class="dot" style="background:${dept.chip}"></span>O CÉREBRO<b>${brain.state.notes.toLocaleString('pt-PT')}</b>NOTAS</div>`;
     b.onclick = (e) => { e.stopPropagation(); brain.open(); };
     b.title = 'abrir o Cérebro (G)';
   }
@@ -398,7 +398,7 @@ for (const k of [...DEPT_KEYS, 'brain']) {
     sales:     [48, 8.6, -32],     // over the pod's right corner — past the DELIVERY pod's desks and the Sales Lead pill
     ops:       [-13.5, 4, 54],     // side LEFT
     fin:       [43.5, 4, 17],      // side RIGHT
-    brain:     [-5.5, 3.2, -5.5],  // just above the pod's back corner
+    brain:     [0, 9.7, 0],       // square above the glass sheet, so the caption stays readable
   };
   deptRT[k].badgeAnchor = new THREE.Vector3(...ANCHOR[k]);
   if (k === 'fin') deptRT[k].sideBadge = true;
