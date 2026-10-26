@@ -38,7 +38,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, ROOT } from './config.mjs';
 import { layoutGraph, readVault, readOfficeNotes } from './graph-build.mjs';
 import { DEPTS, DEPT_KEYS } from './src/data.js';
@@ -65,6 +65,17 @@ import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
 const cfg = loadConfig();
+// O bundle é gerado por build.mjs e vem commitado, mas `dist/` não sobrevive a todas as cópias do
+// repositório (é um directório de artefactos). Se faltar, constrói-se UMA vez no arranque — assim o
+// `npm start` num clone limpo abre o escritório em vez de rebentar na primeira visita a `/`.
+function ensureBundle() {
+  const out = path.join(ROOT, 'dist', 'command-centre-v2.html');
+  if (fs.existsSync(out) && fs.existsSync(path.join(ROOT, 'dist', 'mesa.html'))) return;
+  console.log('  bundle ausente: a construir (node build.mjs)…');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'build.mjs')], { cwd: ROOT, stdio: 'inherit' });
+  if (r.status !== 0) console.error('  aviso: a construção falhou — / e /app vão responder 503 até `npm run build`.');
+}
+ensureBundle();
 const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by build.mjs; shipped so npm start works without a build
 const MESA = path.join(ROOT, 'dist', 'mesa.html'); // a mesa de trabalho: Hoje, leads, aprovação, conversas, saldo
 const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
@@ -659,6 +670,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/command-centre-v2.html' || url.pathname === '/dark')) {
+      if (!fs.existsSync(HTML)) { res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('o escritório ainda não foi construído — corre `npm run build` na pasta agents-office-main'); }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       let page = fs.readFileSync(HTML, 'utf8');
       if (url.pathname === '/dark') page = page.replace('<body>', '<body class="dark">'); // /dark: o mesmo ficheiro, em modo escuro
@@ -672,6 +684,7 @@ const server = http.createServer(async (req, res) => {
     // A mesa de trabalho (26 out 2026): a superfície limpa para decidir. O escritório 3D fica onde
     // está; esta é a página que se abre de manhã e não pede para olhar para uma cena.
     if (req.method === 'GET' && (url.pathname === '/app' || url.pathname === '/mesa' || url.pathname === '/hoje')) {
+      if (!fs.existsSync(MESA)) { res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('a mesa ainda não foi construída — corre `npm run build` na pasta agents-office-main'); }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(MESA, 'utf8'));
     }
