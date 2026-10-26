@@ -104,6 +104,13 @@ resultados». Os tokens de design (espaçamento em múltiplos de 4, escala tipog
 semânticas `--ok/--warn/--risk`, modo escuro e `prefers-reduced-motion`) estão no `:root` do
 `src/shell.html`.
 
+## Sem chave nenhuma, já dá para trabalhar
+
+A gaveta **◉ OPERAÇÃO** tem `+ NOVO LEAD` (nome, cidade, telefone, email, site) e, em cada lead,
+`ESCREVER` — que abre um compositor com o canal, o assunto e um texto de partida escrito a partir
+do que se sabe do negócio (tem site? que cidade?). O rascunho aparece de imediato em **Hoje**, à
+espera do teu OK. É o ciclo inteiro sem depender da Google nem de nenhum motor de IA.
+
 ## Caixa de entrada e envio
 
 - **Email** exige `RESEND_API_KEY` **e** consentimento registado no lead (`consent: 'dado'`).

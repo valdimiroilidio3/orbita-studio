@@ -17,7 +17,7 @@ export function initOps({ api = '/api' } = {}) {
     body: panel.querySelector('.op-body'), close: panel.querySelector('.op-close'),
     refresh: panel.querySelector('.op-refresh'), note: panel.querySelector('.op-note'),
   };
-  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '' };
+  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null };
 
   const open = () => { panel.hidden = false; btn.classList.add('on'); load(); };
   const close = () => { panel.hidden = true; btn.classList.remove('on'); };
@@ -55,8 +55,47 @@ export function initOps({ api = '/api' } = {}) {
   const STATUS_PT = { novo: 'novo', contactado: 'contactado', respondeu: 'respondeu', reuniao: 'reunião', cliente: 'cliente', perdido: 'perdido' };
   const NEXT = { novo: ['contactado', 'perdido'], contactado: ['respondeu', 'perdido'], respondeu: ['reuniao', 'perdido'], reuniao: ['cliente', 'perdido'], cliente: [], perdido: ['novo'] };
 
+  function newLeadForm() {
+    return `<div class="op-form" role="group" aria-label="novo lead">
+      <input class="op-in" data-f="name" placeholder="Nome do negócio" aria-label="nome">
+      <input class="op-in" data-f="city" placeholder="Cidade" aria-label="cidade">
+      <input class="op-in" data-f="phone" placeholder="Telefone" aria-label="telefone">
+      <input class="op-in" data-f="email" placeholder="Email" aria-label="email">
+      <input class="op-in" data-f="website" placeholder="Site (se tiver)" aria-label="site">
+      <div class="op-form-acts">
+        <button class="op-b good" data-act="save-lead">GUARDAR LEAD</button>
+        <button class="op-b" data-act="cancel-lead">CANCELAR</button>
+        <span class="op-hint">A nota é calculada do que escreveres — sem site, telefone público e avaliação contam.</span>
+      </div>
+    </div>`;
+  }
+
+  function composer(l) {
+    const ch = l.phone ? 'whatsapp' : 'email';
+    return `<div class="op-form" role="group" aria-label="escrever mensagem a ${esc(l.name)}">
+      <div class="op-form-row">
+        <select class="op-in" data-f="channel" aria-label="canal">
+          <option value="whatsapp"${ch === 'whatsapp' ? ' selected' : ''}${l.phone ? '' : ' disabled'}>WhatsApp${l.phone ? '' : ' (sem número)'}</option>
+          <option value="email"${ch === 'email' ? ' selected' : ''}${l.email ? '' : ' disabled'}>Email${l.email ? '' : ' (sem endereço)'}</option>
+        </select>
+        <input class="op-in" data-f="subject" placeholder="Assunto (email)" aria-label="assunto" value="${esc(l.website ? 'O site de ' + l.name : 'Uma ideia para ' + l.name)}">
+      </div>
+      <textarea class="op-in" data-f="body" rows="3" aria-label="mensagem" placeholder="Escreve a mensagem. Nada sai daqui sem o teu OK em Hoje.">${esc(
+        l.website ? `Bom dia, vi que o ${l.name} tem presença em ${String(l.website).replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}${l.city ? ' em ' + l.city : ''} e reparei numa coisa que se resolve depressa: uma página simples, com o essencial e o botão de contacto. Faço isto por um valor fechado, sem mensalidade. Faz sentido falarmos 10 minutos esta semana?` : `Bom dia, encontrei o ${l.name}${l.city ? ' em ' + l.city : ''} e reparei que ainda não tem site — só o que aparece nas redes. Faço uma página simples, com o essencial e o botão de contacto, por um valor fechado. Faz sentido falarmos 10 minutos esta semana?`,
+      )}</textarea>
+      <div class="op-form-acts">
+        <button class="op-b good" data-act="save-msg" data-id="${esc(l.id)}">GUARDAR RASCUNHO</button>
+        <button class="op-b" data-act="cancel-msg">CANCELAR</button>
+        <span class="op-hint">Fica à espera de aprovação. ${
+          l.email || l.phone ? '' : 'Este lead não tem contacto — acrescenta um telefone ou email primeiro.'
+        }</span>
+      </div>
+    </div>`;
+  }
+
   function paintLeads() {
-    if (!S.leads.length) return `<div class="op-empty">Ainda não há leads na base de dados. Pesquisa na gaveta <b>LEADS</b> (◈) e o que encontra entra aqui, com nota e razões.</div>`;
+    const add = S.adding ? newLeadForm() : `<button class="op-b good" data-act="new-lead">+ NOVO LEAD</button>`;
+    if (!S.leads.length) return `<div class="op-empty">Ainda não há leads na base de dados. Acrescenta um à mão, ou pesquisa na gaveta <b>LEADS</b> (◈) — o que encontra entra aqui, com nota e razões.</div><div class="op-form-acts">${add}</div>`;
     return S.leads.map(l => {
       const opts = [l.status, ...NEXT[l.status]].map(s => `<option value="${s}"${s === l.status ? ' selected' : ''}>${STATUS_PT[s]}</option>`).join('');
       return `<div class="op-row">
@@ -68,9 +107,10 @@ export function initOps({ api = '/api' } = {}) {
         <div class="op-side">
           <div class="op-score">${l.score ?? '—'}<small>NOTA</small></div>
           <select class="op-stage" data-id="${esc(l.id)}" title="mudar de estado no funil">${opts}</select>
+          <button class="op-b" data-act="compose" data-id="${esc(l.id)}">ESCREVER</button>
         </div>
-      </div>`;
-    }).join('');
+      </div>${S.composing === l.id ? composer(l) : ''}`;
+    }).join('') + `<div class="op-form-acts">${add}</div>`;
   }
 
   function paintMessages() {
@@ -122,13 +162,40 @@ export function initOps({ api = '/api' } = {}) {
         else P.note.textContent = r.reason || 'não saiu.';
       }
       if (a === 'confirm') { const r = await post(`/ops/messages/${id}/confirm`); if (r.error) throw new Error(r.error); P.note.textContent = 'confirmada como enviada.'; }
+      if (a === 'save-lead') {
+        const f = P.body.querySelector('.op-form');
+        if (!f) return;
+        const val = k => String(f.querySelector(`[data-f="${k}"]`)?.value || '').trim();
+        if (!val('name')) throw new Error('o lead precisa de um nome');
+        const r = await post('/ops/leads', { leads: [{ name: val('name'), city: val('city'), phone: val('phone'), email: val('email'), website: val('website'), source: 'manual' }] });
+        if (r.error) throw new Error(r.error);
+        S.adding = false;
+        P.note.textContent = r.created ? 'lead guardado e pontuado.' : 'já existia — atualizei os dados.';
+      }
+      if (a === 'save-msg') {
+        const f = P.body.querySelector('.op-form');
+        if (!f) return;
+        const val = k => String(f.querySelector(`[data-f="${k}"]`)?.value || '').trim();
+        if (!val('body')) throw new Error('a mensagem está vazia');
+        const r = await post('/ops/messages', { leadId: id, channel: val('channel') || 'whatsapp', subject: val('subject'), body: val('body') });
+        if (r.error) throw new Error(r.error);
+        S.composing = null;
+        P.note.textContent = 'rascunho guardado — está à tua espera em Hoje.';
+      }
     } catch (e) { P.note.textContent = e.message; P.note.classList.add('bad'); }
     finally { S.busy = false; await load(); }
   }
 
   P.body.addEventListener('click', e => {
     const b = e.target.closest('button[data-act]');
-    if (b) { act(b.dataset.act, b.dataset.id, b.dataset.ch); return; }
+    if (b) {
+      const a = b.dataset.act;
+      if (a === 'new-lead') { S.adding = true; S.composing = null; return paint(); }
+      if (a === 'cancel-lead') { S.adding = false; return paint(); }
+      if (a === 'compose') { S.composing = S.composing === b.dataset.id ? null : b.dataset.id; S.adding = false; return paint(); }
+      if (a === 'cancel-msg') { S.composing = null; return paint(); }
+      return act(a, b.dataset.id, b.dataset.ch);
+    }
     const c = e.target.closest('button[data-confirm]');
     if (c) act('confirm', c.dataset.confirm);
   });

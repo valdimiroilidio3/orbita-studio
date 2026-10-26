@@ -910,6 +910,16 @@
   .op-note.bad { color: #B4391E; }
   body.dark #opsPanel { background: #1E1F24; box-shadow: 0 26px 70px rgba(0,0,0,.7); }
   body.dark .op-stage { background: #1B1C21; color: var(--ink); border-color: var(--hairline); }
+  .op-form { border: 1px solid var(--ink); border-radius: 12px; padding: var(--s3); margin-top: var(--s2);
+    display: flex; flex-direction: column; gap: var(--s2); background: var(--surface); }
+  .op-form-row { display: flex; gap: var(--s2); }
+  .op-in { font-family: var(--ui); font-size: var(--t-s); color: var(--ink); background: var(--surface);
+    border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 9px; min-width: 0; width: 100%; resize: vertical; }
+  .op-in:focus { outline: none; border-color: var(--ink); }
+  .op-in:disabled { opacity: .45; }
+  .op-form-acts { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+  .op-hint { font-family: var(--ui); font-size: 8.5px; color: var(--grey); line-height: 1.4; flex: 1; min-width: 140px; }
+  body.dark .op-in { background: #1B1C21; color: var(--ink); border-color: var(--hairline); }
   /* 26 out 2026 · HOJE — um ecrã, três perguntas, e a decisão como gesto */
   #topToday { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--ink);
     background: none; border: 1px solid var(--ink); border-radius: 99px; padding: 5px 12px; cursor: pointer; position: relative; }

@@ -21,7 +21,7 @@ const since24 = iso => {
 
 const KIND_PT = { mensagem: 'mensagem', tarefa: 'trabalho', seguimento: 'seguimento', rotina: 'rotina' };
 
-export function initToday({ api = '/api', onOpenLeads = null, onOpenAgent = null } = {}) {
+export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, onOpenAgent = null } = {}) {
   const ov = document.getElementById('todayOv');
   const btn = document.getElementById('topToday');
   if (!ov || !btn) return null;
@@ -100,7 +100,8 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenAgent = null
         <p class="td-empty-h">Nada à espera de ti.</p>
         <p>O escritório está a fazer o trabalho de fundo. Quando houver uma mensagem para sair, aparece aqui — e não sai sem este ecrã.</p>
         <div class="td-empty-acts">
-          ${onOpenLeads ? '<button class="td-btn primary" data-act="leads">Procurar leads reais</button>' : ''}
+          ${onOpenOps ? '<button class="td-btn primary" data-act="ops">Acrescentar um lead</button>' : ''}
+          ${onOpenLeads ? '<button class="td-btn" data-act="leads">Procurar na Google</button>' : ''}
           <button class="td-btn quiet" data-act="refresh">Voltar a ver</button>
         </div>
         <p class="td-empty-note">${(S.data?.resumo?.leads?.total || 0)} leads guardados · ${(S.data?.aSeguir?.length || 0)} por vir</p>
@@ -269,6 +270,7 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenAgent = null
       const card = b.closest('.td-card');
       const act = b.dataset.act;
       if (act === 'leads' && onOpenLeads) return onOpenLeads();
+      if (act === 'ops' && onOpenOps) return onOpenOps();
       if (act === 'refresh') return load();
       if (!card) return;
       if (act === 'why') return openWhy(card);

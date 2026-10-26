@@ -1394,9 +1394,9 @@ tasks = initTasks({
   toScreen: (p) => toScreen(p), reframe,
 });
 const leadsDrawer = initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
-initOps({ api: '/api' }); // a gaveta OPERAÇÃO: o que está guardado, o que espera OK, e o rasto
+const opsDrawer = initOps({ api: '/api' }); // a gaveta OPERAÇÃO: o que está guardado, o que espera OK, o rasto
 // HOJE: abre por cima de tudo. Sem decisões, ensina o próximo passo em vez de dizer «sem resultados».
-const today = initToday({ api: '/api', onOpenLeads: () => { today.close(); leadsDrawer.open(); } });
+const today = initToday({ api: '/api', onOpenLeads: () => { today.close(); leadsDrawer.open(); }, onOpenOps: () => { today.close(); opsDrawer.open(); } });
 // primeira visita do dia → o ecrã abre sozinho; nas seguintes, a barra mostra o número à espera
 fetch('/api/ops/today').then(r => r.json()).then(d => {
   const n = d?.resumo?.decidir || 0;
