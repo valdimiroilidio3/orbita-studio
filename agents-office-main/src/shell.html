@@ -1433,6 +1433,241 @@
     text-shadow: 0 0 6px var(--cream), 0 0 12px var(--cream), 0 0 2px var(--cream);
     will-change: transform, opacity;
   }
+
+  /* ===========================================================================
+     V5 · O MENU (26 out 2026) — «vibe Apple»: uma barra só, em vidro.
+
+     O que muda: o material (vidro em vez de papel opaco), a escala (tipografia
+     mais pequena e mais calibrada), a hierarquia (HOJE é a única acção cheia;
+     o resto é vidro que acende ao passar), e o movimento (curto, amortecido).
+     O que NÃO muda: ids, handlers e texto de acessibilidade — o JavaScript da
+     cena, do calendário, do HOJE, dos LEADS e da OPERAÇÃO continuam a mandar.
+     =========================================================================== */
+  :root {
+    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Inter, system-ui, sans-serif;
+    --bar-h: 54px;
+    --glass: rgba(253,255,248,.70);
+    --glass-strong: rgba(253,255,248,.88);
+    --glass-sheen: linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.16) 52%, rgba(255,255,255,0) 100%);
+    --glass-line: rgba(255,255,255,.55);
+    --glass-edge: rgba(21,20,20,.10);
+    --fill-hover: rgba(21,20,20,.06);
+    --fill-press: rgba(21,20,20,.11);
+    --accent: #0A84FF;
+    --accent-soft: rgba(10,132,255,.14);
+    --accent-ink: #0A62CC;
+    --accent-bg: #1D1D1F;
+    --accent-fg: #FDFFF8;
+    --amber-bg: rgba(255,159,10,.14);
+    --amber-line: rgba(255,159,10,.36);
+    --amber-ink: #8A5400;
+  }
+  body.dark {
+    --glass: rgba(28,29,34,.64);
+    --glass-strong: rgba(28,29,34,.88);
+    --glass-sheen: linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.02) 52%, rgba(255,255,255,0) 100%);
+    --glass-line: rgba(255,255,255,.12);
+    --glass-edge: rgba(0,0,0,.5);
+    --fill-hover: rgba(255,255,255,.085);
+    --fill-press: rgba(255,255,255,.15);
+    --accent-soft: rgba(10,132,255,.22);
+    --accent-ink: #82BBFF;
+    --accent-bg: #F5F5F7;
+    --accent-fg: #15161A;
+    --amber-bg: rgba(255,159,10,.18);
+    --amber-line: rgba(255,159,10,.42);
+    --amber-ink: #FFC46B;
+  }
+
+  /* a barra: flutua 8 px, canto contínuo, vidro por cima da cena */
+  #topbar {
+    top: 8px; left: 10px; right: 10px; height: var(--bar-h);
+    padding: 0 10px 0 14px; gap: 10px;
+    border: 0; border-radius: 17px;
+    background-color: var(--glass);
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    box-shadow:
+      inset 0 0 0 1px var(--glass-line),
+      inset 0 -1px 0 var(--glass-edge),
+      0 1px 1px rgba(21,20,20,.06),
+      0 18px 44px -16px rgba(21,20,20,.34);
+    font-family: var(--sf);
+    animation: barIn .5s var(--ease) both;
+  }
+  body.dark #topbar {
+    background-color: var(--glass);
+    box-shadow:
+      inset 0 0 0 1px var(--glass-line),
+      inset 0 -1px 0 var(--glass-edge),
+      0 1px 1px rgba(0,0,0,.45),
+      0 18px 44px -16px rgba(0,0,0,.62);
+  }
+  @keyframes barIn { from { opacity: 0; transform: translateY(-8px); } }
+
+  /* a marca e a versão: a versão deixa de ser texto solto e passa a etiqueta */
+  #topbar .brand { font-family: var(--serif); font-size: 18px; letter-spacing: .05em; line-height: 1; display: inline-flex; align-items: center; gap: 6px; }
+  #topbar .brand .ver {
+    font-family: var(--sf); font-size: 9px; font-weight: 700; letter-spacing: .09em;
+    color: var(--grey); background: var(--fill-hover);
+    border-radius: 5px; padding: 3px 5px; margin: 0; vertical-align: 0;
+  }
+
+  /* as tiras de motores: etiquetas discretas, logotipos com relevo */
+  #topbar #topconn .tc-lab, #topbar #topmodels .tc-lab {
+    font-family: var(--sf); font-size: 9px; font-weight: 650; letter-spacing: .12em;
+    color: var(--grey); opacity: .92;
+  }
+  #topbar #topconn img, #topbar #topmodels img {
+    width: 26px; height: 26px; border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(21,20,20,.18), inset 0 0 0 1px rgba(255,255,255,.32);
+    transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+  }
+  #topbar #topconn img:hover, #topbar #topmodels img:hover {
+    transform: translateY(-1px) scale(1.06);
+    box-shadow: 0 5px 14px rgba(21,20,20,.24);
+  }
+
+  /* o menu: uma bandeja só — «segmented control» — e dentro dela, botões */
+  #topbar .m-group {
+    display: flex; align-items: center; gap: 2px; flex: none;
+    padding: 3px; border-radius: 13px;
+    background: rgba(21,20,20,.055);
+    box-shadow: inset 0 0 0 1px rgba(21,20,20,.06);
+  }
+  body.dark #topbar .m-group { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+  #topbar .m-group > button, #topbar .m-group > a {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 34px; padding: 0 11px; margin: 0;
+    font-family: var(--sf); font-size: 12.5px; font-weight: 550; letter-spacing: -.004em;
+    color: var(--ink); text-decoration: none; white-space: nowrap;
+    background: transparent; border: 0; border-radius: 10px; cursor: pointer;
+    transition: background-color .2s var(--ease), color .2s var(--ease),
+                transform .16s var(--ease), box-shadow .2s var(--ease), opacity .2s var(--ease);
+    -webkit-tap-highlight-color: transparent;
+  }
+  #topbar .m-group > button:hover, #topbar .m-group > a:hover { background: var(--fill-hover); }
+  #topbar .m-group > button:active, #topbar .m-group > a:active { background: var(--fill-press); transform: scale(.975); }
+  #topbar .m-group > button.on, #topbar .m-group > a.on { background: var(--accent-soft); color: var(--accent-ink); }
+  body.calOpen #topbar .m-group > #topCal { background: var(--accent-soft); color: var(--accent-ink); }
+  #topbar .m-group > #topLeads.off { opacity: .45; }
+
+  .mb-i {
+    width: 15px; height: 15px; flex: none; display: block;
+    fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
+    opacity: .72; transition: opacity .2s var(--ease);
+  }
+  #topbar .m-group > button:hover .mb-i, #topbar .m-group > a:hover .mb-i,
+  #topbar .m-group > .on .mb-i { opacity: 1; }
+
+  /* HOJE: a única acção cheia. Tudo o resto é vidro. */
+  #topbar .m-group > #topToday {
+    background: var(--accent-bg); color: var(--accent-fg); font-weight: 600;
+    box-shadow: 0 1px 2px rgba(21,20,20,.22), inset 0 1px 0 rgba(255,255,255,.14);
+  }
+  #topbar .m-group > #topToday:hover { background: var(--accent-bg); filter: brightness(1.14); }
+  #topbar .m-group > #topToday .mb-i { opacity: .95; }
+  #topbar .m-group > #topToday.on { box-shadow: 0 0 0 3px var(--accent-soft), 0 1px 2px rgba(21,20,20,.22); }
+  #topToday .td-badge { display: none; }
+  #topToday .td-badge:not([hidden]) {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 17px; height: 17px; padding: 0 5px;
+    border-radius: 99px; background: #FF453A; color: #fff;
+    font-family: var(--sf); font-size: 10.5px; font-weight: 700; letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 0 2px rgba(255,69,58,.28);
+  }
+
+  /* o que espera por ti: um selo âmbar, não um alarme */
+  #topAppr {
+    align-items: center; gap: 6px; height: 28px; padding: 0 10px; cursor: pointer;
+    font-family: var(--sf); font-size: 12px; font-weight: 600; letter-spacing: 0;
+    color: var(--amber-ink); background: var(--amber-bg);
+    border: 1px solid var(--amber-line); border-radius: 99px;
+    animation: apprIn 2.6s var(--ease) infinite;
+  }
+  #topAppr svg { width: 13px; height: 13px; flex: none; }
+  #topAppr span { font-variant-numeric: tabular-nums; }
+  @keyframes apprIn {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,159,10,0); }
+    50% { box-shadow: 0 0 0 4px rgba(255,159,10,.14); }
+  }
+
+  /* o relógio: números alinhados, um traço a separar do menu */
+  #clock {
+    font-family: var(--sf); font-size: 12.5px; font-weight: 560; letter-spacing: .01em;
+    font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1;
+    color: var(--ink); opacity: .86;
+    display: inline-flex; align-items: center; height: 20px;
+    padding-left: 12px; margin-left: 2px; border-left: 1px solid var(--hairline);
+  }
+
+  /* teclado: foco visível, azul, sem mudar o desenho */
+  #topbar .m-group > button:focus-visible, #topbar .m-group > a:focus-visible,
+  #topbar #topconn img:focus-visible, #topbar #topmodels img:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  #topAppr:focus-visible, #topbar img:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* as gavetas que pendem do menu: o mesmo vidro, mais espesso (o texto tem de se ler) */
+  #leadsPanel, #opsPanel {
+    top: 72px; right: 12px;
+    font-family: var(--sf);
+    background-color: var(--glass-strong);
+    background-image: var(--glass-sheen);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--glass-line); border-radius: 20px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 1px 1px rgba(21,20,20,.05), 0 30px 72px -20px rgba(21,20,20,.34);
+    transform-origin: top right;
+    animation: sheetIn .32s var(--ease) both;
+  }
+  body.dark #leadsPanel, body.dark #opsPanel {
+    background-color: var(--glass-strong);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), 0 1px 1px rgba(0,0,0,.4), 0 30px 72px -20px rgba(0,0,0,.66);
+  }
+  @keyframes sheetIn { from { opacity: 0; transform: translateY(-6px) scale(.99); } }
+  #leadsPanel .ld-h, #opsPanel .op-h { border-bottom: 1px solid var(--hairline); }
+  #leadsPanel .ld-h button, #opsPanel .op-h button { border-radius: 99px; transition: background-color .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease); }
+  #leadsPanel .ld-h button:hover, #opsPanel .op-h button:hover { background: var(--fill-hover); border-color: transparent; }
+
+  /* a barra flutua: o que vive debaixo dela desce os 8 px do vidro */
+  #rail { top: 62px; }
+  #overviewBtn { top: 74px; }
+  #board.company { top: 72px; }
+  #board.left, #board.right { top: 118px; }
+  body.railLeft #sahniMark { top: 76px; }
+
+  /* ecrãs estreitos: primeiro caem as etiquetas, depois os logotipos, depois o
+     texto dos botões — nunca as acções. */
+  @media (max-width: 1140px) {
+    #topbar .brand .ver, #topbar #topconn .tc-lab, #topbar #topmodels .tc-lab { display: none; }
+  }
+  @media (max-width: 1020px) {
+    #topbar #topmodels { display: none; }
+  }
+  @media (max-width: 900px) {
+    #topbar { left: 8px; right: 8px; padding: 0 8px 0 12px; gap: 8px; }
+    #topbar .m-group > button, #topbar .m-group > a { padding: 0 9px; }
+    #topbar .m-group .mb-t { display: none; }
+    #topbar .m-group > #topToday .mb-t { display: inline; }
+    #topbar #topconn { display: none; }
+    #clock { font-size: 12px; padding-left: 10px; }
+  }
+  @media (max-width: 620px) {
+    #topbar { top: 6px; left: 6px; right: 6px; height: 50px; padding: 0 6px 0 10px; }
+    #topbar .brand { font-size: 16px; }
+    #topbar .m-group > button, #topbar .m-group > a { height: 32px; padding: 0 8px; }
+  }
+
+  /* quem pediu menos movimento não perde nada: só perde a animação */
+  @media (prefers-reduced-motion: reduce) {
+    #topbar, #leadsPanel, #opsPanel { animation: none; }
+    #topAppr { animation: none; }
+    #topbar .m-group > button, #topbar .m-group > a,
+    #topbar #topconn img, #topbar #topmodels img { transition-duration: .001ms; }
+  }
 </style>
 </head>
 <body>
@@ -1447,12 +1682,17 @@
   <div id="topconn"></div>
   <span class="sp"></span>
   <div id="topmodels"></div>
-  <button id="topToday" class="td-open" title="o que precisa de ti, o que aconteceu, o que vem aí (H)">HOJE <span class="td-badge" hidden></span></button>
-  <button id="topOps" title="a operação a sério: leads guardados com nota, mensagens à espera do teu OK, fila e auditoria">◉ OPERAÇÃO</button>
-  <a id="topMesa" href="/app" target="_blank" rel="noopener" title="a mesa de trabalho: Hoje, os leads, a aprovação de cada mensagem, o saldo">▤ MESA</a>
-  <button id="topLeads" title="procura real na Google: empresas (Places) e informação (pesquisa web)">◈ LEADS</button>
-  <button id="topCal" title="o calendário — tarefas e rotinas nos seus dias (P)">◷ CALENDÁRIO</button>
-  <span id="topAppr" style="display:none">⚠ <span>0</span></span>
+  <!-- V5 (26 out 2026): o menu é uma bandeja só. Os ícones são desenhados em SVG (sem fontes
+       de símbolos a faltar), e as etiquetas são texto normal — em ecrã estreito sai a etiqueta,
+       fica o ícone, e a acção continua toda lá. -->
+  <div class="m-group" role="group" aria-label="menu">
+    <button id="topToday" class="td-open" aria-label="Hoje" title="o que precisa de ti, o que aconteceu, o que vem aí (H)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg><span class="mb-t">Hoje</span><span class="td-badge" hidden></span></button>
+    <button id="topOps" aria-label="Operação" title="a operação a sério: leads guardados com nota, mensagens à espera do teu OK, fila e auditoria"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8h2.4l1.7-4.4L8.2 12l1.7-4h4.6"/></svg><span class="mb-t">Operação</span></button>
+    <a id="topMesa" href="/app" target="_blank" rel="noopener" aria-label="Mesa" title="a mesa de trabalho: Hoje, os leads, a aprovação de cada mensagem, o saldo"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="2" y="8.9" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="8.9" width="5.1" height="5.1" rx="1.5"/></svg><span class="mb-t">Mesa</span></a>
+    <button id="topLeads" aria-label="Leads" title="procura real na Google: empresas (Places) e informação (pesquisa web)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7.1" cy="7.1" r="4.3"/><path d="M10.3 10.3 14 14"/></svg><span class="mb-t">Leads</span></button>
+    <button id="topCal" aria-label="Calendário" title="o calendário — tarefas e rotinas nos seus dias (P)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.2" width="12" height="10.8" rx="3"/><path d="M2 6.6h12M5.6 1.7v2.6M10.4 1.7v2.6"/></svg><span class="mb-t">Calendário</span></button>
+  </div>
+  <span id="topAppr" style="display:none" role="status" title="decisões à tua espera"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.1 14.2 13.2H1.8Z"/><path d="M8 6.5v3"/><path d="M8 11.3v.3"/></svg><span>0</span></span>
   <span id="clock">—</span>
 </div>
 <!-- V4 (25 out 2026): LEADS — a pesquisa real da Google, ligada à prospeção -->
