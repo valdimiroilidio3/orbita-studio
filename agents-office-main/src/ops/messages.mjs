@@ -35,14 +35,15 @@ export function sentLastMinute(db, channel, at = new Date()) {
 }
 
 /** Cria um rascunho. Não envia nada e não fala com nenhum serviço. */
-export function draftMessage(db, { leadId, channel = 'email', subject = '', body }, actor = 'agente') {
+export function draftMessage(db, { leadId, channel = 'email', subject = '', body, predictions = [], evidenceUsed = [], generatedBy = '', why = '' }, actor = 'agente') {
   if (!CHANNELS.includes(channel)) throw Object.assign(new Error(`canal desconhecido: ${channel}`), { status: 400 });
   if (!String(body || '').trim()) throw Object.assign(new Error('a mensagem está vazia'), { status: 400 });
   const lead = getLead(db, leadId);
   if (!lead) throw Object.assign(new Error('lead não encontrado'), { status: 404 });
   const id = uid('m_');
-  db.prepare(`INSERT INTO messages (id, lead_id, channel, subject, body, status, created_at) VALUES (?,?,?,?,?,'rascunho',?)`)
-    .run(id, leadId, channel, subject, body, now());
+  db.prepare(`INSERT INTO messages (id, lead_id, channel, subject, body, status, created_at, predictions, evidence_used, generated_by, why)
+    VALUES (?,?,?,?,?,'rascunho',?,?,?,?,?)`)
+    .run(id, leadId, channel, subject, body, now(), JSON.stringify(predictions), JSON.stringify(evidenceUsed), generatedBy, why);
   audit(db, { actor, action: 'mensagem.rascunho', entity: 'mensagem', entityId: id, detail: { leadId, channel } });
   return getMessage(db, id);
 }
@@ -51,7 +52,11 @@ export function getMessage(db, id) {
   const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(id);
   if (!row) return null;
   const lead = getLead(db, row.lead_id);
-  return { ...row, lead: lead ? { id: lead.id, name: lead.name, email: lead.email, phone: lead.phone, status: lead.status } : null };
+  const parse = v => { try { return JSON.parse(v || '[]'); } catch { return []; } };
+  return {
+    ...row, predictions: parse(row.predictions), evidence_used: parse(row.evidence_used),
+    lead: lead ? { id: lead.id, name: lead.name, email: lead.email, phone: lead.phone, status: lead.status, city: lead.city, score: lead.score } : null,
+  };
 }
 
 export function listMessages(db, { limit = 50, status = null, leadId = null } = {}) {

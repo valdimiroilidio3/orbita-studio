@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch { /* Node sem SQLite */ }
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -104,6 +104,36 @@ CREATE TABLE IF NOT EXISTS outbox (
 );
 CREATE INDEX IF NOT EXISTS outbox_due ON outbox(status, next_attempt_at);
 
+-- O que se encontrou ao olhar para o negócio antes de lhe escrever. Uma linha por lead e por
+-- tipo; data guarda os factos e evidence as frases verdadeiras de onde saíram. Se a leitura
+-- falhar, fica o motivo — nunca um dossiê inventado.
+CREATE TABLE IF NOT EXISTS research (
+  id TEXT PRIMARY KEY,
+  lead_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'site',
+  url TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'por_fazer',
+  reason TEXT NOT NULL DEFAULT '',
+  fetched_at TEXT,
+  data TEXT NOT NULL DEFAULT '{}',
+  evidence TEXT NOT NULL DEFAULT '[]'
+);
+CREATE UNIQUE INDEX IF NOT EXISTS research_lead_kind ON research(lead_id, kind);
+
+-- O ciclo que fecha: o que o mundo respondeu. «respondeu», «interessado», «reuniao», «ignorou»,
+-- «recusou», «pediu_parar». É daqui que saem os pesos da pontuação e as regras dos rascunhos.
+CREATE TABLE IF NOT EXISTS signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  lead_id TEXT NOT NULL,
+  message_id TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  attributes TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS signals_lead ON signals(lead_id);
+CREATE INDEX IF NOT EXISTS signals_kind ON signals(kind);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -162,6 +192,19 @@ export function openDb(file) {
 
 /** Migrações: cada versão nova só acrescenta — nada de deitar dados fora. */
 function migrate(db) {
+  // v3: a nota passa a ter uma parte de base e uma parte aprendida (as duas visíveis)
+  // v3: a mensagem passa a dizer de onde veio e o que se prevê que respondam
+  const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
+  for (const c of ['predictions', 'evidence_used']) {
+    if (!msgCols.includes(c)) db.exec(`ALTER TABLE messages ADD COLUMN ${c} TEXT NOT NULL DEFAULT '[]'`);
+  }
+  if (!msgCols.includes('generated_by')) db.exec("ALTER TABLE messages ADD COLUMN generated_by TEXT NOT NULL DEFAULT ''");
+  if (!msgCols.includes('why')) db.exec("ALTER TABLE messages ADD COLUMN why TEXT NOT NULL DEFAULT ''");
+
+  const leadCols = db.prepare('PRAGMA table_info(leads)').all().map(c => c.name);
+  if (!leadCols.includes('score_base')) db.exec('ALTER TABLE leads ADD COLUMN score_base INTEGER NOT NULL DEFAULT 0');
+  if (!leadCols.includes('score_learned')) db.exec('ALTER TABLE leads ADD COLUMN score_learned INTEGER NOT NULL DEFAULT 0');
+
   const cols = db.prepare('PRAGMA table_info(events)').all().map(c => c.name);
   for (const c of ['prev_hash', 'hash']) {
     if (!cols.includes(c)) db.exec(`ALTER TABLE events ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);

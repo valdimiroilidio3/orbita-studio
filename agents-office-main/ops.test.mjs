@@ -307,3 +307,211 @@ test('«Hoje»: só mostra o que existe, com o porquê tirado dos dados', () => 
   assert.deepEqual(empty.decidir, []);
   assert.equal(empty.resumo.decidir, 0);
 });
+
+/* ---------- 26 out 2026 · passo 3: ver o negócio, escrever com factos, aprender ---------- */
+
+import http from 'node:http';
+import * as research from './src/ops/research.mjs';
+import * as personalize from './src/ops/personalize.mjs';
+
+// Uma página que parece um site real de um salão: velha, sem versão móvel, com Instagram.
+const SALAO = `<!doctype html><html lang="pt-PT"><head><title>Salão Bela Vista — Lisboa</title>
+<meta name="description" content="Cortes, coloração e tratamentos no coração de Alvalade, com marcação pelo telefone.">
+</head><body><h1>Salão Bela Vista</h1><h2>Cortes</h2><h2>Coloração</h2>
+<p>Horário: 9h às 19h, de terça a sábado. Telefone 21 000 11 22.</p>
+<a href="https://instagram.com/salaobelavista">Instagram</a>
+<footer>© 2019 Salão Bela Vista</footer></body></html>
+<script>var x=1;</script>`;
+
+function serveSite(pages) {
+  const srv = http.createServer((req, res) => {
+    const p = pages[req.url];
+    if (!p) { res.writeHead(404); return res.end('não'); }
+    res.writeHead(p.status || 200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(p.body);
+  });
+  return new Promise(r => srv.listen(0, '127.0.0.1', () => r({ srv, base: `http://127.0.0.1:${srv.address().port}` })));
+}
+
+test('pesquisa: lê o site, tira frases verdadeiras e datou o abandono', async () => {
+  const { srv, base } = await serveSite({
+    '/robots.txt': { body: 'User-agent: *\nDisallow: /admin\n' },
+    '/': { body: SALAO },
+  });
+  try {
+    const db = fresh();
+    const lead = leads.upsertLead(db, { name: 'Salão Bela Vista', website: `${base}/`, city: 'Lisboa', category: 'cabeleireiro', rating: 4.1, reviews: 10 }).lead;
+    const r = await research.researchSite(db, lead, { allowPrivate: true });
+    assert.equal(r.status, 'ok', r.reason);
+    assert.equal(r.data.platform, '');
+    assert.equal(r.data.hasViewport, false);
+    assert.equal(r.data.copyrightYear, 2019);
+    const keys = r.evidence.map(e => e.key);
+    assert.ok(keys.includes('sem-mobile'), 'tinha de notar a falta de versão móvel');
+    assert.ok(keys.includes('desactualizado'), 'tinha de notar o rodapé de 2019');
+    assert.ok(keys.includes('sem-formulario'));
+    const desc = r.evidence.find(e => e.key === 'descricao');
+    assert.match(desc.quote, /Cortes, coloração/, 'a frase da casa vem inteira, para poder ser citada');
+    assert.ok(!/Horário|Cortes/.test(JSON.stringify(r.data.text || '')), 'o texto inteiro não fica guardado');
+  } finally { srv.close(); }
+});
+
+test('pesquisa: não lê o que o robots.txt proíbe, nem endereços privados', async () => {
+  const { srv, base } = await serveSite({
+    '/robots.txt': { body: 'User-agent: *\nDisallow: /\n' },
+    '/': { body: SALAO },
+  });
+  try {
+    const db = fresh();
+    const lead = leads.upsertLead(db, { name: 'Barrada', website: `${base}/` }).lead;
+    const r = await research.researchSite(db, lead, { allowPrivate: true });
+    assert.equal(r.status, 'bloqueado');
+    assert.match(r.reason, /robots/);
+    // e o endereço de casa nunca é lido, mesmo que alguém meta um lead com ele
+    for (const bad of ['http://127.0.0.1:8080', 'http://localhost/x', 'http://192.168.1.1', 'http://10.0.0.5/']) {
+      assert.ok(research.unsafeTarget(bad), bad + ' devia ser recusado');
+    }
+    const l2 = leads.upsertLead(db, { name: 'Rede de casa', website: 'http://192.168.1.1/admin' }).lead;
+    const r2 = await research.researchSite(db, l2); // sem permissão: o guarda tem de travar
+    assert.equal(r2.status, 'bloqueado');
+    assert.match(r2.reason, /privado/);
+  } finally { srv.close(); }
+});
+
+test('pesquisa: quando falha, fica o motivo — nunca um dossiê inventado', async () => {
+  const db = fresh();
+  const semSite = leads.upsertLead(db, { name: 'Sem site Lda', phone: '+351 912 000 111' }).lead;
+  const r1 = await research.researchSite(db, semSite);
+  assert.equal(r1.status, 'sem_site');
+  assert.match(r1.reason, /oportunidade/);
+
+  const morto = leads.upsertLead(db, { name: 'Dominio Morto', website: 'https://nao-existe-mesmo-xyz.pt' }).lead;
+  const r2 = await research.researchSite(db, morto, { fetchImpl: async () => { const e = new Error('getaddrinfo ENOTFOUND'); throw e; } });
+  assert.equal(r2.status, 'falhou');
+  assert.match(r2.reason, /domínio não existe/);
+
+  const recusa = leads.upsertLead(db, { name: 'Recusa', website: 'https://recusa.pt' }).lead;
+  const r3 = await research.researchSite(db, recusa, { allowPrivate: true, fetchImpl: async (u) => ({ ok: false, status: u.endsWith('/robots.txt') ? 404 : 403, text: async () => '' }) });
+  assert.equal(r3.status, 'falhou');
+  assert.match(r3.reason, /403/);
+  const d = research.dossier(db, recusa);
+  assert.equal(d.evidence.length, 0, 'sem leitura não há evidência nenhuma');
+});
+
+test('personalização: a mensagem cita o que se leu e prevê as objeções', async () => {
+  const { srv, base } = await serveSite({ '/robots.txt': { body: 'User-agent: *\nDisallow: /admin\n' }, '/': { body: SALAO } });
+  try {
+    const db = fresh();
+    const lead = leads.upsertLead(db, { name: 'Salão Bela Vista', website: `${base}/`, city: 'Lisboa', phone: '+351 210 001 122', category: 'cabeleireiro', rating: 4.1, reviews: 10 }).lead;
+    await research.researchSite(db, lead, { allowPrivate: true });
+    const d = personalize.templateDraft(db, lead, { channel: 'whatsapp' });
+    assert.match(d.body, /Salão Bela Vista/);
+    assert.match(d.body, /350 €/, 'a oferta entra com o preço do dono');
+    assert.match(d.body, /7 dias/);
+    const c = await personalize.compose(db, lead, { channel: 'whatsapp' });
+    assert.equal(c.generatedBy, 'modelo');
+    assert.ok(c.evidenceUsed.length >= 3);
+    assert.ok(c.predictions.length >= 3, 'tem de prever objeções');
+    assert.ok(c.predictions.every(p => p.if && p.answer), 'cada objeção traz a resposta');
+    assert.match(c.why, /vi o site/);
+    assert.ok(c.predictions.some(p => /Quanto custa/.test(p.if)));
+  } finally { srv.close(); }
+});
+
+test('personalização: um motor que inventa citações é travado', async () => {
+  const db = fresh();
+  const lead = leads.upsertLead(db, { name: 'Óptica Central', city: 'Porto', phone: '+351 913 000 000' }).lead;
+  const inventivo = async () => JSON.stringify({
+    assunto: 'Uma ideia',
+    corpo: 'Bom dia! Reparei que «abrem ao domingo e fazem entregas em 24 horas em todo o país» na vossa página. Posso ajudar?',
+    facto_usado: 'abrem ao domingo',
+  });
+  const c = await personalize.compose(db, lead, { channel: 'whatsapp', ask: inventivo });
+  assert.equal(c.generatedBy, 'modelo', 'a versão inventada tinha de ser recusada');
+  assert.match(c.rejectedReason, /citava coisas que não li|não está no que li/);
+  assert.ok(!/domingo/.test(c.body), 'a citação inventada não pode sobreviver');
+
+  // e quando a citação é verdadeira, passa
+  const honesto = async () => JSON.stringify({ assunto: 'Ideia', corpo: 'Bom dia! Vi que não tem site e que o telefone é público. Faz sentido falarmos?', facto_usado: 'não tem site' });
+  const ok = await personalize.compose(db, lead, { channel: 'whatsapp', ask: honesto });
+  assert.equal(ok.generatedBy, 'ia');
+  assert.match(ok.why, /presa aos factos/);
+});
+
+test('guardDraft: corta promessas e citações inventadas frase a frase', () => {
+  const facts = ['o rodapé ainda diz 2019', 'horizontal'];
+  const out = personalize.guardDraft(
+    'O rodapé diz 2019. «Somos a número um de Portugal em coloração». Garantimos resultados em 24 horas. Falamos?',
+    facts, { channel: 'email' });
+  assert.match(out.text, /rodapé diz 2019/);
+  assert.match(out.text, /Falamos/);
+  assert.ok(!/número um/.test(out.text), 'a citação inventada saiu');
+  assert.ok(!/Garantimos/.test(out.text), 'a promessa saiu');
+  assert.equal(out.dropped.length, 2);
+});
+
+test('ciclo fechado: os sinais viram pesos, e a nota dos outros leads mexe-se com razão', () => {
+  const db = fresh();
+  // três respostas em leads sem site; três ignorados em leads com site
+  for (let i = 0; i < 3; i++) {
+    const a = leads.upsertLead(db, { name: `Sem site ${i}`, phone: `+351 912 000 10${i}` }).lead;
+    personalize.recordSignal(db, { leadId: a.id, kind: 'respondeu', note: 'respondeu no WhatsApp' });
+    const b = leads.upsertLead(db, { name: `Com site ${i}`, website: `https://site${i}.pt`, phone: `+351 912 000 20${i}` }).lead;
+    personalize.recordSignal(db, { leadId: b.id, kind: 'ignorou' });
+  }
+  const w = personalize.learnedWeights(db);
+  assert.ok(w['sem-site'].peso > 0, 'sem site devia valorizar: ' + JSON.stringify(w['sem-site']));
+  assert.ok(w['tem-site'].peso < 0, 'com site devia desvalorizar: ' + JSON.stringify(w['tem-site']));
+  assert.equal(w['sem-site'].amostra, true);
+
+  const novo = leads.upsertLead(db, { name: 'Outro sem site', phone: '+351 913 000 999' }).lead;
+  const adj = personalize.scoreAdjustment(db, novo);
+  assert.ok(adj.delta > 0);
+  assert.match(adj.reasons, /\+.* aprendido: sem-site/);
+
+  const antes = novo.score;
+  personalize.recalibrate(db);
+  const depois = leads.getLead(db, novo.id);
+  assert.ok(depois.score > antes - 1, 'a nota aprendeu');
+  assert.ok(depois.score_base > 0);
+  assert.match(depois.score_reasons, /aprendido/);
+  assert.equal(depois.score, Math.max(0, Math.min(100, depois.score_base + depois.score_learned)));
+
+  const resumo = personalize.learningSummary(db);
+  assert.equal(resumo.totalSinais, 6);
+  assert.ok(resumo.aprendido.some(x => /sem-site/.test(x)));
+});
+
+test('ciclo fechado: amostra pequena não se escreve na pontuação', () => {
+  const db = fresh();
+  const a = leads.upsertLead(db, { name: 'Um só', phone: '+351 912 111 222' }).lead;
+  personalize.recordSignal(db, { leadId: a.id, kind: 'respondeu' });
+  const w = personalize.learnedWeights(db);
+  assert.equal(w['sem-site'].amostra, false);
+  assert.equal(w['sem-site'].peso, 0, 'um caso é coincidência, não é regra');
+  assert.ok(personalize.learningSummary(db).aEsperar.some(x => /sem-site \(1\/3\)/.test(x)));
+});
+
+test('ciclo fechado: «respondeu» move o funil e «recusou» fecha o lead', () => {
+  const db = fresh();
+  const lead = withLead(db);
+  leads.setStatus(db, lead.id, 'contactado');
+  personalize.recordSignal(db, { leadId: lead.id, kind: 'respondeu' });
+  assert.equal(leads.getLead(db, lead.id).status, 'respondeu');
+  const b = leads.upsertLead(db, { name: 'Outro', website: 'https://outro.pt' }).lead;
+  leads.setStatus(db, b.id, 'contactado');
+  personalize.recordSignal(db, { leadId: b.id, kind: 'recusou', note: 'disse que não' });
+  assert.equal(leads.getLead(db, b.id).status, 'perdido');
+  assert.throws(() => personalize.recordSignal(db, { leadId: b.id, kind: 'talvez' }), /sinal desconhecido/);
+});
+
+test('a oferta é do dono e entra nas mensagens', async () => {
+  const db = fresh();
+  personalize.setOffer(db, { preco_eur: 500, prazo_dias: 10, nome: 'um site de 3 páginas' });
+  const lead = leads.upsertLead(db, { name: 'Padaria Nova', city: 'Coimbra', phone: '+351 912 333 444' }).lead;
+  const c = await personalize.compose(db, lead, {});
+  assert.match(c.body, /500 €/);
+  assert.match(c.body, /10 dias/);
+  assert.match(c.body, /3 páginas/);
+  assert.equal(personalize.offerOf(db).preco_eur, 500);
+});

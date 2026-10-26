@@ -21,6 +21,8 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Hoje** | `src/ops/today.mjs` + `src/today.js` + `HOJE` na barra | Um ecrã: decidir, o que aconteceu, o que vem |
 | **Outbox** | `src/ops/outbox.mjs` | Envio escrito antes de sair, com chave de idempotência e aluguer |
 | **Registo** | `src/ops/events.mjs` | Eventos encadeados por hash; `verify` denuncia a linha mexida |
+| **Pesquisa do negócio** | `src/ops/research.mjs` | Vai ver o site, com robots.txt e sem tocar em redes privadas |
+| **Personalização** | `src/ops/personalize.mjs` | Dossiê → mensagem → objeções previstas → aprendizagem |
 | Provas | `ops.test.mjs` (`npm run test:ops`) | 17 testes, tudo em memória, sem tocar em serviços |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
@@ -111,6 +113,77 @@ A gaveta **◉ OPERAÇÃO** tem `+ NOVO LEAD` (nome, cidade, telefone, email, si
 do que se sabe do negócio (tem site? que cidade?). O rascunho aparece de imediato em **Hoje**, à
 espera do teu OK. É o ciclo inteiro sem depender da Google nem de nenhum motor de IA.
 
+## Personalização por lead (passo 3)
+
+«Vi que não tem site» é o que todos mandam. A vantagem está em abrir com algo que **só se sabe
+porque se foi ver** — e que se pode provar.
+
+### 1. Ler o negócio, uma vez, com regras
+
+`POST /api/ops/leads/:id/pesquisar` lê o site do lead e guarda:
+
+| Guarda | Porquê |
+|---|---|
+| `robots.txt` | se o site não permite, não se lê — e o motivo fica escrito |
+| Sem endereços privados | 127.x, 10.x, 192.168.x, 169.254.x, `localhost`… um servidor público não pode ser usado para entrar na rede de casa (SSRF) |
+| 12 s e 400 KB | uma página que não responde não vale uma mensagem |
+| Um pedido por lead | não se anda a martelar o site de ninguém |
+| Nome que diz quem somos | `OrbitaBot/1.0 (+pesquisa de contacto comercial; respeita robots.txt)` |
+
+Do HTML saem **factos com a frase de onde vieram**: falta de `viewport` (não abre bem no
+telemóvel), rodapé de 2019, sem `https`, sem formulário, sem marcação, plataforma (Wix,
+WordPress…), Instagram, o título e a descrição que a própria casa escreveu. Cada facto tem um
+peso, e a soma é a **oportunidade** (0–100) — separada da nota do lead, porque uma coisa é o
+negócio valer a pena e outra é haver ali trabalho a fazer.
+
+O texto inteiro da página **não é guardado**: só o que se pode citar. Se a leitura falhar (DNS
+inexistente, 403, tempo esgotado, certificado inválido), fica o motivo em português — nunca um
+dossiê inventado. Sem site, o motivo é a oportunidade.
+
+### 2. Escrever a partir dos factos
+
+`POST /api/ops/leads/:id/rascunho` compõe a mensagem:
+
+- **Com motor de IA ligado**, o prompt só pode citar os factos listados. A resposta passa por um
+  pente (`guardDraft`): se o motor citar entre aspas algo que não está no que se leu, ou prometer
+  «o melhor do mercado», a mensagem **inteira** é recusada e volta-se ao modelo local. Um modelo
+  que inventa uma vez inventa outra; cortar só a frase deixaria um texto mutilado.
+- **Sem motor**, um modelo escrito à mão (curto, com um facto, uma oferta e uma pergunta).
+- Em ambos os casos a mensagem diz **de onde veio** (`generated_by`) e **porquê** (`why`), e leva
+  consigo os factos citáveis.
+
+A oferta é tua e vive nas definições: `GET/POST /api/ops/oferta` — nome, preço, prazo, garantia.
+Aparece tal e qual nas mensagens e nas respostas às objeções.
+
+### 3. Prever a resposta antes de enviar
+
+Cada rascunho traz `predictions`: as objeções prováveis **e a resposta já escrita** — «Já tenho
+Instagram e chega», «Quanto custa?», «Não tenho tempo para isto», «Já tenho quem faça isso», mais
+as específicas do que se viu (site sem versão móvel, rodapé de 2019, marcações só por telefone).
+São regras do negócio, não do modelo — para não haver respostas inventadas a objeções inventadas.
+
+No ecrã **Hoje**, o cartão abre com «Ver porquê» e mostra os factos e as objeções. Na gaveta
+**◉ OPERAÇÃO**, o botão `PESQUISAR` de cada lead mostra o dossiê e `ESCREVER COM OS FACTOS`
+gera o rascunho.
+
+### 4. O ciclo que fecha
+
+`POST /api/ops/messages/:id/sinal` com `respondeu`, `interessado`, `reuniao`, `cliente`,
+`ignorou`, `recusou` ou `pediu_parar`. Cada sinal guarda os **atributos** do lead naquele momento
+(sem-site, tem-site, avaliação baixa, sem-mobile, desactualizado…), e daí saem pesos:
+
+```
+peso = (positivos − negativos) / max(6, n) × 12     limitado a ±8
+```
+
+Com **amostra mínima de 3** — abaixo disso é coincidência, e coincidências não se escrevem na nota
+dos outros. A nota passa a ter duas partes visíveis: `score_base` e `score_learned` (limitado a
+±12), com a razão escrita: «+4 aprendido: sem-site (3 sinais)». `GET /api/ops/aprendizagem` mostra
+o que já se aprendeu e o que está à espera de amostra.
+
+Os sinais também movem o funil: «respondeu» leva o lead a `respondeu` (se estava contactado),
+«interessado»/`reuniao` a `reuniao`, «cliente» fecha, «recusou» fecha como perdido.
+
 ## Caixa de entrada e envio
 
 - **Email** exige `RESEND_API_KEY` **e** consentimento registado no lead (`consent: 'dado'`).
@@ -146,6 +219,12 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | POST | `/api/ops/stop` | Interruptor de emergência (`{ "stop": true \| false }`) |
 | GET | `/api/ops/outbox` | Fila de saída com tentativas, alugueres e revisões |
 | GET | `/api/ops/events/verify` | Verifica a cadeia de hashes do registo |
+| POST | `/api/ops/leads/:id/pesquisar` | Lê o site do lead e devolve o dossiê |
+| GET | `/api/ops/leads/:id/dossier` | O que já se sabe (sem ir à rede) |
+| POST | `/api/ops/leads/:id/rascunho` | Escreve com os factos (`{ "channel": "whatsapp" }`) |
+| POST | `/api/ops/messages/:id/sinal` | O que responderam (`{ "kind": "respondeu" }`) |
+| GET | `/api/ops/aprendizagem` | Pesos, sinais e o que falta para aprender |
+| GET/POST | `/api/ops/oferta` | A tua oferta: nome, preço, prazo, garantia |
 
 A pesquisa da Google (`/api/google/search`) continua a guardar na gaveta e **passa a gravar
 também na base de dados**, já pontuado e sem duplicados. A resposta traz `baseDeDados` com
@@ -161,15 +240,19 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
   escreve; a margem é receita menos custo de API, e é isso que a gaveta mostra.
 - **Envio real de WhatsApp Business.** Falta a conta Meta, o número aprovado e o token.
   Enquanto não existir, o caminho é o link revisto à mão.
-- **Testes A/B de mensagem.** (por fazer) A tabela `messages` já tem tudo o que é preciso (`subject`,
-  `body`, `status`, `sent_at`); o que falta é o campo de variante e a escolha da vencedora.
+- **Testes A/B de mensagem.** (por fazer) A tabela `messages` já tem o que é preciso para medir
+  (`predictions`, `generated_by`, `sent_at` e os sinais); falta a variante explícita e a escolha
+  da vencedora.
+- **Instagram e avaliações lidas a sério.** O dossiê detecta o perfil e usa a nota do Google
+  Places que já temos; ler o conteúdo do Instagram exige a API da Meta (conta e token) — sem
+  isso seria raspar, e raspar não é base para escrever a um cliente.
 - **Regras aprendidas com correções.** O `learn.mjs` já guarda lições e regras; ligá-las às
   aprovações (rejeitar uma mensagem e a razão virar regra) é o passo seguinte.
 
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 17 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 27 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

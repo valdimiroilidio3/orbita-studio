@@ -80,6 +80,17 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, 
         ${c.subject ? `<p class="td-subject">${esc(c.subject)}</p>` : ''}
         <p class="td-body">${esc(String(c.body || '').slice(0, expanded ? 1400 : 180))}${!expanded && String(c.body || '').length > 180 ? '…' : ''}</p>
         ${c.why ? `<p class="td-why ${expanded ? 'open' : ''}"><span>porquê</span> ${esc(c.why)}</p>` : ''}
+        ${expanded && (c.evidence?.length || c.predictions?.length) ? `<div class="td-dossier">
+          ${c.evidence?.length ? `<div class="td-dossier-blk">
+            <h4>O que vi antes de escrever</h4>
+            <ul class="td-facts">${c.evidence.slice(0, 6).map(e => `<li><b>${esc(e.label)}</b>${e.quote ? `<q>${esc(e.quote)}</q>` : ''}</li>`).join('')}</ul>
+          </div>` : ''}
+          ${c.predictions?.length ? `<div class="td-dossier-blk">
+            <h4>O que ele pode responder — e o que eu respondo</h4>
+            <dl class="td-objections">${c.predictions.slice(0, 5).map(p => `<dt>«${esc(p.if)}»</dt><dd>${esc(p.answer)}</dd>`).join('')}</dl>
+          </div>` : ''}
+          ${c.generatedBy ? `<p class="td-gen">${c.generatedBy === 'ia' ? 'escrita pelo motor, presa aos factos lidos' : 'escrita pelo modelo local — não há motor de IA ligado'}</p>` : ''}
+        </div>` : ''}
         <div class="td-actions">
           ${canSend
             ? `<button class="td-btn primary" data-act="send">${c.channel === 'whatsapp' ? 'Abrir WhatsApp' : 'Enviar'}</button>`

@@ -17,7 +17,7 @@ export function initOps({ api = '/api' } = {}) {
     body: panel.querySelector('.op-body'), close: panel.querySelector('.op-close'),
     refresh: panel.querySelector('.op-refresh'), note: panel.querySelector('.op-note'),
   };
-  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null };
+  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null, dossier: {}, learning: null };
 
   const open = () => { panel.hidden = false; btn.classList.add('on'); load(); };
   const close = () => { panel.hidden = true; btn.classList.remove('on'); };
@@ -31,11 +31,11 @@ export function initOps({ api = '/api' } = {}) {
 
   async function load() {
     try {
-      const [s, l, m, q, e] = await Promise.all([
-        get('/ops/summary'), get('/ops/leads?limit=40'), get('/ops/messages?limit=40'), get('/ops/queue'), get('/ops/events?limit=25'),
+      const [s, l, m, q, e, a] = await Promise.all([
+        get('/ops/summary'), get('/ops/leads?limit=40'), get('/ops/messages?limit=40'), get('/ops/queue'), get('/ops/events?limit=25'), get('/ops/aprendizagem'),
       ]);
       if (s.error) throw new Error(s.error);
-      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], error: '' });
+      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], learning: a, error: '' });
     } catch (err) {
       S.error = err.message === 'Failed to fetch' ? 'o servidor não respondeu — a gaveta não inventa números' : err.message;
     }
@@ -66,6 +66,23 @@ export function initOps({ api = '/api' } = {}) {
         <button class="op-b good" data-act="save-lead">GUARDAR LEAD</button>
         <button class="op-b" data-act="cancel-lead">CANCELAR</button>
         <span class="op-hint">A nota é calculada do que escreveres — sem site, telefone público e avaliação contam.</span>
+      </div>
+    </div>`;
+  }
+
+  function dossierBlock(l) {
+    const d = S.dossier[l.id];
+    const r = d.research || {};
+    const status = r.status === 'ok'
+      ? `${d.evidence.length} factos · oportunidade ${d.opportunity}/100`
+      : r.status === 'sem_site' ? 'sem site — é a oportunidade' : `${r.status}${r.reason ? ': ' + r.reason : ''}`;
+    const facts = (d.evidence || []).map(e => `<li><b>${esc(e.label)}</b>${e.quote ? `<q>${esc(e.quote)}</q>` : ''}</li>`).join('');
+    return `<div class="op-dossier">
+      <div class="op-dossier-h"><b>Dossiê</b><span class="op-m">${esc(status)}</span></div>
+      ${facts ? `<ul class="op-facts">${facts}</ul>` : `<div class="op-hint">${esc(r.reason || 'Ainda não li o site deste lead.')}</div>`}
+      <div class="op-form-acts">
+        <button class="op-b good" data-act="draft" data-id="${esc(l.id)}">ESCREVER COM OS FACTOS</button>
+        <button class="op-b" data-act="close-dossier" data-id="${esc(l.id)}">FECHAR</button>
       </div>
     </div>`;
   }
@@ -108,8 +125,9 @@ export function initOps({ api = '/api' } = {}) {
           <div class="op-score">${l.score ?? '—'}<small>NOTA</small></div>
           <select class="op-stage" data-id="${esc(l.id)}" title="mudar de estado no funil">${opts}</select>
           <button class="op-b" data-act="compose" data-id="${esc(l.id)}">ESCREVER</button>
+          <button class="op-b" data-act="research" data-id="${esc(l.id)}" title="ver o site e o que se pode citar">${S.dossier[l.id]?.research?.status === 'ok' ? 'VER FACTOS' : 'PESQUISAR'}</button>
         </div>
-      </div>${S.composing === l.id ? composer(l) : ''}`;
+      </div>${S.composing === l.id ? composer(l) : ''}${S.dossier[l.id] ? dossierBlock(l) : ''}`;
     }).join('') + `<div class="op-form-acts">${add}</div>`;
   }
 
@@ -124,16 +142,29 @@ export function initOps({ api = '/api' } = {}) {
       ? `<button class="op-b good" data-act="approve" data-id="${esc(m.id)}">APROVAR</button><button class="op-b" data-act="reject" data-id="${esc(m.id)}">REJEITAR</button>`
       : `<button class="op-b" data-act="send" data-id="${esc(m.id)}" data-ch="${esc(m.channel)}">${m.channel === 'whatsapp' ? 'ABRIR WHATSAPP' : 'ENVIAR'}</button>`
         + (m.channel === 'whatsapp' ? `<button class="op-b good" data-confirm="${esc(m.id)}" title="marcar como enviada depois de enviares no WhatsApp">JÁ ENVIEI</button>` : '')))).join('');
-    const r = rest.length ? `<div class="op-sec">HISTÓRICO</div>${rest.slice(0, 12).map(m => row(m, '')).join('')}` : '';
+    const r = rest.length ? `<div class="op-sec">HISTÓRICO — diz o que responderam, e a nota aprende</div>${rest.slice(0, 12).map(m => row(m, m.status === 'enviada'
+      ? `<button class="op-b good" data-act="signal" data-id="${esc(m.id)}" data-kind="respondeu">RESPONDEU</button>
+         <button class="op-b" data-act="signal" data-id="${esc(m.id)}" data-kind="interessado">QUER FALAR</button>
+         <button class="op-b" data-act="signal" data-id="${esc(m.id)}" data-kind="ignorou">IGNOROU</button>
+         <button class="op-b" data-act="signal" data-id="${esc(m.id)}" data-kind="recusou">RECUSOU</button>`
+      : '')).join('')}` : '';
     if (!waiting.length && !rest.length) return `<div class="op-empty">Nenhuma mensagem. Escreve uma a um lead (a partir da conversa de um agente) e ela aparece aqui para aprovares.</div>`;
     return (waiting.length ? `<div class="op-sec">À ESPERA DO TEU OK (${waiting.length})</div>${w}` : '<div class="op-empty">Nada à espera de aprovação.</div>') + r;
   }
 
   function paintQueue() {
     const q = S.queue || {};
+    const L = S.learning;
+    const learning = L && L.totalSinais
+      ? `<div class="op-sec">O QUE APRENDI COM AS RESPOSTAS</div>
+         <div class="op-learn">${L.aprendido.length
+           ? L.aprendido.map(x => `<span class="op-tag ${/\+/.test(x) ? 'ok' : 'bad'}">${esc(x)}</span>`).join('')
+           : `<span class="op-hint">Ainda não há sinais suficientes. ${L.aEsperar.length ? 'A esperar: ' + esc(L.aEsperar.join(' · ')) : ''}</span>`}
+         </div>`
+      : `<div class="op-sec">O QUE APRENDI COM AS RESPOSTAS</div><div class="op-hint">Ainda não há respostas registadas. Quando marcarem «respondeu» ou «ignorou» numa mensagem, a pontuação dos leads parecidos ajusta-se — com a razão escrita.</div>`;
     const box = ['fila', 'feito', 'falhou', 'a_correr'].map(k => `<div class="op-stat"><b>${q[k] || 0}</b><small>${k.replace('_', ' ')}</small></div>`).join('');
     const ev = S.events.map(e => `<div class="op-ev"><span class="op-evt">${hhmm(e.at)}</span> <b>${esc(e.action)}</b> <span class="op-m">${esc(e.actor)}${e.entity_id ? ' · ' + esc(String(e.entity_id).slice(0, 14)) : ''}</span></div>`).join('');
-    return `<div class="op-stats">${box}</div>
+    return `<div class="op-stats">${box}</div>${learning}
       <div class="op-sec">O QUE ACONTECEU (auditoria)</div>${ev || '<div class="op-empty">Sem eventos ainda.</div>'}`;
   }
 
@@ -148,7 +179,7 @@ export function initOps({ api = '/api' } = {}) {
   function tab(k) { S.tab = k; for (const t of P.tabs) t.classList.toggle('on', t.dataset.k === k); paint(); }
 
   // ---- ações ----
-  async function act(a, id, ch) {
+  async function act(a, id, extra) {
     if (S.busy) return;
     S.busy = true; P.note.classList.remove('bad');
     try {
@@ -162,6 +193,12 @@ export function initOps({ api = '/api' } = {}) {
         else P.note.textContent = r.reason || 'não saiu.';
       }
       if (a === 'confirm') { const r = await post(`/ops/messages/${id}/confirm`); if (r.error) throw new Error(r.error); P.note.textContent = 'confirmada como enviada.'; }
+      if (a === 'signal') {
+        if (!extra) throw new Error('sinal sem tipo');
+        const r = await post(`/ops/messages/${id}/sinal`, { kind: extra, note: '' });
+        if (r.error) throw new Error(r.error);
+        P.note.textContent = `registado: ${r.signal.kind}. A nota dos leads parecidos ajustou-se.`;
+      }
       if (a === 'save-lead') {
         const f = P.body.querySelector('.op-form');
         if (!f) return;
@@ -171,6 +208,22 @@ export function initOps({ api = '/api' } = {}) {
         if (r.error) throw new Error(r.error);
         S.adding = false;
         P.note.textContent = r.created ? 'lead guardado e pontuado.' : 'já existia — atualizei os dados.';
+      }
+      if (a === 'research') {
+        P.note.textContent = 'a ler o site…';
+        const r = await post(`/ops/leads/${id}/pesquisar`);
+        if (r.error) throw new Error(r.error);
+        S.dossier[id] = r;
+        P.note.textContent = r.research?.status === 'ok' ? `li ${r.evidence.length} factos no site.` : (r.research?.reason || 'sem site.');
+        return paint();
+      }
+      if (a === 'close-dossier') { delete S.dossier[id]; return paint(); }
+      if (a === 'draft') {
+        P.note.textContent = 'a escrever com o que li…';
+        const r = await post(`/ops/leads/${id}/rascunho`, {});
+        if (r.error) throw new Error(r.error);
+        S.dossier[id] = null;
+        P.note.textContent = `rascunho ${r.generatedBy === 'ia' ? 'pelo motor' : 'pelo modelo local'} — está à tua espera em Hoje.`;
       }
       if (a === 'save-msg') {
         const f = P.body.querySelector('.op-form');
@@ -194,7 +247,7 @@ export function initOps({ api = '/api' } = {}) {
       if (a === 'cancel-lead') { S.adding = false; return paint(); }
       if (a === 'compose') { S.composing = S.composing === b.dataset.id ? null : b.dataset.id; S.adding = false; return paint(); }
       if (a === 'cancel-msg') { S.composing = null; return paint(); }
-      return act(a, b.dataset.id, b.dataset.ch);
+      return act(a, b.dataset.id, b.dataset.kind || b.dataset.ch);
     }
     const c = e.target.closest('button[data-confirm]');
     if (c) act('confirm', c.dataset.confirm);

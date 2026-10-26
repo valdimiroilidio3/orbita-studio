@@ -57,6 +57,7 @@ await step('hoje: o ecrã existe no bundle — três blocos, gesto, porquê e in
     'interruptor': ['PARAR TUDO', '/ops/stop'],
     'tokens': ['--s4: 16px', '--t-m: 14px', '--ok:', '--risk:'],
     'acessibilidade': ['aria-modal', 'aria-live', 'focus-visible'],
+    'passo 3': ['PESQUISAR', 'dossier', 'predictions', 'td-objections'],
   };
   const falta = [];
   for (const [what, needles] of Object.entries(must)) for (const n of needles) if (!html.includes(n)) falta.push(`${what}:${n}`);
@@ -842,7 +843,8 @@ else {
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-ops-'));
   const port = 4700 + Math.floor(Math.random() * 200);
-  const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db') };
+  // ORBITA_PESQUISA_PERMITIR_PRIVADO: só aqui, para o passo 3 poder ler um site falso local
+  const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db'), ORBITA_PESQUISA_PERMITIR_PRIVADO: '1' };
   const srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   const base = `http://localhost:${port}`;
@@ -951,6 +953,73 @@ else {
       if (after.body.presenca.parado !== false) throw new Error('não retomou');
       return 'parado recusa · Hoje mostra · retoma';
     });
+
+    // --- passo 3: ver o negócio a sério, escrever com factos, aprender com as respostas ---
+    const fakeSite = await (async () => {
+      const http = await import('node:http');
+      const page = `<!doctype html><html lang="pt-PT"><head><title>Salão Bela Vista — Lisboa</title>
+        <meta name="description" content="Cortes, coloração e tratamentos no coração de Alvalade, com marcação pelo telefone.">
+        </head><body><h1>Salão Bela Vista</h1><p>Horário: 9h às 19h. Telefone 21 000 11 22.</p>
+        <a href="https://instagram.com/salaobelavista">Instagram</a><footer>© 2019</footer></body></html>`;
+      const srv = http.createServer((rq, rs) => {
+        if (rq.url === '/robots.txt') { rs.writeHead(200); return rs.end('User-agent: *\nDisallow: /admin\n'); }
+        rs.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); rs.end(page);
+      });
+      await new Promise(r => srv.listen(0, '127.0.0.1', r));
+      return { srv, url: `http://127.0.0.1:${srv.address().port}/` };
+    })();
+    try {
+      let lote;
+      await step('passo 3: a pesquisa lê o site e tira frases verdadeiras', async () => {
+        const made = await call('POST', '/api/ops/leads', { leads: [{ name: 'Salão Bela Vista', city: 'Lisboa', phone: '+351 210 001 122', website: fakeSite.url, category: 'cabeleireiro', rating: 4.1, reviews: 10 }] });
+        if (!made.body.total) throw new Error('não criou o lead');
+        const lead = (await call('GET', '/api/ops/leads?limit=10')).body.leads.find(l => /Bela Vista/.test(l.name));
+        const r = await call('POST', `/api/ops/leads/${lead.id}/pesquisar`);
+        if (r.body.research.status !== 'ok') throw new Error('status ' + r.body.research.status + ': ' + r.body.research.reason);
+        if (r.body.evidence.length < 4) throw new Error('poucos factos: ' + r.body.evidence.length);
+        const keys = r.body.evidence.map(e => e.key);
+        for (const k of ['sem-mobile', 'desactualizado']) if (!keys.includes(k)) throw new Error('faltou notar ' + k);
+        const desc = r.body.evidence.find(e => e.key === 'descricao');
+        if (!/Cortes, coloração/.test(desc?.quote || '')) throw new Error('a citação verdadeira não veio');
+        if (/Horário/.test(JSON.stringify(r.body.research.facts?.text || ''))) throw new Error('guardou o texto todo');
+        lote = { leadId: lead.id };
+        return `${r.body.evidence.length} factos · oportunidade ${r.body.opportunity}/100 · cita «Cortes, coloração…»`;
+      });
+
+      await step('passo 3: a mensagem nasce dos factos e traz as objeções respondidas', async () => {
+        if (!lote) throw new Error('sem lead do passo anterior');
+        const r = await call('POST', `/api/ops/leads/${lote.leadId}/rascunho`, { channel: 'whatsapp' });
+        if (r.status !== 201) throw new Error('HTTP ' + r.status + ': ' + (r.body.error || ''));
+        const m = r.body.message;
+        if (!/350 €/.test(m.body)) throw new Error('a oferta não entrou: ' + m.body);
+        if (!m.predictions.length || m.predictions.some(p => !p.if || !p.answer)) throw new Error('objeções incompletas');
+        if (!m.evidence_used.length) throw new Error('a mensagem não diz em que factos se apoia');
+        if (m.generated_by !== 'modelo') throw new Error('autor inesperado: ' + m.generated_by);
+        if (!/vi o site/.test(m.why)) throw new Error('o porquê não diz que leu o site: ' + m.why);
+        lote.messageId = m.id;
+        return `${m.predictions.length} objeções previstas · autor «${m.generated_by}» · ${m.evidence_used.length} factos citáveis`;
+      });
+
+      await step('passo 3: um sinal de resposta entra na aprendizagem, com amostra honesta', async () => {
+        if (!lote?.messageId) throw new Error('sem mensagem do passo anterior');
+        const sig = await call('POST', `/api/ops/messages/${lote.messageId}/sinal`, { kind: 'respondeu', note: 'pediu proposta' });
+        if (!sig.body.ok) throw new Error(JSON.stringify(sig.body).slice(0, 120));
+        if (!sig.body.signal.attributes.length) throw new Error('o sinal não trouxe atributos');
+        const a = await call('GET', '/api/ops/aprendizagem');
+        if (a.body.totalSinais < 1) throw new Error('a aprendizagem não contou o sinal');
+        if (a.body.aprendido.length) throw new Error('aprendeu com um caso só — não devia');
+        if (!a.body.aEsperar.length) throw new Error('não disse o que está a esperar');
+        return `1 sinal registado · à espera de amostra (${a.body.aEsperar[0]})`;
+      });
+
+      await step('passo 3: a oferta é do dono e volta já no rascunho seguinte', async () => {
+        const set = await call('POST', '/api/ops/oferta', { preco_eur: 450, prazo_dias: 5 });
+        if (set.body.oferta.preco_eur !== 450) throw new Error('não guardou o preço');
+        const r = await call('POST', `/api/ops/leads/${lote.leadId}/rascunho`, { channel: 'whatsapp' });
+        if (!/450 €/.test(r.body.message.body)) throw new Error('o preço novo não entrou: ' + r.body.message.body.slice(0, 120));
+        return '450 € e 5 dias na mensagem seguinte';
+      });
+    } finally { fakeSite.srv.close(); }
 
     await step('registo: a cadeia de hashes fecha e denuncia uma edição', async () => {
       const v = await call('GET', '/api/ops/events/verify');

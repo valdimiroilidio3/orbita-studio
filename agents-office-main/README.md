@@ -157,6 +157,24 @@ Precisa de uma chave: `GOOGLE_MAPS_API_KEY` (leads) e, se quiseres pesquisa web 
 Search, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`. Sem chave o escritório diz exatamente o que falta — não
 inventa resultados. Guia completo, quotas e cuidados em **[PESQUISA.md](PESQUISA.md)**.
 
+## Escrever a cada negócio como quem lá esteve
+
+Antes de escrever a alguém, o Órbita **vai ver o negócio**: lê o site do lead uma vez (respeitando
+o `robots.txt`, sem tocar em redes privadas, com tempo e tamanho limitados) e tira de lá factos
+com a frase exacta de onde saíram — «a página não se adapta ao telemóvel», «o rodapé ainda diz
+2019», «não há formulário, só telefone». A soma desses factos é a **oportunidade** (0–100),
+separada da nota do lead.
+
+A mensagem nasce daí. Com um motor de IA ligado, o prompt só pode citar os factos listados — e
+uma citação inventada **derruba o rascunho inteiro**, que volta ao modelo local. Sem motor, há um
+modelo escrito à mão que faz o mesmo com menos graça. Em qualquer dos casos a mensagem diz de onde
+veio e porquê.
+
+Cada rascunho traz ainda as **objeções prováveis já respondidas** («Já tenho Instagram e chega»,
+«Quanto custa?», «Não tenho tempo»). E quando marcas o que responderam — respondeu, quer falar,
+ignorou, recusou — isso entra na pontuação dos leads parecidos, com amostra mínima de 3 e a razão
+escrita. Guia completo em **[OPS.md](OPS.md)**.
+
 ## Hoje: um ecrã, três perguntas
 
 Abres o escritório e vês **Hoje**: o que precisa da tua decisão, o que aconteceu enquanto
@@ -272,12 +290,16 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | POST | `/api/ops/stop` | interruptor de emergência (`{ "stop": true }`) |
 | GET | `/api/ops/outbox` | fila de saída: alugueres, tentativas, revisões |
 | GET | `/api/ops/events/verify` | verifica a cadeia de hashes do registo |
+| POST | `/api/ops/leads/:id/pesquisar` | lê o site do lead e devolve os factos |
+| POST | `/api/ops/leads/:id/rascunho` | escreve a mensagem a partir dos factos |
+| POST | `/api/ops/messages/:id/sinal` | registar o que responderam (a nota aprende) |
+| GET/POST | `/api/ops/oferta` | a tua oferta: preço, prazo, garantia |
 
 ## Verificação
 
 ```bash
-npm run check         # 59 verificações locais (build, elenco, competências, rotinas, operação, Hoje, servidor)
-npm run test:ops      # 17 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 63 verificações locais (build, elenco, competências, rotinas, operação, Hoje, servidor)
+npm run test:ops      # 27 testes da operação: base de dados em memória, nenhum serviço externo
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```

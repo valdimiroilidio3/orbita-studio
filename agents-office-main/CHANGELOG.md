@@ -24,6 +24,17 @@
 - **Tokens de design e acessibilidade.** Espaçamento em múltiplos de 4, escala tipográfica, cores semânticas (`--ok`, `--warn`, `--risk`), modo escuro de raiz, `aria-modal`/`aria-live`, foco visível e `prefers-reduced-motion`.
 - **Estados vazios que ensinam** o próximo passo em vez de «sem resultados». **Provas:** 17 testes em memória e **59 verificações** (a do navegador falha sem Chrome).
 
+## 1.3.0 — 26 out 2026 · Personalização por lead
+
+- **Ver o negócio antes de lhe escrever.** `POST /api/ops/leads/:id/pesquisar` lê o site do lead uma vez — respeitando `robots.txt`, recusando endereços privados (SSRF), com 12 s e 400 KB — e guarda factos com a frase de onde saíram: sem versão móvel, rodapé de 2019, sem `https`, sem formulário, sem marcação, plataforma, Instagram, a descrição escrita pela própria casa. O texto inteiro não é guardado, só o que se pode citar. Falhas ficam com o motivo em português (DNS inexistente, 403, tempo esgotado…), nunca com um dossiê inventado.
+- **Oportunidade separada da nota.** A soma dos factos dá uma nota de 0–100 que diz quanto trabalho há ali — distinta do valor do lead.
+- **Mensagem presa aos factos.** Com motor de IA, o prompt só pode citar a lista de factos; `guardDraft` recusa a mensagem inteira se aparecer uma citação inventada ou uma promessa («o melhor do mercado»). Sem motor, um modelo local escreve na mesma. O rascunho diz sempre de onde veio (`generated_by`) e porquê (`why`).
+- **Objeções previstas com resposta pronta** — regras do negócio, não do modelo: Instagram, preço, falta de tempo, «já tenho quem faça», mais as específicas do que se viu no site.
+- **A oferta é do dono** (`GET/POST /api/ops/oferta`: nome, preço, prazo, garantia) e entra nas mensagens e nas respostas.
+- **Ciclo que fecha.** `POST /api/ops/messages/:id/sinal` com respondeu/interessado/reuniao/cliente/ignorou/recusou/pediu_parar. Cada sinal guarda os atributos do lead, e daí saem pesos com amortecimento e **amostra mínima de 3**; a nota passa a ter `score_base` + `score_learned` (±12), com a razão escrita. Os sinais também movem o funil.
+- **Na interface:** o cartão de Hoje mostra os factos e as objeções em «Ver porquê»; a gaveta OPERAÇÃO ganhou `PESQUISAR`, o dossiê e `ESCREVER COM OS FACTOS`, e botões de sinal nas mensagens enviadas, com o que se aprendeu na aba da fila.
+- **Provas:** 27 testes em memória (robots, SSRF, falhas, citação inventada, pesos, amostra) e **63 verificações** — a do navegador continua a falhar sem Chrome.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

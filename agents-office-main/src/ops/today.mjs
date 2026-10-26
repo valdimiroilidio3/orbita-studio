@@ -28,7 +28,13 @@ function messageCard(db, m) {
   return {
     id: m.id, kind: 'mensagem', status: m.status, channel: m.channel,
     lead: { id: lead.id, name: lead.name || '', city: lead.city || '', phone: lead.phone || '', email: lead.email || '' },
-    subject: m.subject || '', body: m.body || '', why, at: m.created_at,
+    subject: m.subject || '', body: m.body || '',
+    // o porquê da mensagem diz o que se viu e o que se citou; cai para a nota do lead se não houver
+    why: [m.why, why].filter(Boolean).join(' · '),
+    evidence: m.evidence_used || [],
+    predictions: m.predictions || [],
+    generatedBy: m.generated_by || '',
+    at: m.created_at,
     actions: m.status === 'rascunho' ? ['aprovar', 'rejeitar', 'editar'] : m.status === 'aprovada' ? ['enviar', 'rejeitar'] : ['abrir'],
   };
 }

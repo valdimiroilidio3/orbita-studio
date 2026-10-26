@@ -943,6 +943,54 @@ const server = http.createServer(async (req, res) => {
         if (url.pathname === '/api/ops/events/verify' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.events.verify(OPS.db) });
         }
+        // ---------- passo 3: ver o negócio, escrever com factos, aprender ----------
+        if (url.pathname === '/api/ops/oferta' && req.method === 'GET') {
+          return json(res, 200, { ok: true, oferta: OPS.personalize.offerOf(OPS.db) });
+        }
+        if (url.pathname === '/api/ops/oferta' && req.method === 'POST') {
+          const b = await limitedBody(req, 4000);
+          if (b.preco_eur !== undefined && !(+b.preco_eur >= 0)) return json(res, 400, { ok: false, error: 'o preço tem de ser um número' });
+          if (b.prazo_dias !== undefined && !(+b.prazo_dias > 0)) return json(res, 400, { ok: false, error: 'o prazo tem de ser em dias' });
+          return json(res, 200, { ok: true, oferta: OPS.personalize.setOffer(OPS.db, b) });
+        }
+        if (url.pathname === '/api/ops/aprendizagem' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.personalize.learningSummary(OPS.db), pesos: OPS.personalize.learnedWeights(OPS.db) });
+        }
+        const dossierMatch = url.pathname.match(/^\/api\/ops\/leads\/([^/]+)\/(pesquisar|dossier|rascunho)$/);
+        if (dossierMatch) {
+          const id = decodeURIComponent(dossierMatch[1]), what = dossierMatch[2];
+          const lead = OPS.leads.getLead(OPS.db, id);
+          if (!lead) return json(res, 404, { ok: false, error: 'lead não encontrado' });
+          if (what === 'dossier' && req.method === 'GET') {
+            return json(res, 200, { ok: true, ...OPS.research.dossier(OPS.db, lead) });
+          }
+          if (what === 'pesquisar' && req.method === 'POST') {
+            const r = await OPS.research.researchSite(OPS.db, lead, { actor: 'dono' });
+            return json(res, 200, { ok: r.status === 'ok' || r.status === 'sem_site', pesquisa: r, ...OPS.research.dossier(OPS.db, lead) });
+          }
+          if (what === 'rascunho' && req.method === 'POST') {
+            const b = await limitedBody(req, 4000);
+            // o motor só entra se estiver ligado; sem ele, o modelo local escreve na mesma
+            const engine = (AI.active && backend !== 'nenhum')
+              ? (system, user, opts) => ask(system, user, opts)
+              : null;
+            const made = await OPS.personalize.compose(OPS.db, lead, { channel: b.channel || null, ask: engine, actor: 'agente' });
+            const m = OPS.messages.draftMessage(OPS.db, {
+              leadId: lead.id, channel: made.channel, subject: made.subject, body: made.body,
+              predictions: made.predictions, evidenceUsed: made.evidenceUsed, generatedBy: made.generatedBy, why: made.why,
+            }, 'agente');
+            return json(res, 201, { ok: true, message: m, ...made });
+          }
+        }
+        const signalMatch = url.pathname.match(/^\/api\/ops\/messages\/([^/]+)\/sinal$/);
+        if (signalMatch && req.method === 'POST') {
+          const b = await limitedBody(req, 4000);
+          const m = OPS.messages.getMessage(OPS.db, signalMatch[1]);
+          if (!m) return json(res, 404, { ok: false, error: 'mensagem não encontrada' });
+          const out = OPS.personalize.recordSignal(OPS.db, { leadId: m.lead_id, messageId: m.id, kind: b.kind, note: b.note || '', actor: 'dono' });
+          OPS.personalize.recalibrate(OPS.db);
+          return json(res, 200, { ok: true, ...out, lead: OPS.leads.getLead(OPS.db, m.lead_id) });
+        }
         if (url.pathname === '/api/ops/usage' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.messages.usageSummary(OPS.db, Math.max(1, +url.searchParams.get('days') || 30)) });
         }
