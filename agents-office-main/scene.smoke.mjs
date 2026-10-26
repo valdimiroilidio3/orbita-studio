@@ -189,6 +189,44 @@ for (const p of plantas) {
 }
 ok(plantas.filter(p => p.dept === 'brain').length === 1, 'o centro devia ter uma planta, a peça de apresentação');
 
+/* ---------- as 35 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
+// O pedido foi «mesa preta com LED na cor da sala». Aqui lê-se a cena MONTADA, posto a posto:
+// cada secretária tem de ter a malha do LED com a cor emissiva igual ao vidro daquela sala, e o
+// corpo tem de ser escuro. Se alguém trocar a cor ou voltar a pôr a madeira clara, cai aqui.
+const LED_POR_SALA = {};
+for (const id of Object.keys(R)) {
+  const st = R[id] && R[id].station;
+  const desk = R[id] && R[id].desk;          // a secretária (a cadeira fica ao lado, no station)
+  const dept = R[id] && R[id].a && R[id].a.dept;
+  if (!st || !desk || !dept) continue;
+  let led = null, corpo = null, halos = 0;
+  desk.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.part === 'deskLed') led = o;
+    if (o.userData.part === 'desk') corpo = o;
+    if (o.material && o.material.blending === 2) halos++; // 2 = AdditiveBlending (os halos são fundidos numa malha)
+  });
+  const esperado = (win.CC.office.depts[dept] || {}).glass;
+  ok(!!led, `${id}: a secretária não tem LED`);
+  if (led && esperado) {
+    const cor = '#' + led.material.emissive.getHexString();
+    ok(cor === esperado.toLowerCase(), `${id}: o LED da secretária é ${cor} e a sala é ${esperado}`);
+    LED_POR_SALA[dept] = cor;
+  }
+  ok(!!corpo, `${id}: a secretária não tem corpo`);
+  if (corpo) {
+    const c = corpo.material.color;
+    ok(Math.max(c.r, c.g, c.b) < 0.25, `${id}: o corpo da secretária não é preto (${c.getHexString()})`);
+  }
+  ok(halos >= 1, `${id}: a secretária tem luz mas não tem halo (${halos})`);
+  // a cadeira também leva a costura na cor da sala
+  let ledCadeira = null;
+  st.traverse((o) => { if (o.isMesh && o.userData.part === 'deskLed' && !desk.getObjectById(o.id)) ledCadeira = o; });
+  ok(!!ledCadeira && esperado && '#' + ledCadeira.material.emissive.getHexString() === esperado.toLowerCase(),
+    `${id}: a costura da cadeira não está na cor da sala`);
+}
+ok(Object.keys(LED_POR_SALA).length === 6, `esperava as 6 salas iluminadas, encontrei ${Object.keys(LED_POR_SALA).length}`);
+
 /* ---------- o espelho acessível: a mesma cena, por palavras (V8, 26 out 2026) ---------- */
 // A cena correu; agora exige-se que o escritório exista TAMBÉM fora dela. Não se testa a cor de
 // um anel de foco (isso é o olho), testa-se o que um leitor de ecrã e um teclado precisam: nome no
@@ -271,6 +309,6 @@ const resumoPlantas = (() => {
   const up = ps.filter(p => p.kind === 'upright').length;
   return `${ps.length} plantas (${up} verticais · ${ps.length - up} de folha larga, ${Math.min(...alturas).toFixed(1)}–${Math.max(...alturas).toFixed(1)} de altura)`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, 35 secretárias pretas com LED na cor da sala, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

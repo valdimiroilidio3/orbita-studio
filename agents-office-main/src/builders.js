@@ -173,6 +173,9 @@ export function makeFloorTitle(text, inkColor, width) {
 
 /* ---------- desk: wood top, white pedestals, monitor with live screen, chair ---------- */
 export function makeDeskScreenTexture(chip) {
+  // sem `document` (testes em Node) não há tela desenhada: devolve-se vazia em vez de rebentar.
+  // A geometria do monitor é a mesma; só o conteúdo do ecrã é que não existe.
+  if (typeof document === 'undefined' || !document.createElement) return { tex: null, canvas: null, draw: () => {} };
   const c = document.createElement('canvas');
   c.width = 256; c.height = 160;
   const x = c.getContext('2d');
@@ -193,37 +196,372 @@ export function makeDeskScreenTexture(chip) {
   return { tex, canvas: c, ctx: x, draw };
 }
 
-export function makeDesk(chip, live) {
+/* ===========================================================================
+   A SECRETÁRIA (26 out 2026) — pedido do dono: «mesa moderna preta com LED,
+   acessórios gamers, muito bonito e chamativo», com as luzes na cor da sala.
+
+   O que havia: tampo de madeira clara, dois pés brancos, um teclado branco e
+   uma caneca. Lia-se como mobiliário de escritório de 2014 — e era, com a
+   cadeira verde, a coisa menos «Órbita» da cena.
+
+   O que há agora: uma secretária de secretária-gaming-bem-feita. E há uma
+   regra que atravessa tudo: **a luz é da sala**. O LED de baixo do tampo, a
+   luz de trás do monitor, a barra que ilumina o teclado, o contorno do tapete
+   do rato, os anéis das colunas e as ventoinhas da torre — todos na cor do
+   vidro daquela sala (`dept.glass`), a mesma do chão. Uma sala, uma cor, sete
+   luzes. É o que faz o conjunto ler como um sistema e não como sete objetos.
+
+   E, como não há post-processing nesta cena (o polimento de 1.9.1 foi
+   revertido a pedido do dono: sem PMREM, sem tone mapping), o brilho não vem
+   de um bloom: vem de **material emissivo** (o LED em si) mais **quês
+   aditivos** com gradiente radial (o halo, a luz na secretária, a luz no
+   chão). É o truque de sempre dos jogos — e não mexe no pipeline de render.
+
+   Custo: as peças são fundidas por material (corpo, luz, acento, halo), pelo
+   que uma secretária inteira são ~5 draw calls, não 30. Cada secretária tem
+   uma semente: a variante de acessório muda de posto para posto, para a sala
+   parecer vivida e não clonada.
+   =========================================================================== */
+
+/* o teclado: teclas claras sobre preto. O material multiplica esta textura pela cor da sala,
+   por isso as teclas acendem na cor do vidro e os intervalos ficam pretos — um teclado
+   retroiluminado, sem uma luz por tecla. */
+let _keyTex = null;
+function keyboardTexture() {
+  if (_keyTex !== null) return _keyTex;
+  if (typeof document === 'undefined' || !document.createElement) return (_keyTex = null);
+  const W = 320, H = 110;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#08090B'; x.fillRect(0, 0, W, H);
+  const rr = (a, b, w, h, r) => {
+    x.beginPath();
+    x.moveTo(a + r, b); x.lineTo(a + w - r, b); x.quadraticCurveTo(a + w, b, a + w, b + r);
+    x.lineTo(a + w, b + h - r); x.quadraticCurveTo(a + w, b + h, a + w - r, b + h);
+    x.lineTo(a + r, b + h); x.quadraticCurveTo(a, b + h, a, b + h - r);
+    x.lineTo(a, b + r); x.quadraticCurveTo(a, b, a + r, b); x.fill();
+  };
+  const cols = 14, rows = 4, gap = 3, pad = 7;
+  const kw = (W - pad * 2 - gap * (cols - 1)) / cols;
+  const kh = (H - pad * 2 - gap * (rows - 1) - 10) / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let i = 0; i < cols; i++) {
+      const lit = (i * 7 + r * 13) % 11 === 0;      // algumas teclas mais vivas: o resto do teclado respira
+      x.fillStyle = lit ? '#ffffff' : 'rgba(226,232,240,.82)';
+      rr(pad + i * (kw + gap), pad + r * (kh + gap), kw, kh, 2.2);
+    }
+  }
+  x.fillStyle = 'rgba(226,232,240,.7)';             // a barra de espaço
+  rr(pad + kw * 2, H - pad - 8, kw * 6 + gap * 5, 8, 2.2);
+  _keyTex = new THREE.CanvasTexture(c);
+  _keyTex.colorSpace = THREE.SRGBColorSpace;
+  _keyTex.anisotropy = 4;
+  return _keyTex;
+}
+
+/* o tapete do rato: contorno aceso, centro preto. Mesma ideia do teclado. */
+let _padTex = null;
+function mousepadTexture() {
+  if (_padTex !== null) return _padTex;
+  if (typeof document === 'undefined' || !document.createElement) return (_padTex = null);
+  const W = 192, H = 160;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#0A0B0E'; x.fillRect(0, 0, W, H);
+  x.strokeStyle = '#ffffff'; x.lineWidth = 7;
+  x.shadowColor = '#ffffff'; x.shadowBlur = 14;
+  const r = 20, a = 4, w = W - 8, h = H - 8;
+  x.beginPath();
+  x.moveTo(a + r, a); x.lineTo(a + w - r, a); x.quadraticCurveTo(a + w, a, a + w, a + r);
+  x.lineTo(a + w, a + h - r); x.quadraticCurveTo(a + w, a + h, a + w - r, a + h);
+  x.lineTo(a + r, a + h); x.quadraticCurveTo(a, a + h, a, a + h - r);
+  x.lineTo(a, a + r); x.quadraticCurveTo(a, a, a + r, a); x.stroke();
+  _padTex = new THREE.CanvasTexture(c);
+  _padTex.colorSpace = THREE.SRGBColorSpace;
+  return _padTex;
+}
+
+/** um halo: disco de raios com o alfa a cair do centro para fora (cor por vértice, com alfa).
+ *  Não usa textura — por isso existe em Node (testes) e no browser, e é sempre igual. */
+function glowDisc(w, h, strength = 0.9, rings = 7, seg = 40) {
+  const pos = [], col = [], idx = [];
+  pos.push(0, 0, 0); col.push(1, 1, 1, strength);          // centro
+  for (let r = 1; r <= rings; r++) {
+    const t = r / rings;
+    const a = strength * Math.pow(1 - t, 2.1);             // queda suave, como uma luz difusa
+    for (let j = 0; j < seg; j++) {
+      const ang = (j / seg) * Math.PI * 2;
+      pos.push(Math.cos(ang) * 0.5 * w * t, Math.sin(ang) * 0.5 * h * t, 0);
+      col.push(1, 1, 1, a);
+    }
+  }
+  for (let j = 0; j < seg; j++) idx.push(0, 1 + j, 1 + ((j + 1) % seg));
+  for (let r = 1; r < rings; r++) {
+    const a0 = 1 + (r - 1) * seg, b0 = 1 + r * seg;
+    for (let j = 0; j < seg; j++) {
+      const j1 = (j + 1) % seg;
+      idx.push(a0 + j, b0 + j, a0 + j1, a0 + j1, b0 + j, b0 + j1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/* materiais por (sala, cor): seis salas, seis jogos. Nunca um por secretária. */
+const deskMatCache = new Map();
+function deskMaterials(chip, glass) {
+  const key = `${chip}|${glass}`;
+  if (deskMatCache.has(key)) return deskMatCache.get(key);
+  const std = (o) => new THREE.MeshStandardMaterial({ metalness: 0, ...o });
+  const M = {
+    body: std({ color: '#1C1E23', roughness: 0.40, metalness: 0.28 }),   // preto acetinado
+    edge: std({ color: '#33363E', roughness: 0.33, metalness: 0.50 }),   // aresta maquinada, um tom acima
+    matte: std({ color: '#101114', roughness: 0.95 }),                   // borracha: teclado, tapete, torre
+    metal: std({ color: '#3A3D44', roughness: 0.3, metalness: 0.8 }),
+    accent: std({ color: chip, roughness: 0.55 }),
+    led: std({ color: '#050507', emissive: glass, emissiveIntensity: 1.25, roughness: 0.6 }),
+    glow: new THREE.MeshBasicMaterial({
+      color: glass, vertexColors: true, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+    glassPanel: std({ color: '#0B0D10', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.55 }),
+  };
+  deskMatCache.set(key, M);
+  return M;
+}
+
+/** funde uma lista de geometrias já transformadas numa malha só. */
+function meshOf(geos, material, { shadow = true } = {}) {
+  if (!geos.length) return null;
+  const m = new THREE.Mesh(mergeGeos(geos), material);
+  m.castShadow = shadow; m.receiveShadow = shadow;
+  geos.forEach((g) => g.dispose());
+  return m;
+}
+
+const GEO = {
+  box: (w, d, h, r = 0.04) => rboxGeo(w, d, h, r),
+  disc: (r, seg = 18) => new THREE.CylinderGeometry(r, r, 0.03, seg),
+  post: (r, h, seg = 10) => new THREE.CylinderGeometry(r, r * 0.92, h, seg),
+  ring: (r, tube = 0.014, seg = 14) => new THREE.TorusGeometry(r, tube, 5, seg),
+  ball: (r, a = 12, b = 8) => new THREE.SphereGeometry(r, a, b),
+  quad: (w, h) => new THREE.PlaneGeometry(w, h),
+};
+/** coloca uma geometria (nunca partilhada — clone) no sítio pedido. */
+function place(geo, x, y, z, { rx = 0, ry = 0, rz = 0 } = {}) {
+  const g = geo.clone();
+  if (rx) g.rotateX(rx);
+  if (ry) g.rotateY(ry);
+  if (rz) g.rotateZ(rz);
+  g.translate(x, y, z);
+  return g;
+}
+
+export function makeDesk(chip, live, opts = {}) {
+  const glass = opts.glass || chip;   // a cor da sala: vem de data.js, com o chip como recurso
+  const seed = opts.seed || 0;
+  const rnd = seededRandom(seed * 977 + 13);
+  const M = deskMaterials(chip, glass);
   const g = new THREE.Group();
-  const top = rbox(5.2, 2.6, 0.22, '#DCC29A', 0.18); top.position.y = 2.1; g.add(top);
-  const ped1 = rbox(0.9, 2.2, 1.9, WHITE, 0.12); ped1.position.set(-2.0, 0.1, 0); g.add(ped1);
-  const ped2 = rbox(0.9, 2.2, 1.9, WHITE, 0.12); ped2.position.set(2.0, 0.1, 0); g.add(ped2);
-  // monitor — with a live screen (screens.js) it is a wider 16:10 panel so the session reads from the pod view
+
+  const body = [], edge = [], matte = [], metal = [], led = [], accent = [], glow = [], glassy = [];
+
+  /* ---------- o tampo ---------- */
+  body.push(place(GEO.box(5.2, 2.6, 0.22, 0.18), 0, 2.10, 0));
+  edge.push(place(GEO.box(5.24, 2.64, 0.035, 0.19), 0, 2.085, 0)); // o filete que apanha a luz
+  /* os pés: duas lâminas finas de metal, à moderna — em vez dos armários brancos */
+  for (const sx of [-2.35, 2.35]) {
+    edge.push(place(GEO.box(0.26, 2.28, 2.02, 0.09), sx, 0.02, 0));       // a perna em grafite
+    metal.push(place(GEO.box(0.34, 2.32, 0.06, 0.02), sx, 0.02, 0));      // a sapata de metal
+    led.push(place(GEO.box(0.02, 0.02, 1.9, 0.01), sx + (sx > 0 ? 0.14 : -0.14), 0.18, 0)); // a luz da perna
+  }
+  body.push(place(GEO.box(4.5, 0.13, 0.14, 0.05), 0, 1.52, -1.02));       // travessa
+  matte.push(place(GEO.box(3.4, 0.40, 0.10, 0.04), 0, 1.88, -0.98));      // calha de cabos
+
+  /* ---------- o LED: por baixo do tampo, à volta, na cor da sala ---------- */
+  led.push(place(GEO.box(4.86, 0.06, 0.05, 0.02), 0, 2.062, 1.27));        // aresta da frente
+  for (const sx of [-2.52, 2.52]) led.push(place(GEO.box(0.06, 2.28, 0.05, 0.02), sx, 2.062, 0));
+
+  /* ---------- o monitor: a mesma tela (AO VIVO), com moldura preta e luz atrás ---------- */
   const screenSet = live ? { tex: live.tex, canvas: live.canvas, draw: () => {}, live } : makeDeskScreenTexture(chip);
   const [mw, mh] = live ? [3.4, 2.125] : [2.1, 1.3];
-  // rbox extrudes UP from its position — bezel base sits just above the desk top
-  const monBack = rbox(mw + 0.2, 0.14, mh + 0.2, '#26262A', 0.08); monBack.position.set(0, 2.75, -0.85); g.add(monBack);
+  const monBack = rbox(mw + 0.2, 0.14, mh + 0.2, '#0E0F12', 0.08);
+  monBack.position.set(0, 2.75, -0.85); g.add(monBack);
+  monBack.name = 'monBack';
   const screen = new THREE.Mesh(
     new THREE.PlaneGeometry(mw, mh),
-    new THREE.MeshBasicMaterial({ map: screenSet.tex })
+    new THREE.MeshBasicMaterial(screenSet.tex ? { map: screenSet.tex } : { color: '#0C0D10' })
   );
-  screen.position.set(0, 2.85 + mh / 2, -0.77); screen.name = 'screen'; monBack.name = 'monBack'; g.add(screen);
-  const stand = rbox(0.16, 0.16, 0.45, '#3A3A3E', 0.05); stand.position.set(0, 2.32, -0.9); g.add(stand);
-  // keyboard + mug
-  const kb = rbox(1.5, 0.5, 0.07, '#EFEFEA', 0.06); kb.position.set(0, 2.22, 0.35); g.add(kb);
-  const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.3, 12), mat(chip));
-  mug.position.set(1.9, 2.36, 0.4); mug.castShadow = true; g.add(mug);
+  screen.position.set(0, 2.85 + mh / 2, -0.77); screen.name = 'screen'; g.add(screen);
+  const screenTopY = 2.85 + mh;
+  // a moldura: um lábio por baixo e um pilar/arm que a segura
+  body.push(place(GEO.box(mw + 0.22, 0.06, 0.10, 0.03), 0, 2.785, -0.79));
+  body.push(place(GEO.box(0.20, 0.24, 0.46, 0.06), 0, 2.33, -0.92));
+  body.push(place(GEO.box(0.90, 0.52, 0.05, 0.03), 0, 2.325, -0.92));
+  led.push(place(GEO.box(0.10, 0.02, 0.02, 0.01), 0.42, 2.795, -0.74));   // o ponto de marca no lábio
+
+  /* a luz de trás do monitor: o halo que se vê à volta do ecrã */
+  glow.push(place(glowDisc(mw * 1.22, mh * 1.30, 0.62), 0, 2.85 + mh / 2, -1.03));
+  /* a barra de luz (Aukora) presa no cimo do ecrã: acende o teclado, não os olhos */
+  const barY = screenTopY + 0.14;
+  body.push(place(GEO.box(mw * 0.86, 0.10, 0.09, 0.03), 0, barY, -0.70));
+  body.push(place(GEO.box(0.10, 0.05, 0.22, 0.02), 0, barY - 0.04, -0.85)); // a dobra que prende
+  led.push(place(GEO.box(mw * 0.82, 0.085, 0.02, 0.01), 0, barY - 0.055, -0.70));
+  // o halo da barra a cair sobre o teclado e o tapete: um disco deitado, a apontar para cima
+  glow.push(place(glowDisc(mw * 1.10, 1.75, 0.34), 0, 2.325, -0.30, { rx: -Math.PI / 2 }));
+
+  /* ---------- o teclado mecânico ---------- */
+  matte.push(place(GEO.box(1.80, 0.62, 0.075, 0.05), 0, 2.325, 0.42));
+  metal.push(place(GEO.box(1.74, 0.02, 0.02, 0.01), 0, 2.345, 0.72));
+  led.push(place(GEO.box(1.72, 0.04, 0.02, 0.01), 0, 2.352, 0.735));       // a linha de baixo, acesa
+  const keyTex = keyboardTexture();
+  if (keyTex) {   // com textura, lê-se um teclado retroiluminado; sem ela, não se inventa uma cor chapada
+    const keys = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.68, 0.52),
+      new THREE.MeshBasicMaterial({ map: keyTex, color: glass, transparent: true })
+    );
+    keys.rotation.x = -Math.PI / 2; keys.position.set(0, 2.404, 0.42); g.add(keys);
+    keys.name = 'keys';
+  }
+
+  /* ---------- o tapete do rato, o rato ---------- */
+  matte.push(place(GEO.box(1.06, 0.90, 0.018, 0.03), 1.36, 2.325, 0.40));
+  const padTex = mousepadTexture();
+  if (padTex) {
+    const pad = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.02, 0.86),
+      new THREE.MeshBasicMaterial({ map: padTex, color: glass, transparent: true })
+    );
+    pad.rotation.x = -Math.PI / 2; pad.position.set(1.36, 2.337, 0.40); g.add(pad);
+  }
+  const mouse = place(GEO.ball(0.115), 1.34, 2.372, 0.44);
+  mouse.scale(1, 0.58, 1.42);
+  body.push(mouse);
+  led.push(place(GEO.box(0.02, 0.012, 0.16, 0.006), 1.34, 2.415, 0.30));   // a tira do rato
+
+  /* ---------- as colunas, com um anel de luz na base ---------- */
+  for (const sx of [-1.94, 1.94]) {
+    body.push(place(GEO.box(0.28, 0.28, 0.82, 0.07), sx, 2.34, -0.78));
+    matte.push(place(GEO.box(0.20, 0.20, 0.60, 0.05), sx, 2.42, -0.70));
+    led.push(place(GEO.ring(0.135, 0.012), sx, 2.352, -0.78, { rx: Math.PI / 2 }));
+  }
+
+  /* ---------- o suporte do auricular, com o auricular pendurado ---------- */
+  const hsX = -2.02, hsZ = 0.16;
+  metal.push(place(GEO.disc(0.20), hsX, 2.345, hsZ));
+  metal.push(place(GEO.post(0.045, 0.92), hsX, 2.81, hsZ));
+  body.push(place(new THREE.TorusGeometry(0.30, 0.052, 5, 12, Math.PI), hsX, 3.02, hsZ));
+  for (const sx of [-0.30, 0.30]) {
+    body.push(place(new THREE.CylinderGeometry(0.155, 0.155, 0.13, 14), hsX + sx, 2.93, hsZ, { rz: Math.PI / 2 }));
+    accent.push(place(new THREE.CylinderGeometry(0.115, 0.115, 0.02, 14), hsX + sx * 1.06, 2.93, hsZ, { rz: Math.PI / 2 }));
+  }
+  led.push(place(GEO.ring(0.10, 0.011), hsX - 0.33, 2.93, hsZ, { ry: Math.PI / 2 }));
+
+  /* ---------- a caneca (na cor da sala) com um prato de luz ---------- */
+  accent.push(place(new THREE.CylinderGeometry(0.16, 0.145, 0.32, 14), 1.98, 2.48, 0.02));
+  led.push(place(GEO.ring(0.185, 0.012), 1.98, 2.335, 0.02, { rx: Math.PI / 2 }));
+
+  /* ---------- a torre, debaixo da mesa, com três ventoinhas acesas ---------- */
+  const twX = -1.70, twZ = -0.42;
+  body.push(place(GEO.box(0.80, 1.32, 1.46, 0.07), twX, 0.02, twZ));
+  edge.push(place(GEO.box(0.86, 1.38, 0.06, 0.02), twX, 0.02, twZ - 0.02));    // a chapa de topo
+  metal.push(place(GEO.box(0.84, 0.06, 0.04, 0.02), twX, 1.36, twZ + 0.66));    // a grelha
+  led.push(place(GEO.box(0.62, 0.02, 0.02, 0.01), twX, 0.10, twZ + 0.68));      // a linha da base
+  glassy.push(place(GEO.quad(1.22, 1.34), twX + 0.41, 0.74, twZ, { ry: Math.PI / 2 })); // o vidro lateral
+  for (let i = 0; i < 3; i++) {
+    const y = 0.34 + i * 0.38;
+    matte.push(place(GEO.ring(0.245, 0.045), twX, y, twZ + 0.66, {}));
+    led.push(place(GEO.ring(0.225, 0.013), twX, y, twZ + 0.675, {}));
+  }
+  glow.push(place(glowDisc(1.1, 1.5, 0.30), twX, 0.72, twZ + 0.70));   // o brilho que sai das ventoinhas
+  led.push(place(GEO.box(0.30, 0.02, 0.02, 0.01), twX, 1.46, twZ + 0.70));  // a tira do topo da torre
+
+  /* ---------- a luz no chão: o que sai de baixo da mesa ---------- */
+  glow.push(place(glowDisc(5.7, 3.05, 0.50), 0, 0.012, 0.05, { rx: -Math.PI / 2 }));
+
+  /* ---------- um acessório por posto, para a sala parecer vivida ---------- */
+  const variant = Math.abs(seed) % 3;
+  if (variant === 0) {                                   // comando de jogos
+    const cx = -1.36, cy = 2.385, cz = 0.42;
+    body.push(place(GEO.box(0.52, 0.30, 0.10, 0.10), cx, cy, cz));
+    for (const sx of [-0.40, 0.40]) {
+      const grip = place(GEO.ball(0.13), cx + sx, cy - 0.02, cz + 0.02);
+      grip.scale(0.9, 0.62, 1.05);
+      body.push(grip);
+    }
+    matte.push(place(GEO.ball(0.055), cx - 0.13, cy + 0.07, cz));
+    matte.push(place(GEO.ball(0.055), cx + 0.13, cy + 0.07, cz));
+    led.push(place(GEO.box(0.02, 0.012, 0.20, 0.006), cx, cy + 0.06, cz - 0.02));
+  } else if (variant === 1) {                            // telemóvel num suporte
+    const px = -1.38, pz = 0.34;
+    metal.push(place(GEO.box(0.26, 0.20, 0.04, 0.02), px, 2.33, pz));
+    body.push(place(GEO.box(0.46, 0.055, 0.86, 0.03), px, 2.62, pz, { rx: -0.32 }));
+    const ecra = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.40, 0.78),
+      new THREE.MeshBasicMaterial({ color: glass, transparent: true, opacity: 0.55 })
+    );
+    ecra.position.set(px, 2.635, pz + 0.032); ecra.rotation.x = -0.32 - Math.PI / 2; ecra.rotation.z = 0;
+    // (a tela do telemóvel fica no plano do vidro; a rotação é a mesma do corpo)
+    ecra.rotation.set(-0.32, 0, 0); ecra.position.set(px, 2.635, pz + 0.031);
+    g.add(ecra);
+  } else {                                               // mini barra de luz Aukora
+    const lx = -1.40, lz = 0.30;
+    accent.push(place(GEO.disc(0.16), lx, 2.34, lz));
+    metal.push(place(GEO.post(0.028, 0.62), lx, 2.65, lz));
+    body.push(place(GEO.box(0.80, 0.09, 0.09, 0.03), lx + 0.34, 2.96, lz));
+    led.push(place(GEO.box(0.76, 0.02, 0.075, 0.01), lx + 0.34, 2.905, lz));
+    glow.push(place(glowDisc(1.0, 0.8, 0.45), lx + 0.34, 2.90, lz, { rx: -Math.PI / 2 }));
+  }
+  if (rnd() > 0.55) {                                    // uns papéis, umas notas: nem todos iguais
+    accent.push(place(GEO.box(0.34, 0.26, 0.012, 0.01), 2.10, 2.335, 0.72, { ry: 0.3 }));
+    accent.push(place(GEO.box(0.34, 0.26, 0.012, 0.01), 2.12, 2.348, 0.76, { ry: -0.2 }));
+  }
+
+  /* ---------- as malhas: cinco por secretária ---------- */
+  const bodyMesh = meshOf(body, M.body); bodyMesh.userData.part = 'desk'; g.add(bodyMesh);
+  const edgeMesh = meshOf(edge, M.edge); edgeMesh.userData.part = 'desk'; g.add(edgeMesh);
+  const matteMesh = meshOf(matte, M.matte); matteMesh.userData.part = 'deskMatte'; g.add(matteMesh);
+  const metalMesh = meshOf(metal, M.metal); g.add(metalMesh);
+  const ledMesh = meshOf(led, M.led, { shadow: false }); ledMesh.userData.part = 'deskLed'; g.add(ledMesh);
+  const accentMesh = meshOf(accent, M.accent); g.add(accentMesh);
+  const glassMesh = meshOf(glassy, M.glassPanel, { shadow: false }); if (glassMesh) g.add(glassMesh);
+  // o halo: quês aditivas, uma malha só, e nunca a tapar nada (depthWrite falso)
+  const haloMesh = meshOf(glow, M.glow, { shadow: false });
+  if (haloMesh) { haloMesh.renderOrder = 2; g.add(haloMesh); }
+
+  g.userData.desk = { glass, chip, variant, led: true };
   return { group: g, screenSet };
 }
 
-export function makeChair() {
+/* ---------- a cadeira: preta, com a costura na cor da sala ---------- */
+export function makeChair(opts = {}) {
+  const glass = opts.glass || '#8E998B';
+  const M = deskMaterials(opts.chip || '#2B3245', glass);
   const g = new THREE.Group();
-  const seat = rbox(1.3, 1.2, 0.22, '#8E998B', 0.35); seat.position.y = 1.25; g.add(seat);
-  const back = rbox(1.25, 0.2, 1.35, '#7C8779', 0.3); back.position.set(0, 1.5, 0.62); g.add(back);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.85, 8), mat('#55555A'));
-  pole.position.y = 0.82; g.add(pole);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.1, 10), mat('#55555A'));
-  base.position.y = 0.4; base.castShadow = true; g.add(base);
+  const dark = [], led = [], metal = [];
+
+  // o assento e as costas: uma peça só, em concha, com o vinco aceso
+  dark.push(place(GEO.box(1.32, 1.24, 0.18, 0.42), 0, 1.16, 0));      // assento
+  dark.push(place(GEO.box(1.26, 0.17, 1.42, 0.40), 0, 1.42, 0.64));    // costas
+  dark.push(place(GEO.box(1.10, 0.14, 0.20, 0.30), 0, 1.30, 0.60));    // o apoio lombar
+  led.push(place(GEO.box(1.30, 0.02, 0.02, 0.01), 0, 2.02, 0.56));     // a costura do topo
+  led.push(place(GEO.box(1.30, 0.02, 0.02, 0.01), 0, 1.10, 0.56));
+  metal.push(place(GEO.post(0.075, 0.62), 0, 0.82, 0));                 // a coluna a gás
+  // a estrela de cinco braços, com rodas
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    metal.push(place(GEO.box(0.86, 0.11, 0.08, 0.03), Math.cos(a) * 0.43, 0.42, Math.sin(a) * 0.43, { ry: -a }));
+    metal.push(place(GEO.ball(0.075, 8, 6), Math.cos(a) * 0.82, 0.36, Math.sin(a) * 0.82));
+  }
+  metal.push(place(GEO.disc(0.16), 0, 0.46, 0));
+
+  const d = meshOf(dark, M.body); d.userData.part = 'desk'; g.add(d);
+  const l = meshOf(led, M.led, { shadow: false }); l.userData.part = 'deskLed'; g.add(l);
+  const mm = meshOf(metal, M.metal); g.add(mm);
   return g;
 }
 
@@ -475,8 +813,12 @@ function mergeGeos(geos) {
     nVert += g.attributes.position.count;
     nIdx += g.index ? g.index.count : g.attributes.position.count;
   }
+  // a cor pode ter 3 (RGB) ou 4 (RGBA) componentes: os halos usam alfa por vértice, e o three
+  // só o respeita se o atributo tiver quatro. Junta-se na largura máxima e o que falta fica 1.
+  const colorItem = geos.reduce((n, g) => Math.max(n, g.attributes.color ? g.attributes.color.itemSize : 0), 0);
   const pos = new Float32Array(nVert * 3), nor = new Float32Array(nVert * 3);
-  const uv = new Float32Array(nVert * 2), col = new Float32Array(nVert * 3).fill(1);
+  const uv = new Float32Array(nVert * 2);
+  const col = colorItem ? new Float32Array(nVert * colorItem).fill(1) : null;
   const idx = new Uint32Array(nIdx);
   let vo = 0, io = 0;
   for (const g of geos) {
@@ -484,7 +826,13 @@ function mergeGeos(geos) {
     pos.set(p.array, vo * 3);
     if (g.attributes.normal) nor.set(g.attributes.normal.array, vo * 3);
     if (g.attributes.uv) uv.set(g.attributes.uv.array, vo * 2);
-    if (g.attributes.color) col.set(g.attributes.color.array, vo * 3);
+    const c = g.attributes.color;
+    if (c && col) {
+      const it = c.itemSize;
+      for (let i = 0; i < p.count; i++) {
+        for (let k = 0; k < it; k++) col[(vo + i) * colorItem + k] = c.array[i * it + k];
+      }
+    }
     if (g.index) {
       const a = g.index.array;
       for (let i = 0; i < a.length; i++) idx[io + i] = a[i] + vo;
@@ -499,7 +847,7 @@ function mergeGeos(geos) {
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (col) out.setAttribute('color', new THREE.BufferAttribute(col, colorItem));
   out.setIndex(new THREE.BufferAttribute(idx, 1));
   out.computeBoundingSphere();
   return out;

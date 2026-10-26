@@ -18,7 +18,7 @@ import {
 } from './src/palette.js';
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, assertOffice } from './src/data.js';
 import * as THREE from 'three';
-import { makePlant, leafGeometry, stemGeometry, seededRandom, PLANT_KINDS } from './src/builders.js';
+import { makePlant, leafGeometry, stemGeometry, seededRandom, PLANT_KINDS, makeDesk, makeChair } from './src/builders.js';
 
 /* ---------- cor: a matemática que tudo o resto usa ---------- */
 
@@ -302,4 +302,74 @@ test('a mesma semente dá a mesma planta; sementes diferentes dão plantas difer
   const a = posicoes(12), b = posicoes(12), c = posicoes(13);
   assert.deepEqual([...a].slice(0, 300), [...b].slice(0, 300));
   assert.notDeepEqual([...a].slice(0, 300), [...c].slice(0, 300));
+});
+
+/* ---------- a secretária (1.9.8): preta, com a luz da sala ----------
+   O pedido foi «mesa moderna preta com LED, acessórios gamers, na cor da sala». O que se prova
+   aqui é o que se pode provar sem olhos: que a luz é mesmo a da sala, que a tela continua a
+   existir (é o contrato com o painel AO VIVO), que cada posto tem uma variante e que tudo é
+   determinístico — a cena não muda entre recarregamentos. */
+
+const malhasDe = (g) => { const out = []; g.traverse((o) => { if (o.isMesh) out.push(o); }); return out; };
+
+test('a secretária devolve a tela e a moldura que o main.js espera', () => {
+  const live = { tex: null, canvas: null };
+  const { group, screenSet } = makeDesk('#CFEBDD', live, { glass: '#1FA36B', seed: 0 });
+  assert.ok(screenSet && screenSet.live, 'a tela AO VIVO tem de vir no screenSet');
+  const nomes = malhasDe(group).map((m) => m.name).filter(Boolean);
+  assert.ok(nomes.includes('screen'), 'falta a malha do ecrã');
+  assert.ok(nomes.includes('monBack'), 'falta a moldura do monitor');
+  const ecra = malhasDe(group).find((m) => m.name === 'screen');
+  const box = new THREE.Box3().setFromObject(ecra);
+  assert.ok(box.max.y > 4.0 && box.max.y < 5.6, `o ecrã subiu ou desceu demais (${box.max.y.toFixed(2)})`);
+});
+
+test('a luz da secretária é a cor da sala — e não outra', () => {
+  for (const glass of ['#1FA36B', '#DC5348', '#8B5AD6']) {
+    const { group } = makeDesk('#EEEEEE', null, { glass, seed: 1 });
+    const led = malhasDe(group).find((m) => m.userData.part === 'deskLed');
+    assert.ok(led, 'falta a malha do LED');
+    assert.equal('#' + led.material.emissive.getHexString(), glass.toLowerCase(), 'o LED não está na cor da sala');
+    assert.ok(led.material.emissiveIntensity > 0.8, 'um LED apagado não é um LED');
+    const halo = malhasDe(group).find((m) => m.material && m.material.blending === THREE.AdditiveBlending);
+    assert.ok(halo, 'falta o halo (o brilho à volta da luz)');
+    assert.equal('#' + halo.material.color.getHexString(), glass.toLowerCase(), 'o halo não está na cor da sala');
+    assert.equal(halo.material.depthWrite, false, 'um halo não pode escrever profundidade (tapava o resto)');
+  }
+});
+
+test('a mesa é preta: o corpo não é branco nem madeira', () => {
+  const { group } = makeDesk('#CFEBDD', null, { glass: '#1FA36B', seed: 2 });
+  const corpo = malhasDe(group).find((m) => m.userData.part === 'desk');
+  const c = corpo.material.color;
+  assert.ok(Math.max(c.r, c.g, c.b) < 0.20, `o corpo da secretária devia ser preto (${c.getHexString()})`);
+  assert.ok(corpo.material.metalness > 0.1, 'o preto acetinado tem de ter um pouco de metal');
+});
+
+test('cada posto tem uma variante de acessório, e a mesma semente dá a mesma mesa', () => {
+  const tamanho = (seed) => {
+    const { group } = makeDesk('#CFEBDD', null, { glass: '#1FA36B', seed });
+    let v = 0;
+    malhasDe(group).forEach((m) => { v += m.geometry.attributes.position.count; });
+    return v;
+  };
+  const a = tamanho(0), b = tamanho(1), c = tamanho(2);
+  assert.equal(new Set([a, b, c]).size, 3, 'as três variantes (comando, telemóvel, barra) têm de ser diferentes');
+  assert.equal(tamanho(1), b, 'a mesma semente tem de dar a mesma mesa');
+});
+
+test('a cadeira também é preta, com a costura na cor da sala', () => {
+  const ch = makeChair({ glass: '#41AEE4', chip: '#D6EEF9' });
+  const malhas = malhasDe(ch);
+  const corpo = malhas.find((m) => m.userData.part === 'desk');
+  const led = malhas.find((m) => m.userData.part === 'deskLed');
+  assert.ok(corpo && led, 'a cadeira tem de ter corpo e costura');
+  assert.equal('#' + led.material.emissive.getHexString(), '#41aee4');
+  assert.ok(Math.max(corpo.material.color.r, corpo.material.color.g, corpo.material.color.b) < 0.20);
+});
+
+test('as peças ficam fundidas: uma secretária são poucas malhas, não trinta', () => {
+  const { group } = makeDesk('#CFEBDD', null, { glass: '#1FA36B', seed: 0 });
+  const n = malhasDe(group).length;
+  assert.ok(n <= 12, `demasiadas malhas por secretária (${n}) — o custo é por posto, e são 35`);
 });

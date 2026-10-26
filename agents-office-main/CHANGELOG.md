@@ -1,3 +1,40 @@
+## 1.9.8 — 26 out 2026 · A secretária: preta, com a luz da sala
+
+Pedido 26: *«melhorias nível Apple design 3D mais moderna e elegante, com LEDs Aukora combinando com a cor da sala, uma vibe de mesa moderna preta com LED, e acessórios gamers, muito bonito e chamativo»*.
+
+O que havia era um tampo de madeira clara, dois armários brancos, um teclado branco e uma caneca — mobiliário de escritório de 2014. Não faltava material: faltava desenho. E faltava a coisa que faz uma mesa com LED parecer **desta sala** e não de uma loja: a cor.
+
+### A mesa
+
+- **Preta, e não cinzenta.** Tampo e corpo em `#1C1E23` acetinado (metalness 0.28), pernas em lâmina de grafite com sapata de metal, calha de cabos e travessa. Saiu a madeira; saíram os armários brancos.
+- **Sete luzes, uma cor.** Fita LED sob a aresta da frente e nas laterais, LED nas pernas, halo atrás do monitor, **barra de luz Aukora** presa no cimo do ecrã, teclado retroiluminado, contorno do tapete do rato, anéis das colunas, **três ventoinhas da torre** e a costura da cadeira — **todas em `dept.glass`**, a mesma cor do vidro do chão. Uma sala, uma cor. É o que faz o conjunto ler como um sistema.
+- **Acessórios gamers:** monitor com moldura preta, suporte e barra de luz; teclado mecânico; rato sobre tapete iluminado; duas colunas com anel de luz; auricular pendurado num suporte em arco; caneca; torre com vidro lateral e ventoinhas acesas. E, **de posto para posto, a mesa muda**: comando de jogos, telemóvel em suporte ou mini barra Aukora — três variantes decididas por semente, para a sala parecer vivida e não clonada.
+- **A cadeira** acompanha: preta, em concha, com a costura do encosto e do assento na cor da sala, coluna a gás, estrela de cinco braços com rodas.
+
+### Como o brilho é feito (e porque não há bloom)
+
+O polimento de 1.9.1 continua **revertido**, como o dono pediu: sem PMREM, sem tone mapping, sem pós-processamento. O brilho não vem de um *bloom* — vem de **material emissivo** (o LED em si) mais **quês aditivos** (`glowDisc`: geometria com alfa por vértice e gradiente de queda, `depthWrite: false`). É o truque de sempre dos jogos, é determinístico, existe sem browser (por isso é testável) e não mexe no pipeline de render.
+
+### Correções que isto obrigou
+
+- **`mergeGeos` só sabia juntar cor RGB.** Os halos precisam de **alfa por vértice** (quatro componentes) e o three só o respeita assim. A função passou a juntar na largura máxima (3 ou 4) e a preencher com 1 o que falta. Sem isto, o halo ficava opaco.
+- **O `dimTwin` (escurecer a sala que não está em foco) só apagava a cor.** Resultado: a sala apagava-se e o LED ficava aceso, a brilhar no escuro. Passou a **escurecer a emissão** também (para 22 %).
+- **No modo escuro, uma mesa preta sobre fundo escuro desaparecia.** O corpo sobe para grafite (`#2E3138`), o mate para `#23252A` e o LED ganha 45 % de intensidade — é assim que uma secretária com luz se comporta à noite.
+- **A textura da tela exigia `document`.** Em Node (testes) rebentava; agora devolve uma tela vazia e o monitor desenha-se na mesma, com um fundo escuro.
+
+### Provas
+
+- **`test:office` — 31/31** (eram 25). Seis testes novos sobre a secretária: a tela e a moldura que o `main.js` espera, o LED na cor da sala em três salas diferentes, o corpo preto e metálico, o halo aditivo sem escrita de profundidade, as três variantes determinísticas e o limite de malhas por posto.
+- **`test:scene` — ✓ 35 postos** … e agora **posto a posto**: cada uma das 35 secretárias tem de ter a malha do LED com a cor emissiva **exacta** do vidro daquela sala, corpo escuro, halo, e a costura da cadeira na mesma cor. *O teste tem dentes:* troquei a cor por magenta à força e ele apontou as 35 (`✗ 35 falhas · elead: o LED da secretária é #ff00ff e a sala é #1FA36B`); reposto, ✓.
+- **Vi a mesa antes de a entregar**, com o mesmo rasterizador da 1.9.6: foi ele que mostrou que o halo do monitor parecia uma lua, que a luz da barra caía por cima do teclado, e que a torre era um bloco preto sem forma. Três correções saíram daí; os retratos ficam em `docs/secretarias-3-variantes.png` e `docs/secretaria-detalhe.png`.
+- **Custo:** cada secretária ficou em **≤ 12 malhas** (eram 8 peças soltas + 5 da cadeira antes, agora tudo fundido por material: corpo, aresta, mate, metal, LED, acento, vidro, halo, tela, moldura, teclado, tapete). Mais detalhe, menos draw calls.
+- `test:a11y` **21/21** · `ops.test` **71/71** · `integrations` **18/18** · `check.mjs` **94/95** (só `smoke: browser`) · build **1341 KB** + `mesa.html` 86 KB.
+
+### Limitações, declaradas
+
+- **A tela do monitor aparece preta nos retratos.** É fiel ao que o meu rasterizador sabe desenhar: o conteúdo do ecrã é uma textura em canvas, desenhada no browser em tempo real pelo painel AO VIVO. Na cena servida, o ecrã tem conteúdo.
+- **A cena 3D continua sem captura neste sandbox** (o WebGL não arranca: faltam bibliotecas de sistema ao Chromium). Os retratos são de luz de estudo e provam a forma e a cor — não julgam a luz final da cena. Essa parte é o olho do dono.
+
 ## 1.9.7 — 26 out 2026 · «ÓRBITA AGENTES», e a conversa
 
 Pedido 25: *«remove o BETA e coloca ÓRBITA AGENTES; o lugar onde se escrevem as mensagens deve ficar ainda mais elegante, inspira-te no ChatGPT, com mais vibe Apple design»*.

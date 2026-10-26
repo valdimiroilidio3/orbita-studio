@@ -118,18 +118,57 @@ planta.
 Retratos (rasterizados fora do browser, luz de estudo — servem para ver a forma, não para julgar a
 luz da cena): `docs/planta-vertical.png`, `docs/planta-folha-larga.png`.
 
+## As secretárias (1.9.8, 26 out 2026)
+
+Pedido do dono: *«mesa moderna preta com LED, acessórios gamers, muito bonito e chamativo», com a
+luz na cor da sala*.
+
+Havia um tampo de madeira clara, dois armários brancos, um teclado branco e uma caneca. Agora é
+uma secretária de gaming bem feita — e com **uma regra que atravessa tudo: a luz é da sala**.
+
+| Peça | Material | Detalhe |
+|---|---|---|
+| Tampo + pernas | `#1C1E23`, metalness 0.28 | pernas em lâmina de grafite `#33363E` com sapata de metal |
+| Fita LED | emissivo **`dept.glass`** | aresta da frente, as duas laterais, as pernas e a base da torre |
+| Monitor | moldura preta + tela AO VIVO | luz de trás (halo) e **barra de luz Aukora** no cimo |
+| Teclado | textura de teclas × cor da sala | teclado retroiluminado, sem uma luz por tecla |
+| Tapete do rato | contorno aceso | textura própria × cor da sala |
+| Torre | `#1C1E23` + vidro lateral | três ventoinhas com anel aceso |
+| Cadeira | preta | costura do encosto e do assento na cor da sala |
+
+- **Sete luzes, uma cor.** LED do tampo, halo do monitor, barra Aukora, teclado, tapete, anéis das
+  colunas, ventoinhas da torre, costura da cadeira — todas em `dept.glass`, a mesma cor do chão de
+  vidro. É o que faz o conjunto ler como sistema e não como sete objetos.
+- **Sem post-processing.** O polimento de 1.9.1 continua revertido (sem PMREM, sem tone mapping):
+  o brilho é **material emissivo** mais **quês aditivos** (`glowDisc`), que são geometria com alfa
+  por vértice — o truque de sempre dos jogos e não mexe no pipeline de render.
+- **Determinístico e variado.** `makeDesk(chip, live, { glass, seed })`: a semente escolhe uma de
+  três variantes de acessório (comando, telemóvel em suporte, mini barra Aukora) e decide se há
+  papéis. Posto 0 comando, posto 1 telemóvel, posto 2 barra; a mesma semente dá sempre a mesma mesa.
+- **Fundido por material.** Cada secretária são ≤ 12 malhas (corpo, aresta, mate, metal, LED,
+  acento, vidro, halo, tela, moldura, teclado, tapete) — e não as ~30 peças que a constroem.
+- **Modo escuro.** Uma mesa preta sobre fundo escuro desaparece: no escuro o corpo sobe para
+  grafite (`#2E3138`), o mate para `#23252A` e o LED sobe 45 % de intensidade. O `dimTwin` do foco
+  também passou a escurecer a **emissão** — antes a sala apagava-se e a luz ficava acesa.
+- Retratos (rasterizados fora do browser, luz de estudo; a tela aparece preta porque o conteúdo é
+  desenhado em canvas no browser): `docs/secretarias-3-variantes.png`, `docs/secretaria-detalhe.png`.
+
 ## O que prova o quê
 
-- `npm run test:office` — `office.test.mjs`, 25 testes puros: matemática de cor, famílias,
+- `npm run test:office` — `office.test.mjs`, 31 testes puros: matemática de cor, famílias,
   derivação das camadas, as invariantes dos dados (7 pods, 35 agentes, um chefe por sala,
   duas pessoas na mesma secretária, `officeProblems()` vazio) e **a forma das plantas**: a folha
   estreita-engorda-acaba-em-bico, a dobra e a queda, a cor variável, o pecíolo que afina, a
-  planta leve e determinística, e as duas espécies distintas.
+  planta leve e determinística, e as duas espécies distintas — e **a secretária**: a tela e a
+  moldura que o `main.js` espera, o LED na cor da sala (em três salas diferentes), o halo aditivo
+  sem escrita de profundidade, o corpo preto, as três variantes determinísticas e o limite de
+  malhas por posto.
 - `npm run test:scene` — carrega o bundle num DOM com WebGL falso, corre o ciclo de desenho e
   **lê o material que ficou desenhado** (`window.CC.office.floors`): 7 pods, 4 camadas cada, a
   laje translúcida, e cada uma das seis famílias presente exactamente uma vez, com o centro em
-  vidro fosco. Também as **7 plantas**: duas espécies, altura razoável, e nenhuma folhagem a sair
-  do seu pod.
+  vidro fosco. Também as **7 plantas** (duas espécies, altura razoável, nenhuma folhagem a sair do
+  pod) e as **35 secretárias**: cada uma com LED na cor emissiva exacta do vidro da sua sala, corpo
+  preto, halo, e a costura da cadeira na mesma cor.
 - `npm run check` — o servidor, as rotas, a sessão, o SSE.
 
 ## Código sem uso, declarado

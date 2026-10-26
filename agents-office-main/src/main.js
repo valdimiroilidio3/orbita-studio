@@ -251,10 +251,12 @@ for (const a of AGENTS) {
   station.position.copy(base);
   station.rotation.y = ANG;
   const live = liveUi.attach(agentInfo(a.id)); // um monitor por posto, ligado ao que a base de dados diz
-  const { group: desk, screenSet } = makeDesk(dept.chip, live);
+  // 26 out 2026: a secretária passa a ser preta, com LED na cor do vidro da sala e acessórios
+  // gamers. A semente muda o acessório de posto para posto (comando, telemóvel, barra de luz).
+  const { group: desk, screenSet } = makeDesk(dept.chip, live, { glass: dept.glass, seed: AGENTS.indexOf(a) });
   station.add(desk);
   screenSets.push({ screenSet, dept: a.dept, live, agentId: a.id });
-  const chair = makeChair();
+  const chair = makeChair({ glass: dept.glass, chip: dept.chip });
   chair.position.set(0, 0, 1.75);
   station.add(chair);
   station.traverse(o => { if (o.isMesh) o.userData.dept = a.dept; }); // focus-dim tagging
@@ -369,6 +371,13 @@ function dimTwin(m) {
     d.userData.baseColor = m.color.clone();
     const l = (m.color.r + m.color.g + m.color.b) / 3;
     d.userData.dimColor = new THREE.Color(l * 0.40 + 0.10, l * 0.40 + 0.10, l * 0.38 + 0.09);
+    // 26 out 2026: um LED aceso numa sala que não está em foco continuava a brilhar — o corpo
+    // apagava-se e a luz ficava. A emissão também entra no escurecimento.
+    if (m.emissive) {
+      d.userData.baseEmissive = m.emissive.clone();
+      d.userData.dimEmissive = m.emissive.clone().multiplyScalar(0.22);
+      d.emissive = m.emissive.clone();
+    }
     dimCache.set(m.uuid, d);
   }
   return dimCache.get(m.uuid);
@@ -390,8 +399,10 @@ function restoreSceneDim() {
 function tickDim(dt) {
   focusDim += (focusDimTarget - focusDim) * (1 - Math.exp(-dt * 5));
   if (focusDimTarget === 0 && focusDim < 0.02 && dimSwapped.length) restoreSceneDim();
-  for (const m of dimCache.values())
+  for (const m of dimCache.values()) {
     m.color.copy(m.userData.baseColor).lerp(m.userData.dimColor, focusDim);
+    if (m.emissive && m.userData.baseEmissive) m.emissive.copy(m.userData.baseEmissive).lerp(m.userData.dimEmissive, focusDim);
+  }
 }
 
 /* ---------- department billboards — os números que a base de dados tem, e mais nada ----------
@@ -642,6 +653,14 @@ function setDark(on) {
       m.opacity = darkOn ? m.userData.baseOpacity * 0.7 : m.userData.baseOpacity;
     }
     else if (o.userData.part === 'wall') m.color.set(darkOn ? DARK.wall : m.userData.base);
+    // 26 out 2026: uma mesa preta sobre um fundo escuro desaparecia. No escuro, o corpo sobe um
+    // tom (grafite) e o LED fica mais intenso — é assim que uma secretária com luz se comporta.
+    else if (o.userData.part === 'desk') m.color.set(darkOn ? '#2E3138' : m.userData.base);
+    else if (o.userData.part === 'deskMatte') m.color.set(darkOn ? '#23252A' : m.userData.base);
+    else if (o.userData.part === 'deskLed') {
+      if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity;
+      m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.45 : m.userData.baseEmissiveIntensity;
+    }
   });
   hemi.color.set(darkOn ? 0x8e95a3 : 0xfdfff8); hemi.groundColor.set(darkOn ? 0x14151a : 0xd8d4c8); hemi.intensity = darkOn ? 0.75 : 0.85;
   key.color.set(darkOn ? 0xe4e9f2 : 0xfff1dd); key.intensity = darkOn ? 1.5 : 2.2;
