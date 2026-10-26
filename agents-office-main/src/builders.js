@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 // V7 (26 out 2026): os builders recebem CORES, nunca salas. Quem sabe que sala é qual é o
 // main.js; quem sabe derivar tons de uma cor é a palette (pura, testável sem WebGL).
-import { glassLayers, tint } from './palette.js';
+import { glassLayers, tint, shade, mix, brass } from './palette.js';
 // 27 out 2026: o teclado, o tapete e o rato têm UM sítio onde estão definidos (`deskmap.js`), porque
 // agora há mãos que têm de lhes chegar. Se estes números vivessem só aqui, o avatar adivinhava.
 import {
@@ -140,8 +140,31 @@ export function makePlinth(w, d, glassColor) {
   pool.position.y = 0.122;
   part(pool, 'floorPool', L.pool, { receiveShadow: false });
 
+  // 5 · o vinco: um vão de sombra de 3 cm entre o tampo do plinto e o corpo. É o detalhe que faz
+  //     uma peça flutuar em vez de pousar — o mesmo truque de mobiliário que a secretária já usa.
+  // (o vinco tem de ser mais LARGO que o corpo: é uma sombra na face exterior, não uma peça dentro)
+  const gapMat = new THREE.MeshStandardMaterial({ color: '#26272B', roughness: 0.9, metalness: 0.05 });
+  const gap = rbox(w + 0.012, d + 0.012, 0.045, gapMat, 0.9);
+  gap.position.y = -0.055;
+  part(gap, 'plinthGap', '#26272B', { receiveShadow: false });
+
+  // 6 · o filé de latão à volta da laje: um aro fino que apanha a luz na espessura do vidro. Não é
+  //     decoração — é o que separa «plástico cor-de-rosa» de «vidro numa moldura de metal».
+  const brassMat = new THREE.MeshStandardMaterial({
+    color: brass(glassColor, 0.22), roughness: 0.28, metalness: 0.92,
+  });
+  const ix = (w - 0.88) / 2 + 0.02, iz = (d - 0.88) / 2 + 0.02;
+  for (const [bw, bd, bx, bz] of [
+    [(w - 0.84), 0.045, 0, -iz], [(w - 0.84), 0.045, 0, iz],
+    [0.045, (d - 0.84), -ix, 0], [0.045, (d - 0.84), ix, 0],
+  ]) {
+    const bar = rbox(bw + 0.045, bd + 0.045, 0.035, brassMat, 0.02);
+    bar.position.set(bx, 0.10, bz);
+    part(bar, 'floorInlay', brass(glassColor, 0.22), { receiveShadow: false });
+  }
+
   // as peças, por nome: quem desenha ou re-tinge não adivinha índices
-  g.userData.parts = { body, base, edge, glass, pool };
+  g.userData.parts = { body, base, edge, glass, pool, gap };
   return g;
 }
 
@@ -1387,68 +1410,292 @@ export function makeWallSign(text, inkColor, width) {
 }
 
 export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
-  const base = opts.base ?? 2.8;      // solid part, up to the desk top
-  const glass = opts.glass ?? 2.6;    // glass band on top of it
-  const t = opts.t ?? 0.34;           // wall thickness
-  const H = base + glass;             // total wall height
+  const base = opts.base ?? 2.8;      // parte sólida, até ao tampo das secretárias
+  const band = opts.band ?? 1.9;      // altura da banda de vidro por cima
+  const t = opts.t ?? 0.34;           // espessura da parede
+  const H = base + band;              // altura total
+  const room = opts.glass || chip;    // (atenção: `glass` é a COR; `band` é a altura)
   const g = new THREE.Group();
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: '#F4F3ED', roughness: 0.94, metalness: 0 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: chip, roughness: 0.72, metalness: 0.02 });
+  /* 27 out 2026 — «chique chique». A parede era uma caixa branca com uma faixa colorida em baixo e
+     uma banda de vidro quase invisível: lia-se como uma maquete de cartão. Agora tem os gestos que
+     fazem uma parede de hotel — RIPAADO vertical (sombras reais, de graça em 3D), RODAPÉ e MONTANTES
+     de latão, uma COVA DE LUZ na cor da sala debaixo do remate e a placa em latão. E, sobretudo,
+     tudo isto é FUNDIDO em cinco malhas (era uma malha por ripa: 48 por sala): cinco draw calls por
+     sala em vez de sessenta. */
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#F5F4EE', roughness: 0.94, metalness: 0 });
+  const ribMat = new THREE.MeshStandardMaterial({ color: '#EDEBE2', roughness: 0.92, metalness: 0 });
+  const brassMat = new THREE.MeshStandardMaterial({ color: brass(room, 0.2), roughness: 0.3, metalness: 0.9 });
   const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.55, metalness: 0.1 });
-  // V7: a banda de vidro da parede é a MESMA família de cor do chão (mais clara, porque sobe
-  // contra a luz). Antes era a cor pastel do cartão; o chão e a parede diziam coisas diferentes.
   const glassMat = new THREE.MeshStandardMaterial({
-    color: tint(opts.glass || chip, 0.30), roughness: 0.1, metalness: 0.06,
-    transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide,
+    color: tint(room, 0.26), roughness: 0.08, metalness: 0.08,
+    transparent: true, opacity: 0.26, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const coveMat = new THREE.MeshStandardMaterial({
+    color: tint(room, 0.55), roughness: 0.4, metalness: 0.1, emissive: room, emissiveIntensity: 0.55,
   });
 
-  const add = (mesh, part) => {
-    mesh.userData.part = part;
-    mesh.castShadow = part !== 'wallGlass';
-    mesh.receiveShadow = true;
-    g.add(mesh);
-    return mesh;
+  const wallG = [], ribG = [], trimG = [], glassG = [], capG = [], coveG = [];
+  const boxAt = (arr, ww, dd, hh, r, x, y, z) => {
+    const geo = rboxGeo(ww, dd, hh, r).clone();
+    geo.translate(x, y, z);
+    arr.push(geo);
   };
 
-  // back wall — runs along X on the far -Z edge
   const backZ = -d / 2 + t / 2;
-  const backBase = rbox(w, t, base, wallMat, 0.1); backBase.position.set(0, 0, backZ); add(backBase, 'wall');
-  const backSkirt = rbox(w, t + 0.12, 0.42, trimMat, 0.06); backSkirt.position.set(0, 0, backZ); add(backSkirt, 'wallTrim');
-  const backGlass = rbox(w, 0.08, glass, glassMat, 0.03); backGlass.position.set(0, base, backZ); add(backGlass, 'wallGlass');
-  const backCap = rbox(w + 0.08, t + 0.16, 0.16, capMat, 0.05); backCap.position.set(0, H - 0.16, backZ); add(backCap, 'wallCap');
-  const backRail = rbox(w, t + 0.06, 0.1, capMat, 0.03); backRail.position.set(0, base - 0.1, backZ); add(backRail, 'wallCap');
-
-  // side wall — runs along Z on the far -X edge
   const sideX = -w / 2 + t / 2;
-  const sideBase = rbox(t, d, base, wallMat, 0.1); sideBase.position.set(sideX, 0, 0); add(sideBase, 'wall');
-  const sideSkirt = rbox(t + 0.12, d, 0.42, trimMat, 0.06); sideSkirt.position.set(sideX, 0, 0); add(sideSkirt, 'wallTrim');
-  const sideGlass = rbox(0.08, d, glass, glassMat, 0.03); sideGlass.position.set(sideX, base, 0); add(sideGlass, 'wallGlass');
-  const sideCap = rbox(t + 0.16, d + 0.08, 0.16, capMat, 0.05); sideCap.position.set(sideX, H - 0.16, 0); add(sideCap, 'wallCap');
-  const sideRail = rbox(t + 0.06, d, 0.1, capMat, 0.03); sideRail.position.set(sideX, base - 0.1, 0); add(sideRail, 'wallCap');
 
-  // mullions in the glass band — they read as a studio partition
-  for (const zz of [d / 2 - 0.8, 0]) {
-    const mul = rbox(0.14, t + 0.1, glass, capMat, 0.03); mul.position.set(0, base, zz); add(mul, 'wallCap');
+  // base das duas paredes + pilares de canto
+  boxAt(wallG, w, t, base, 0.1, 0, 0, backZ);
+  boxAt(wallG, t, d, base, 0.1, sideX, 0, 0);
+  for (const [px, pz] of [[w / 2 - 0.3, backZ], [sideX, d / 2 - 0.3], [-w / 2 + 0.3, backZ]]) {
+    boxAt(wallG, 0.54, 0.54, H, 0.1, px, 0, pz);
+    boxAt(capG, 0.62, 0.62, 0.14, 0.05, px, H - 0.14, pz);
   }
-  for (const xx of [-w / 2 + 0.8, 0]) {
-    const mul = rbox(t + 0.1, 0.14, glass, capMat, 0.03); mul.position.set(xx, base, 0); add(mul, 'wallCap');
-  }
+  // ripaado (só no pano acima do rodapé)
+  for (let x = -w / 2 + 0.62; x < w / 2 - 0.5; x += 0.92) boxAt(ribG, 0.17, 0.09, base - 1.05, 0.03, x, 0.42, backZ + t / 2 + 0.035);
+  for (let z = -d / 2 + 0.62; z < d / 2 - 0.5; z += 0.92) boxAt(ribG, 0.09, 0.17, base - 1.05, 0.03, sideX + t / 2 + 0.035, 0.42, z);
 
-  // end posts where the walls stop, so the open corner reads as a doorway
-  const posts = [[w / 2 - 0.3, backZ], [sideX, d / 2 - 0.3], [-w / 2 + 0.3, backZ]];
-  for (const [px, pz] of posts) {
-    const post = rbox(0.54, 0.54, H, wallMat, 0.1); post.position.set(px, 0, pz); add(post, 'wall');
-    const postCap = rbox(0.62, 0.62, 0.14, capMat, 0.05); postCap.position.set(px, H - 0.14, pz); add(postCap, 'wallCap');
-  }
+  // rodapé de latão (baixo e fino)
+  boxAt(trimG, w, t + 0.10, 0.20, 0.04, 0, 0, backZ);
+  boxAt(trimG, t + 0.10, d, 0.20, 0.04, sideX, 0, 0);
 
-  // the room's name, drawn small on the inside of the back wall
+  // banda de vidro + remate
+  boxAt(glassG, w, 0.08, band, 0.03, 0, base, backZ);
+  boxAt(glassG, 0.08, d, band, 0.03, sideX, base, 0);
+  // remate de latão à cabeça do vidro (é a linha que faz a parede parecer um pavilhão) e
+  // uma faixa fina de tinta por cima, para o vidro não acabar em aresta viva
+  boxAt(trimG, w + 0.10, t + 0.18, 0.15, 0.05, 0, H - 0.15, backZ);
+  boxAt(trimG, t + 0.18, d + 0.10, 0.15, 0.05, sideX, H - 0.15, 0);
+  boxAt(capG, w + 0.04, t + 0.10, 0.06, 0.03, 0, H - 0.02, backZ);
+  boxAt(capG, t + 0.10, d + 0.04, 0.06, 0.03, sideX, H - 0.02, 0);
+  boxAt(trimG, w, t + 0.07, 0.07, 0.03, 0, base - 0.05, backZ);
+  boxAt(trimG, t + 0.07, d, 0.07, 0.03, sideX, base - 0.05, 0);
+
+  // montantes de latão no vidro
+  for (const zz of [d / 2 - 0.8, 0, -d / 2 + 0.8]) boxAt(trimG, 0.11, t + 0.08, band, 0.02, 0, base, zz);
+  for (const xx of [-w / 2 + 0.8, 0, w / 2 - 0.8]) boxAt(trimG, t + 0.08, 0.11, band, 0.02, xx, base, 0);
+
+  // cova de luz (na cor da sala), encostada ao remate
+  boxAt(coveG, w - 0.5, 0.05, 0.05, 0.02, 0, base - 0.26, backZ + t / 2 + 0.05);
+  boxAt(coveG, 0.05, d - 0.5, 0.05, 0.02, sideX + t / 2 + 0.05, base - 0.26, 0);
+
+  const add = (geos, material, part, shadow = true) => {
+    const m = meshOf(geos, material, { shadow });
+    if (!m) return null;
+    m.userData.part = part;
+    if (part === 'wallGlass' || part === 'wallCove') { m.castShadow = false; m.receiveShadow = false; }
+    g.add(m);
+    return m;
+  };
+  add(wallG, wallMat, 'wall');
+  add(ribG, ribMat, 'wall');
+  add(trimG, brassMat, 'wallTrim');
+  add(glassG, glassMat, 'wallGlass');
+  add(capG, capMat, 'wallCap');
+  add(coveG, coveMat, 'wallCove', false);
+
+  // o nome da sala: latão sobre a parede, e não branco sobre branco
   if (label) {
     const signW = Math.min(w * 0.34, 6.6);
-    const sign = makeWallSign(String(label).toUpperCase(), ink, signW);
-    sign.position.set(w / 2 - signW / 2 - 0.95, 2.28, backZ + t / 2 + 0.03);
+    const sign = makeWallSign(String(label).toUpperCase(), '#8A6F45', signW);
+    sign.position.set(w / 2 - signW / 2 - 0.95, 2.36, backZ + t / 2 + 0.06);
     sign.userData.part = 'wallSign';
     g.add(sign);
   }
+  return g;
+}
+
+/* ---------- o adereço da sala (27 out 2026, revisto) ----------
+   O que uma sala destas tem a mais do que secretárias: um SÍTIO. Nasceu daí o adereço — e a
+   primeira versão falhou por duas razões que se vêem no render: (1) o tapete caía no meio das
+   secretárias, onde ninguém o vê e onde estorva; (2) os candeeiros de 4,1 m liam-se como
+   microfones de pé alto, não como luz.
+
+   A planta da sala diz onde há espaço: as secretárias ocupam z de -7,4 a +5,4 e ficam entre
+   x ±5,3; as paredes estão em -x e -z (o canto aberto é o que a câmara vê). Sobra uma faixa de
+   ~7 m à frente — a mais visível de todas — e dois corredores laterais. É aí que entra o adereço:
+   uma ENTRADA (tapete de marfim com filete de latão e soleira gravada), um SALÃO à frente
+   (duas poltronas de latão, mesa redonda, taça) e LUZ nos dois corredores. Tudo dentro do mesmo
+   gesto de hotelaria: marfim, carvão e latão.
+
+   Regra de desenho: nada disto pode parecer mobília de maquete — por isso as peças têm pés,
+   folgas e alturas de gente (poltrona 1,15 a encosto, mesa 0,60, candeeiro 1,95). E regra de
+   motor: TUDO é fundido por material no fim (4 malhas), porque um adereço por sala a 20 draw
+   calls eram 120 draw calls que ninguém pediu. */
+export function makeRoomDressing(w, d, glass, chip, ink, opts = {}) {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: brass(glass, 0.22), roughness: 0.26, metalness: 0.94 });
+  const dark = new THREE.MeshStandardMaterial({ color: mix(shade(glass, 0.55), '#15161A', 0.55), roughness: 0.5, metalness: 0.22 });
+  const ivory = new THREE.MeshStandardMaterial({ color: mix('#EFE9DC', glass, 0.05), roughness: 0.95, metalness: 0 });
+  // o campo do tapete: escuro, para o marfim das poltronas e o latão terem onde brilhar
+  const rugDeep = new THREE.MeshStandardMaterial({ color: mix(shade(glass, 0.52), '#20222A', 0.5), roughness: 0.97, metalness: 0 });
+  const glow = new THREE.MeshStandardMaterial({
+    color: tint(glass, 0.55), roughness: 0.4, metalness: 0.06, emissive: glass, emissiveIntensity: 0.6,
+    transparent: true, opacity: 0.92,
+  });
+  const bags = { dressRug: [], dressIvory: [], dress: [], dressMetal: [], dressGlow: [] };
+  const put = (mesh, part) => {
+    const geo = mesh.geometry.clone();
+    mesh.updateMatrix();
+    geo.applyMatrix4(mesh.matrix);
+    bags[part].push(geo);
+    return mesh;
+  };
+  // põe uma peça num sítio LOCAL (lx, lz) de um móvel centrado em (cx, cz) e virado de `rot`
+  const seat = (mesh, cx, cz, rot, lx, lz, ly) => {
+    mesh.position.set(cx + lx * Math.cos(rot) + lz * Math.sin(rot), ly, cz - lx * Math.sin(rot) + lz * Math.cos(rot));
+    mesh.rotation.y = rot;
+    mesh.updateMatrix();
+    return mesh;
+  };
+
+  /* 1 · A ENTRADA. Tapete de marfim com moldura de carvão e filete de latão, na faixa da frente,
+     com uma soleira de latão gravada do lado de fora — o gesto de quem chega. */
+  // o tapete é do SALÃO, não da sala: cobre a mesa e as duas poltronas com folga, e deixa
+  // respiração à volta. Um tapete de parede a parede lia-se como uma alcatifa preta no render.
+  const rw = Math.min(8.0, w - 3.4), rd = 3.4;
+  // a faixa da frente tem de existir em TODAS as salas: nas de 26 de fundo há menos 4 m do que
+  // nas de 30, e o tapete da primeira versão ficava a rasar as secretárias (visto no render).
+  const rz = Math.min(d / 2 - 2.6, Math.max(10.4, d / 2 - 3.4));
+  /* Onde o salão assenta dentro da faixa da frente. Deslocado para +x de propósito: a câmara olha
+     a sala pela diagonal (+x,+z), e ao centro o salão ficava por trás da fila da esquerda. Assim
+     cai no vão que a câmara vê de facto, e deixa a árvore sozinha no canto oposto. */
+  const rx = Math.min(w / 2 - rw / 2 - 1.5, 2.8);
+  const rugY = 0.124, rugH = 0.03;
+  const rug = rbox(rw, rd, rugH, rugDeep, 0.14);
+  rug.position.set(rx, rugY, rz); put(rug, 'dressRug');
+  // moldura de carvão (quatro barras) e filete de latão por dentro dela
+  for (const [bw, bd, px, pz] of [
+    [rw, 0.16, 0, -rd / 2 + 0.08], [rw, 0.16, 0, rd / 2 - 0.08],
+    [0.16, rd - 0.32, -rw / 2 + 0.08, 0], [0.16, rd - 0.32, rw / 2 - 0.08, 0],
+  ]) {
+    const bar = rbox(bw, bd, 0.028, ivory, 0.02);
+    bar.position.set(rx + px, rugY + 0.022, rz + pz); put(bar, 'dressIvory');
+  }
+  for (const [bw, bd, px, pz] of [
+    [rw - 0.72, 0.03, 0, -rd / 2 + 0.40], [rw - 0.72, 0.03, 0, rd / 2 - 0.40],
+    [0.03, rd - 0.72, -rw / 2 + 0.40, 0], [0.03, rd - 0.72, rw / 2 - 0.40, 0],
+  ]) {
+    const line = rbox(bw, bd, 0.012, metal, 0.006);
+    line.position.set(rx + px, rugY + 0.036, rz + pz); put(line, 'dressMetal');
+  }
+  // soleira de latão à frente do tapete
+  const sill = rbox(Math.min(rw - 2.2, 9), 0.34, 0.05, metal, 0.03);
+  sill.position.set(rx, rugY + 0.01, rz + rd / 2 + 0.52); put(sill, 'dressMetal');
+
+  /* 2 · O SALÃO. Duas poltronas de carvão com pés de latão, viradas umas para as outras, e uma
+     mesa redonda de latão com uma taça de marfim. Alturas de gente: assento 0,42, encosto 1,15. */
+  const armchair = (cx, cz, rot) => {
+    const base = rbox(1.08, 1.04, 0.26, ivory, 0.12);
+    seat(base, cx, cz, rot, 0, 0, 0.40); put(base, 'dressIvory');
+    const cushion = rbox(0.94, 0.88, 0.10, dark, 0.07);   // a almofada de assento, noutro tom
+    seat(cushion, cx, cz, rot, 0, 0.02, 0.55); put(cushion, 'dress');
+    const back = rbox(1.08, 0.18, 0.74, ivory, 0.09);
+    seat(back, cx, cz, rot, 0, -0.44, 0.83); put(back, 'dressIvory');
+    for (const ax of [-0.48, 0.48]) {
+      const arm = rbox(0.14, 0.94, 0.22, ivory, 0.07);
+      seat(arm, cx, cz, rot, ax, 0.02, 0.62); put(arm, 'dressIvory');
+    }
+    for (const [lx, lz] of [[-0.42, -0.38], [0.42, -0.38], [-0.42, 0.38], [0.42, 0.38]]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.30, 8), metal);
+      seat(leg, cx, cz, rot, lx, lz, 0.27); put(leg, 'dressMetal');
+    }
+  };
+  const tableX = rx, tableZ = rz - 0.1;
+  armchair(tableX - 2.35, tableZ, Math.PI / 2);
+  armchair(tableX + 2.35, tableZ, -Math.PI / 2);
+  {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.50, 0.05, 26), metal);
+    foot.position.set(tableX, 0.145, tableZ); put(foot, 'dressMetal');
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.42, 14), metal);
+    stem.position.set(tableX, 0.36, tableZ); put(stem, 'dressMetal');
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.86, 0.86, 0.06, 34), metal);
+    top.position.set(tableX, 0.60, tableZ); put(top, 'dressMetal');
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.17, 0.17, 22), ivory);
+    bowl.position.set(tableX, 0.72, tableZ); put(bowl, 'dressIvory');
+  }
+
+  /* 3 · A APARADORA do corredor esquerdo: baixa, comprida, tampo de latão, dois livros e um jarro. */
+  const cx = -(w / 2 - 0.95), cz = d * 0.02, clen = Math.min(d * 0.42, 7.5);
+  const body = rbox(0.56, clen, 0.74, dark, 0.05);
+  body.position.set(cx, 0.12, cz); put(body, 'dress');
+  const top = rbox(0.62, clen + 0.06, 0.045, metal, 0.02);
+  top.position.set(cx, 0.87, cz); put(top, 'dressMetal');
+  const bookA = rbox(0.30, 0.34, 0.05, ivory, 0.01);
+  bookA.position.set(cx, 0.93, cz - clen * 0.30); put(bookA, 'dressIvory');
+  const bookB = rbox(0.26, 0.30, 0.05, dark, 0.01);
+  bookB.position.set(cx, 0.99, cz - clen * 0.28); put(bookB, 'dress');
+  const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.20, 0.42, 16), metal);
+  vase.position.set(cx, 1.10, cz + clen * 0.32); put(vase, 'dressMetal');
+
+  /* 4 · A LUZ. Dois candeeiros de pé de 1,95 m — fuste fino, cúpula de linho acesa — nos topos
+     dos corredores, junto ao salão. Não são candeeiros de tecto porque a sala não tem tecto. */
+  const lamps = [];
+  for (const lx of [-(w / 2 - 1.8), w / 2 - 1.8]) {
+    const lz = rz - 2.4;
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.30, 0.05, 22), metal);
+    foot.position.set(lx, 0.145, lz); put(foot, 'dressMetal');
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.036, 1.52, 12), metal);
+    pole.position.set(lx, 0.93, lz); put(pole, 'dressMetal');
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.31, 0.38, 24, 1, true), glow);
+    shade.position.set(lx, 1.69, lz); put(shade, 'dressGlow');
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.02, 24), metal);
+    cap.position.set(lx, 1.89, lz); put(cap, 'dressMetal');
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), glow);
+    bulb.position.set(lx, 1.61, lz); put(bulb, 'dressGlow');
+    lamps.push({ x: lx, z: lz, h: 1.90 });
+  }
+
+  /* 4b · A LUZ DO SALÃO: um candeeiro de braço — fuste de latão de 2,45 m, braço horizontal e
+     cúpula acesa pendurada sobre a mesa. É a peça que se vê POR CIMA das secretárias; sem ela o
+     salão ficava rente ao chão e a sala lia-se como uma fila de mesas e nada mais. */
+  const lpX = rx + rw / 2 + 0.75, lpZ = rz + 0.35;
+  {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.40, 0.06, 24), metal);
+    foot.position.set(lpX, 0.15, lpZ); put(foot, 'dressMetal');
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 2.30, 14), metal);
+    pole.position.set(lpX, 1.33, lpZ); put(pole, 'dressMetal');
+    const armLen = lpX - tableX - 0.1;
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, armLen, 12), metal);
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(lpX - armLen / 2, 2.46, lpZ); put(arm, 'dressMetal');
+    const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.30, 10), metal);
+    drop.position.set(lpX - armLen, 2.31, lpZ); put(drop, 'dressMetal');
+    const bell = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.30, 24, 1, true), glow);
+    bell.rotation.x = Math.PI;   // a boca para baixo
+    bell.position.set(lpX - armLen, 2.04, lpZ); put(bell, 'dressGlow');
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), glow);
+    bulb.position.set(lpX - armLen, 1.98, lpZ); put(bulb, 'dressGlow');
+  }
+
+  /* 5 · A ÁRVORE do canto direito da frente: o canto que a câmara vê e que estava vazio. A planta
+     da sala existe do lado oposto (é a peça de 1.9.6), por isso esta é outra espécie e outra
+     semente — duas plantas iguais à mesma distância lêem-se como decoração de catálogo. */
+  let tree = null;
+  try {
+    tree = makePlant({ seed: (opts.seed || 7) + 5, kind: 'broad', scale: 1.12 });
+    tree.position.set(w / 2 - 2.1, 0.12, d / 2 - 2.2);
+    tree.rotation.y = 1.15;
+    tree.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.add(tree);
+  } catch (e) { tree = null; }
+
+  const M_ = { dressRug: rugDeep, dressIvory: ivory, dress: dark, dressMetal: metal, dressGlow: glow };
+  for (const part of ['dressRug', 'dressIvory', 'dress', 'dressMetal', 'dressGlow']) {
+    if (!bags[part].length) continue;
+    const m = meshOf(bags[part], M_[part], { shadow: part !== 'dressGlow' });
+    if (!m) continue;
+    m.userData.part = part;
+    if (part === 'dressGlow') { m.castShadow = false; m.receiveShadow = false; }
+    if (part === 'dressRug') { m.castShadow = false; m.receiveShadow = true; }
+    g.add(m);
+  }
+
+  g.userData.dressing = {
+    rug: { w: rw, d: rd, x: rx, z: rz }, lamps, table: { x: tableX, z: tableZ },
+    pendant: { x: lpX - (lpX - tableX - 0.1), z: lpZ, h: 2.46 },
+    console: { x: cx, z: cz, len: clen }, tree: tree ? { x: w / 2 - 2.1, z: d / 2 - 2.2 } : null,
+  };
   return g;
 }

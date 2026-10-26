@@ -153,6 +153,48 @@ uma secretária de gaming bem feita — e com **uma regra que atravessa tudo: a 
 - Retratos (rasterizados fora do browser, luz de estudo; a tela aparece preta porque o conteúdo é
   desenhado em canvas no browser): `docs/secretarias-3-variantes.png`, `docs/secretaria-detalhe.png`.
 
+## As salas — paredes, chão e adereço (1.10.3)
+
+Cada sala é um **pod de vidro com uma parede em L** (os dois lados virados para longe da câmara).
+Depois de 1.10.3 a parede tem, de baixo para cima: rodapé de **latão** de 0,20 → pano branco com
+**ripaado vertical** a cada 0,92 → filete de latão → **banda de vidro** de 1,9 com três **montantes**
+de latão por pano → **remate de latão** à cabeça. Nos cantos há pilares brancos com capitel de tinta.
+A **cova de luz** (`base − 0,26`, emissiva na cor do vidro da sala) corre encostada ao rodapé do pano
+e é o que dá a sensação de parede lavada por baixo. A placa da sala é latão `#8A6F45` a 2,36.
+
+O **chão** são as quatro camadas de vidro de 1.9.x (0,10 / 0,115 / 0,12 + poça de luz), agora com um
+**vinco de sombra** perimetral (`#26272B`) que separa a laje do volume branco, e um **filé de latão**
+de 0,035 na aresta.
+
+O **adereço** (`makeRoomDressing(w, d, glass, chip, ink, { seed })`) assenta na faixa da frente —
+a única área grande que a câmara vê livre, porque as secretárias ocupam `z ∈ [−7,4, +8,4]` e
+`x ∈ [−5,5, +5,5]`:
+
+| peça | medida / sítio | porquê |
+|---|---|---|
+| tapete do salão | 8,0 × 3,4, centro `x = min(w/2 − rw/2 − 1,5, 2,8)`, `z ≈ d/2 − 3` | campo escuro + moldura de marfim + filete de latão: o marfim das poltronas e o latão precisam de fundo |
+| soleira | do lado de fora do tapete | o gesto de entrada |
+| 2 poltronas | `x = rx ± 2,35`, viradas umas para as outras | assento 0,42, encosto 1,15 — altura de gente |
+| mesa redonda | centro do tapete, tampo de latão a 0,60 | |
+| candeeiro de braço | fuste 2,46 no bordo do tapete, cúpula sobre a mesa | **é a peça que se vê por cima das secretárias** |
+| 2 candeeiros de pé | `x = ±(w/2 − 1,8)`, `z = rz − 2,4`, 1,90 | luz nos corredores |
+| aparadora | `x = −(w/2 − 0,95)`, `len = min(d·0,42, 7,5)` | o corredor esquerdo |
+| árvore | canto `(w/2 − 2,1, d/2 − 2,2)`, `scale 1,12` | o canto que a câmara vê, e não é a planta da sala |
+
+**Porque não há quadros nem galerias.** A câmara vê a sala pela diagonal `(+x, +z)`; as duas paredes
+fechadas ficam **atrás** das secretárias. Um quadro a 2,35 numa parede a `z = −d/2 + 0,62` fica
+escondido pelos monitores — a primeira tentativa (rev. 1 do adereço) pôs lá uma galeria e o render
+mostrou o problema. O que se investe é o **chão**, o **remate das paredes** e o que é **alto** nos
+corredores.
+
+**Modo escuro.** `setDark()` trata os part novos: `wallTrim`/`dressMetal`/`wallSign`/`floorInlay` vão
+para latão velho `#7A6242`, `wallCap` para `#2B2C2A`, o vidro escurece sobre a própria cor,
+`dressRug` → `#2C2C31`, `dressIvory` → `#6F6C63`, `dress` → `#26272C`, e a cova/cúpula sobem 50–60 %
+de emissão.
+
+**Inspecção.** `window.CC.office.dressing` devolve, por sala, `rug`, `lamps`, `table`, `console`,
+`pendant` e `tree` — é o que o `test:scene` lê para provar que o adereço está lá e que não estorva.
+
 ## O que prova o quê
 
 - `npm run test:office` — `office.test.mjs`, 31 testes puros: matemática de cor, famílias,

@@ -55,6 +55,14 @@ export function hsl(hex) {
   return { h, s: Math.min(1, s), l };
 }
 
+/* ---------- os metais (27 out 2026) ----------
+   «Chique» em 3D faz-se sobretudo com duas coisas: um metal que apanhe a luz (latão escovado, não
+   ouro) e um vinco escuro onde as peças se encontram. Este é o latão da casa — um só, derivado de
+   cada cor só na temperatura (as salas quentes ficam com latão mais quente). */
+const BRASS = '#B7986A';
+/** latão da casa, aquecido pela cor da sala (0 = neutro). */
+export const brass = (c, k = 0.18) => mix(BRASS, c, k * 0.5);
+
 /* ---------- as seis famílias que o dono pediu ---------- */
 
 // O pedido (26 out 2026) foi literal: «vermelho, verde, azul, roxo, amarelo e azul céu».

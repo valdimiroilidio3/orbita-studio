@@ -10,7 +10,7 @@ import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, de
 // faz alguém procurar um título de chão que já não existe.
 import {
   makePlinth, makeDesk, makeChair,
-  makePlant, makeWalkway, makeWarnSprite, makeRoomWalls,
+  makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing,
 } from './builders.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
@@ -203,6 +203,8 @@ const personTargets = [];  // person meshes -> agent id
 const R = {};              // runtime per agent
 const deptRT = {};         // runtime per dept
 const screenSets = [];
+const dressingRT = [];     // 27 out 2026: o adereço de cada sala, para a inspecção e o teste
+const DECK = ['emails', 'sales', 'marketing', 'fin', 'ops', 'delivery'];
 
 for (const [key_, L] of Object.entries(LAYOUT)) {
   const dept = DEPTS[key_];
@@ -225,9 +227,26 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
     } catch (e) { walls = null; console.warn('paredes: ' + key_ + ' — ' + e.message); }
   }
 
+  /* 27 out 2026 — «chique chique». O adereço da sala: tapete de entrada, salão à frente,
+     aparadora no corredor, dois candeeiros de pé e uma árvore no canto que a câmara vê.
+     Entra dentro do `try` das paredes: se um adereço falhar, a sala continua de pé sem ele. */
+  let dressing = null;
+  if (key_ !== 'brain') {
+    try {
+      dressing = makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink, { seed: DECK.indexOf(key_) + 3 });
+      dressing.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
+      g.add(dressing);
+      dressingRT.push({
+        dept: key_, w: L.w, d: L.d, ...dressing.userData.dressing,
+        lamps: dressing.userData.dressing.lamps.length,
+        tree: !!dressing.userData.dressing.tree,
+      });
+    } catch (e) { dressing = null; console.warn('adereço: ' + key_ + ' — ' + e.message); }
+  }
+
   // no floor titles — the billboards name each department (AJ's call, M2.3)
   scene.add(g);
-  deptRT[key_] = { group: g, L, walls };
+  deptRT[key_] = { group: g, L, walls, dressing };
 }
 
 // 1.9.6: o que cada planta é, e o que ela mede — lido depois por `window.CC.office.plants`
@@ -719,6 +738,24 @@ function setDark(on) {
       m.opacity = darkOn ? m.userData.baseOpacity * 0.7 : m.userData.baseOpacity;
     }
     else if (o.userData.part === 'wall') m.color.set(darkOn ? DARK.wall : m.userData.base);
+    /* 27 out 2026: as peças novas do adereço e do remate das paredes. O latão no escuro não fica
+       cinzento — fica latão velho (um tom mais fundo do mesmo metal), como numa sala sem luz. */
+    else if (o.userData.part === 'wallTrim' || o.userData.part === 'dressMetal' || o.userData.part === 'wallSign' || o.userData.part === 'floorInlay') {
+      m.color.set(darkOn ? '#7A6242' : m.userData.base);
+    }
+    else if (o.userData.part === 'wallCap') m.color.set(darkOn ? '#2B2C2A' : m.userData.base);
+    else if (o.userData.part === 'wallGlass') m.color.copy(darkOn ? darken(m.userData.base, 0.34) : m.userData.base);
+    else if (o.userData.part === 'wallCove') {
+      if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity;
+      m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.5 : m.userData.baseEmissiveIntensity;
+    }
+    else if (o.userData.part === 'dressRug') m.color.set(darkOn ? '#2C2C31' : m.userData.base);
+    else if (o.userData.part === 'dressIvory') m.color.set(darkOn ? '#6F6C63' : m.userData.base);
+    else if (o.userData.part === 'dress') m.color.set(darkOn ? '#26272C' : m.userData.base);
+    else if (o.userData.part === 'dressGlow') {
+      if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity;
+      m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.6 : m.userData.baseEmissiveIntensity;
+    }
     // 26 out 2026: uma mesa preta sobre um fundo escuro desaparecia. No escuro, o corpo sobe um
     // tom (grafite) e o LED fica mais intenso — é assim que uma secretária com luz se comporta.
     else if (o.userData.part === 'desk') m.color.set(darkOn ? '#2E3138' : m.userData.base);
@@ -1565,7 +1602,7 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
   office: {
-    depts: DEPTS, floors: floorReport(), plants: plantsRT,
+    depts: DEPTS, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
     problems: officeProblems().concat(lookProblems()),
     // 27 out 2026: os 35 avatares, para o teste de cena poder olhar para eles
     avatars: {

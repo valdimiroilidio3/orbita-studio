@@ -1,3 +1,51 @@
+## 1.10.3 — 27 out 2026 · As salas, «chique chique»
+
+Pedido: *«quero que melhores brutalmente as salas, deixando mais bonita e elegante, chique chique»*.
+O alvo são as **seis salas** — não a interface. O que estava lá era uma caixa branca com uma faixa
+de vidro fina e uma laje de vidro colorido: lia-se como maquete de cartão.
+
+O que mudou, por camadas:
+
+- **O remate das paredes.** A parede passou a ter o que uma parede de hotel tem: **ripaado vertical**
+  a cada 0,92 (sombras reais, de graça em 3D), **rodapé de latão** de 0,20 em vez da faixa alta de
+  tinta, uma **cova de luz** na cor da sala (`base − 0,26`, emissiva) debaixo do remate, **montantes
+  de latão** no vidro e um **remate de latão à cabeça do vidro** — a linha que faz a parede ler como
+  pavilhão e não como aquário. A banda de vidro desceu de 2,6 para **1,9** (a parede total fica em
+  4,7 e não em 5,4: mais íntima, e sobra mais céu na câmara).
+- **O chão.** Um **vinco de sombra** a todo o perímetro da laje (`#26272B`, 0,045) separa o vidro do
+  volume branco do pod, e um **filé de latão** de 0,035 corre pela aresta — o remate que faltava
+  entre o chão colorido e o branco.
+- **O adereço da sala** (`makeRoomDressing`): a faixa da frente das salas — a mais visível de todas
+  e até agora vazia — passa a ser uma **entrada de hotel**: tapete do salão (8,0 × 3,4) de campo
+  escuro com moldura de marfim e filete de latão, **soleira de latão** do lado de fora, **duas
+  poltronas de marfim** com pés de latão e almofada de carvão, **mesa redonda de latão** com uma
+  taça, **dois candeeiros de pé** de 1,90 nos corredores, **candeeiro de braço** de 2,46 com cúpula
+  acesa sobre a mesa (é a peça que se vê por cima das secretárias), **aparadora** de latão no
+  corredor esquerdo com livros e jarro, e uma **árvore** no canto que a câmara vê.
+- **Sinalética.** A placa da sala deixou de ser branca sobre branco: latão `#8A6F45`, recuada, a 2,36.
+- **Modo escuro.** Os part novos (`wallTrim`, `wallCap`, `wallGlass`, `wallCove`, `wallSign`,
+  `floorInlay`, `dress`, `dressRug`, `dressIvory`, `dressMetal`, `dressGlow`) entram no `setDark`:
+  o latão no escuro não fica cinzento, fica **latão velho**; a cova e a cúpula sobem de emissão.
+
+**A regra de motor que isto obrigou**: a primeira versão das paredes somava ~60 malhas por sala
+(uma por ripa, uma por montante). Agora as peças são **fundidas por material** — a parede são cinco
+malhas (`wall`, `wallTrim`, `wallGlass`, `wallCap`, `wallCove`) e o adereço são cinco. Seis salas
+custam 60 draw calls no total, não 360.
+
+**Como foi visto sem browser.** Chromium não corre neste ambiente, por isso o julgamento foi feito
+com um rasterizador próprio (`tools/raster.mjs`, agora com **alfa** — sem ele o vidro pintava a laje
+de branco) e uma câmara **ortográfica igual à da app** (`tools/room.mjs`, ISO `(1,.92,1)`, FR 42).
+Para os builders com textura de canvas correrem em node, `tools/domstub.mjs` dá-lhes um canvas falso.
+
+Provas: `test:scene` ✓ com **doze asserções novas por sala** (o adereço existe nas seis, o tapete tem
+a medida do salão e **não entra por baixo das secretárias**, não sai do pod, os dois candeeiros
+existem, aparadora, árvore e a luz do salão por cima das mesas) — e uma delas foi **vista a falhar**
+(o tapete a rasar as secretárias em `emails` e `fin`, onde a sala tem 26 de fundo em vez de 30) antes
+de o cálculo da faixa da frente ser corrigido. `test:office` 49/49, `test:a11y` 21/21, `test:ops`
+71/71, `test:google` 5/5, `test:integracoes` 13/13, build **1 417 kB**.
+
+Renders do processo (raster, não browser): `/tmp/room-p4.png` … `/tmp/room-p15.png`.
+
 ## 1.10.2 — 27 out 2026 · O canto esquerdo: a licença
 
 Pedido: *«licença ORBITA PROJECT 1.0.0 — coloca mesmo de forma bem inteligente, POR CHELTON MAHOZE

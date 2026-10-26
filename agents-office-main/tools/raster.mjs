@@ -28,6 +28,10 @@ export function renderPNG({ width, height, camera, objects, bg = [246, 247, 244]
       const idx = g.index;
       const mat = o.material;
       const base = mat && mat.color ? mat.color : new THREE.Color(1, 1, 1);
+      // 27 out 2026: transparência a sério (aproximada). Sem isto, a poça de luz do chão (opacity
+      // 0.38) pintava a laje de vidro de branco opaco e todas as salas pareciam forradas a leite.
+      const alpha = mat && mat.transparent ? Math.max(0, Math.min(1, mat.opacity ?? 1)) : 1;
+      if (alpha <= 0.02) return;
       const count = idx ? idx.count : pos.count;
       for (let t = 0; t < count; t += 3) {
         for (let k = 0; k < 3; k++) {
@@ -65,8 +69,17 @@ export function renderPNG({ width, height, camera, objects, bg = [246, 247, 244]
             const z = w0 * proj[0].z + w1 * proj[1].z + w2 * proj[2].z;
             const o2 = y * width + x;
             if (z >= buf[o2]) continue;   // NDC: mais perto = z menor
-            buf[o2] = z;
-            img[o2 * 3] = R; img[o2 * 3 + 1] = G; img[o2 * 3 + 2] = B;
+            if (alpha >= 0.999) {
+              buf[o2] = z;
+              img[o2 * 3] = R; img[o2 * 3 + 1] = G; img[o2 * 3 + 2] = B;
+            } else {
+              // mistura por cima do que já está pintado, sem escrever profundidade (o vidro não
+              // tapa o que está por baixo — é o que o `depthWrite: false` faz na cena real)
+              const k = alpha;
+              img[o2 * 3] = Math.round(img[o2 * 3] * (1 - k) + R * k);
+              img[o2 * 3 + 1] = Math.round(img[o2 * 3 + 1] * (1 - k) + G * k);
+              img[o2 * 3 + 2] = Math.round(img[o2 * 3 + 2] * (1 - k) + B * k);
+            }
           }
         }
       }

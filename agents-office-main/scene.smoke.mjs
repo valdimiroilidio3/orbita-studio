@@ -189,6 +189,32 @@ for (const p of plantas) {
 }
 ok(plantas.filter(p => p.dept === 'brain').length === 1, 'o centro devia ter uma planta, a peça de apresentação');
 
+/* ---------- o adereço das salas: entrada, salão, aparadora, luz e uma árvore (27 out 2026) ---------- */
+// O pedido foi «melhora brutalmente as salas, chique chique». O desenho julga-se com o olho; aqui
+// prova-se o que o olho não vê: que cada uma das seis salas tem adereço, que o tapete é da largura
+// da sala e NÃO cai por baixo das secretárias (a primeira versão caiu, e viu-se no render), que os
+// dois candeeiros ficam nos corredores e não sobre os postos, e que nada disto saiu do pod.
+const aderecos = (office.dressing || []);
+ok(aderecos.length === 6, `esperava adereço nas 6 salas, encontrei ${aderecos.length}`);
+const ADEREÇO_MAX = 8.4; // z mais alto que qualquer posto ocupa (secretária + cadeira)
+for (const a of aderecos) {
+  const k = a.dept;
+  ok(a.w > 16 && a.d > 20, `${k}: medidas de sala inesperadas (${a.w}×${a.d})`);
+  ok(a.rug && a.rug.w >= 6, `${k}: o tapete é estreito (${a.rug && a.rug.w})`);
+  ok(Math.abs(a.rug.w - Math.min(8.0, a.w - 3.4)) < 0.01, `${k}: o tapete não tem a medida do salão`);
+  ok(a.rug.w >= 2 * 2.35 + 1.2, `${k}: o tapete não chega às duas poltronas (${a.rug.w})`);
+  ok(a.rug.z - a.rug.d / 2 > ADEREÇO_MAX, `${k}: o tapete entra por baixo das secretárias (frente em ${a.rug.z - a.rug.d / 2})`);
+  ok(a.rug.z + a.rug.d / 2 < a.d / 2, `${k}: o tapete sai do pod pela frente`);
+  ok(a.lamps === 2, `${k}: devia ter dois candeeiros de pé, tem ${a.lamps}`);
+  ok(Math.abs(a.rug.x) + a.rug.w / 2 < a.w / 2 - 1, `${k}: o tapete encosta à parede lateral`);
+  ok(a.table && Math.abs(a.table.x) <= a.w / 2 && Math.abs(a.table.z) <= a.d / 2, `${k}: a mesa do salão saiu do pod`);
+  ok(a.console && Math.abs(a.console.x) + 0.31 < a.w / 2, `${k}: a aparadora atravessa a parede`);
+  ok(a.tree, `${k}: falta a árvore do canto`);
+  ok(a.pendant && a.pendant.h > 2.2, `${k}: a luz do salão tem de passar por cima das secretárias`);
+}
+// nenhum adereço pode cair em cima de um posto: a mesa do salão fica à frente da última fila
+for (const a of aderecos) ok(a.table.z - a.rug.d / 2 > 6.2, `${a.dept}: a mesa do salão encosta às secretárias`);
+
 /* ---------- as 35 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
 // O pedido foi «mesa preta com LED na cor da sala». Aqui lê-se a cena MONTADA, posto a posto:
 // cada secretária tem de ter a malha do LED com a cor emissiva igual ao vidro daquela sala, e o
@@ -437,6 +463,12 @@ if (falhas.length) {
   process.exit(1);
 }
 const mapaCores = [...familiaDaSala.entries()].map(([cor, sala]) => `${sala} ${cor}`).join(' · ');
+const resumoAdereco = (() => {
+  const ds = (office.dressing || []);
+  if (!ds.length) return 'sem adereço';
+  const taps = ds.map(d => d.rug.w);
+  return `adereço nas ${ds.length} salas (tapete do salão ${Math.min(...taps).toFixed(1)}×${ds[0].rug.d}, ${ds.filter(d => d.tree).length} árvores, 2 candeeiros por sala)`;
+})();
 const resumoPlantas = (() => {
   const ps = (office.plants || []);
   if (!ps.length) return 'sem plantas';
@@ -451,6 +483,6 @@ const avatares = (() => {
   if (!av.stats) return 'sem avatares';
   return `${av.stats.total} avatares (${av.stats.women} mulheres · ${av.stats.hats} chapéus · ${av.stats.beards} barbas · ${av.stats.glasses} óculos · ${av.stats.styles} estilos), 57 teclas e 1 rato por posto`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, 35 secretárias pretas com LED na cor da sala, ${avatares}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, 35 secretárias pretas com LED na cor da sala, ${avatares}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);
