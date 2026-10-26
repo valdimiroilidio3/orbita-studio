@@ -17,17 +17,26 @@ Tudo corre na tua máquina.
 - macOS, Linux ou Windows (no Windows usa os comandos `npm` diretamente, o `./setup` é Bash)
 - Node.js 20+ — https://nodejs.org
 - git
-- **Claude Code** com sessão iniciada, ou uma `ANTHROPIC_API_KEY`
+- **uma chave de IA** — qualquer uma destas serve:
+  - `GEMINI_API_KEY` do Google AI Studio (aistudio.google.com/apikey): **não instala nada**, fala
+    direto com a API do Google (`gemini-flash-latest` por omissão);
+  - **Claude Code** com sessão iniciada, ou uma `ANTHROPIC_API_KEY`.
 
 ## Instalação
 
 ```bash
 git clone <este-repositório>
 cd agents-office-main
-npm install
-node build.mjs      # gera dist/command-centre-v2.html (o escritório num único ficheiro)
-npm start           # → http://localhost:4520
+npm ci
+cp .env.example .env   # põe lá a GEMINI_API_KEY (o .env nunca vai para o git)
+node build.mjs         # gera dist/command-centre-v2.html (o escritório num único ficheiro)
+npm start              # → http://localhost:4520
 ```
+
+Sem chave nenhuma o escritório abre e diz, em cada sítio, o que falta — não finge que trabalha.
+Com a chave do AI Studio, os 35 agentes encaminham, escrevem e conversam de imediato. Para Chrome,
+ficheiros e conectores MCP, precisa do Claude Code (uma API dá voz, não mãos): ver
+[AI.md](AI.md).
 
 Atalho: `./setup` faz as três coisas e arranca o escritório uma vez para testar.
 

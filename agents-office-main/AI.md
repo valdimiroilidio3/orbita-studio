@@ -18,11 +18,26 @@ está escrita em português, na gaveta **IA** do painel de tarefas.
 | `gemini-cli` **Gemini** | `gemini -p {prompt} --model {model}` | `npm i -g @google/gemini-cli` e `gemini` uma vez — **substituído pelo Antigravity em junho de 2026**; fica por compatibilidade |
 | `cli` **CLI personalizada** | o que puseres em `ai.providers.cli` | um binário, `args` com `{prompt}` `{system}` `{model}` |
 | `anthropic` **Claude (API)** | `POST /v1/messages` | `ANTHROPIC_API_KEY` |
+| `gemini-api` **Gemini (API do Google)** | `POST /v1beta/models/{modelo}:generateContent` com `X-Goog-Api-Key`; system prompt em `systemInstruction` | **só** `GEMINI_API_KEY` (chave do AI Studio). Sem CLI, sem login. Modelo por omissão `gemini-flash-latest` |
 | `openai` · `openrouter` · `groq` · `mistral` · `deepseek` · `xai` · `gemini` | `POST /chat/completions` | `OPENAI_API_KEY` · `OPENROUTER_API_KEY` · `GROQ_API_KEY` · `MISTRAL_API_KEY` · `DEEPSEEK_API_KEY` · `XAI_API_KEY` · `GEMINI_API_KEY` |
 | `ollama` · `lmstudio` **locais** | `POST /chat/completions` em `127.0.0.1` | o servidor local a responder |
 | `openai-compatible` **qualquer endpoint** | `POST /chat/completions` | `baseUrl` + `model` (+ `AO_AI_KEY` se pedir chave) |
 
-As chaves vivem **só** no ambiente. Nada de segredos em ficheiros versionados.
+As chaves vivem **só** no ambiente. Nada de segredos em ficheiros versionados — o `.env` da raiz é
+lido no arranque (`config.mjs`), nunca sobrepõe o que já estiver exportado, e está no `.gitignore`.
+
+**O caminho mais curto para o escritório funcionar a sério**: uma chave do AI Studio.
+
+```bash
+# .env (nunca vai para o git)
+GEMINI_API_KEY=a-tua-chave
+AO_AI=gemini-api            # opcional: força o motor (sem isto, é escolhido por ter chave)
+AO_AI_MODEL=gemini-flash-latest
+```
+
+Com isso, os 35 agentes encaminham, escrevem e conversam — sem instalar nada. Os agentes ficam sem
+ferramentas MCP (uma API dá voz, não mãos): para Chrome, ficheiros e conectores, o Claude Code
+continua a ser o único motor com mãos.
 
 O `agy` instala-se em `~/.local/bin`, que muitas vezes não está no PATH do servidor: o escritório
 procura também em `~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt/homebrew/bin` e `/snap/bin`.

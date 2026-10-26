@@ -516,6 +516,56 @@ else {
       if (!/motor-imaginario/.test(j.error || '')) throw new Error('não explicou: ' + JSON.stringify(j).slice(0, 120));
       return 'recusado · ' + String(j.error).slice(0, 60);
     });
+    await step('motores: o Gemini nativo fala o dialeto do Google (X-Goog-Api-Key, systemInstruction)', async () => {
+      // Servidor local que imita a API do AI Studio: prova o pedido exato (rota, cabeçalho, corpo) e
+      // a leitura da resposta, sem chave verdadeira e sem sair da máquina.
+      const http = await import('node:http');
+      let vazio = false;
+      let seen = null;
+      const srv = http.createServer((rq, rs) => {
+        let raw = '';
+        rq.on('data', d => { raw += d; });
+        rq.on('end', () => {
+          seen = { url: rq.url, key: rq.headers['x-goog-api-key'], body: JSON.parse(raw || '{}') };
+          rs.writeHead(200, { 'content-type': 'application/json' });
+          rs.end(JSON.stringify(vazio
+            ? { promptFeedback: { blockReason: 'SAFETY' } }
+            : { candidates: [{ content: { parts: [{ text: 'olá do Gemini' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 4 }, modelVersion: 'gemini-flash-latest' }));
+        });
+      });
+      await new Promise(r => srv.listen(0, '127.0.0.1', r));
+      const url = `http://127.0.0.1:${srv.address().port}/v1beta`;
+      const before = { key: process.env.GEMINI_API_KEY, base: process.env.GEMINI_BASE_URL, model: process.env.AO_AI_MODEL };
+      process.env.GEMINI_API_KEY = 'chave-de-teste';
+      process.env.GEMINI_BASE_URL = url;
+      delete process.env.AO_AI_MODEL;
+      try {
+        const ai = await import('./providers.mjs?gemini=' + Date.now()); // o preset lê GEMINI_BASE_URL no import
+        const res = ai.resolve({ model: 'sonnet', ai: { provider: 'gemini-api', providers: {} } }, null);
+        const target = res.candidates.find(c => c.id === 'gemini-api');
+        if (!target.available) throw new Error('gemini-api indisponível: ' + target.reason);
+        const out = await ai.makeRunner(target, { model: 'sonnet' }, {}).askX({ system: 'SYS', user: 'Olá', tools: false });
+        if (out.text !== 'olá do Gemini') throw new Error('texto: ' + JSON.stringify(out.text));
+        if (out.usage.input_tokens !== 11 || out.usage.output_tokens !== 4) throw new Error('uso não lido: ' + JSON.stringify(out.usage));
+        if (!seen) throw new Error('o servidor não recebeu nada');
+        if (seen.url !== '/v1beta/models/gemini-flash-latest:generateContent') throw new Error('rota errada: ' + seen.url);
+        if (seen.key !== 'chave-de-teste') throw new Error('cabeçalho X-Goog-Api-Key em falta');
+        if (seen.body.systemInstruction?.parts?.[0]?.text !== 'SYS') throw new Error('systemInstruction em falta');
+        if (seen.body.contents?.[0]?.parts?.[0]?.text !== 'Olá') throw new Error('contents errado');
+        if (process.env.GEMINI_API_KEY !== 'chave-de-teste') throw new Error('ambiente mexido');
+        vazio = true;
+        let honest = '';
+        try { await ai.makeRunner(target, { model: 'sonnet' }, {}).askX({ system: 'SYS', user: 'Olá', tools: false }); }
+        catch (e) { honest = e.message; }
+        if (!/SAFETY|vazia/.test(honest)) throw new Error('resposta bloqueada não foi explicada: ' + (honest || 'resolveu vazio'));
+        return 'rota + X-Goog-Api-Key + systemInstruction · texto e tokens lidos · bloqueio explicado';
+      } finally {
+        srv.close();
+        if (before.key === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = before.key;
+        if (before.base === undefined) delete process.env.GEMINI_BASE_URL; else process.env.GEMINI_BASE_URL = before.base;
+        if (before.model !== undefined) process.env.AO_AI_MODEL = before.model;
+      }
+    });
     await step('motores: o Antigravity responde, desembrulha o JSON e recusa saída vazia', async () => {
       // Um `agy` falso no PATH: prova o caminho inteiro (deteção, argumentos, envelope, erro) sem
       // instalar nada nem tocar na conta do dono.

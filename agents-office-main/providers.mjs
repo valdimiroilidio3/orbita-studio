@@ -95,10 +95,19 @@ export const PRESETS = {
     keyEnv: 'XAI_API_KEY', model: '',
     hint: 'XAI_API_KEY + o modelo em `ai.model`',
   },
+  'gemini-api': {
+    // A API nativa do Google AI Studio: POST /models/{modelo}:generateContent com X-Goog-Api-Key.
+    // É a mesma chave (AQ.…) que se usa no AI Studio; não precisa de CLI instalada nem de login.
+    label: 'Gemini (API do Google)', kind: 'api', style: 'gemini',
+    baseUrl: process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
+    keyEnv: 'GEMINI_API_KEY', model: 'gemini-flash-latest',
+    models: { sonnet: 'gemini-flash-latest', opus: 'gemini-flash-latest', fable: 'gemini-flash-latest' },
+    hint: 'GEMINI_API_KEY do AI Studio (aistudio.google.com/apikey); modelo por omissão gemini-flash-latest, muda com ai.model ou GEMINI_MODEL',
+  },
   'gemini': {
-    label: 'Gemini (API)', kind: 'api', style: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    label: 'Gemini (endpoint OpenAI)', kind: 'api', style: 'openai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     keyEnv: 'GEMINI_API_KEY', model: '',
-    hint: 'GEMINI_API_KEY + o modelo em `ai.model`',
+    hint: 'a mesma GEMINI_API_KEY, pelo endpoint compatível com OpenAI — define o modelo em ai.model',
   },
   'ollama': {
     label: 'Ollama (local)', kind: 'api', style: 'openai', baseUrl: 'http://127.0.0.1:11434/v1',
@@ -269,6 +278,44 @@ async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, mo
       return {
         text, tools: [], modelId: j.model || want,
         usage: { input_tokens: u.input_tokens || 0, output_tokens: u.output_tokens || 0 },
+      };
+    }
+    if (d.style === 'gemini') {
+      // Gemini nativo: o system prompt vai em systemInstruction e a resposta vem em candidates[]
+      const key = process.env[d.keyEnv] || '';
+      const url = `${d.baseUrl.replace(/\/$/, '')}/models/${encodeURIComponent(want)}:generateContent`;
+      const body = {
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { maxOutputTokens: maxTokens },
+      };
+      if (system) body.systemInstruction = { parts: [{ text: system }] };
+      let res;
+      try {
+        res = await fetch(url, {
+          method: 'POST', signal: ac.signal,
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        if (e.name === 'AbortError') throw timeoutError(timeout);
+        throw new Error(`${d.label}: não consegui chegar ao Google (${e.cause?.code || e.message}) — a máquina tem de conseguir sair para generativelanguage.googleapis.com`);
+      }
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = j.error?.message ? ': ' + j.error.message : '';
+        if (res.status === 429) throw new Error(`${d.label}: a chave atingiu o limite de pedidos agora (429)${detail} — espera um pouco e tenta outra vez`);
+        if (res.status === 400 || res.status === 403) throw new Error(`${d.label}: a Google recusou a chave ou o modelo (${res.status})${detail} — confirma a chave em aistudio.google.com/apikey e o nome do modelo`);
+        throw new Error(`${d.label} respondeu ${res.status}${detail}`);
+      }
+      const text = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+      if (!text) {
+        const why = j.promptFeedback?.blockReason || j.candidates?.[0]?.finishReason;
+        throw new Error(why ? `o Gemini não devolveu texto (${why})` : 'o Gemini devolveu uma resposta vazia');
+      }
+      const u = j.usageMetadata || {};
+      return {
+        text, tools: [], modelId: j.modelVersion || want,
+        usage: { input_tokens: u.promptTokenCount || 0, output_tokens: u.candidatesTokenCount || 0 },
       };
     }
     // dialeto OpenAI: /chat/completions — serve OpenAI, OpenRouter, Groq, Mistral, DeepSeek, xAI,
