@@ -18,7 +18,10 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | Fila | `src/ops/queue.mjs` | Trabalho persistente, tentativas com espera crescente, concorrência limitada |
 | Métricas | `src/ops/metrics.mjs` | Funil, conversão, custos — com `null` e a razão quando não há dados |
 | Gaveta | `src/ops.js` + `◉ OPERAÇÃO` na barra | Ver, aprovar, mudar de estado, ler o rasto |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 12 testes, tudo em memória, sem tocar em serviços |
+| **Hoje** | `src/ops/today.mjs` + `src/today.js` + `HOJE` na barra | Um ecrã: decidir, o que aconteceu, o que vem |
+| **Outbox** | `src/ops/outbox.mjs` | Envio escrito antes de sair, com chave de idempotência e aluguer |
+| **Registo** | `src/ops/events.mjs` | Eventos encadeados por hash; `verify` denuncia a linha mexida |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 17 testes, tudo em memória, sem tocar em serviços |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
 `ExperimentalWarning` no arranque — é do Node, não do Órbita; silencia-se com
@@ -47,7 +50,59 @@ Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (a
    crescente (15 s, 30 s, 1 min… até 1 h) e desiste ao fim de `max_attempts`, deixando o erro
    escrito. O servidor drena a fila sozinho a cada 2 segundos.
 8. **Tudo deixa rasto.** Criar, atualizar, aprovar, bloquear, enviar, falhar, retentar — cada
-   uma dessas ações escreve em `events` com quem, o quê, quando e sobre o quê.
+   uma dessas ações escreve em `events` com quem, o quê, quando e sobre o quê. O registo é
+   encadeado por hash: uma edição silenciosa denuncia-se.
+9. **Um envio nunca acontece duas vezes.** Passa pelo outbox, com chave de idempotência e
+   aluguer. Email resgatado depois de um crash não se repete sozinho — vai para revisão.
+10. **Há um travão.** O interruptor de emergência pára todos os envios a partir de qualquer
+   caminho, e a recusa diz o motivo.
+
+## Eventos, outbox e idempotência (a base que não se vê)
+
+**Eventos em vez de estado.** Cada coisa que acontece é uma linha em `events` — lead encontrado,
+mensagem aprovada, resposta recebida, envio recusado. O estado atual (o lead, a mensagem) é o
+resumo; o registo é a história, e é ela que dá auditoria e permite refazer análises.
+
+O registo é uma **cadeia**: cada linha leva `prev_hash` e `hash`, calculados sobre os campos e
+sobre a linha anterior. Editar uma linha à socapa parte a cadeia, e `GET /api/ops/events/verify`
+diz exatamente em que `id` partiu. Não protege de quem reescreva o ficheiro todo — protege de
+edições silenciosas, que é o problema real.
+
+**Outbox: o envio é escrito antes de sair.** Uma linha em `outbox` com uma **chave de
+idempotência** (id da mensagem + hash do conteúdo). Pedir o mesmo envio duas vezes é pedir uma:
+a segunda chamada encontra a chave e não cria nada.
+
+Quem pega num item faz um **aluguer** com prazo (`lease_until`). Se o processo morrer, o aluguer
+expira e o item volta a ser pego — trabalho não fica preso para sempre. E há uma regra dura: se
+o item for um **email** e tiver sido resgatado depois de um crash, **não é reenviado às cegas** —
+vai para `revisao` e espera por uma pessoa. Um envio a menos é melhor do que um cliente a receber
+duas vezes. (O link do WhatsApp não tem esse risco: não sai nada da máquina.)
+
+**Interruptor de emergência.** `POST /api/ops/stop` com `{ "stop": true }` e não sai mais nada:
+o envio imediato recusa com a frase certa, o outbox drena zero, a gaveta e o `Hoje` mostram o
+estado. `{ "stop": false }` retoma. Não apaga nada — só pára.
+
+## Hoje: um ecrã, três perguntas
+
+`GET /api/ops/today` compõe três listas e um estado de presença:
+
+| Bloco | De onde vem | O que responde |
+|---|---|---|
+| `decidir` | mensagens em `rascunho`/`aprovada`/`revisao` + tarefas prontas sem OK | «o que precisa de ti» |
+| `aconteceu` | `events` desde a última visita (24 h na primeira) | «o que aconteceu enquanto dormias» |
+| `a seguir` | seguimentos marcados + rotinas do escritório | «o que vai acontecer» |
+| `presenca` | tarefas a correr, fila, outbox, interruptor | «quem está a trabalhar» |
+
+Cada cartão traz uma linha **porquê** feita só com dados guardados (as razões da nota do lead, o
+canal, o estado). Se não houver dados que cheguem para justificar, o cartão não aparece.
+
+No ecrã (`src/today.js`): deslizar aprova/rejeita, toque longo abre o porquê, `←`/`→` fazem o
+mesmo pelo teclado, `Esc` fecha e `H` abre. As decisões são **otimistas** — o cartão sai no
+instante e a lista confirma a seguir; se o servidor recusar, o cartão volta com a razão escrita.
+Estados vazios ensinam o próximo passo (procurar leads, voltar a ver) em vez de dizer «sem
+resultados». Os tokens de design (espaçamento em múltiplos de 4, escala tipográfica, cores
+semânticas `--ok/--warn/--risk`, modo escuro e `prefers-reduced-motion`) estão no `:root` do
+`src/shell.html`.
 
 ## Caixa de entrada e envio
 
@@ -80,6 +135,10 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | POST | `/api/ops/queue/tick` | Correr agora o que está devido |
 | GET | `/api/ops/events?limit=` | A auditoria |
 | GET | `/api/ops/usage?days=` | Consumo e custo por fornecedor |
+| GET | `/api/ops/today` | O ecrã Hoje: decidir, aconteceu, a seguir, presença |
+| POST | `/api/ops/stop` | Interruptor de emergência (`{ "stop": true \| false }`) |
+| GET | `/api/ops/outbox` | Fila de saída com tentativas, alugueres e revisões |
+| GET | `/api/ops/events/verify` | Verifica a cadeia de hashes do registo |
 
 A pesquisa da Google (`/api/google/search`) continua a guardar na gaveta e **passa a gravar
 também na base de dados**, já pontuado e sem duplicados. A resposta traz `baseDeDados` com
@@ -95,7 +154,7 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
   escreve; a margem é receita menos custo de API, e é isso que a gaveta mostra.
 - **Envio real de WhatsApp Business.** Falta a conta Meta, o número aprovado e o token.
   Enquanto não existir, o caminho é o link revisto à mão.
-- **Testes A/B de mensagem.** A tabela `messages` já tem tudo o que é preciso (`subject`,
+- **Testes A/B de mensagem.** (por fazer) A tabela `messages` já tem tudo o que é preciso (`subject`,
   `body`, `status`, `sent_at`); o que falta é o campo de variante e a escolha da vencedora.
 - **Regras aprendidas com correções.** O `learn.mjs` já guarda lições e regras; ligá-las às
   aprovações (rejeitar uma mensagem e a razão virar regra) é o passo seguinte.
@@ -103,7 +162,7 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 12 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 17 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

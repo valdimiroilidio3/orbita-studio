@@ -69,9 +69,14 @@ const OPS = (() => {
   try { return ops.openOps({ dataDir: DATA, concurrency: 2, pollMs: 2000 }); }
   catch (e) { console.warn(`  operação indisponível: ${e.message}`); return null; }
 })();
-// como é que uma mensagem aprovada sai: email pelo Resend, WhatsApp por link revisto à mão
-const deliverOut = async (msg, lead) => {
-  if (msg.channel === 'whatsapp') {
+// Como é que uma mensagem aprovada sai. Uma só função para os dois caminhos (o envio imediato e
+// o outbox a drenar sozinho), a receber o item do outbox: email pelo Resend, WhatsApp por link.
+const deliverOut = async (item) => {
+  const msg = OPS && OPS.messages.getMessage(OPS.db, item.message_id);
+  if (!msg) throw new Error('a mensagem deste envio já não existe');
+  const lead = OPS.leads.getLead(OPS.db, msg.lead_id);
+  if (!lead) throw new Error('o lead desta mensagem já não existe');
+  if (item.channel === 'whatsapp') {
     const link = integrations.whatsappClickToChatUrl(lead.phone, msg.body);
     return { doesNotSend: true, url: link.url, note: 'link wa.me pronto — o dono revê e envia no WhatsApp' };
   }
@@ -915,6 +920,28 @@ const server = http.createServer(async (req, res) => {
         if (url.pathname === '/api/ops/events' && req.method === 'GET') {
           const limit = Math.max(1, Math.min(500, +url.searchParams.get('limit') || 100));
           return json(res, 200, { ok: true, events: OPS.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT ?').all(limit) });
+        }
+        // ---------- «Hoje»: três perguntas e mais nada ----------
+        if (url.pathname === '/api/ops/today' && req.method === 'GET') {
+          const since = url.searchParams.get('since') || null;
+          const tasks = load().map(t => ({ ...t, agentName: (AGENTS.find(a => a.id === t.agent) || {}).name || t.agent }));
+          const view = OPS.today.screen(OPS.db, { office: { tasks, routines: loadRoutines() }, since });
+          return json(res, 200, { ok: true, ...view });
+        }
+        // O interruptor de emergência: um toque e não sai mais nada.
+        if (url.pathname === '/api/ops/stop' && req.method === 'POST') {
+          const b = await limitedBody(req, 2000);
+          const out = OPS.outbox.setStop(OPS.db, b.stop !== false, 'dono', b.why || '');
+          console.log(`${out.parado ? '⏹' : '▶'} envios ${out.parado ? 'parados' : 'retomados'} pelo dono`);
+          return json(res, 200, { ok: true, ...out });
+        }
+        if (url.pathname === '/api/ops/outbox' && req.method === 'GET') {
+          const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 25));
+          return json(res, 200, { ok: true, ...OPS.outbox.stats(OPS.db), items: OPS.outbox.list(OPS.db, { status: url.searchParams.get('status') || null, limit }) });
+        }
+        // O registo não é uma tabela qualquer: é uma cadeia. Isto prova-o (ou diz onde partiu).
+        if (url.pathname === '/api/ops/events/verify' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.events.verify(OPS.db) });
         }
         if (url.pathname === '/api/ops/usage' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.messages.usageSummary(OPS.db, Math.max(1, +url.searchParams.get('days') || 30)) });

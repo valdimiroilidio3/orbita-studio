@@ -11,6 +11,9 @@ import * as leads from './src/ops/leads.mjs';
 import * as messages from './src/ops/messages.mjs';
 import { createQueue } from './src/ops/queue.mjs';
 import * as metrics from './src/ops/metrics.mjs';
+import * as outbox from './src/ops/outbox.mjs';
+import * as events from './src/ops/events.mjs';
+import * as today from './src/ops/today.mjs';
 
 const fresh = () => openDb(':memory:');
 const withLead = (db, extra = {}) => leads.upsertLead(db, {
@@ -79,7 +82,9 @@ test('mensagem: rascunho não sai sem aprovação; aprovada sai e marca o lead',
   const approved = messages.approveMessage(db, m.id);
   assert.equal(approved.status, 'aprovada');
   let called = 0;
-  const out = await messages.sendMessage(db, m.id, { deliver: async (msg, l) => { called++; assert.equal(l.id, lead.id); return { id: 'rs_1' }; } });
+  const out = await messages.sendMessage(db, m.id, {
+    deliver: async (item) => { called++; assert.equal(item.message_id, m.id); assert.equal(item.payload.body, 'Proposta de site'); return { id: 'rs_1' }; },
+  });
   assert.equal(out.delivered, true);
   assert.equal(called, 1);
   assert.equal(messages.getMessage(db, m.id).status, 'enviada');
@@ -203,4 +208,102 @@ test('métricas: números que saem das tabelas, com null quando não há dados',
   assert.equal(s.mensagens.enviadas, 1);
   assert.ok(s.custos.apiCentimos >= 0);
   assert.match(metrics.summaryLine(db), /2 leads/);
+});
+
+/* ---------- 26 out 2026: eventos, outbox e idempotência (a base que não se vê) ---------- */
+
+test('outbox: pedir o mesmo envio duas vezes é pedir uma', async () => {
+  const db = fresh();
+  const lead = withLead(db);
+  const m = messages.draftMessage(db, { leadId: lead.id, channel: 'email', body: 'Olá' });
+  messages.approveMessage(db, m.id);
+  const a = outbox.enqueue(db, { messageId: m.id, channel: 'email', to: lead.email, payload: { to: lead.email, subject: '', body: 'Olá' } });
+  const b = outbox.enqueue(db, { messageId: m.id, channel: 'email', to: lead.email, payload: { to: lead.email, subject: '', body: 'Olá' } });
+  assert.equal(a.created, true);
+  assert.equal(b.created, false, 'a segunda vez não cria outra linha');
+  assert.equal(a.item.id, b.item.id);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM outbox').get().n, 1);
+  let calls = 0;
+  const deliver = async () => { calls++; return { id: 'rs_1' }; };
+  const first = await outbox.drain(db, { deliver });
+  const second = await outbox.drain(db, { deliver });
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 0, 'já não há nada devido');
+  assert.equal(calls, 1, 'o serviço foi chamado uma única vez');
+  assert.equal(outbox.stats(db).feito, 1);
+});
+
+test('outbox: se o processo morre a meio, o aluguer expira — mas um email não se repete às cegas', async () => {
+  const db = fresh();
+  const lead = withLead(db);
+  const m = messages.draftMessage(db, { leadId: lead.id, channel: 'email', body: 'Proposta' });
+  messages.approveMessage(db, m.id);
+  const { item } = outbox.enqueue(db, { messageId: m.id, channel: 'email', to: lead.email, payload: { body: 'Proposta' } });
+  // simula o crash: alguém pegou no item e o processo morreu antes de o terminar
+  const [held] = outbox.claim(db, { leaseMs: 5 });
+  assert.equal(held.id, item.id);
+  assert.equal(held.attempts, 1);
+  assert.equal(outbox.get(db, item.id).status, 'em_voo');
+  await new Promise(r => setTimeout(r, 20)); // o aluguer expira
+  let calls = 0;
+  const out = await outbox.drain(db, { deliver: async () => { calls++; return { id: 'rs_2' }; } });
+  assert.equal(out.length, 1, 'o trabalho preso voltou a ser pegado');
+  assert.equal(calls, 0, 'mas não se reenvia um email que pode já ter saído');
+  assert.equal(outbox.get(db, item.id).status, 'revisao');
+  const ev = db.prepare("SELECT action FROM events WHERE entity='mensagem'").all().map(r => r.action);
+  assert.ok(ev.includes('outbox.revisao'));
+});
+
+test('interruptor de emergência: parado, nada sai e a recusa explica-se', async () => {
+  const db = fresh();
+  const lead = withLead(db);
+  const m = messages.draftMessage(db, { leadId: lead.id, channel: 'email', body: 'Olá' });
+  messages.approveMessage(db, m.id);
+  outbox.setStop(db, true, 'dono', 'teste');
+  let calls = 0;
+  const blocked = await messages.sendMessage(db, m.id, { deliver: async () => { calls++; return { id: 'x' }; } });
+  assert.equal(blocked.delivered, false);
+  assert.match(blocked.reason, /interruptor de emergência/);
+  assert.equal(calls, 0);
+  const drained = await outbox.drain(db, { deliver: async () => { calls++; return { id: 'x' }; } });
+  assert.deepEqual(drained, []);
+  assert.equal(outbox.stats(db).parado, true);
+  outbox.setStop(db, false, 'dono', 'teste');
+  assert.equal(outbox.sendBlocked(db), false);
+  assert.ok(db.prepare("SELECT 1 FROM events WHERE action IN ('envio.parado','envio.retomado')").all().length >= 2);
+});
+
+test('registo imutável: a cadeia fecha e denuncia a linha que foi mexida', () => {
+  const db = fresh();
+  const lead = withLead(db);
+  leads.setStatus(db, lead.id, 'contactado');
+  const okChain = events.verify(db);
+  assert.equal(okChain.ok, true);
+  assert.ok(okChain.count >= 2);
+  // alguém reescreve uma linha à socapa
+  const victim = db.prepare('SELECT id FROM events ORDER BY id LIMIT 1 OFFSET 1').get();
+  db.prepare("UPDATE events SET detail = 'falsificado' WHERE id = ?").run(victim.id);
+  const broken = events.verify(db);
+  assert.equal(broken.ok, false);
+  assert.equal(broken.brokenAt, victim.id);
+});
+
+test('«Hoje»: só mostra o que existe, com o porquê tirado dos dados', () => {
+  const db = fresh();
+  const lead = withLead(db);
+  const a = messages.draftMessage(db, { leadId: lead.id, channel: 'email', subject: 'Uma ideia', body: 'Texto' });
+  const b = messages.draftMessage(db, { leadId: lead.id, channel: 'whatsapp', body: 'Outro' });
+  messages.approveMessage(db, b.id);
+  leads.scheduleFollowUp(db, lead.id, new Date(Date.now() + 86400000).toISOString());
+  const view = today.screen(db, { office: { tasks: [], routines: [] } });
+  assert.equal(view.decidir.length, 2);
+  const draftCard = view.decidir.find(c => c.id === a.id);
+  assert.match(draftCard.why, /sem site|telefone|avaliação/, 'o porquê vem das razões guardadas');
+  assert.ok(view.decidir.every(c => c.why), 'nenhum cartão sem justificação');
+  assert.ok(view.aSeguir.some(x => x.kind === 'seguimento'));
+  assert.equal(view.presenca.parado, false);
+  assert.ok(view.aconteceu.length > 0, 'o que aconteceu tem eventos');
+  const empty = today.screen(fresh(), { office: {} });
+  assert.deepEqual(empty.decidir, []);
+  assert.equal(empty.resumo.decidir, 0);
 });

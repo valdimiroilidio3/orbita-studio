@@ -8,12 +8,16 @@ import { createQueue } from './queue.mjs';
 import * as leadsModule from './leads.mjs';
 import * as messagesModule from './messages.mjs';
 import * as metricsModule from './metrics.mjs';
+import * as outboxModule from './outbox.mjs';
+import * as eventsModule from './events.mjs';
+import * as todayModule from './today.mjs';
 
 export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = true } = {}) {
   const file = process.env.ORBITA_DB || path.join(dataDir, 'orbita.db');
   const db = openDb(file);
   const queue = createQueue(db, { concurrency, pollMs });
-  const { leads, messages, metrics, audit: log } = { leads: leadsModule, messages: messagesModule, metrics: metricsModule, audit };
+  const leads = leadsModule, messages = messagesModule, metrics = metricsModule;
+  const outbox = outboxModule, events = eventsModule, today = todayModule;
 
   // trabalho que a fila sabe fazer — nomes explícitos, sem `eval` nem magia
   queue.register('leads.importar', async (p) => leads.importLeads(db, p.leads || [], p.actor || 'fila', p.source || 'import'));
@@ -30,12 +34,31 @@ export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = t
   });
 
   if (autostart) queue.start();
+
+  // ---- o outbox drena sozinho ----
+  // O que ficou escrito para sair tenta sair aqui, a cada 3 s, com o mesmo `deliver` do servidor.
+  // Se o processo morrer, o aluguer expira e o item volta — ninguém fica com trabalho preso.
+  let outboxTimer = null;
+  const drainOutbox = async () => {
+    if (!globalThis.__orbitaDeliver) return [];
+    try { return await outboxModule.drain(db, { deliver: globalThis.__orbitaDeliver, limit: 5 }); }
+    catch (e) { console.warn('outbox:', e.message); return []; }
+  };
+  if (autostart) {
+    outboxTimer = setInterval(() => { drainOutbox(); }, 3000);
+    if (outboxTimer.unref) outboxTimer.unref();
+  }
   setSetting(db, 'ops.iniciado_em', getSetting(db, 'ops.iniciado_em', now()));
 
   return {
-    db, queue, leads, messages, metrics,
+    db, queue, leads, messages, metrics, outbox, events, today,
+    drainOutbox,
     audit: (event) => audit(db, event),
-    close: () => { queue.stop(); try { db.close(); } catch { /* já fechada */ } },
+    close: () => {
+      queue.stop();
+      if (outboxTimer) clearInterval(outboxTimer);
+      try { db.close(); } catch { /* já fechada */ }
+    },
   };
 }
 

@@ -14,6 +14,7 @@ import { initMcp } from './mcp.js';
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
 import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
+import { initToday } from './today.js'; // 26 out 2026: o ecrã HOJE — decidir, o que aconteceu, o que vem
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
 import { initBrain } from './brain.js';
@@ -1392,8 +1393,19 @@ tasks = initTasks({
   getFocused: () => focused, getZoom: () => view.zoom, getFocusDim: () => focusDim,
   toScreen: (p) => toScreen(p), reframe,
 });
-initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
+const leadsDrawer = initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
 initOps({ api: '/api' }); // a gaveta OPERAÇÃO: o que está guardado, o que espera OK, e o rasto
+// HOJE: abre por cima de tudo. Sem decisões, ensina o próximo passo em vez de dizer «sem resultados».
+const today = initToday({ api: '/api', onOpenLeads: () => { today.close(); leadsDrawer.open(); } });
+// primeira visita do dia → o ecrã abre sozinho; nas seguintes, a barra mostra o número à espera
+fetch('/api/ops/today').then(r => r.json()).then(d => {
+  const n = d?.resumo?.decidir || 0;
+  const badge = document.querySelector('#topToday .td-badge');
+  if (badge) { badge.textContent = n ? String(n) : ''; badge.hidden = !n; }
+  const seen = (() => { try { return localStorage.getItem('orbita.today.seen'); } catch { return null; } })();
+  const fresh = !seen || (Date.now() - new Date(seen).getTime()) > 6 * 3600 * 1000;
+  if (n && fresh && today) today.open();
+}).catch(() => {});
 view.target.set(...overviewPos());
 addEventListener('resize', () => { if (!focused && !tween && !HERO) view.target.set(...overviewPos()); });
 const hero = HERO ? initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_KEYS, view, camera, spawnEmote, isBusy: () => !!focused || !!tween || !!drag }) : null;

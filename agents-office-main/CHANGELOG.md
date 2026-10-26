@@ -13,6 +13,17 @@
 - **A pesquisa passa a gravar na base de dados.** `/api/google/search` continua a guardar na gaveta e passa a gravar também em `orbita.db`, pontuado e sem duplicados (`baseDeDados: { created, updated, refused }`). O que já estava só em `data/leads.json` entra com `POST /api/ops/leads/importar-gravados`.
 - **Provas.** `ops.test.mjs` (12 testes, SQLite em memória, nenhum serviço externo) e cinco passos novos no `check.mjs` com um servidor isolado que exercita as rotas sem tocar nos dados do dono: **55 verificações** (a do navegador continua a falhar sem Chrome). Guia em **OPS.md**.
 
+## 1.2.0 — 26 out 2026 · Hoje, e a base que não se vê
+
+- **O ecrã «Hoje».** Um só ecrã com três perguntas: o que precisa da tua decisão, o que aconteceu enquanto dormias, o que vai acontecer. Abre com `HOJE` na barra (ou `H`), e na primeira visita de cada seis horas abre sozinho quando há algo à tua espera.
+- **A decisão é um gesto.** Deslizar para a direita aprova, para a esquerda rejeita, toque longo abre o porquê. Cada gesto tem botão e tecla equivalentes (`←` rejeitar, `→` aprovar) — teclado e leitor de ecrã não ficam de fora. Decisões otimistas: o cartão sai já e volta com a razão se o servidor recusar.
+- **Porquê em cada cartão**, feito só com dados guardados (as razões da nota do lead, o canal, o estado, os dias sem resposta). Sem dados que cheguem, o cartão não aparece.
+- **Eventos encadeados.** Cada linha de `events` leva o hash da anterior; `GET /api/ops/events/verify` fecha a cadeia ou diz em que linha partiu. O feed do «aconteceu» traduz os eventos em frases.
+- **Outbox com idempotência.** O envio é escrito antes de sair, com chave única (mensagem + conteúdo) e aluguer com prazo. Pedir duas vezes é pedir uma; um processo que morre não deixa trabalho preso; um email resgatado depois de um crash vai para `revisao` em vez de se repetir às cegas.
+- **Interruptor de emergência.** `POST /api/ops/stop` pára todos os envios de todos os caminhos, com a razão dita na recusa; o ecrã Hoje mostra-o ligado.
+- **Tokens de design e acessibilidade.** Espaçamento em múltiplos de 4, escala tipográfica, cores semânticas (`--ok`, `--warn`, `--risk`), modo escuro de raiz, `aria-modal`/`aria-live`, foco visível e `prefers-reduced-motion`.
+- **Estados vazios que ensinam** o próximo passo em vez de «sem resultados». **Provas:** 17 testes em memória e **59 verificações** (a do navegador falha sem Chrome).
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

@@ -7,6 +7,7 @@
 // O envio em si é injetado (`deliver`), para os testes não tocarem em nenhum serviço real.
 import { audit, getSetting, now, setSetting, uid } from './db.mjs';
 import { getLead, isBlocked } from './leads.mjs';
+import * as outbox from './outbox.mjs';
 
 export const STATUS = ['rascunho', 'aprovada', 'enviada', 'falhou', 'bloqueada'];
 export const CHANNELS = ['email', 'whatsapp'];
@@ -85,11 +86,20 @@ export function rejectMessage(db, id, reason = '', actor = 'dono') {
   return getMessage(db, id);
 }
 
-/** Envia uma mensagem aprovada. `deliver(msg, lead)` faz o trabalho — e pode não haver nenhum. */
+/**
+ * Envia uma mensagem aprovada. `deliver(msg, lead)` faz o trabalho — e pode não haver nenhum.
+ *
+ * O envio passa sempre pelo **outbox**: fica escrito antes de sair, com uma chave de
+ * idempotência. Pedir duas vezes o mesmo envio não manda duas mensagens.
+ */
 export async function sendMessage(db, id, { deliver = null, actor = 'dono', channel } = {}) {
   const m = getMessage(db, id);
   if (!m) throw Object.assign(new Error('mensagem não encontrada'), { status: 404 });
   if (m.status !== 'aprovada') throw Object.assign(new Error(`só se envia uma mensagem aprovada (está «${m.status}»)`), { status: 409 });
+  if (outbox.sendBlocked(db)) {
+    audit(db, { actor, action: 'envio.recusado_parado', entity: 'mensagem', entityId: id });
+    return { message: m, delivered: false, reason: 'os envios estão parados (interruptor de emergência). Retoma em «Retomar envios».' };
+  }
 
   const lead = getLead(db, m.lead_id);
   if (isBlocked(db, { email: lead.email, phone: lead.phone })) {
@@ -112,24 +122,35 @@ export async function sendMessage(db, id, { deliver = null, actor = 'dono', chan
   if (typeof deliver !== 'function') {
     return { message: getMessage(db, id), delivered: false, reason: 'não há forma de enviar configurada (falta a chave do serviço)' };
   }
-  try {
-    const out = await deliver({ ...m, channel: ch }, lead);
-    if (out?.doesNotSend) {
-      // link wa.me: o dono ainda tem de carregar em enviar; não se marca como enviada
-      db.prepare("UPDATE messages SET provider_id=?, reason=? WHERE id=?").run(out.url || '', out.note || 'envio manual no WhatsApp', id);
-      audit(db, { actor, action: 'mensagem.link', entity: 'mensagem', entityId: id, detail: out.url });
-      return { message: getMessage(db, id), delivered: false, manual: true, url: out.url, reason: out.note || 'link pronto: o dono revê e envia' };
-    }
-    db.prepare("UPDATE messages SET status='enviada', sent_at=?, provider_id=?, error='' WHERE id=?")
-      .run(now(), out?.id || '', id);
-    db.prepare("UPDATE leads SET status=CASE WHEN status='novo' THEN 'contactado' ELSE status END, contacted_at=COALESCE(contacted_at, ?), updated_at=? WHERE id=?")
-      .run(now(), now(), lead.id);
-    recordUsage(db, { provider: ch === 'email' ? 'resend' : 'whatsapp', units: 1, note: `mensagem ${id}`, costCents: getSetting(db, `custo.${ch}_centimos`, ch === 'email' ? 1 : 0) });
-    audit(db, { actor, action: 'mensagem.enviada', entity: 'mensagem', entityId: id, detail: { to: lead.email || lead.phone } });
-    return { message: getMessage(db, id), delivered: true };
-  } catch (e) {
-    return fail(db, id, e.message, actor);
+
+  // 1. fica escrito antes de sair (idempotente: a mesma mensagem duas vezes = uma linha)
+  const queued = outbox.enqueue(db, {
+    messageId: id, channel: ch, to: lead.email || lead.phone,
+    payload: { to: lead.email || lead.phone, subject: m.subject || '', body: m.body },
+    actor,
+  });
+
+  // 2. e agora tenta sair, uma vez
+  const [res] = await outbox.drain(db, { only: queued.item.id, actor, deliver });
+  if (!res) return { message: getMessage(db, id), delivered: false, reason: 'ficou na fila de envio' };
+  if (!res.ok) {
+    const item = outbox.get(db, queued.item.id);
+    return fail(db, id, res.error || 'não saiu', actor, item?.status === 'revisao');
   }
+  const out = res.result || {};
+  if (out.doesNotSend) {
+    // link wa.me: o dono ainda tem de carregar em enviar; não se marca como enviada
+    db.prepare("UPDATE messages SET provider_id=?, reason=? WHERE id=?").run(out.url || '', out.note || 'envio manual no WhatsApp', id);
+    audit(db, { actor, action: 'mensagem.link', entity: 'mensagem', entityId: id, detail: out.url });
+    return { message: getMessage(db, id), delivered: false, manual: true, url: out.url, reason: out.note || 'link pronto: o dono revê e envia' };
+  }
+  db.prepare("UPDATE messages SET status='enviada', sent_at=?, provider_id=?, error='' WHERE id=?")
+    .run(now(), out?.id || '', id);
+  db.prepare("UPDATE leads SET status=CASE WHEN status='novo' THEN 'contactado' ELSE status END, contacted_at=COALESCE(contacted_at, ?), updated_at=? WHERE id=?")
+    .run(now(), now(), lead.id);
+  recordUsage(db, { provider: ch === 'email' ? 'resend' : 'whatsapp', units: 1, note: `mensagem ${id}`, costCents: getSetting(db, `custo.${ch}_centimos`, ch === 'email' ? 1 : 0) });
+  audit(db, { actor, action: 'mensagem.enviada', entity: 'mensagem', entityId: id, detail: { to: lead.email || lead.phone } });
+  return { message: getMessage(db, id), delivered: true };
 }
 
 /** O dono confirma que enviou à mão (WhatsApp). Aí sim conta como contactado. */
@@ -145,10 +166,13 @@ export function confirmSent(db, id, actor = 'dono') {
   return getMessage(db, id);
 }
 
-function fail(db, id, error, actor) {
-  db.prepare("UPDATE messages SET status='falhou', error=? WHERE id=?").run(String(error).slice(0, 500), id);
-  audit(db, { actor, action: 'mensagem.falhou', entity: 'mensagem', entityId: id, detail: String(error).slice(0, 300) });
-  return { message: getMessage(db, id), delivered: false, reason: String(error) };
+function fail(db, id, error, actor, needsReview = false) {
+  db.prepare("UPDATE messages SET status=?, error=? WHERE id=?").run(needsReview ? 'revisao' : 'falhou', String(error).slice(0, 500), id);
+  audit(db, { actor, action: needsReview ? 'mensagem.revisao' : 'mensagem.falhou', entity: 'mensagem', entityId: id, detail: String(error).slice(0, 300) });
+  return {
+    message: getMessage(db, id), delivered: false, needsReview,
+    reason: String(error) + (needsReview ? ' — já tinha saído uma vez; não repito sozinho, confirma na gaveta' : ''),
+  };
 }
 
 /** Consumo das APIs, para o medidor de saldo não ser uma surpresa no fim do mês. */

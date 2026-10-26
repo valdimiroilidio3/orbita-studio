@@ -11,6 +11,13 @@
     --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
     --ui: Inter, -apple-system, "Helvetica Neue", sans-serif;
     --ease: cubic-bezier(.2,.8,.2,1);
+    /* 26 out 2026 · tokens de design, desde o dia 1. Espaçamento em múltiplos de 4, escala
+       tipográfica fixa, e três cores semânticas que querem dizer a mesma coisa em todo o lado. */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+    --t-xs: 10px; --t-s: 12px; --t-m: 14px; --t-l: 18px; --t-xl: 26px; --t-2xl: 38px;
+    --ok: #1E9070; --warn: #B4830B; --risk: #B4391E;
+    --ok-soft: rgba(30,144,112,.10); --warn-soft: rgba(180,131,11,.12); --risk-soft: rgba(180,57,30,.10);
+    --surface: #fff; --surface-2: #FAFAF5;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
@@ -903,6 +910,93 @@
   .op-note.bad { color: #B4391E; }
   body.dark #opsPanel { background: #1E1F24; box-shadow: 0 26px 70px rgba(0,0,0,.7); }
   body.dark .op-stage { background: #1B1C21; color: var(--ink); border-color: var(--hairline); }
+  /* 26 out 2026 · HOJE — um ecrã, três perguntas, e a decisão como gesto */
+  #topToday { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--ink);
+    background: none; border: 1px solid var(--ink); border-radius: 99px; padding: 5px 12px; cursor: pointer; position: relative; }
+  #topToday:hover, #topToday.on { background: var(--ink); color: var(--cream); }
+  #topToday .td-badge { display: none; }
+  #todayOv { position: fixed; inset: 0; z-index: 95; background: var(--cream); color: var(--ink);
+    overflow-y: auto; font-family: var(--ui); }
+  #todayOv[hidden] { display: none; }
+  .td-wrap { max-width: 1200px; margin: 0 auto; padding: var(--s6) var(--s5) var(--s7); }
+  .td-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
+  .td-brand h1 { font-family: var(--serif); font-weight: 400; font-size: var(--t-2xl); letter-spacing: .01em; margin: 0; }
+  .td-date { display: block; margin-top: var(--s1); font-size: var(--t-xs); letter-spacing: .14em; text-transform: uppercase; color: var(--grey); }
+  .td-live { display: flex; align-items: center; gap: var(--s2); }
+  .td-ring { position: relative; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    border: 1px solid var(--hairline); font-size: var(--t-xs); color: var(--grey); }
+  .td-ring i { position: absolute; inset: -4px; border-radius: 50%; border: 1px solid transparent; }
+  .td-ring.working { color: var(--ok); border-color: var(--ok); }
+  .td-ring.working i { border-color: var(--ok); opacity: .5; animation: tdPulse 2s var(--ease) infinite; }
+  @keyframes tdPulse { 0% { transform: scale(.85); opacity: .55; } 70% { transform: scale(1.35); opacity: 0; } 100% { opacity: 0; } }
+  .td-stop, .td-refresh, .td-close { font-family: var(--ui); font-size: var(--t-xs); letter-spacing: .12em; font-weight: 700;
+    color: var(--grey); background: none; border: 1px solid var(--hairline); border-radius: 99px; padding: 6px 12px; cursor: pointer; }
+  .td-stop:hover { border-color: var(--risk); color: var(--risk); }
+  .td-stop.on { background: var(--risk); color: #fff; border-color: var(--risk); }
+  .td-refresh:hover, .td-close:hover { border-color: var(--ink); color: var(--ink); }
+  .td-note { min-height: 18px; margin-top: var(--s3); font-size: var(--t-s); color: var(--grey); }
+  .td-note.bad { color: var(--risk); }
+  .td-cols { display: grid; grid-template-columns: 1.25fr 1fr .85fr; gap: var(--s5); margin-top: var(--s4); align-items: start; }
+  .td-col h2 { font-family: var(--ui); font-size: var(--t-xs); letter-spacing: .16em; font-weight: 700; text-transform: uppercase;
+    color: var(--grey); margin: 0 0 var(--s3); display: flex; align-items: center; gap: var(--s2); }
+  .td-count { font-family: var(--serif); font-size: var(--t-m); letter-spacing: 0; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 99px; padding: 0 7px; }
+  .td-decide { display: flex; flex-direction: column; gap: var(--s3); }
+  .td-card { position: relative; background: var(--surface); border: 1px solid var(--hairline); border-radius: 18px;
+    box-shadow: 0 12px 32px rgba(21,20,20,.07); padding: var(--s4); touch-action: pan-y; will-change: transform;
+    transition: transform .22s var(--ease), border-color .18s var(--ease), box-shadow .18s var(--ease); outline: none; }
+  .td-card:focus-visible { border-color: var(--ink); box-shadow: 0 0 0 3px var(--ink); }
+  .td-card.drag-r { border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .td-card.drag-l { border-color: var(--risk); box-shadow: 0 0 0 3px var(--risk-soft); }
+  .td-card.is-review { border-color: var(--warn); }
+  .td-card.is-task { background: var(--surface-2); }
+  .td-swipe-hint { position: absolute; top: var(--s4); font-size: var(--t-xs); letter-spacing: .18em; font-weight: 700;
+    text-transform: uppercase; opacity: 0; transition: opacity .12s linear; pointer-events: none; }
+  .td-swipe-hint.left { left: var(--s4); color: var(--risk); }
+  .td-swipe-hint.right { right: var(--s4); color: var(--ok); }
+  .td-card.drag-r .td-swipe-hint.right, .td-card.drag-l .td-swipe-hint.left { opacity: 1; }
+  .td-card.fly-r { animation: tdFlyR .3s var(--ease) forwards; }
+  .td-card.fly-l { animation: tdFlyL .3s var(--ease) forwards; }
+  @keyframes tdFlyR { to { transform: translateX(120%) rotate(7deg); opacity: 0; } }
+  @keyframes tdFlyL { to { transform: translateX(-120%) rotate(-7deg); opacity: 0; } }
+  .td-card-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--s2); }
+  .td-kind { font-size: var(--t-xs); letter-spacing: .14em; font-weight: 700; text-transform: uppercase; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 99px; padding: 2px 8px; }
+  .td-when { font-size: var(--t-xs); color: var(--grey); font-variant-numeric: tabular-nums; }
+  .td-lead { font-size: var(--t-l); font-weight: 600; letter-spacing: -.01em; margin: 0 0 var(--s1); }
+  .td-subject { font-size: var(--t-s); color: var(--grey); margin: 0 0 var(--s2); }
+  .td-body { font-size: var(--t-m); line-height: 1.55; margin: 0; color: var(--ink); }
+  .td-why { position: relative; margin: var(--s3) 0 0; padding: var(--s2) var(--s3); font-size: var(--t-s); line-height: 1.5;
+    color: var(--grey); background: var(--surface-2); border-radius: 10px; border-left: 2px solid var(--hairline); }
+  .td-why span { display: inline-block; margin-right: var(--s2); font-size: var(--t-xs); letter-spacing: .14em;
+    text-transform: uppercase; font-weight: 700; color: var(--ink); }
+  .td-actions { display: flex; gap: var(--s2); margin-top: var(--s3); flex-wrap: wrap; }
+  .td-btn { font-family: var(--ui); font-size: var(--t-s); letter-spacing: .02em; font-weight: 600; color: var(--ink);
+    background: none; border: 1px solid var(--hairline); border-radius: 99px; padding: 8px 14px; cursor: pointer;
+    transition: background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease); }
+  .td-btn:hover { border-color: var(--ink); }
+  .td-btn.primary { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  .td-btn.primary:hover { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .td-btn.quiet { border-color: transparent; color: var(--grey); }
+  .td-btn.quiet:hover { color: var(--ink); }
+  .td-empty { border: 1px dashed var(--hairline); border-radius: 18px; padding: var(--s5); text-align: left; background: var(--surface); }
+  .td-empty-h { font-family: var(--serif); font-size: var(--t-xl); margin: 0 0 var(--s2); }
+  .td-empty p { font-size: var(--t-m); line-height: 1.6; color: var(--grey); margin: 0 0 var(--s3); }
+  .td-empty-acts { display: flex; gap: var(--s2); flex-wrap: wrap; }
+  .td-empty-note { font-size: var(--t-xs); color: var(--grey); margin-top: var(--s3) !important; }
+  .td-feed, .td-next { list-style: none; margin: 0; padding: 0; }
+  .td-feed li, .td-next li { display: grid; grid-template-columns: 52px 1fr; gap: var(--s2); padding: var(--s2) 0;
+    border-bottom: 1px solid var(--hairline); font-size: var(--t-s); line-height: 1.5; }
+  .td-feed time, .td-next time { font-variant-numeric: tabular-nums; color: var(--grey); font-size: var(--t-xs); padding-top: 2px; }
+  .td-next em { display: block; font-style: normal; font-size: var(--t-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--grey); }
+  .td-none { color: var(--grey); grid-template-columns: 1fr !important; }
+  .td-foot { display: flex; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s6);
+    padding-top: var(--s3); border-top: 1px solid var(--hairline); font-size: var(--t-xs); color: var(--grey); }
+  .td-keys b { display: inline-block; border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; margin: 0 2px; font-weight: 600; }
+  @media (max-width: 980px) { .td-cols { grid-template-columns: 1fr; } .td-wrap { padding: var(--s4) var(--s4) var(--s7); } }
+  @media (prefers-reduced-motion: reduce) {
+    .td-card, .td-ring i { transition: none; animation: none !important; }
+  }
   .tp-team-chip { font-size: 7.5px; letter-spacing: .12em; font-weight: 700; border: 1px solid var(--ink); color: var(--ink); border-radius: 99px; padding: 0 5px; vertical-align: 1px; }
   .tp-row.piece .tp-t::before { content: '↳ '; color: var(--grey); }
   body.dark .tp-team { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
@@ -1168,6 +1262,11 @@
     background: radial-gradient(120% 90% at 50% 30%, #1B1C20 45%, #0F1013 100%);
     color: var(--ink);
   }
+  body.dark {
+    --surface: #1E1F24; --surface-2: #191A1F;
+    --ok: #4FD1A5; --warn: #E0B34A; --risk: #F0795C;
+    --ok-soft: rgba(79,209,165,.12); --warn-soft: rgba(224,179,74,.12); --risk-soft: rgba(240,121,92,.12);
+  }
   body.dark.cam { background: radial-gradient(120% 90% at 50% 30%, #2A2B30 45%, #151619 100%); }
   body.dark #topbar { background: color-mix(in srgb, var(--cream) 90%, transparent); }
   body.dark .badge, body.dark .pill, body.dark .connl, body.dark .mcp-tip, body.dark #railHeader, body.dark #board, body.dark #tpanel,
@@ -1220,6 +1319,7 @@
   <div id="topconn"></div>
   <span class="sp"></span>
   <div id="topmodels"></div>
+  <button id="topToday" class="td-open" title="o que precisa de ti, o que aconteceu, o que vem aí (H)">HOJE <span class="td-badge" hidden></span></button>
   <button id="topOps" title="a operação a sério: leads guardados com nota, mensagens à espera do teu OK, fila e auditoria">◉ OPERAÇÃO</button>
   <button id="topLeads" title="procura real na Google: empresas (Places) e informação (pesquisa web)">◈ LEADS</button>
   <button id="topCal" title="o calendário — tarefas e rotinas nos seus dias (P)">◷ CALENDÁRIO</button>
@@ -1250,6 +1350,39 @@
   <div class="op-tabs"><button class="op-tab on" data-k="leads">LEADS</button><button class="op-tab" data-k="messages">MENSAGENS</button><button class="op-tab" data-k="queue">FILA E RASTO</button></div>
   <div class="op-body"></div>
   <div class="op-foot"><span class="op-note">Nada sai daqui sem o teu OK. O funil só avança um passo de cada vez.</span></div>
+</div>
+<!-- 26 out 2026 · HOJE: três perguntas e mais nada. A decisão é um gesto. -->
+<div id="todayOv" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tdTitle">
+  <div class="td-wrap">
+    <header class="td-top">
+      <div class="td-brand"><h1 id="tdTitle">Hoje</h1><span class="td-date"></span></div>
+      <div class="td-live">
+        <span class="td-ring" title="agentes a trabalhar neste momento" aria-label="agentes a trabalhar"><i></i><b>0</b></span>
+        <button class="td-stop" aria-pressed="false" title="pára todos os envios, imediatamente">PARAR TUDO</button>
+        <button class="td-refresh" title="voltar a ler">ATUALIZAR</button>
+        <button class="td-close" aria-label="fechar (Esc)" title="fechar (Esc)">✕</button>
+      </div>
+    </header>
+    <div class="td-note" role="status" aria-live="polite"></div>
+    <div class="td-cols">
+      <section class="td-col td-col-decide" aria-labelledby="tdDecideH">
+        <h2 id="tdDecideH">Precisa de ti <span class="td-count" hidden></span></h2>
+        <div class="td-decide"></div>
+      </section>
+      <section class="td-col" aria-labelledby="tdFeedH">
+        <h2 id="tdFeedH">Enquanto dormias</h2>
+        <ul class="td-feed"></ul>
+      </section>
+      <section class="td-col" aria-labelledby="tdNextH">
+        <h2 id="tdNextH">A seguir</h2>
+        <ul class="td-next"></ul>
+      </section>
+    </div>
+    <footer class="td-foot">
+      <span>Desliza para decidir · toque longo para o porquê</span>
+      <span class="td-keys"><b>←</b> rejeitar <b>→</b> aprovar <b>Esc</b> fechar</span>
+    </footer>
+  </div>
 </div>
 <div id="vignette"></div>
 <!-- marca ÓRBITA + linha de licença: fica em todas as vistas -->

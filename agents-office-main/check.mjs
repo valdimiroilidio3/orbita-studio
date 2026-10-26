@@ -48,6 +48,22 @@ await step('build: braingraph + bundle', async () => {
   if (!/ÓRBITA/.test(html)) throw new Error('shell missing');
   return out.trim().split('\n').pop();
 });
+await step('hoje: o ecrã existe no bundle — três blocos, gesto, porquê e interruptor', async () => {
+  const html = fs.readFileSync(path.join(ROOT, 'dist', 'command-centre-v2.html'), 'utf8');
+  const must = {
+    'três blocos': ['td-col-decide', 'Enquanto dormias', 'A seguir'],
+    'gesto': ['pointerdown', 'ArrowRight', 'pointerup'],
+    'porquê': ['td-why', 'why'],
+    'interruptor': ['PARAR TUDO', '/ops/stop'],
+    'tokens': ['--s4: 16px', '--t-m: 14px', '--ok:', '--risk:'],
+    'acessibilidade': ['aria-modal', 'aria-live', 'focus-visible'],
+  };
+  const falta = [];
+  for (const [what, needles] of Object.entries(must)) for (const n of needles) if (!html.includes(n)) falta.push(`${what}:${n}`);
+  if (falta.length) throw new Error('falta no bundle → ' + falta.join(', '));
+  return 'três blocos · deslizar + teclado · porquê · parar tudo · tokens e aria';
+});
+
 await step('horas: 00:00–23:59 em todo o lado, nunca AM/PM', async () => {
   const t = await import('./src/time.js');
   const d = new Date(2026, 9, 25, 13, 5, 42);
@@ -897,6 +913,50 @@ else {
         if (!actions.includes(a)) throw new Error('sem rasto de ' + a);
       }
       return `${ev.body.events.length} eventos na auditoria · fila ${q.body.fila || 0} à espera`;
+    });
+
+    await step('hoje: o que espera decisão aparece com o porquê, tirado dos dados', async () => {
+      const list = await call('GET', '/api/ops/leads?limit=1');
+      const lead = list.body.leads[0];
+      if (!lead) throw new Error('sem lead');
+      await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'whatsapp', body: 'Uma abordagem curta.' });
+      const t = await call('GET', '/api/ops/today');
+      if (t.status !== 200) throw new Error('HTTP ' + t.status);
+      if (!Array.isArray(t.body.decidir)) throw new Error('sem lista de decisões');
+      const card = t.body.decidir.find(c => c.kind === 'mensagem');
+      if (!card) throw new Error('a mensagem à espera não apareceu');
+      if (!card.why) throw new Error('cartão sem porquê');
+      if (!/avaliação|telefone|site|nicho/.test(card.why)) throw new Error('o porquê não vem dos dados: ' + card.why);
+      if (!t.body.aconteceu.length) throw new Error('nada no «aconteceu»');
+      if (typeof t.body.presenca?.parado !== 'boolean') throw new Error('sem estado do interruptor');
+      return `${t.body.decidir.length} à espera · ${t.body.aconteceu.length} eventos · porquê: ${card.why.slice(0, 48)}…`;
+    });
+
+    await step('interruptor de emergência: parado, nada sai; retomado, volta', async () => {
+      // um lead próprio para esta prova: o anterior foi para opt-out no passo 3
+      await call('POST', '/api/ops/leads', { leads: [{ name: 'Paragem Teste', website: 'https://paragem-teste.pt', phone: '+351 967 111 222' }] });
+      const list = await call('GET', '/api/ops/leads?limit=10');
+      const lead = list.body.leads.find(l => /Paragem Teste/.test(l.name));
+      if (!lead) throw new Error('não criou o lead da prova');
+      const d = await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'whatsapp', body: 'Outra.' });
+      await call('POST', `/api/ops/messages/${d.body.message.id}/approve`);
+      await call('POST', '/api/ops/stop', { stop: true, why: 'check' });
+      const blocked = await call('POST', `/api/ops/messages/${d.body.message.id}/send`);
+      if (blocked.body.delivered) throw new Error('enviou com tudo parado');
+      if (!/interruptor/.test(blocked.body.reason || '')) throw new Error('recusou sem explicar: ' + JSON.stringify(blocked.body).slice(0, 140));
+      const t = await call('GET', '/api/ops/today');
+      if (t.body.presenca.parado !== true) throw new Error('o ecrã Hoje não mostra o interruptor ligado');
+      await call('POST', '/api/ops/stop', { stop: false });
+      const after = await call('GET', '/api/ops/today');
+      if (after.body.presenca.parado !== false) throw new Error('não retomou');
+      return 'parado recusa · Hoje mostra · retoma';
+    });
+
+    await step('registo: a cadeia de hashes fecha e denuncia uma edição', async () => {
+      const v = await call('GET', '/api/ops/events/verify');
+      if (!v.body.ok) throw new Error('a cadeia partiu-se em ' + v.body.brokenAt);
+      if (v.body.count < 5) throw new Error('poucos eventos para provar: ' + v.body.count);
+      return `${v.body.count} eventos encadeados · último ${String(v.body.lastHash).slice(0, 12)}…`;
     });
 
     await step('operação: email exige token e consentimento; sem eles não sai', async () => {

@@ -157,6 +157,20 @@ Precisa de uma chave: `GOOGLE_MAPS_API_KEY` (leads) e, se quiseres pesquisa web 
 Search, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`. Sem chave o escritório diz exatamente o que falta — não
 inventa resultados. Guia completo, quotas e cuidados em **[PESQUISA.md](PESQUISA.md)**.
 
+## Hoje: um ecrã, três perguntas
+
+Abres o escritório e vês **Hoje**: o que precisa da tua decisão, o que aconteceu enquanto
+dormias e o que vai acontecer. Os agentes não são uma lista — são um anel discreto na barra, que
+pulsa quando há trabalho a acontecer.
+
+A decisão é um **gesto**: desliza para a direita para aprovar, para a esquerda para rejeitar, e
+um toque longo abre o **porquê** («escolhi este tom porque o negócio tem 4,8★ e poucas
+avaliações»). Cada gesto tem um botão equivalente e uma tecla (`←` rejeitar, `→` aprovar) — quem
+usa teclado ou leitor de ecrã não fica de fora. O cartão sai no instante em que decides e, se o
+servidor recusar, volta com a razão escrita.
+
+No topo está o **PARAR TUDO**: um toque e não sai mais nenhum envio, seja qual for o caminho.
+
 ## Operação: guardado, aprovado, com rasto
 
 Os leads, as mensagens, a fila e o registo do que aconteceu vivem numa base de dados SQLite
@@ -254,12 +268,16 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET/POST | `/api/ops/messages` | mensagens / criar rascunho |
 | POST | `/api/ops/messages/:id/approve` · `/reject` · `/send` · `/confirm` | a decisão e o envio |
 | GET | `/api/ops/queue` · `/api/ops/events` · `/api/ops/usage` | fila, auditoria, consumo |
+| GET | `/api/ops/today` | o ecrã Hoje: decisões, acontecimentos, o que vem a seguir |
+| POST | `/api/ops/stop` | interruptor de emergência (`{ "stop": true }`) |
+| GET | `/api/ops/outbox` | fila de saída: alugueres, tentativas, revisões |
+| GET | `/api/ops/events/verify` | verifica a cadeia de hashes do registo |
 
 ## Verificação
 
 ```bash
-npm run check         # 55 verificações locais (build, elenco, competências, rotinas, operação, servidor)
-npm run test:ops      # 12 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 59 verificações locais (build, elenco, competências, rotinas, operação, Hoje, servidor)
+npm run test:ops      # 17 testes da operação: base de dados em memória, nenhum serviço externo
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```
