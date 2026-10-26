@@ -1,0 +1,20 @@
+{
+  "name": "orbita-studio-integrations",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "As integrações do Órbita Studio: uma API HTTP autenticada por token para leads (OpenStreetMap), email, WhatsApp, GitHub, Instagram, Vercel, Gemini e Supabase",
+  "main": "integrations.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test:integrations": "node --test test/*.test.mjs",
+    "start": "node dist/server.mjs",
+    "dev": "node src/server.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

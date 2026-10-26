@@ -1,0 +1,9 @@
+# segredos: o .env nunca entra no git (só o .env.example)
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+npm-debug.log*
+.DS_Store

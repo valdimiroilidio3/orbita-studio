@@ -1,0 +1,12 @@
+# nada de dependências, builds ou segredos no repositório
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/*.json
+.DS_Store
+*.log
+
+# o ZIP original do projeto (o código vive em agents-office-main/)
+agents-office-main.zip
