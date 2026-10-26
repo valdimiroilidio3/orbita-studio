@@ -176,6 +176,7 @@ async function withProject(list) {
     s.source = 'project';
     s.tools = probe.tools || [];
     if (s.id === 'orbita_integrations') { s.name = 'ORBITA Integrations'; s.key = 'orbita'; s.depts = deptsFor(s.name, 'orbita'); }
+    if (s.id === 'orbita_google') { s.name = 'ORBITA Google'; s.depts = deptsFor('Pesquisa Google', 'orbita'); } // pesquisa real: leads e informação
     s.error = probe.error || '';
     extra.push(s);
   }

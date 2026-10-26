@@ -70,6 +70,13 @@ metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo
 Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
 e entregue aos agentes por `--mcp-config`; o estado real está em `GET /api/mcp`.
 
+Há um segundo servidor do projeto, `orbita_google`, com quatro ferramentas para os agentes
+procurarem por sua conta: `google_places_search` (empresas reais — o mesmo motor da gaveta LEADS),
+`google_web_search` (informação e contexto), `google_leads_saved` e `google_leads_save`. Sem chave,
+a resposta diz qual variável falta — `GOOGLE_MAPS_API_KEY` e/ou `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`
+(ver [PESQUISA.md](PESQUISA.md)). Os dois são arrancados e testados no arranque; `GET /api/mcp`
+mostra as 19 ferramentas.
+
 As rotas HTTP equivalentes vivem em `/api/*` e exigem `Authorization: Bearer $ORBITA_API_TOKEN`
 com 32+ caracteres. Guia completo, limites e o que **não** existe (Stripe, envio pela WhatsApp
 Business API): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). O segundo servidor local,

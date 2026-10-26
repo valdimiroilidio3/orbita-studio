@@ -4,6 +4,11 @@
       "type": "stdio",
       "command": "node",
       "args": ["mcp-servers/orbita-integrations/index.mjs"]
+    },
+    "orbita_google": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp-servers/orbita-google/index.mjs"]
     }
   }
 }

@@ -22,11 +22,13 @@ const cfg = loadConfig();
 const LIVE = process.env.CHECK_LIVE === '1';
 
 /* ---------- ORBITA API integrations (26 out 2026) ---------- */
-await step('integrações: token, CRM, fila de conteúdo e portas dos fornecedores', async () => {
-  const out = await sh('node', ['--test', 'integrations.test.mjs']);
-  const passed = /# pass (\d+)/.exec(out)?.[1];
-  if (!passed || !/# fail 0/.test(out)) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
-  return `${passed} testes de integração · 0 falhas`;
+await step('integrações e Google: token, CRM, fila de conteúdo, Places e pesquisa web', async () => {
+  const out = await sh('node', ['--test', 'integrations.test.mjs', 'google.test.mjs']);
+  const counts = [...out.matchAll(/# pass (\d+)/g)].map(m => +m[1]); // um ficheiro de testes por linha de resumo
+  const passed = counts.reduce((a, b) => a + b, 0);
+  const failed = [...out.matchAll(/# fail (\d+)/g)].reduce((a, m) => a + +m[1], 0);
+  if (!passed || failed) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
+  return `${passed} testes (integrações + Google) · 0 falhas`;
 });
 
 /* ---------- 1. build ---------- */
@@ -562,13 +564,19 @@ else {
       if (!Array.isArray(j.leads)) throw new Error('sem lista');
       return `${anon.status} sem token · 200 com token · ${j.leads.length} leads em ${j.storage}`;
     });
-    await step('server: os agentes recebem o servidor MCP orbita_integrations', async () => {
+    await step('server: os agentes recebem os dois servidores MCP do projeto', async () => {
       const m = await (await fetch(base + '/api/mcp')).json();
-      const s = m.servers.find(x => x.id === 'orbita_integrations');
-      if (!s) throw new Error('o servidor do projeto não aparece em /api/mcp');
-      if (s.status !== 'connected') throw new Error('estado: ' + s.status + (s.error ? ' — ' + s.error : ''));
-      if (!s.tools.includes('orbita_leads_list')) throw new Error('ferramentas: ' + s.tools.length);
-      return `${s.tools.length} ferramentas · ${s.name} (${s.status})`;
+      const get = id => {
+        const s = m.servers.find(x => x.id === id);
+        if (!s) throw new Error(id + ' não aparece em /api/mcp');
+        if (s.status !== 'connected') throw new Error(`${id}: ${s.status}${s.error ? ' — ' + s.error : ''}`);
+        return s;
+      };
+      const integ = get('orbita_integrations'), goog = get('orbita_google');
+      if (!integ.tools.includes('orbita_leads_list')) throw new Error('integrações sem ferramentas');
+      if (!goog.tools.includes('google_places_search')) throw new Error('google sem google_places_search');
+      if (goog.tools.length !== 4) throw new Error('google: ' + goog.tools.length + ' ferramentas');
+      return `${integ.tools.length} + ${goog.tools.length} ferramentas · ${integ.name} · ${goog.name}`;
     });
     await step('server: serves the office', async () => { const r = await fetch(base + '/'); const t = await r.text(); if (!/ÓRBITA/.test(t)) throw new Error('html missing'); });
     await step('server: /api/brain has the live graph', async () => { const g = await (await fetch(base + '/api/brain')).json(); if (!g.nodes.length) throw new Error('empty'); return `${g.nodes.length} linked notes`; });

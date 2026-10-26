@@ -122,3 +122,23 @@ GOOGLE_PLACES_URL=http://127.0.0.1:4601/places GOOGLE_MAPS_API_KEY=teste node se
   termos exigem para uso prolongado; o `googleMapsUri` já vem em cada lead.
 - **Privacidade.** Isto são empresas, não pessoas: morada comercial, telefone público e site. Não
   guardes dados pessoais de terceiros em `data/leads.json`.
+
+## Os agentes também procuram — servidor MCP `orbita_google`
+
+A gaveta LEADS é para ti. Para os agentes, o mesmo motor está exposto como servidor MCP local
+(`mcp-servers/orbita-google/index.mjs`), registado no `.mcp.json` e entregue aos 35 agentes por
+`--mcp-config`:
+
+| Ferramenta | O que faz | Quando é usada |
+|---|---|---|
+| `google_places_search` | empresas reais: nome, morada, telefone, site, avaliação, nota de oportunidade | prospeção de leads |
+| `google_web_search` | resultados da web com título, link e excerto | contexto, concorrência, informação |
+| `google_leads_saved` | lê os leads já guardados | antes de procurar outra vez |
+| `google_leads_save` | guarda resultados verificados (deduplicado) | depois de confirmar |
+
+Regras que o servidor impõe: nada é enviado, publicado ou contactado por estas ferramentas; sem
+chave, a chamada volta com o nome exato da variável em falta; os resultados são públicos e podem
+estar incompletos — quem lê confirma antes de contactar.
+
+Prova sem chave nenhuma, contra um Places falso local: `npm run test:integrations` (5 dos 18 testes
+são da camada Google: estado honesto, mapeamento, nota, deduplicação e o servidor MCP por stdio).
