@@ -1,3 +1,42 @@
+## 1.10.2 — 27 out 2026 · O canto esquerdo: a licença
+
+Pedido: *«licença ORBITA PROJECT 1.0.0 — coloca mesmo de forma bem inteligente, POR CHELTON MAHOZE
+no canto esquerdo»*.
+
+O que estava lá era uma **linha de 130 caracteres ao centro do fundo**, branca em
+`mix-blend-mode: difference`, a atravessar o escritório: não se lia, e ficava por cima da cena como
+uma legenda de televisão. No mesmo canto já vivia uma pastilha de assinatura, cada uma com as suas
+coordenadas absolutas.
+
+Agora o canto é **um sítio só** — `#corner`, um *flex* de duas peças — e a licença é uma **placa de
+três linhas com hierarquia**:
+
+```
+licença · PolyForm Noncommercial        ← o que é (7,5 px, versaletes, cinza)
+ÓRBITA PROJECT  1.0.0                   ← de quem é (serifa de marca, 15 px) + selo da versão
+por CHELTON MAHOZE                      ← quem o fez (8 px, versaletes, o nome em tinta)
+```
+
+- **A frase legal inteira não se perdeu**: mudou de sítio — vive no `aria-label` (licença, versão,
+  uso pessoal e interno, não para revenda, © 2026 Chelton Mahoze), onde um leitor de ecrã a lê toda.
+- **Uma superfície em vez de um truque**: creme a 82% + `backdrop-filter` + fio de 1 px, como os
+  outros elementos flutuantes. Sai o `mix-blend-mode: difference` (a placa lê-se igual sobre chão
+  claro, escuro, e no modo escuro da interface, onde o creme já é tinta escura).
+- **A assinatura** (`chelton_`, a pastilha preta que abre o repositório) passou a ser a segunda peça
+  do mesmo *flex*: sem `left/bottom` próprios, alinhada pela base com a placa.
+- **Sem colisões**: com a gaveta da sala aberta à esquerda, o canto inteiro passa para o lado dela
+  (`body.railLeft`); no calendário e no cérebro a assinatura sai (têm cabeçalho próprio) e o rodapé
+  desses painéis sobe para não ficar debaixo da placa; abaixo de 760 px o rótulo da licença recolhe.
+- **A cena continua a receber o rato**: só a assinatura tem `pointer-events: auto`.
+
+A versão `1.0.0` da placa é o rótulo do projecto (o que o dono pediu) — a versão de construção
+continua a ser a do `package.json` e a que `/api/health` devolve (1.10.2).
+
+Provas: `test:scene` ✓ com 12 asserções novas (o canto é um elemento, a placa tem três linhas, diz
+«ÓRBITA PROJECT 1.0.0» e «POR CHELTON MAHOZE», o aria-label guarda a PolyForm inteira, a frase
+antiga não voltou, a assinatura abre o repositório) — uma delas foi **vista a falhar** ao trocar
+`1.0.0` por `9.9.9`. `test:office` 49/49, `test:a11y` 21/21, build 1 410 kB.
+
 ## 1.10.1 — 27 out 2026 · A barra do compositor de tarefas
 
 Pedido: *«o chat deve ter um design bonito nesta área»* — apontando para a caixa de tarefas da

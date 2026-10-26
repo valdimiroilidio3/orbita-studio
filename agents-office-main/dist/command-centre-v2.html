@@ -49,20 +49,75 @@
   .wm i { font-style: normal; animation: wmblink 1.1s steps(1) infinite; }
   @keyframes wmblink { 50% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .wm i { animation: none; } }
-  #sahniMark { /* the mark lives outside the top bar (AJ, 17 Sep): a tile at the bottom-left of the office, out of the bar's way */
-    position: fixed; left: 18px; bottom: 9px; z-index: 23; display: inline-flex; align-items: center; gap: 7px; text-decoration: none; padding: 5px 11px 5px 10px; border-radius: 9px;
-    background: #040406; border: 1px solid #2a2a33; overflow: hidden; box-shadow: 0 10px 26px rgba(21,20,20,.18); transition: border-color .3s var(--ease), transform .3s var(--ease); }
+  #sahniMark { /* a assinatura: a pastilha preta ao lado da placa da licença, no canto esquerdo */
+    position: relative; flex: none; display: inline-flex; align-items: center; gap: 7px; text-decoration: none; padding: 5px 11px 5px 10px; border-radius: 9px;
+    background: #040406; border: 1px solid #2a2a33; overflow: hidden; box-shadow: 0 10px 26px rgba(21,20,20,.18);
+    pointer-events: auto;                    /* o resto do canto deixa passar o rato para a cena 3D */
+    transition: border-color .3s var(--ease), transform .3s var(--ease); }
   #sahniMark::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .35; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.08) 0 1px, transparent 1px 3px); }
   #sahniMark:hover { border-color: #2B6BEB; transform: translateY(-1px); }
   #sahniMark .by { margin-right: 5px; font-family: var(--ui); font-size: 8px; letter-spacing: .2em; font-weight: 700; color: #8a8a94; }
   #sahniMark .wm { font-size: 14px; }
-  body.railLeft #sahniMark { left: calc(min(400px, 92vw) + 18px); bottom: auto; top: 64px; } /* a department in focus docks its chat rail on the left and the licence line sits centred: the mark moves to the top-left of the scene, under the bar (OVERVIEW has moved right) */
-  body.calOpen #sahniMark, body.brainOpen #sahniMark { display: none; } /* the overlays carry their own headers; the licence line still rides over them */
-  #licence { position: fixed; left: 50%; transform: translateX(-50%); bottom: 9px; z-index: 60; display: inline-flex; align-items: center; gap: 9px; pointer-events: none; user-select: none;
-    font-family: var(--ui); font-size: 9px; letter-spacing: .08em; color: #fff; mix-blend-mode: difference; opacity: .55; white-space: nowrap; }
-  #licence .wm { font-size: 10.5px; text-shadow: none; }
-  #licence .wm i { animation: none; }
-  body.dark #licence { mix-blend-mode: normal; color: rgba(236,234,227,.62); }
+  /* ---------- o canto esquerdo: a licença e a assinatura (27 out 2026) ----------
+     Pedido: «licença ÓRBITA PROJECT 1.0.0 — coloca mesmo de forma bem inteligente, POR CHELTON
+     MAHOZE no canto esquerdo». Antes a licença era UMA linha de 130 caracteres ao centro do fundo,
+     em mix-blend-mode: difference, branca sobre o escritório — atravessava a cena, colidia com a
+     pastilha da assinatura que já vivia nesse canto, e não se lia. Agora o canto é um sítio só:
+     uma PLACA de três linhas com hierarquia (o que é · de quem é · de quem é a autoria) e a
+     assinatura ao lado, alinhadas por flex — sem coordenadas mágicas por elemento, e com a
+     frase legal inteira no aria-label (a única coisa que se perdeu foi o comprimento). */
+  #corner {
+    position: fixed; left: 18px; bottom: 9px; z-index: 60;
+    display: flex; align-items: flex-end; gap: 10px;
+    pointer-events: none; user-select: none;
+    transition: left .45s var(--ease);
+  }
+  #licence {
+    display: inline-flex; flex-direction: column; gap: 2px;
+    padding: 7px 12px 8px; border-radius: 12px;
+    background: color-mix(in srgb, var(--cream) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    border: 1px solid var(--hairline);
+    box-shadow: 0 10px 26px -16px rgba(21,20,20,.5);
+    color: var(--ink);
+  }
+  #licence .lc-k {
+    font-family: var(--ui); font-size: 7.5px; letter-spacing: .19em; font-weight: 700;
+    text-transform: uppercase; color: var(--grey); line-height: 1.4;
+  }
+  #licence .lc-n {
+    display: flex; align-items: baseline; gap: 7px;
+    font-family: var(--serif); font-size: 15px; letter-spacing: .05em; line-height: 1.02;
+    text-transform: uppercase; color: var(--ink); white-space: nowrap;
+  }
+  #licence .lc-v {
+    font-family: var(--ui); font-size: 8.5px; font-weight: 700; letter-spacing: .1em;
+    font-variant-numeric: tabular-nums; color: var(--grey);
+    border: 1px solid var(--hairline); border-radius: 99px; padding: 1px 6px 2px;
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+  #licence .lc-by {
+    font-family: var(--ui); font-size: 8px; letter-spacing: .17em; font-weight: 600;
+    text-transform: uppercase; color: var(--grey); line-height: 1.4;
+  }
+  #licence .lc-by b { color: var(--ink); font-weight: 700; }
+  /* com a gaveta da sala aberta à esquerda, o canto passa para o lado dela (uma regra, os dois) */
+  body.railLeft #corner { left: calc(min(400px, 92vw) + 18px); }
+  /* no calendário e no cérebro a placa continua (é a licença), mas a assinatura sai: os painéis já
+     têm o seu cabeçalho */
+  body.calOpen #sahniMark, body.brainOpen #sahniMark { display: none; }
+  /* as vistas que já escrevem no canto esquerdo sobem para dar lugar à placa (o canto fica em cima
+     delas: é a licença, e uma licença não se esconde atrás de um rodapé de atalhos) */
+  body.calOpen .cv-rail { padding-bottom: 78px; }
+  body.calOpen .cv-wrap { padding-bottom: 46px; }
+  body.brainOpen .bv-foot { bottom: 76px; }
+  @media (max-width: 760px) {
+    #licence { padding: 6px 10px 7px; }
+    #licence .lc-k { display: none; }
+    #licence .lc-n { font-size: 13px; }
+    #corner { gap: 8px; left: 12px; bottom: 8px; }
+  }
+  @media (max-width: 520px) { #sahniMark { display: none; } }
   #topbar .brand .ver { font-size: 13px; letter-spacing: .16em; color: var(--grey); vertical-align: 3px; margin-left: 2px; }
   /* INDUSTRY PROFILE (12 Sep 2026): the demo company beside the brand */
   #topbar .brand .co { font-size: 15px; letter-spacing: .02em; color: var(--grey); margin-left: 12px; white-space: nowrap; }
@@ -2358,8 +2413,19 @@
 </div>
 <div id="vignette"></div>
 <!-- marca ÓRBITA + linha de licença: fica em todas as vistas -->
-<a class="sahni" id="sahniMark" href="https://github.com/valdimiroilidio3/orbita-studio" target="_blank" rel="noopener" title="Órbita — criado por Chelton Mahoze"><span class="by">POR</span><span class="wm">chelton<i>_</i></span></a>
-<div id="licence" aria-label="licença"><span class="wm">ÓRBITA<i>_</i></span><span>© 2026 Chelton Mahoze · Órbita · criado por Chelton Mahoze · licença PolyForm Noncommercial 1.0.0 · uso pessoal e interno · não para revenda</span></div>
+<!-- 27 out 2026 · O CANTO ESQUERDO. A licença e a assinatura, num sítio só: a placa diz o que é
+     (Órbita Project, versão 1.0.0), de quem é a licença (PolyForm Noncommercial) e de quem é o
+     trabalho (por Chelton Mahoze); a pastilha ao lado abre o repositório. A frase legal inteira
+     vive no aria-label — está toda lá para quem usa um leitor de ecrã, e não em 130 caracteres a
+     atravessar o escritório. -->
+<div id="corner">
+  <div id="licence" role="contentinfo" aria-label="Licença — Órbita Project 1.0.0, por Chelton Mahoze. Licença PolyForm Noncommercial 1.0.0: uso pessoal e interno, não para revenda. © 2026 Chelton Mahoze.">
+    <span class="lc-k">licença · PolyForm Noncommercial</span>
+    <span class="lc-n">Órbita Project<b class="lc-v">1.0.0</b></span>
+    <span class="lc-by">por <b>Chelton Mahoze</b></span>
+  </div>
+  <a class="sahni" id="sahniMark" href="https://github.com/valdimiroilidio3/orbita-studio" target="_blank" rel="noopener" title="Órbita Project — por Chelton Mahoze. Abrir o repositório."><span class="wm">chelton<i>_</i></span></a>
+</div>
 <div id="rail" style="display:none">
   <div id="railDept" class="rview">
     <div id="railHeader"></div>

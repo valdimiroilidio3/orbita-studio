@@ -274,6 +274,34 @@ if (marca) {
 }
 ok(!/BETA/.test(doc.title.toUpperCase()), `o título da página ainda diz BETA: ${doc.title}`);
 
+/* ---------- o canto esquerdo: licença e assinatura (27 out 2026) ----------
+   O dono pediu «licença ÓRBITA PROJECT 1.0.0 — coloca mesmo de forma bem inteligente, POR CHELTON
+   MAHOZE no canto esquerdo». Antes era uma linha de 130 caracteres ao centro, branca em
+   mix-blend-mode sobre o escritório. Agora é uma placa de três linhas num canto só, com a frase
+   legal inteira no aria-label. Aqui prova-se que está lá, que diz o que tem de dizer, que o canto
+   é UM elemento (não duas coordenadas absolutas a poderem colidir) e que a assinatura continua a
+   abrir o repositório. */
+{
+  const canto = doc.getElementById('corner');
+  ok(!!canto, 'falta o canto esquerdo (#corner)');
+  const placa = doc.getElementById('licence');
+  ok(!!placa, 'falta a placa da licença');
+  ok(!!canto && !!placa && canto.contains(placa), 'a licença tem de viver dentro do canto');
+  const linhas = placa ? [...placa.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()) : [];
+  ok(linhas.length === 3, `a placa devia ter três linhas (tem ${linhas.length}): ${linhas.join(' | ')}`);
+  const nome = (linhas[1] || '').toUpperCase();
+  ok(/ÓRBITA PROJECT/.test(nome) && /1\.0\.0/.test(nome), `a placa tem de dizer «ÓRBITA PROJECT 1.0.0» — diz «${linhas[1]}»`);
+  ok(/POR CHELTON MAHOZE/i.test(linhas[2] || ''), `a placa tem de dizer «POR CHELTON MAHOZE» — diz «${linhas[2]}»`);
+  const dito = (placa && placa.getAttribute('aria-label')) || '';
+  ok(/PolyForm Noncommercial 1\.0\.0/.test(dito), 'o aria-label tem de manter a licença inteira (PolyForm Noncommercial 1.0.0)');
+  ok(/Chelton Mahoze/.test(dito) && /2026/.test(dito), 'o aria-label tem de manter a autoria e o ano');
+  // a linha antiga (o parágrafo de 130 caracteres a atravessar a cena) não pode voltar
+  ok(!/não para revenda/.test((placa && placa.textContent) || ''), 'a placa não pode voltar a ser o parágrafo inteiro');
+  const marcaAutor = doc.getElementById('sahniMark');
+  ok(!!marcaAutor && canto.contains(marcaAutor), 'a assinatura tem de estar no mesmo canto');
+  ok((marcaAutor.getAttribute('href') || '').includes('github.com/valdimiroilidio3/orbita-studio'), 'a assinatura tem de continuar a abrir o repositório');
+}
+
 // O compositor: um campo que cresce, uma seta que só responde quando há texto, Shift+Enter.
 const mIn = doc.getElementById('mIn'), mSend = doc.getElementById('mSend');
 ok(!!mIn && !!mSend, 'o compositor da conversa desapareceu');
