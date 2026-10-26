@@ -225,6 +225,39 @@ if (indice && win.CC && win.CC.a11y) {
   win.CC.a11y.close();
 }
 
+/* ---------- a marca e a conversa (1.9.7, 26 out 2026) ---------- */
+// A marca: saiu o «BETA», entrou «ÓRBITA AGENTES» — e não muda quando o escritório fica ao vivo.
+const marca = doc.querySelector('#topbar .brand');
+ok(!!marca, 'a marca desapareceu da barra');
+if (marca) {
+  const texto = marca.textContent.replace(/\s+/g, ' ').trim().toUpperCase();
+  ok(texto === 'ÓRBITA AGENTES', `a marca devia ler-se «ÓRBITA AGENTES» e lê «${texto}»`);
+  ok(!/BETA/.test(texto), 'o «BETA» continua na marca');
+}
+ok(!/BETA/.test(doc.title.toUpperCase()), `o título da página ainda diz BETA: ${doc.title}`);
+
+// O compositor: um campo que cresce, uma seta que só responde quando há texto, Shift+Enter.
+const mIn = doc.getElementById('mIn'), mSend = doc.getElementById('mSend');
+ok(!!mIn && !!mSend, 'o compositor da conversa desapareceu');
+if (mIn && mSend) {
+  ok(mIn.tagName === 'TEXTAREA', `o campo da conversa devia aceitar mais de uma linha (é ${mIn.tagName})`);
+  ok(mSend.tagName === 'BUTTON' && mSend.getAttribute('aria-label'), 'a seta de enviar tem de ser um botão com nome');
+  ok(mSend.disabled === true, 'com o campo vazio, a seta começa apagada');
+  mIn.value = 'olá';
+  mIn.dispatchEvent(new win.Event('input', { bubbles: true }));
+  ok(mSend.disabled === false, 'ao escrever, a seta tem de acordar');
+  const enter = new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  mIn.dispatchEvent(enter);
+  ok(enter.defaultPrevented === true, 'o Enter devia ser tratado pelo compositor (e não mudar de linha)');
+  mIn.value = 'duas linhas';
+  const shiftEnter = new win.KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true });
+  mIn.dispatchEvent(shiftEnter);
+  ok(shiftEnter.defaultPrevented === false, 'Shift + Enter tem de deixar escrever uma linha nova');
+  ok(doc.getElementById('mChat').querySelector('.m-foot .m-hint'), 'falta a linha de ajuda do compositor');
+  mIn.value = ''; mIn.dispatchEvent(new win.Event('input', { bubbles: true }));
+  ok(mSend.disabled === true, 'ao esvaziar, a seta volta a apagar-se');
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
@@ -238,6 +271,6 @@ const resumoPlantas = (() => {
   const up = ps.filter(p => p.kind === 'upright').length;
   return `${ps.length} plantas (${up} verticais · ${ps.length - up} de folha larga, ${Math.min(...alturas).toFixed(1)}–${Math.max(...alturas).toFixed(1)} de altura)`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, espelho acessível com 7 salas + 35 agentes (tecla L), sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

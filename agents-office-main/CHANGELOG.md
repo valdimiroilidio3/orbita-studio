@@ -1,3 +1,37 @@
+## 1.9.7 — 26 out 2026 · «ÓRBITA AGENTES», e a conversa
+
+Pedido 25: *«remove o BETA e coloca ÓRBITA AGENTES; o lugar onde se escrevem as mensagens deve ficar ainda mais elegante, inspira-te no ChatGPT, com mais vibe Apple design»*.
+
+### A marca
+
+- **Saiu o «BETA», entrou «ÓRBITA AGENTES».** A etiqueta da barra lia-se «V1» e, quando o escritório ficava ao vivo, o JavaScript **reescrevia-a para «BETA»** — o produto mudava de nome conforme o servidor acordasse. Agora é «ÓRBITA AGENTES», uma palavra só, e **fica quieta**: a linha que a trocava passou a mudar apenas o título da página.
+- **O título também.** `Órbita — escritório de agentes` → **`Órbita Agentes — escritório de agentes`**.
+
+### A conversa (o sítio onde se escrevem as mensagens)
+
+Referência declarada: o ChatGPT. O que se copia é a **calma**; o que é nosso é a tipografia SF, o vidro e as cores da casa.
+
+- **O compositor deixou de ser uma caixa de uma linha.** Era um `<input>` com um botão «ENVIAR» ao lado — a versão mais barata possível de uma conversa. Agora é um **campo que cresce com o texto** (até 132 px, depois rola), com a seta de enviar num círculo escuro do lado direito e a **tecla Enter a enviar** (Shift + Enter muda de linha, como no ChatGPT). Com o campo vazio a seta está apagada e não responde: o botão diz a verdade sobre o que pode fazer.
+- **As sugestões subiram para cima do compositor** e passaram a pílulas de vidro em SF — antes eram sete botões de contorno que pareciam formulário.
+- **Uma linha de ajuda discreta** por baixo (`Enter envia · Shift + Enter nova linha`). Quem não sabe, aprende; quem sabe, não repara.
+- **As mensagens.** A resposta do agente é um cartão claro com um canto mais apertado do lado de quem fala; a fala do dono passou de **bloco preto** a **cinza baço** (numa coluna de 400 px, três blocos pretos seguidos pesam mais do que informam) — o escuro fica para o modo escuro. Entram uma animação de 0,3 s na chegada de cada mensagem, um desvanecimento no topo da lista (o texto desaparece, não é cortado a direito) e uma barra de deslocamento fina.
+- **Os indicadores de trabalho** («Helena Prado está a pensar») deixaram de ser monospace cinzento e passaram a uma linha pequena com um ponto a pulsar.
+- **Os separadores «AO VIVO / CONVERSA»** passam a **«Ao vivo / Conversa»** num *segmented control* (a mesma leitura do menu da 1.9.3). Isto apanhou uma incoerência minha: na 1.9.5 escrevi nos testes «o texto é PT-PT e conta o que está lá» e deixei dois rótulos em maiúsculas de 10 px com `letter-spacing: .14em` — exactamente o que a 1.9.3 tinha vindo corrigir no menu.
+- **A saudação de abertura** já não diz «pede trabalho na barra à direita» (uma barra que já não existe há versões) — diz o que se faz: escrever aqui em baixo.
+- **Acessibilidade a acompanhar:** o campo tem `<label>` próprio (`.sr-only`), a seta tem `aria-label` e `title`, e o `textarea` continua a travar os atalhos da cena enquanto se escreve.
+
+### Provas — e, desta vez, olhos
+
+- **Vi o resultado.** Até aqui todas as entregas diziam «não há Chrome nesta máquina». Hoje há: instalei um Chromium headless (`@sparticuz/chromium`, sem tocar no `package.json`) e o `playwright-core` que já estava no projecto, e **abri a página a 1× e 2×**. O WebGL não corre neste sandbox (SwiftShader sem bibliotecas de sistema), por isso a captura da cena falha — mas a **conversa é DOM puro** e pôde ser fotografada com o CSS real: `docs/conversa-clara.png` e `docs/conversa-escura.png`.
+- **O que as capturas mostraram** (e que os testes não mostrariam): o campo crescia mas o botão ficava colado ao fundo; o separador antigo cortava a lista com uma linha; e, à segunda volta, a linha de ajuda caía por baixo da marca do canto. Dois dos três foram corrigidos por olho.
+- **`test:scene` — ✓ 35 postos** … e agora com **a marca e o compositor**: exige que a barra leia «ÓRBITA AGENTES» (e falha se voltar a dizer «BETA»), que o campo seja `<textarea>`, que a seta comece apagada e acorde ao escrever, que Enter seja tratado pelo compositor e que **Shift + Enter não** seja apanhado.
+- `test:office` **25/25** · `test:a11y` **21/21** · `ops.test` **71/71** · `integrations` **18/18** · `check.mjs` **94/95** (só `smoke: browser`) · build **1333 KB** + `mesa.html` 86 KB.
+
+### Limitações, declaradas
+
+- **A cena 3D continua sem captura**: neste sandbox o WebGL não arranca (falta o conjunto de bibliotecas de sistema do Chromium; só consegui as do NSS). O que ficou provado com olhos é a interface em HTML — a conversa, a barra, os separadores. A cena continua a ser provada pelos testes.
+- **As capturas são de uma folha de contacto** (o `shell.html` real com uma conversa de exemplo e sem a cena por trás), não do escritório ao vivo: o objectivo era julgar o desenho da conversa, e a cena não muda nada nele.
+
 ## 1.9.6 — 26 out 2026 · As plantas: forma em vez de esferas
 
 Pedido 24: *«dá melhorias nível Apple design 3D nas plantas, dando total realismo nelas»*.

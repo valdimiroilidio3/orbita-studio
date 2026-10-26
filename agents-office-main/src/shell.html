@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
 <meta charset="utf-8">
-<title>Órbita — escritório de agentes</title>
+<title>Órbita Agentes — escritório de agentes</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -356,24 +356,70 @@
   #rail .mh-name .star { color: #C8A438; font-size: 16px; }
   #rail .mh-role { font-size: 10.5px; letter-spacing: .14em; color: var(--grey); text-transform: uppercase; }
   #rail .mh-tag { padding: 4px 18px 0; font-size: 12px; color: var(--grey); line-height: 1.35; }
-  #rail .mtabs { display: flex; gap: 4px; padding: 12px 18px 0; border-bottom: 1px solid var(--hairline); }
-  #rail .mtabs button {
-    font-family: var(--ui); font-size: 10.5px; letter-spacing: .14em; font-weight: 600;
-    background: none; border: 0; border-bottom: 2px solid transparent;
-    padding: 8px 12px; cursor: pointer; color: var(--grey); transition: all .4s var(--ease);
+  /* 26 out 2026: os dois separadores passam a «segmented control» — a mesma leitura do menu.
+     Caixa de frase em SF, a opção escolhida numa pastilha branca com sombra de 1 px. */
+  #rail .mtabs {
+    display: flex; gap: 2px; flex: none;
+    margin: 12px 16px 0; padding: 3px; border-radius: 11px;
+    background: rgba(21,20,20,.055); box-shadow: inset 0 0 0 1px rgba(21,20,20,.05);
   }
-  #rail .mtabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
-  #rail .mtabs { display: flex; } /* 26 out 2026: conversa + painel ao vivo */
+  #rail .mtabs button {
+    flex: 1; font-family: var(--sf); font-size: 12px; font-weight: 550; letter-spacing: -.004em;
+    background: transparent; border: 0; border-radius: 8px;
+    padding: 6px 8px; cursor: pointer; color: var(--grey);
+    transition: background-color .2s var(--ease), color .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  #rail .mtabs button:hover { color: var(--ink); }
+  #rail .mtabs button.on {
+    color: var(--ink); background: #fff;
+    box-shadow: 0 1px 2px rgba(21,20,20,.10), 0 0 0 .5px rgba(21,20,20,.06);
+  }
+  body.dark #rail .mtabs { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  body.dark #rail .mtabs button.on { background: rgba(255,255,255,.14); color: var(--ink); box-shadow: none; }
   #rail .mpane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  #mMsgs { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 9px;
-    scroll-behavior: smooth; min-height: 120px; border-top: 1px solid var(--hairline); margin-top: 10px; }
-  .m-agent { align-self: flex-start; max-width: 86%; background: #fff;
-    border: 1px solid var(--hairline); border-radius: 14px 14px 14px 4px;
-    padding: 9px 12px; font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; }
-  .m-user { align-self: flex-end; max-width: 86%; background: var(--ink); color: var(--cream);
-    border-radius: 14px 14px 4px 14px; padding: 9px 12px; font-size: 12.5px; line-height: 1.45; }
-  .m-work { font-family: Menlo, monospace; font-size: 10.5px; color: var(--grey); padding: 0 2px; }
-  .m-work .wi { margin-right: 5px; }
+  /* ---------- o registo da conversa (26 out 2026) ----------
+     Referência declarada: o ChatGPT. O que se copia é a CALMA — muito ar, bolhas com um canto
+     mais apertado do lado de quem fala, a resposta do agente em cartão claro e a do dono em
+     cinza baço (não em bloco escuro: numa coluna de 400 px, três blocos pretos seguidos pesam
+     mais do que informam). O que é nosso: a tipografia SF, o desvanecimento no topo e as cores
+     da casa. */
+  #mMsgs {
+    flex: 1; overflow-y: auto; scroll-behavior: smooth; min-height: 120px;
+    padding: 14px 14px 10px; margin-top: 4px;
+    display: flex; flex-direction: column; gap: 8px;
+    /* o texto desaparece suavemente por baixo dos separadores, em vez de ser cortado a direito */
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px);
+    mask-image: linear-gradient(180deg, transparent 0, #000 14px);
+    overscroll-behavior: contain;
+  }
+  #mMsgs::-webkit-scrollbar { width: 8px; }
+  #mMsgs::-webkit-scrollbar-thumb { background: rgba(21,20,20,.14); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+  #mMsgs::-webkit-scrollbar-thumb:hover { background: rgba(21,20,20,.24); background-clip: padding-box; }
+  #mMsgs::-webkit-scrollbar-track { background: transparent; }
+  .m-agent, .m-user, .m-file, .m-appr {
+    animation: msgIn .30s var(--ease) both;
+    font-family: var(--sf); letter-spacing: -.004em;
+  }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(5px) scale(.995); } }
+  .m-agent {
+    align-self: flex-start; max-width: 88%; background: #fff;
+    border: 1px solid var(--hairline); border-radius: 18px 18px 18px 6px;
+    padding: 10px 13px; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap;
+    box-shadow: 0 1px 2px rgba(21,20,20,.04);
+  }
+  .m-user {
+    align-self: flex-end; max-width: 86%;
+    background: rgba(21,20,20,.055); color: var(--ink);
+    border: 1px solid transparent; border-radius: 18px 18px 6px 18px;
+    padding: 10px 13px; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap;
+  }
+  .m-work {
+    align-self: flex-start; display: flex; align-items: center; gap: 6px;
+    font-family: var(--sf); font-size: 10.5px; letter-spacing: .01em; color: var(--grey);
+    padding: 1px 4px;
+  }
+  .m-work .wi { font-size: 9px; opacity: .8; animation: workPulse 1.4s var(--ease) infinite; }
+  @keyframes workPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
   .m-file { align-self: flex-start; width: 88%; background: #fff; border: 1px solid var(--hairline);
     border-radius: 12px; padding: 9px 12px; cursor: pointer; transition: box-shadow .4s var(--ease); }
   .m-file:hover { box-shadow: 0 6px 18px rgba(21,20,20,.10); }
@@ -444,19 +490,55 @@
   .mk-mail .ml-body { border-top: 1px solid var(--hairline); margin-top: 8px; padding-top: 8px;
     font-family: Menlo, monospace; font-size: 9.5px; line-height: 1.55; color: rgba(21,20,20,.75);
     white-space: pre-wrap; }
-  #mChips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 8px; }
-  #mChips button { font-size: 10.5px; border: 1px solid var(--hairline); background: none;
-    border-radius: 99px; padding: 5px 11px; cursor: pointer; color: var(--ink);
-    transition: all .4s var(--ease); }
-  #mChips button:hover { background: var(--ink); color: var(--cream); border-color: var(--ink); }
-  #rail .mInput { display: flex; gap: 8px; padding: 10px 18px 16px; border-top: 1px solid var(--hairline); }
-  #rail .mInput input { flex: 1; font-family: var(--ui); font-size: 12.5px; padding: 9px 13px;
-    border: 1px solid var(--hairline); border-radius: 99px; background: #fff; outline: none;
-    transition: border-color .4s var(--ease); }
-  #rail .mInput input:focus { border-color: var(--ink); }
-  #rail .mInput button { font-size: 10.5px; letter-spacing: .12em; font-weight: 600;
-    background: var(--ink); color: var(--cream); border: 1px solid var(--ink);
-    border-radius: 99px; padding: 0 18px; cursor: pointer; }
+  /* o rodapé: as sugestões, o compositor e a linha de ajuda, sobre um desvanecimento —
+     o resto da cena passa por baixo, mas o texto não se cruza com ele */
+  .m-foot {
+    flex: none; padding: 8px 14px 12px;
+    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--cream) 88%, transparent) 34%);
+  }
+  #mChips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px 9px; }
+  #mChips button {
+    font-family: var(--sf); font-size: 11.5px; font-weight: 500; letter-spacing: -.004em;
+    color: var(--ink); background: rgba(21,20,20,.045); border: 1px solid transparent;
+    border-radius: 99px; padding: 6px 11px; cursor: pointer;
+    transition: background-color .2s var(--ease), transform .16s var(--ease), opacity .2s var(--ease);
+  }
+  #mChips button:hover { background: rgba(21,20,20,.10); }
+  #mChips button:active { transform: scale(.97); }
+
+  #rail .mInput {
+    display: flex; align-items: flex-end; gap: 6px;
+    padding: 6px 6px 6px 14px; border-radius: 24px;
+    background: #fff; border: 1px solid var(--hairline);
+    box-shadow: 0 1px 2px rgba(21,20,20,.05), 0 12px 28px -18px rgba(21,20,20,.55);
+    transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  #rail .mInput:focus-within {
+    border-color: color-mix(in srgb, var(--accent) 52%, transparent);
+    box-shadow: 0 0 0 4px var(--accent-soft), 0 12px 28px -18px rgba(21,20,20,.55);
+  }
+  #rail .mInput textarea {
+    flex: 1; min-width: 0; appearance: none; -webkit-appearance: none;
+    font-family: var(--sf); font-size: 13px; line-height: 1.45; letter-spacing: -.004em;
+    color: var(--ink); background: none; border: 0; outline: none; resize: none;
+    padding: 8px 0 7px; max-height: 132px; min-height: 21px; overflow-y: auto;
+  }
+  #rail .mInput textarea::placeholder { color: var(--grey); opacity: .9; }
+  #rail .mInput #mSend {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center; border: 0; cursor: pointer;
+    background: var(--accent-bg); color: var(--accent-fg);
+    transition: transform .16s var(--ease), opacity .2s var(--ease), background-color .2s var(--ease);
+  }
+  #rail .mInput #mSend svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  #rail .mInput #mSend:hover:not(:disabled) { transform: translateY(-1px); }
+  #rail .mInput #mSend:active:not(:disabled) { transform: scale(.93); }
+  #rail .mInput #mSend:disabled { opacity: .28; cursor: default; }
+  .m-hint {
+    font-family: var(--sf); font-size: 10px; letter-spacing: .01em; color: var(--grey);
+    text-align: center; padding: 7px 2px 0; opacity: .8;
+  }
+  .m-hint b { font-weight: 600; color: var(--ink); opacity: .75; }
   /* activity pane */
   #mAct { overflow-y: auto; padding: 12px 16px 18px; gap: 10px; }
   /* painel de inspeção (26 out 2026) — o monitor é o único bloco escuro: é um ecrã, não um cartão */
@@ -1399,14 +1481,25 @@
   body.dark #topbar { background: color-mix(in srgb, var(--cream) 90%, transparent); }
   body.dark .badge, body.dark .pill, body.dark .connl, body.dark .mcp-tip, body.dark #railHeader, body.dark #board, body.dark #tpanel,
   body.dark .tp-cmd, body.dark .tp-menu, body.dark .tk, body.dark .tp-row, body.dark .m-agent, body.dark .m-file, body.dark #mStats .st,
-  body.dark #rail .mInput input, body.dark .mk, body.dark #railAgent, body.dark .tp-brain, body.dark .readlab { background: #1E1F24; color: var(--ink); }
+  body.dark .mk, body.dark #railAgent, body.dark .tp-brain, body.dark .readlab { background: #1E1F24; color: var(--ink); }
+  /* 26 out 2026 · conversa: no escuro, o cartão do agente é o #1E1F24 da casa e a fala do dono é
+     um cinza acima do fundo — nunca um bloco claro, que numa coluna estreita grita. */
+  body.dark #rail .mInput { background: #1E1F24; border-color: var(--hairline); box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -18px rgba(0,0,0,.8); }
+  body.dark #rail .mInput textarea { color: var(--ink); }
+  body.dark #rail .mInput #mSend { background: #F5F5F7; color: #15161A; }
+  body.dark #rail .mInput #mSend:disabled { opacity: .22; }
+  body.dark .m-user { background: rgba(255,255,255,.10); color: var(--ink); }
+  body.dark #mChips button { background: rgba(255,255,255,.07); color: var(--ink); }
+  body.dark #mChips button:hover { background: rgba(255,255,255,.13); }
+  body.dark .m-foot { background: linear-gradient(180deg, transparent, rgba(21,22,26,.92) 34%); }
+  body.dark #mMsgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); background-clip: padding-box; }
   body.dark .badge, body.dark .pill, body.dark .connl, body.dark .tk, body.dark .tp-row, body.dark .m-agent, body.dark .m-file, body.dark #mStats .st, body.dark .mk, body.dark .tp-cmd { border-color: var(--hairline); }
   body.dark #rail { background: color-mix(in srgb, #15161A 82%, transparent); }
   body.dark #rail.left { box-shadow: 30px 0 80px rgba(0,0,0,.45); }
   body.dark #boardDim { background: rgba(15,16,19,.72); }
   body.dark .tp-in, body.dark .tp-menu button { color: var(--ink); }
   body.dark .tp-menu button:hover { background: rgba(236,234,227,.08); }
-  body.dark .tp-add, body.dark #rail .mInput button, body.dark #overviewBtn, body.dark .m-user, body.dark .mk-ad .ad-cta, body.dark .m-appr .a-yes { background: var(--ink); color: #15161A; border-color: var(--ink); }
+  body.dark .tp-add, body.dark #overviewBtn, body.dark .mk-ad .ad-cta, body.dark .m-appr .a-yes { background: var(--ink); color: #15161A; border-color: var(--ink); }
   body.dark .tp-chip.on { background: var(--ink); color: #15161A; border-color: var(--ink); }
   body.dark .tp-chip.on b { color: #15161A; }
   body.dark .tp-bar, body.dark .tk-bar { background: rgba(236,234,227,.12); }
@@ -1901,7 +1994,9 @@
 <p id="sceneHelp" class="sr-only">Uma vista 3D de um escritório: seis salas à volta de um cérebro central, cada uma com o seu chão de vidro colorido e as suas secretárias com agentes. Tudo o que aqui se vê também está escrito em texto: prime a tecla L, ou a ligação «Saltar para a lista do escritório», para abrir a lista das salas e dos agentes e os percorrer com Tab e Enter.</p>
 <div id="hud"></div>
 <div id="topbar">
-  <span class="brand">ÓRBITA <span class="ver">V1</span></span>
+  <!-- 26 out 2026: a marca diz o que o produto é. Saiu o «BETA» e o «V1»: a etiqueta passa a
+       ler-se «ÓRBITA AGENTES», e é estável — não muda quando o servidor fica ao vivo. -->
+  <span class="brand">ÓRBITA <span class="ver">AGENTES</span></span>
   <div id="topconn"></div>
   <span class="sp"></span>
   <div id="topmodels"></div>
@@ -1997,15 +2092,27 @@
     <div id="mRt" class="mrt" hidden></div>
     <div id="mhLive" class="mh-live" hidden></div>
     <div class="mtabs">
-      <button data-tab="live" class="on">AO VIVO</button>
-      <button data-tab="chat">CONVERSA</button>
+      <button data-tab="live" class="on">Ao vivo</button>
+      <button data-tab="chat">Conversa</button>
     </div>
+    <!-- 26 out 2026 · A CONVERSA. O sítio onde se escrevem as mensagens deixou de ser uma
+         caixa de uma linha com um botão «ENVIAR» ao lado e passou a ser um compositor: um
+         campo que cresce com o texto, uma seta redonda para enviar, e as sugestões por cima
+         em pílulas. Escreve-se aqui como se escreve numa conversa — Enter envia,
+         Shift + Enter muda de linha. Nenhum id mudou (#mIn, #mSend, #mChips, #mMsgs). -->
     <div id="mChat" class="mpane" style="display:none">
-      <div id="mMsgs"></div>
-      <div id="mChips"></div>
-      <div class="mInput">
-        <input id="mIn" placeholder="Escreve a este agente… (adicionar tarefa: … · todos os dias úteis às 8h, … · aprovar / rejeitar)" autocomplete="off">
-        <button id="mSend">ENVIAR</button>
+      <div id="mMsgs" class="m-log"></div>
+      <div class="m-foot">
+        <div id="mChips"></div>
+        <div class="mInput">
+          <label class="sr-only" for="mIn">Mensagem para o agente</label>
+          <textarea id="mIn" rows="1" placeholder="Escreve uma mensagem…" autocomplete="off" spellcheck="false"
+            title="adicionar tarefa: … · todos os dias úteis às 8h, … · aprovar / rejeitar"></textarea>
+          <button id="mSend" type="button" disabled aria-label="enviar mensagem" title="enviar (Enter)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.2V3.4M3.6 7.8 8 3.4l4.4 4.4"/></svg>
+          </button>
+        </div>
+        <p class="m-hint"><b>Enter</b> envia · <b>Shift + Enter</b> nova linha</p>
       </div>
     </div>
     <div id="mAct" class="mpane" style="display:none">

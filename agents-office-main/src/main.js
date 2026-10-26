@@ -698,7 +698,7 @@ function ensureChat(id) {
   const a = agentInfo(id);
   // sem texto de exemplo: diz quem é (nome e função reais) e como se trabalha aqui
   chatHist[id] = [
-    { who: 'agent', text: `${a.role || 'Agente'} · ${a.deptName}. ${a.tagline || ''} Pede trabalho na barra à direita ou abre AO VIVO para ver o que está registado.` },
+    { who: 'agent', text: `${a.role || 'Agente'} · ${a.deptName}. ${a.tagline || ''} Escreve aqui em baixo, ou abre «Ao vivo» para ver o que está registado.` },
   ];
 }
 function chatPush(id, msg) {
@@ -932,7 +932,7 @@ function sendChat(text) {
   if (!id || !text.trim()) return;
   const r = R[id];
   chatPush(id, { who: 'user', text });
-  document.getElementById('mIn').value = '';
+  composerClear();
   const low = text.toLowerCase();
   setTimeout(() => {
     if (tasks && tasks.pendingReject(id)) { tasks.rejectLive(id, text); return; } // V3.5: the line after REJECT is the note the agent reworks with
@@ -978,12 +978,33 @@ function sendChat(text) {
       });
   }, 450 + Math.random() * 500);
 }
-document.getElementById('mSend').addEventListener('click', () =>
-  sendChat(document.getElementById('mIn').value));
-document.getElementById('mIn').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendChat(e.target.value);
-  e.stopPropagation();
+/* ---------- o compositor da conversa (26 out 2026) ----------
+   Três coisas que uma caixa de uma linha não sabia fazer: crescer com o texto (até 132 px,
+   depois rola), aceitar uma segunda linha com Shift + Enter, e dizer quando está vazia — a
+   seta fica apagada e não responde. Enter envia, como em qualquer conversa; Shift + Enter
+   escreve uma linha nova, como no ChatGPT. Nada disto inventa uma acção: é o mesmo `sendChat`
+   de sempre, e a tecla continua a não fugir para os atalhos da cena. */
+const mIn = document.getElementById('mIn');
+const mSend = document.getElementById('mSend');
+function composerSync() {
+  mIn.style.height = 'auto';
+  mIn.style.height = Math.min(mIn.scrollHeight || 21, 132) + 'px';
+  mSend.disabled = !mIn.value.trim();
+}
+function composerClear() {
+  mIn.value = '';
+  composerSync();
+}
+mIn.addEventListener('input', composerSync);
+mIn.addEventListener('keydown', (e) => {
+  e.stopPropagation(); // a escrever, «g», «b», «l» e «1–6» são letras e não atalhos
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (mIn.value.trim()) sendChat(mIn.value); // o Enter do teclado e o clique na seta fazem o mesmo
+  }
 });
+mSend.addEventListener('click', () => { if (mIn.value.trim()) sendChat(mIn.value); });
+composerSync();
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);
@@ -1317,7 +1338,9 @@ function applyRoster(agents) {
 tasks = initTasks({
   hud, R, deptRT, RAIL_SIDE, spawnEmote, chatPush, chatHist, feedPush, zoomToApproval, enterFocus, openAgent, esc,
   brainWrite: (id, title) => brain.write(id, title), brain,
-  onLive: (h) => { document.querySelector('#topbar .brand .ver').textContent = 'BETA'; document.title = `${h.name} — Órbita`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
+  // 26 out 2026: a marca não se reescreve quando o escritório fica ao vivo. Antes esta linha
+  // trocava a etiqueta por «BETA»; agora a marca é «ÓRBITA AGENTES» e fica quieta.
+  onLive: (h) => { document.title = `${h.name} — Órbita Agentes`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
   onTools: (agentId, keys) => mcp.onToolsUsed(agentId, keys),
   requestApproval, setStuck: setStuckLive,
   onUsage: (u) => { if (mcp && mcp.setUsage) mcp.setUsage(u); }, // V3.6: the plan's gauge in the top bar
