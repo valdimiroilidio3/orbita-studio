@@ -24,6 +24,59 @@ export function mat(color, opts = {}) {
   return matCache.get(key);
 }
 
+/* ---------- o LED que corre (28 out 2026) ----------
+   Pedido do dono: «nos vidros deve passar uma luz led da cor». Uma tira acesa parada seria só um
+   filete; o que se pede é LUZ A PASSAR. Faz-se com uma textura de cometa (uma cauda branca) que
+   rola ao longo de uma faixa fina, em mistura aditiva — sobre o vidro lê-se como luz a atravessar
+   o vidro, e custa um draw call por pano. A cor vem da sala, por isso o vidro e o LED dizem a
+   mesma cor. Quem anima é o main (uma só passagem por frame, ver `ledFeed`). */
+let cometCanvas = null;
+function cometTexture(repeatX = 1) {
+  if (!cometCanvas) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 4;
+    const x = c.getContext('2d');
+    x.clearRect(0, 0, c.width, c.height);
+    const g = x.createLinearGradient(0, 0, c.width, 0);
+    // cauda longa, núcleo curto, corte seco à frente: é assim que uma luz em movimento se lê
+    g.addColorStop(0.00, 'rgba(255,255,255,0)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.10)');
+    g.addColorStop(0.80, 'rgba(255,255,255,0.45)');
+    g.addColorStop(0.90, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.955, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1.00, 'rgba(255,255,255,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, c.width, c.height);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.minFilter = THREE.LinearFilter;
+    t.magFilter = THREE.LinearFilter;
+    cometCanvas = t;
+  }
+  const t = cometCanvas.clone();
+  t.needsUpdate = true;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  t.repeat.set(Math.max(1, repeatX), 1);
+  return t;
+}
+
+/** Material de uma faixa de LED em movimento. `len` = metros do pano (a luz repete a cada ~3,4 m). */
+export function ledComet(color, len, { speed = 0.06, opacity = 0.95, width = 0.09 } = {}) {
+  const tex = cometTexture(len / 3.4);
+  const m = new THREE.MeshBasicMaterial({
+    map: tex, color: tint(color, 0.42), transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  // o main anima o que tiver `userData.led` (ver `tickLeds`)
+  m.userData.led = true;
+  m.userData.ledTex = tex;
+  m.userData.ledSpeed = speed;
+  return { material: m, width };
+}
+
 // Rounded-rectangle prism via extrusion. Origin at centre, extruded along Y.
 const geoCache = new Map();
 export function rboxGeo(w, d, h, r = 0.35) {
@@ -1370,12 +1423,192 @@ export function makeWarnSprite() {
 }
 
 /* ---------- walkway bridge between two XZ points ---------- */
-export function makeWalkway(from, to) {
+export function makeWalkway(from, to, opts = {}) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const len = Math.hypot(dx, dz);
-  const g = rbox(len, 3.2, 0.35, '#EFEFE8', 0.16);
-  g.position.set((from[0] + to[0]) / 2, -0.35, (from[1] + to[1]) / 2);
+  const room = opts.glass || opts.chip || '#AEB6AB';
+  /* 28 out 2026 — A PASSADEIRA PASSOU A SER UM CORREDOR.
+     Antes: uma laje branca por baixo do chão, que se lia como um resto de maquete. O dono pediu
+     corredores a sério, «na direcção do Cérebro», onde os projectos passam de uma equipa para a
+     outra — por isso o corredor tem agora as três coisas que fazem um corredor: um PISO ao nível
+     das salas, GUARDAS de latão dos dois lados e uma LINHA DE LED na cor da sala, a correr para o
+     Cérebro. No fim, um aro de latão marca a chegada.
+     Geometria: um grupo rodado, com tudo fundido por material (4 malhas por corredor). */
+  const g = new THREE.Group();
+  const deckMat = new THREE.MeshStandardMaterial({ color: '#F2F1EA', roughness: 0.9, metalness: 0.03 });
+  const kerbMat = new THREE.MeshStandardMaterial({ color: brass(room, 0.24), roughness: 0.3, metalness: 0.9 });
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: shade(room, 0.45), roughness: 0.5, metalness: 0.1,
+    emissive: room, emissiveIntensity: 0.85,
+  });
+  const deck = [], kerb = [], line = [];
+  // piso: duas lajes (a de baixo dá espessura ao vão, a de cima é o chão que se pisa)
+  deck.push(place(rboxGeo(len, 3.2, 0.34, 0.16), 0, -0.35, 0));
+  deck.push(place(rboxGeo(len - 0.5, 2.7, 0.10, 0.10), 0, -0.05, 0));
+  // guardas de latão: um perfil fino e comprido de cada lado, com folga para o pé
+  for (const s of [-1, 1]) {
+    kerb.push(place(rboxGeo(len - 1.0, 0.09, 0.16, 0.04), 0, 0.02, s * 1.42));
+    kerb.push(place(rboxGeo(len - 1.0, 0.05, 0.05, 0.02), 0, 0.10, s * 1.46));
+  }
+  // a linha de LED ao centro (o canal) e o aro de chegada
+  line.push(place(rboxGeo(len - 1.6, 0.10, 0.045, 0.02), 0, 0.012, 0));
+  {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.045, 8, 44), kerbMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(len / 2 - 1.9, 0.035, 0);
+    g.add(ring);
+  }
+  const dMesh = meshOf(deck, deckMat, { shadow: true });
+  dMesh.receiveShadow = true;
+  g.add(dMesh);
+  const kMesh = meshOf(kerb, kerbMat, { shadow: true });
+  g.add(kMesh);
+  const lMesh = meshOf(line, ledMat, { shadow: false });
+  lMesh.receiveShadow = false; lMesh.userData.part = 'walkwayLed';
+  g.add(lMesh);
+  // a luz a correr — sempre para o Cérebro (o `to`), por isso o sinal do offset é fixo
+  const comet = ledComet(room, Math.max(2, len - 2), { speed: 0.16, opacity: 0.8, width: 0.34 });
+  const runner = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(2, len - 2), comet.width), comet.material);
+  runner.rotation.x = -Math.PI / 2;
+  runner.position.set(0, 0.035, 0);
+  runner.userData.part = 'walkwayLed';
+  runner.castShadow = false; runner.receiveShadow = false;
+  g.add(runner);
+
+  g.position.set((from[0] + to[0]) / 2, 0, (from[1] + to[1]) / 2);
   g.rotation.y = -Math.atan2(dz, dx);
+  g.userData.walkway = { from, to, len, room, width: 3.2 };
+  g.userData.led = { room, strips: [comet.material], count: 2 };
+  return g;
+}
+
+/* ---------- a SALA-MESTRE: o Cérebro como sala, não como objecto (28 out 2026) ----------
+   Pedido do dono: o Cérebro deixa de ser uma peça exposta e passa a ser a sala onde os chefes se
+   reúnem — «futurística, coisa de outro mundo, rodeada de LED», com o orbe ainda mais em destaque.
+   O que aqui se acrescenta ao que já existe (o orbe é do brain.js, não se lhe toca):
+
+     · um ANEL DE LED no chão, a toda a volta do pod — a fronteira da sala-mestre;
+     · SEIS PÚLPITOS, um por sala, cada um com a cor dessa sala acesa na aresta e na pastilha do
+       tampo: é o lugar de cada chefe, e vê-se de longe quem é de onde;
+     · TRÊS COLUNAS de latão com a ponta acesa, a marcar a sala sem a fechar (o pod não tem tecto);
+     · dois aros de latão no chão (o desenho de uma praça) para o olho ter escala.
+
+   Não é decoração solta: as posições dos chefes saem daqui (`userData.hall.spots`) e são as mesmas
+   que o `crew.js` usa para os pôr a andar. Uma só verdade para o desenho e para a coreografia. */
+export function makeMasterHall({ spots = [], glass = '#AEB6AB', ink = '#4C7A57' } = {}) {
+  const g = new THREE.Group();
+  const R_CHIEF = 5.70;   // onde o chefe pára (à distância de quem lê um púlpito)
+  const R_DESK = 5.00;    // o púlpito, à frente dele
+  const R_RING = 7.10;    // o aro de LED que fecha a sala
+  const LED_COL = tint(glass, 0.55);
+  const brassMat = new THREE.MeshStandardMaterial({ color: brass(glass, 0.26), roughness: 0.26, metalness: 0.94 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: '#15171B', roughness: 0.44, metalness: 0.3 });
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: shade(LED_COL, 0.35), roughness: 0.35, metalness: 0.2,
+    emissive: LED_COL, emissiveIntensity: 1.15,
+  });
+
+  const brassG = [], darkG = [], ledG = [];
+
+  // 1 · a praça: dois aros de latão no chão e o aro de LED a fechar a sala
+  for (const [rin, rout] of [[3.02, 3.10], [6.40, 6.46]]) {
+    const ring = new THREE.RingGeometry(rin, rout, 128);
+    const m = new THREE.Mesh(ring, brassMat);
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.152;
+    m.userData.part = 'hallRing';
+    g.add(m);
+  }
+  {
+    const ring = new THREE.RingGeometry(R_RING - 0.075, R_RING, 128);
+    const m = new THREE.Mesh(ring, ledMat);
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.158;
+    m.userData.part = 'hallLed';
+    g.add(m);
+  }
+  // 2 · as colunas: três, com um colar de luz a meio (marcam a sala, não a fecham)
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+    const x = Math.cos(a) * 7.35, z = Math.sin(a) * 7.35;
+    brassG.push(place(new THREE.CylinderGeometry(0.075, 0.115, 2.70, 14), x, 1.35, z));
+    brassG.push(place(new THREE.CylinderGeometry(0.30, 0.34, 0.07, 20), x, 0.16, z));
+    brassG.push(place(new THREE.CylinderGeometry(0.16, 0.10, 0.16, 14), x, 2.72, z));
+    // o colar de luz: um anel a meio fuste, na cor da casa
+    const colar = new THREE.TorusGeometry(0.105, 0.022, 8, 22);
+    colar.rotateX(Math.PI / 2);
+    colar.translate(x, 1.78, z);
+    ledG.push(colar);
+  }
+  /* 2b · O ORBE EM DESTAQUE. Oito apliques rasos em volta do globo, a apontar para cima: é o gesto
+     de museu que faz de um objecto a peça da sala. Ficam a 4,45 — por dentro dos púlpitos (5,0) e
+     por fora dos anéis do orbe (4,28 / 5,71), e desfasados dos seis chefes para ninguém tropeçar. */
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const x = Math.cos(a) * 4.45, z = Math.sin(a) * 4.45;
+    brassG.push(place(new THREE.CylinderGeometry(0.115, 0.135, 0.16, 14), x, 0.24, z));
+    ledG.push(place(new THREE.CylinderGeometry(0.085, 0.085, 0.02, 14), x, 0.325, z));
+  }
+
+  /* 3 · os SEIS PÚLPITOS. Desenho: um pilar fino de latão, um tampo de vidro escuro inclinado para
+     quem está de pé, e uma aresta acesa na cor da sala — a mesma do vidro dela. A primeira versão
+     era um caixote preto baixo: no render lia-se como uma mala de mão. Um púlpito tem de ter PÉ. */
+  const spotsOut = [];
+  spots.forEach((sp) => {
+    const a = Number(sp.angle) || 0;
+    const cx = Math.cos(a) * R_DESK, cz = Math.sin(a) * R_DESK;
+    const toWorld = (gg) => { gg.rotateY(-a); gg.translate(cx, 0, cz); return gg; };
+
+    // pé e fuste (latão)
+    brassG.push(toWorld(place(new THREE.CylinderGeometry(0.24, 0.28, 0.05, 22), 0, 0.155, 0)));
+    brassG.push(toWorld(place(new THREE.CylinderGeometry(0.055, 0.075, 0.76, 12), 0, 0.56, 0)));
+    brassG.push(toWorld(place(new THREE.CylinderGeometry(0.10, 0.10, 0.05, 16), 0, 0.95, 0)));
+
+    // tampo inclinado para o chefe (o +x local é o lado de FORA, onde ele está)
+    const tilt = -0.40;
+    const topo = rboxGeo(0.70, 0.48, 0.045, 0.03).clone();
+    topo.rotateZ(tilt);
+    topo.translate(0, 1.03, 0);
+    darkG.push(toWorld(topo));
+    // a aresta acesa (na cor da sala) e a pastilha do tampo
+    const edge = rboxGeo(0.70, 0.05, 0.05, 0.02).clone();
+    edge.rotateZ(tilt);
+    edge.translate(0, 1.055, 0.225);
+    const edgeMat = new THREE.MeshStandardMaterial({
+      color: shade(sp.color || glass, 0.42), roughness: 0.35, metalness: 0.3,
+      emissive: sp.color || glass, emissiveIntensity: 1.35,
+    });
+    const edgeMesh = new THREE.Mesh(toWorld(edge), edgeMat);
+    edgeMesh.userData.part = 'hallSpot';
+    edgeMesh.userData.dept = sp.dept;
+    g.add(edgeMesh);
+    // o ecrã do púlpito: vidro escuro, com a cor da sala por baixo (é a única coisa que se acende
+    // quando o chefe chega, e é o que diz de quem é o lugar)
+    const ecra = rboxGeo(0.50, 0.30, 0.012, 0.015).clone();
+    ecra.rotateZ(tilt);
+    ecra.translate(0, 1.062, -0.02);
+    const ecraMat = new THREE.MeshStandardMaterial({
+      color: '#0E1013', roughness: 0.22, metalness: 0.4,
+      emissive: sp.color || glass, emissiveIntensity: 0.42,
+    });
+    const ecraMesh = new THREE.Mesh(toWorld(ecra), ecraMat);
+    ecraMesh.userData.part = 'hallSpot';
+    ecraMesh.userData.dept = sp.dept;
+    g.add(ecraMesh);
+
+    spotsOut.push({
+      dept: sp.dept, color: sp.color || glass,
+      angle: a,
+      x: Math.round(cx * 1000) / 1000, z: Math.round(cz * 1000) / 1000,   // o púlpito
+      standX: Math.round(Math.cos(a) * R_CHIEF * 1000) / 1000,            // onde o chefe pára
+      standZ: Math.round(Math.sin(a) * R_CHIEF * 1000) / 1000,
+      faceY: Math.atan2(-Math.cos(a), -Math.sin(a)),  // virado ao centro
+    });
+  });
+  const bm = meshOf(brassG, brassMat, { shadow: true }); if (bm) g.add(bm);
+  const dm = meshOf(darkG, darkMat, { shadow: true }); if (dm) g.add(dm);
+  const lm = meshOf(ledG, ledMat, { shadow: false });
+  if (lm) { lm.castShadow = false; lm.receiveShadow = false; lm.userData.part = 'hallLed'; g.add(lm); }
+
+  g.userData.hall = { spots: spotsOut, ring: R_RING, chief: R_CHIEF, desk: R_DESK, glass, ink };
   return g;
 }
 
@@ -1480,6 +1713,26 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   boxAt(coveG, w - 0.5, 0.05, 0.05, 0.02, 0, base - 0.26, backZ + t / 2 + 0.05);
   boxAt(coveG, 0.05, d - 0.5, 0.05, 0.02, sideX + t / 2 + 0.05, base - 0.26, 0);
 
+  /* 28 out 2026 — O LED NO VIDRO. A calha: um canal aceso (a mesma malha da cova, sem draw call
+     novo) no arranque da banda de vidro. A luz: a cometa que corre por cima da calha, um pano por
+     parede. As duas coisas na cor da sala — o vidro, a calha e a luz dizem o mesmo tom. */
+  boxAt(coveG, w - 0.55, 0.045, 0.065, 0.02, 0, base + 0.05, backZ + t / 2 + 0.055);
+  boxAt(coveG, 0.045, d - 0.55, 0.065, 0.02, sideX + t / 2 + 0.055, base + 0.05, 0);
+  const ledMeshes = [];
+  {
+    const back = ledComet(room, Math.max(2, w - 1.4), { speed: 0.055 });
+    const m1 = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(2, w - 1.4), back.width), back.material);
+    m1.position.set(0, base + 0.58, backZ + t / 2 + 0.075);
+    m1.userData.part = 'wallLed';
+    ledMeshes.push(m1);
+    const side = ledComet(room, Math.max(2, d - 1.4), { speed: -0.055 });
+    const m2 = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(2, d - 1.4), side.width), side.material);
+    m2.rotation.y = Math.PI / 2;
+    m2.position.set(sideX + t / 2 + 0.075, base + 0.58, 0);
+    m2.userData.part = 'wallLed';
+    ledMeshes.push(m2);
+  }
+
   const add = (geos, material, part, shadow = true) => {
     const m = meshOf(geos, material, { shadow });
     if (!m) return null;
@@ -1503,6 +1756,14 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
     sign.userData.part = 'wallSign';
     g.add(sign);
   }
+  // a luz que passa: entra no grupo e fica anunciada para o main a animar
+  for (const m of ledMeshes) { m.castShadow = false; m.receiveShadow = false; g.add(m); }
+  g.userData.led = {
+    room,
+    strips: ledMeshes.map((m) => m.material),
+    // duas faixas por sala: uma em cada pano de parede
+    count: ledMeshes.length,
+  };
   return g;
 }
 

@@ -479,6 +479,113 @@ if (mIn && mSend) {
   }
 }
 
+/* ---------- a sala-mestre e a circulação (28 out 2026) ----------
+   Pedido do dono: o Cérebro passa a ser a SALA onde os chefes se reúnem (rodeada de LED, com um
+   lugar para cada chefe), o vidro das salas passa a ter «uma luz led da cor a passar», e cada chefe
+   levanta-se para ir buscar o trabalho que o dono pediu no chat — e volta para o explicar ao grupo.
+   Aqui prova-se, sem olhos: (1) há seis lugares, um por sala, dentro do pod e com a cor certa;
+   (2) cada sala tem três faixas de LED (duas paredes + o corredor); (3) a luz ANDA mesmo (o offset
+   da textura muda entre dois frames); (4) um sinal real de trabalho põe o chefe a andar, ele chega
+   ao Cérebro, volta, explica e o grupo levanta-se — e o mesmo trabalho nunca o faz andar duas vezes. */
+{
+  const cc = win.CC;
+  const cc_step = (dt) => (cc.stepSim ? cc.stepSim(dt) : null);
+  ok(typeof cc.stepSim === 'function', 'a cena não publica um passo manual da simulação (CC.stepSim)');
+  const hall = office.hall;
+  ok(!!hall && Array.isArray(hall.spots), 'a cena não publica a sala-mestre (window.CC.office.hall)');
+  if (hall) {
+    ok(hall.spots.length === 6, `a sala-mestre devia ter seis lugares de chefe (tem ${hall.spots.length})`);
+    ok(new Set(hall.spots.map((s) => s.dept)).size === 6, 'dois chefes com o mesmo lugar no anel');
+    const fora = hall.spots.filter((s) => Math.abs(s.standX) > 7.4 || Math.abs(s.standZ) > 7.4);
+    ok(fora.length === 0, `há chefes fora do pod do Cérebro: ${fora.map((s) => s.dept).join(', ')}`);
+    ok(new Set(hall.spots.map((s) => s.color)).size === 6, 'os púlpitos deviam ter a cor de cada uma das seis salas');
+    ok(hall.ring > 6 && hall.ring < 8, `o aro de LED devia fechar a sala (raio ${hall.ring})`);
+  }
+
+  const circ = office.circulation ? office.circulation() : null;
+  ok(!!circ, 'a cena não publica a circulação (window.CC.office.circulation)');
+  if (circ) {
+    const salas = Object.keys(office.depts).filter((k) => k !== 'brain');
+    ok(salas.every((k) => circ.ledByDept[k] === 3),
+      `cada sala devia ter três faixas de LED (duas paredes + corredor): ${JSON.stringify(circ.ledByDept)}`);
+    ok(circ.corridors.length === 6 && circ.corridors.every((c) => c.gate && c.brainGate),
+      'faltam corredores (a porta da sala ou a chegada ao Cérebro)');
+    // o ciclo de desenho do harness morre no primeiro *render target* (WebGL falso), por isso o
+    // tempo avança-se à mão com `CC.stepSim` — as mesmas funções que o browser chama a 60 fps.
+    const a = office.ledPhase();
+    for (let i = 0; i < 8; i++) cc_step(0.05);
+    const b = office.ledPhase();
+    ok(a !== b, 'a luz dos LED não se mexeu em oito passos — está acesa, não a passar');
+  }
+
+  const chefe = Object.values(cc.R).find((r) => r.a.lead && r.a.dept === 'marketing');
+  ok(!!chefe, 'não há chefe em MEDIA');
+  ok(!!cc.crew && !!cc.crew.signal, 'a cena não publica a circulação (CC.crew)');
+  if (cc.crew && chefe) {
+    // cadência de teste: o ciclo inteiro em menos de dois segundos
+    cc.crew.timing.DWELL.brief = 160;
+    cc.crew.timing.TELL.brief = 700;
+    cc.crew.timing.COOLDOWN = 0;
+    chefe.speed = 260;
+
+    ok(cc.crew.signal('brief', 'marketing', 'smoke-1') === true, 'o sinal de trabalho novo não foi aceite');
+    cc.crew.direct(performance.now());
+    ok(!!chefe.trip, 'o chefe não se levantou com trabalho novo na sala');
+    const rota = chefe.path ? chefe.path.map((p) => [Math.round(p.x), Math.round(p.z)]) : [];
+    ok(rota.length >= 4, `a rota até ao Cérebro devia ter quatro troços (tem ${rota.length}): ${JSON.stringify(rota)}`);
+    const lugar = hall && hall.spots.find((s) => s.dept === 'marketing');
+    const fim = chefe.path && chefe.path[chefe.path.length - 1];
+    ok(lugar && fim && Math.abs(fim.x - lugar.standX) < 0.01 && Math.abs(fim.z - lugar.standZ) < 0.01,
+      'o chefe não vai para o lugar dele no anel do Cérebro');
+
+    const viu = new Set();
+    let grupo = false;
+    const p0 = { x: chefe.person.position.x, z: chefe.person.position.z };
+    let mexeu = false;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 6000) {
+      if (chefe.trip) viu.add(chefe.trip.phase);
+      if (cc.crew.state().huddles.length) grupo = true;
+      if (Math.hypot(chefe.person.position.x - p0.x, chefe.person.position.z - p0.z) > 2) mexeu = true;
+      if (!chefe.trip) break;
+      cc_step(0.07);
+      await new Promise((r) => setTimeout(r, 18));
+    }
+    ok(mexeu, 'o chefe não saiu do sítio: não houve caminhada nenhuma');
+    ok(viu.has('out'), `o chefe não foi a caminho do Cérebro (fases vistas: ${[...viu].join(', ')})`);
+    ok(viu.has('atBrain'), `o chefe não parou no Cérebro (fases vistas: ${[...viu].join(', ')})`);
+    ok(viu.has('back'), `o chefe não voltou para a sala (fases vistas: ${[...viu].join(', ')})`);
+    ok(viu.has('tell'), `o chefe não explicou ao grupo (fases vistas: ${[...viu].join(', ')})`);
+    ok(grupo, 'o grupo não se levantou para ouvir o chefe que voltou do Cérebro');
+    ok(!chefe.trip, 'a viagem não acabou — ficou presa');
+    ok(Math.abs(chefe.person.position.x - chefe.seat.x) < 0.8 && Math.abs(chefe.person.position.z - chefe.seat.z) < 0.8,
+      'o chefe não voltou ao lugar dele');
+    ok(viu.has('seat'), 'o chefe não voltou a pé até à secretária (teleportava para a cadeira)');
+    ok(cc.crew.state().stats.briefs >= 1, 'a viagem não ficou registada (stats.briefs)');
+    ok(cc.crew.signal('brief', 'marketing', 'smoke-1') === false, 'o mesmo trabalho mandou o chefe andar duas vezes');
+
+    // o terceiro gesto: o trabalho ACABOU — o chefe leva-o ao Cérebro (é o «passar o projecto»)
+    cc.crew.timing.COOLDOWN = 0;
+    ok(cc.crew.signal('handoff', 'marketing', 'smoke-done-1') === true, 'o sinal de trabalho entregue não foi aceite');
+    cc.crew.direct(performance.now());
+    ok(!!chefe.trip && chefe.trip.kind === 'handoff', 'o chefe não levou o trabalho acabado ao Cérebro');
+    const viuH = new Set();
+    const t1 = Date.now();
+    while (Date.now() - t1 < 6000) {
+      if (chefe.trip) viuH.add(chefe.trip.phase);
+      if (!chefe.trip) break;
+      cc_step(0.07);
+      await new Promise((r) => setTimeout(r, 18));
+    }
+    ok(viuH.has('atBrain') && viuH.has('seat'),
+      `a entrega não passou pelo Cérebro ou não voltou a pé (fases: ${[...viuH].join(', ')})`);
+    ok(!viuH.has('tell'), 'entregar um trabalho não é discurso ao grupo: o chefe parou para explicar');
+    ok(cc.crew.state().stats.handoffs >= 1, 'a entrega não ficou registada (stats.handoffs)');
+    ok(Math.abs(chefe.person.position.x - chefe.seat.x) < 0.8 && Math.abs(chefe.person.position.z - chefe.seat.z) < 0.8,
+      'depois de entregar, o chefe não voltou ao lugar');
+  }
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
@@ -506,6 +613,13 @@ const avatares = (() => {
   if (!av.stats) return 'sem avatares';
   return `${av.stats.total} avatares (${av.stats.women} mulheres · ${av.stats.hats} chapéus · ${av.stats.beards} barbas · ${av.stats.glasses} óculos · ${av.stats.styles} estilos), 57 teclas e 1 rato por posto`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+const resumoCirculacao = (() => {
+  const c = office.circulation ? office.circulation() : null;
+  const h = office.hall;
+  if (!c) return 'sem circulação';
+  const porSala = [...new Set(Object.values(c.ledByDept))].join('/');
+  return `${c.led} faixas de LED (${porSala} por sala), corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
+})();
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

@@ -258,6 +258,27 @@ conta, o Órbita pede entrada em `/app` e cada rota exige uma permissão concret
 - **Sem contas nem token** o Órbita fica em **modo local** — e o arranque di-lo em voz alta, porque
   é só para esta máquina.
 
+## O Cérebro é a sala-mestre, e o escritório mexe-se
+
+O centro deixou de ser um objecto exposto. Passou a ser **uma sala**: uma praça de latão rodeada por
+um aro de LED, três colunas com colar de luz e **seis púlpitos — um por sala, com a cor dessa sala**.
+O orbe fica no meio, em destaque, e é o ponto onde os seis chefes se encontram.
+
+Os corredores que ligam as salas ao centro são corredores a sério: piso ao nível das salas, guardas
+de latão e **uma linha de LED na cor da sala, com a luz a correr para o Cérebro**. Nas paredes, a
+mesma ideia: uma calha acesa e uma luz que percorre o vidro — e que **acelera onde há trabalho real**.
+
+E as pessoas circulam:
+
+- uma **tarefa nova** na sala → o chefe vai ao Cérebro buscá-la, volta e **explica ao grupo** (que se
+  levanta para ouvir);
+- alguém **à espera de uma decisão** → o chefe vai ao Cérebro **pedir ajuda** e volta a contar;
+- sem trabalho, ninguém anda.
+
+Nada disto é encenação: os sinais vêm da base de dados e o mesmo trabalho nunca faz o chefe andar
+duas vezes. O guia completo — circuito, regras, tempos e limites — está em
+[`docs/CIRCULACAO.md`](docs/CIRCULACAO.md).
+
 ## A oficina: os agentes forjam as próprias ferramentas
 
 Um agente que precisa de olhar para o negócio e não tem com que o fazer não inventa números: pede

@@ -209,6 +209,42 @@ comparar composição, não para julgar luz, vidro ou sombras — isso só no br
 **Inspecção.** `window.CC.office.dressing` devolve, por sala, `rug`, `lamps`, `table`, `console`,
 `pendant` e `tree` — é o que o `test:scene` lê para provar que o adereço está lá e que não estorva.
 
+## O LED, os corredores e a sala-mestre (1.12.0)
+
+**A luz que passa.** Cada pano de parede tem, agora, duas coisas a mais: uma **calha** acesa no
+arranque da banda de vidro (`base + 0,05`, fundida na malha da cova — não custa draw call) e uma
+**luz em movimento** a 0,58 acima dela. A luz é uma textura de cometa (`cometTexture`, 256 × 4 px:
+cauda longa, núcleo curto, corte seco à frente) que **rola** ao longo de uma faixa de 0,09 de altura,
+em `MeshBasicMaterial` com mistura aditiva e a cor da sala. O `main` anima os offsets numa única
+passagem por frame (`tickLeds`), e **acelera 2,6× nas salas com trabalho real** (`live + waiting`).
+
+**Os corredores.** `makeWalkway(from, to, { glass, chip })` deixou de ser uma laje: piso ao nível das
+salas (duas lajes: a de baixo dá espessura ao vão, a de cima é o chão que se pisa), guardas de latão
+dos dois lados com um perfil de remate, **canal de LED ao centro** (emissivo, na cor da sala) e uma
+**luz a correr para o Cérebro**, mais um **aro de latão** a marcar a chegada. Quatro malhas por
+corredor (piso, latão, canal, luz) + o aro.
+
+**A sala-mestre.** `makeMasterHall({ spots, glass, ink })` desenha, no pod central:
+
+| peça | medida | porquê |
+|---|---|---|
+| praça | aros de latão a r 3,10 e 6,46 | dá escala ao orbe, que tem 4,2 de raio |
+| aro de LED | `RingGeometry` 6,95–7,10 a `y = 0,158` | fecha a sala (o pod é 16 × 16) |
+| 3 colunas | r 7,35, fuste 2,70, colar de luz a 1,78 | marcam sem fechar — o pod não tem tecto |
+| 6 púlpitos | r 5,00; pé, fuste de latão, tampo de vidro inclinado −0,40 rad, aresta + ecrã na cor da sala | o lugar de cada chefe, legível de longe |
+| lugares | r 5,70, `faceY` virado ao centro | à distância de quem lê um púlpito |
+
+O **ângulo** de cada púlpito é o da sala que representa (`atan2(pos.z, pos.x)`), por isso o lugar de
+cada chefe fica do lado do corredor da sua sala. As posições saem em `userData.hall.spots` e são as
+**mesmas** que o `src/crew.js` usa para pôr as pessoas a andar: desenho e coreografia não podem
+discordar.
+
+**Modo escuro.** `wallLed` sobe 25 % de opacidade (a luz não se apaga numa sala escura);
+`walkwayLed`/`hallLed`/`hallSpot` sobem 50 % de emissão; `hallRing` vai para latão velho.
+
+**Retrato.** `docs/cerebro-sala.png` — `node tools/master.mjs 19,15,21 0,1.6,0 34` (rasterizador
+caseiro, sem browser). Sem emissão nem texturas: serve para julgar volumes e composição.
+
 ## O que prova o quê
 
 - `npm run test:office` — `office.test.mjs`, 31 testes puros: matemática de cor, famílias,

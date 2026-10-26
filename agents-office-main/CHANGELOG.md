@@ -1,3 +1,77 @@
+## 1.12.0 — 28 out 2026 · A circulação: o Cérebro é a sala, e o escritório mexe-se
+
+Pedido: *«nos vidros deve passar uma luz LED da cor, e também quero arriscar numa elegância neste
+projecto, criando uma estrutura mais bonita; cria corredores na direcção do Cérebro, que será onde as
+pessoas vão passar os projectos para a outra equipa pegar e continuar… o Cérebro vira uma sala
+futurística, coisa de outro mundo, rodeada de LED; mantém o globo em destaque, como um ponto onde
+cada chefe se reúne… e cria movimentos para cada chefe: quando tiver dúvida ou quiser pedir ajuda,
+dirige-se à sala do Cérebro. Quando peço algo no chat, o chefe deve estar na sala, depois vai à sala
+dele, explica ao grupo e criam — como 100% de pessoas normais numa empresa de engenharia.»*
+
+### O Cérebro passou a ser uma sala (não um objecto)
+
+- **A praça**: dois aros de latão no chão (r 3,1 e 6,4) e um **aro de LED a fechar a sala** (r 7,1).
+- **Seis púlpitos**, um por sala, a 5,0 m do centro: pé e fuste de latão, tampo de vidro inclinado
+  para quem está de pé, **aresta acesa e ecrã na cor da sala**. É o lugar de cada chefe, e vê-se de
+  longe quem é de onde.
+- **Três colunas** de 2,7 m com um **colar de luz** a meio fuste: marcam a sala sem a fechar (o pod
+  não tem tecto).
+- O **orbe** (o globo) não foi tocado: continua a ser o centro, e agora tem uma sala à altura dele.
+
+### O LED que passa
+
+- Cada pano de parede ganhou **uma calha acesa** no arranque do vidro e **uma luz a percorrer o vidro**
+  — uma textura de cometa em mistura aditiva que rola ao longo da faixa, na cor da sala.
+- **18 faixas** no total: 2 por sala nas paredes + 1 por corredor. Anima-se tudo numa passagem por
+  frame; **a luz acelera onde há trabalho real** (`live` + `waiting` daquela sala) e continua lenta
+  onde não há. Não é telemetria: é ambiente — mas não mente sobre onde há trabalho.
+
+### Os corredores
+
+A passadeira branca por baixo do chão passou a **corredor**: piso ao nível das salas, guardas de
+latão dos dois lados, **linha de LED na cor da sala a correr para o Cérebro** e um aro de latão a
+marcar a chegada. Lê-se a direcção do trabalho.
+
+### A circulação (o coração do pedido)
+
+- O chefe **levanta-se quando há trabalho**: uma tarefa nova na sala → vai ao Cérebro buscá-la
+  (3,0 s no anel, virado ao orbe), volta pelo corredor e **explica ao grupo no topo da sala** (3,2 s).
+- Alguém **à espera de uma decisão** → o chefe vai ao Cérebro **pedir ajuda** (2,4 s) e volta a contar
+  o que trouxe (2,0 s).
+- Uma tarefa **acaba de correr bem** → o chefe **leva o trabalho ao Cérebro** (2,2 s) — o «passar o
+  projecto» do pedido — e volta ao posto sem discurso.
+- **O último troço é sempre a pé** até à cadeira: o chefe nunca «teleporta» do topo da sala para o
+  lugar (fase `seat`).
+- **O grupo levanta-se para ouvir** — pose nova `listen` (de pé, braços ao lado do corpo, cabeça
+  voltada a quem fala) — e volta ao posto quando ele acaba.
+- **Só a base de dados manda alguém andar.** O sinal é o `id` do trabalho, com memória: o mesmo pedido
+  nunca faz o chefe andar duas vezes. Sinais velhos (>25 s) caem; 9 s de descanso entre viagens.
+- O percurso usa o **eixo central** da sala (o único corredor que não atravessa uma secretária) e a
+  **porta** (o canto aberto). O mesmo nos dois sentidos.
+
+### O que ficou provado (e como)
+
+`npm run test:scene` — 34 asserções novas, incluindo o ciclo completo da coreografia, com um
+sinal **real** e o tempo avançado à mão (`CC.stepSim`, porque o WebGL falso do harness morre no
+primeiro *render target*):
+
+```
+✓ 18 faixas de LED (3 por sala) · corredores com guardas em 6 salas
+✓ sala-mestre com 6 lugares de chefe e um aro de 7,1 de raio
+✓ o chefe levanta-se, chega ao Cérebro, volta, explica, o grupo levanta-se
+✓ o mesmo trabalho não o manda andar duas vezes
+```
+
+`node tools/master.mjs` desenha a sala-mestre com o rasterizador caseiro → `docs/cerebro-sala.png`.
+Guia: [`docs/CIRCULACAO.md`](docs/CIRCULACAO.md).
+
+### Limites declarados
+
+Não há procura de caminho (são rectas entre pontos fixos), nem colisões entre pessoas, nem conversa
+entre agentes (não há motor de IA nesta máquina): o grupo levanta-se e ouve, e a postura não finge
+conteúdo. A passagem de um projecto de uma equipa para outra acontece no Cérebro, onde os chefes se
+cruzam, mas não há um estado «entregue a outrem» inventado no registo do trabalho.
+
 ## 1.11.0 — 27 out 2026 · A oficina: os agentes forjam as próprias ferramentas
 
 Pedido: *«implementa um sistema capaz de cada agente criar próprias ferramentas para operar e

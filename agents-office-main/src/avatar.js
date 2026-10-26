@@ -602,6 +602,17 @@ export function poseWork(g, mode, t, dt, con) {
       tg.shRx = -2.70; tg.shRz = 0.85 - Math.sin(t / 190) * 0.12;
       tg.elbL = 0.10; tg.elbR = 0.10; tg.headRx = -0.20;
       break;
+    // 28 out 2026 — 'listen': de pé, braços ao lado do corpo, cabeça voltada para quem fala.
+    // É a pose do grupo quando o chefe volta do Cérebro e explica o que trouxe. Não gesticula:
+    // quem ouve não mexe as mãos, e é essa quietude que faz a cena ler como uma reunião a sério.
+    case 'listen':
+      tg.standK = 1;
+      tg.posY = 0.12;
+      tg.shLx = -0.16; tg.shLz = -0.12; tg.shRx = -0.16; tg.shRz = 0.12;
+      tg.elbL = 0.30; tg.elbR = 0.30;
+      tg.headRx = 0.02 + Math.sin(t / 900) * 0.02;
+      tg.headRy = u.glanceDir || 0;
+      break;
     case 'slump':
       tg.shLx = -0.20; tg.shLz = -0.30; tg.shRx = -0.20; tg.shRz = 0.30;
       tg.elbL = 0.35; tg.elbR = 0.35; tg.headRx = 0.45; tg.posY = 0.50;

@@ -11,11 +11,12 @@ import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, de
 // faz alguém procurar um título de chão que já não existe.
 import {
   makePlinth, makeDesk, makeChair,
-  makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing,
+  makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing, makeMasterHall,
 } from './builders.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
 import { makePerson, posePerson, poseWork } from './avatar.js';
+import { createCrew } from './crew.js'; // 28 out 2026: a circulação (chefes ao Cérebro)
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -273,31 +274,70 @@ function plantHeight(g) {
 // brain centre (V3.6, AJ 6 Sep 2026): the particle nebula is RETIRED. The vault's wiki-link graph
 // is etched into the pod floor (src/brain.js); reads glint, writes add notes, G opens the full graph.
 let brain;
+let hall = null;
 {
   const bg = deptRT.brain.group;
+  /* 28 out 2026 — O CÉREBRO PASSOU A SER UMA SALA (pedido do dono).
+     O orbe já existia (brain.js); o que faltava era o sítio à volta: a praça de latão, o aro de LED
+     que fecha a sala e os SEIS púlpitos — um por sala, com a cor dessa sala na aresta e na pastilha.
+     Cada chefe tem o seu lugar no anel, e é para lá que ele anda quando há um trabalho novo ou
+     uma dúvida (ver src/crew.js). A posição de cada chefe nasce AQUI e é a mesma nos dois sítios:
+     desenho e coreografia não podem discordar. */
+  hall = makeMasterHall({
+    glass: DEPTS.brain.glass,
+    ink: DEPTS.brain.ink,
+    spots: DEPT_KEYS.map((k) => ({
+      dept: k,
+      color: DEPTS[k].glass,
+      // o ângulo da sala: assim o lugar de cada chefe fica do lado do corredor da sua sala
+      angle: Math.atan2(LAYOUT[k].pos[1], LAYOUT[k].pos[0]),
+    })),
+  });
+  bg.add(hall);
   brain = initBrain({ scene, brainGroup: bg, getR: () => R, esc: (t) => esc(t), hud, toScreen: (p) => toScreen(p), getCamera: () => camera });
   // 1.9.6: a planta do centro é a peça de apresentação — folha larga, um pouco maior.
+  // 28 out 2026: saiu do canto (−5,0) para (5,9,−1,6) — o canto passou a ser o lugar do chefe de
+  // PROSPEÇÃO e a folhagem caía-lhe em cima.
   const plant = makePlant({ seed: 11, kind: 'broad', scale: 1.05 });
-  plant.position.set(5.3, 0.12, -5.0);
+  plant.position.set(5.9, 0.12, -1.6);
   plant.rotation.y = 0.6;
   bg.add(plant);
-  plantsRT.push({ dept: 'brain', kind: 'broad', seed: 11, leaves: plant.userData.plant.leaves, scale: 1.05, x: 5.3, z: -5.0, top: 0.12 + plantHeight(plant) });
+  plantsRT.push({ dept: 'brain', kind: 'broad', seed: 11, leaves: plant.userData.plant.leaves, scale: 1.05, x: 5.9, z: -1.6, top: 0.12 + plantHeight(plant) });
 }
+
+/* ---------- A CIRCULAÇÃO (28 out 2026) ----------
+   Quem manda levantar um chefe é a base de dados, não um relógio: `syncFromLive` emite um sinal
+   quando aparece uma tarefa a correr (o chefe vai ao Cérebro buscá-la) ou alguém fica à espera de
+   decisão (o chefe vai pedir ajuda). O `crew` só sabe andar e falar — nada inventa. */
+const crew = createCrew({
+  R, AGENTS, DEPTS, LAYOUT, deptRT,
+  hall: hall && hall.userData.hall,
+  deskFront,
+  onEmote: (r, icon) => { try { spawnEmote(r, icon); } catch { /* um emote nunca derruba a cena */ } },
+});
 
 /* 26 out 2026: o «sweep» que acendia as salas uma a uma saiu. Era teatro: dava a ideia de que a
    sala estava a fazer algo quando não estava. Agora só o trabalho real acende alguma coisa. */
 
-// walkways dept -> brain
+// corredores dept -> Cérebro (28 out 2026: passadeira -> corredor com guardas e LED a correr)
+const ledRT = [];   // as faixas cujo offset se anima por frame (ver `tickLeds`)
 for (const k of DEPT_KEYS) {
   const L = LAYOUT[k];
   const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
   const from = [L.pos[0] - sx * (L.w / 2 - 1), L.pos[1] - sz * (L.d / 2 - 1)];
   const to = [sx * 6.5, sz * 6.5];
-  const walk = makeWalkway(from, to);
+  const walk = makeWalkway(from, to, { glass: DEPTS[k].glass, chip: DEPTS[k].chip });
   walk.userData.dept = k; walk.userData.part = 'walkway';
+  walk.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
   scene.add(walk);
+  for (const m of (walk.userData.led && walk.userData.led.strips) || []) ledRT.push({ dept: k, mat: m });
   deptRT[k].gate = new THREE.Vector3(from[0], 0, from[1]);
   deptRT[k].brainGate = new THREE.Vector3(to[0], 0, to[1]);
+}
+// os LED das paredes entram no mesmo sítio (as faixas já nascem no builder)
+for (const [k, rt] of Object.entries(deptRT)) {
+  if (k === 'brain') continue;
+  for (const m of (rt.walls && rt.walls.userData.led && rt.walls.userData.led.strips) || []) ledRT.push({ dept: k, mat: m });
 }
 // tag remaining brain furnishings (plinth, plant) for the focus-dim pass — these DO go
 // dark in galaxy mode, unlike the 'brainCore' nebula tagged above
@@ -764,6 +804,17 @@ function setDark(on) {
       if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity;
       m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.6 : m.userData.baseEmissiveIntensity;
     }
+    /* 28 out 2026: o Cérebro como sala e a luz que passa. No escuro o LED não se apaga — é a única
+       coisa que continua acesa numa sala sem luz, e é isso que a torna uma sala a sério. */
+    else if (o.userData.part === 'wallLed') {
+      if (m.userData.baseOpacity == null) m.userData.baseOpacity = m.opacity;
+      m.opacity = darkOn ? Math.min(1, m.userData.baseOpacity * 1.25) : m.userData.baseOpacity;
+    }
+    else if (o.userData.part === 'walkwayLed' || o.userData.part === 'hallLed' || o.userData.part === 'hallSpot') {
+      if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity || 1;
+      if (m.emissive) m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.5 : m.userData.baseEmissiveIntensity;
+    }
+    else if (o.userData.part === 'hallRing') m.color.set(darkOn ? '#7A6242' : m.userData.base);
     // 26 out 2026: uma mesa preta sobre um fundo escuro desaparecia. No escuro, o corpo sobe um
     // tom (grafite) e o LED fica mais intenso — é assim que uma secretária com luz se comporta.
     else if (o.userData.part === 'desk') m.color.set(darkOn ? '#2E3138' : m.userData.base);
@@ -1241,16 +1292,39 @@ let lastLiveSync = 0;
 function syncFromLive() {
   for (const [id, r] of Object.entries(R)) {
     const d = liveUi.forAgent(id);
-    if (!d) { r.state = 'idle'; if (r.warn) r.warn.visible = false; continue; }
+    if (!d) {
+      r.liveState = 'idle';
+      if (!r.trip) { r.state = 'idle'; if (r.warn) r.warn.visible = false; }
+      continue;
+    }
     const want = d.state === 'live' ? 'working'
       : d.state === 'waiting' ? 'stuck'
       : d.state === 'error' ? 'error' : 'idle';
+    r.liveState = d.state;
+    /* 28 out 2026 — OS SINAIS DA CIRCULAÇÃO. Só a base de dados os dá:
+         · uma tarefa NOVA a correr numa sala → o chefe vai ao Cérebro buscá-la;
+         · alguém à espera de uma decisão → o chefe vai ao Cérebro pedir ajuda.
+       O `crew` trata do resto (e ignora repetições do mesmo trabalho). */
+    const tid = d.task && d.task.id;
+    if (tid) {
+      if (d.state === 'live') crew.signal('brief', r.a.dept, tid);
+      else if (d.state === 'waiting') crew.signal('help', r.a.dept, tid);
+    }
+    /* e o terceiro gesto: acabou. O chefe leva o trabalho ao Cérebro — é o «passar o projecto» do
+       pedido do dono. Só conta o que acabou nos últimos cinco minutos: uma tarefa de ontem não é
+       motivo para ninguém se levantar hoje. */
+    const fim = d.last && d.last.state === 'succeeded' && d.last.id;
+    if (fim) {
+      const quando = d.last.finished_at ? Date.parse(d.last.finished_at) : 0;
+      if (Date.now() - quando < 5 * 60 * 1000) crew.signal('handoff', r.a.dept, d.last.id);
+    }
+    if (r.trip) continue;                                    // a caminho do Cérebro não se muda o estado por baixo dos pés
     if (want === 'stuck' && r.state !== 'stuck') requestApproval(id);       // só quando a base de dados diz que espera
     if (want !== 'stuck' && r.state === 'stuck') { r.state = want; if (r.warn) r.warn.visible = false; syncApprovals(); }
     else r.state = want;
     if (r.warn) r.warn.visible = want === 'stuck' || want === 'error';
-    r.liveState = d.state;
   }
+  crew.direct(performance.now());
 }
 
 /* ---------- emotes ----------
@@ -1301,27 +1375,12 @@ function tickEmotes(now, dt) {
   }
 }
 
-/* ---------- passos e postura: quem vai a pé e quem está sentado ---------- */
-function walkStep(r, dt) {
-  const cur = r.person.position, tgt = r.path[r.pathI];
-  const d = new THREE.Vector3().subVectors(tgt, cur); d.y = 0;
-  const dist = d.length();
-  const step = r.speed * dt;
-  if (dist <= step) {
-    cur.copy(tgt);
-    r.pathI++;
-    if (r.pathI >= r.path.length) return true;
-  } else {
-    d.normalize();
-    cur.addScaledVector(d, step);
-    r.person.rotation.y = Math.atan2(d.x, d.z);
-  }
-  return false;
-}
+/* ---------- passos e postura: quem vai a pé e quem está sentado ----------
+   O passo (`walkStep`) vive agora em src/crew.js — é lá que mora a circulação. */
 
 // standing modes drift the agent from the chair to a spot beside the desk, and can re-face the camera
 const FACE_CAM = Math.PI / 4;
-function applyStandAndFacing(r, mode, now, dt) {
+function applyStandAndFacing(r, mode, now, dt, face) {
   const u = r.person.userData;
   const sk = (u.cur && u.cur.standK) || 0;
   r.person.position.x = r.seat.x + (r.stand.x - r.seat.x) * sk;
@@ -1331,7 +1390,10 @@ function applyStandAndFacing(r, mode, now, dt) {
     r.person.rotation.y = r.seatRot + ((now - r.modeStart) / span) * Math.PI * 2;
     return;
   }
-  const target = (mode === 'stretch' || mode === 'cheer' || mode === 'wave') ? FACE_CAM : r.seatRot;
+  // 28 out 2026: `face` = olhar para um ponto (o chefe a explicar, no topo da sala)
+  const target = face
+    ? Math.atan2(face.x - r.person.position.x, face.z - r.person.position.z)
+    : (mode === 'stretch' || mode === 'cheer' || mode === 'wave') ? FACE_CAM : r.seatRot;
   let d = target - r.person.rotation.y;
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
@@ -1341,21 +1403,18 @@ function applyStandAndFacing(r, mode, now, dt) {
 function tickSim(now, dt) {
   if (now - lastLiveSync > 1200) { lastLiveSync = now; syncFromLive(); }
   for (const r of Object.values(R)) {
-    if (r.state === 'walking' || r.state === 'returning') { // um percurso pedido (p. ex. ir ao Cérebro) continua a andar
-      posePerson(r.person, 'walk', now);
-      if (walkStep(r, dt)) {
-        if (r.state === 'walking') {
-          r.state = 'atBrain';
-          r.person.rotation.y = r.person.position.x < 2 ? Math.PI / 2 : -Math.PI / 2;
-        } else {
-          r.state = 'idle';
-          r.person.position.copy(r.seat);
-          r.person.rotation.y = r.seatRot;
-        }
-      }
-    } else if (r.state === 'atBrain') {
-      posePerson(r.person, 'stand', now);
-    } else if (r.state === 'working') {
+    // 28 out 2026: quem está a caminho do Cérebro — ou a explicar ao grupo — é conduzido pelo
+    // `crew`. Sai do laço aqui para não haver duas mãos a mexer no mesmo corpo.
+    if (r.trip) { crew.tick(r, now, dt); continue; }
+    // o grupo levanta-se para ouvir o chefe que voltou do Cérebro (ninguém ouve sentado e calado)
+    const hd = crew.huddle(r.a.dept);
+    if (hd && r.state !== 'stuck' && r.state !== 'error') {
+      poseWork(r.person, 'listen', now + r.bob * 300, dt);
+      applyStandAndFacing(r, 'huddle', now, dt, hd);
+      if (r.touched.size) driveDesk(r, null, now, 0, dt);
+      continue;
+    }
+    if (r.state === 'working') {
       // A trabalhar de verdade: escreve e, de vez em quando, vai ao rato. As duas coisas são o mesmo
       // gesto — a mão segue o ponto que `deskmap.js` calcula, e o posto responde (tecla a afundar,
       // rato a deslizar). 27 out 2026.
@@ -1588,7 +1647,7 @@ const a11y = initA11y({
       return {
         name: 'o Cérebro', short: 'O CÉREBRO', glass: DEPTS.brain.glass, action: 'Abrir',
         meta: `${brain.state.notes} notas no vault · o grafo completo abre em ecrã inteiro`,
-        empty: 'O centro não tem secretárias: é a tua pasta de notas, desenhada.',
+        empty: 'O centro não tem secretárias: é a sala-mestre — seis lugares, um por chefe — e, debaixo dela, a tua pasta de notas desenhada.',
       };
     }
     const d = DEPTS[k];
@@ -1608,10 +1667,38 @@ const a11y = initA11y({
 document.getElementById('skipIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
 document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
 
+/* ---------- a luz que passa nos vidros e nos corredores (28 out 2026) ----------
+   Uma só passagem por frame para todas as faixas. A luz nunca pára (é a vida da sala), mas ACELERA
+   onde há trabalho a sério — e só onde há: `deptCount` lê a base de dados, não um relógio. */
+const ledBusy = {};
+let lastLedSync = 0;
+function tickLeds(now, dt) {
+  if (now - lastLedSync > 700) {
+    lastLedSync = now;
+    for (const k of DEPT_KEYS) ledBusy[k] = deptCount(k, 'live') + deptCount(k, 'waiting');
+  }
+  for (const L of ledRT) {
+    const tex = L.mat.userData.ledTex;
+    if (!tex) continue;
+    const speed = (L.mat.userData.ledSpeed || 0.06) * (ledBusy[L.dept] ? 2.6 : 1);
+    tex.offset.x = (tex.offset.x - dt * speed) % 1;
+  }
+}
+
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
   office: {
     depts: DEPTS, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
+    // 28 out 2026: a sala-mestre e a circulação, para se poder olhar para elas sem adivinhar
+    hall: hall && { ...hall.userData.hall },
+    crew: () => crew.state(),
+    // a fase da luz (para o teste poder provar que ela ANDA, e não só que existe)
+    ledPhase: () => ledRT.reduce((n, l) => n + (l.mat.userData.ledTex ? l.mat.userData.ledTex.offset.x : 0), 0),
+    circulation: () => ({
+      led: ledRT.length,
+      ledByDept: Object.fromEntries(DEPT_KEYS.map((k) => [k, ledRT.filter((l) => l.dept === k).length])),
+      corridors: DEPT_KEYS.map((k) => ({ dept: k, gate: deptRT[k].gate && deptRT[k].gate.toArray(), brainGate: deptRT[k].brainGate && deptRT[k].brainGate.toArray() })),
+    }),
     problems: officeProblems().concat(lookProblems()),
     // 27 out 2026: os 35 avatares, para o teste de cena poder olhar para eles
     avatars: {
@@ -1624,7 +1711,12 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
       meshes: Object.values(R).reduce((n, r) => { let k = 0; r.person.traverse((o) => { if (o.isMesh) k++; }); return n + k; }, 0),
     },
   },
-  setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
+  setCam, setDark, brain, crew, connectorReveal: () => mcp.startReveal(), // `crew`: a circulação (28 out 2026)
+  /* 28 out 2026 — um passo manual da simulação, para o teste de cena poder avançar o tempo sem
+     depender do ciclo de desenho. Existe porque o WebGL falso do harness não chega aos *render
+     targets* e o first render mata o `requestAnimationFrame`; sem isto, nada que se mexa (uma luz a
+     passar, um chefe a andar) podia ser provado. Em browser não é preciso: o ciclo corre sozinho. */
+  stepSim: (dt = 0.016) => { const t = performance.now(); tickLeds(t, dt); tickSim(t, dt); return t; },
   forge: { toggle: () => forgeTerm.toggle(), open: () => forgeTerm.open(), close: () => forgeTerm.close(),
     isOpen: () => forgeTerm.isOpen(), command: (c) => forgeTerm.command(c), stats: () => forgeTerm.stats() },
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
@@ -1644,6 +1736,7 @@ function loop(now) {
   tickTween(now);
   applyCamera();
   tickDim(dt);
+  tickLeds(now, dt);
   tickSim(now, dt);
   tickLOD();
   tasks.tick(now);
