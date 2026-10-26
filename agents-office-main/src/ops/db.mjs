@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch { /* Node sem SQLite */ }
 
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '7';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -227,6 +227,46 @@ CREATE TABLE IF NOT EXISTS deliveries (
   detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS deliveries_project ON deliveries(project_id, at DESC);
+
+-- Contas: quem entra. O papel decide o que pode fazer (ver src/ops/auth.mjs). A palavra-passe é
+-- guardada como scrypt com sal próprio — nunca em claro, nunca devolvida por uma API.
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT 'leitor',
+  password_hash TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email);
+
+-- Sessões: na base fica o sha256 do token, nunca o token. Prazo fixo, revogação explícita.
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_seen_at TEXT,
+  revoked_at TEXT,
+  revoked_by TEXT NOT NULL DEFAULT '',
+  agent TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS sessions_exp ON sessions(expires_at);
+
+-- Tentativas de entrada: o email vai em hash (não em claro) — chega para contar e bloquear.
+CREATE TABLE IF NOT EXISTS auth_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  email_hash TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS auth_attempts_email ON auth_attempts(email_hash, at DESC);
 
 -- Tarefas dos departamentos: trabalho que se pode verificar. Uma máquina de estados guardada
 -- (queued → running → succeeded | failed | awaiting_approval), com tentativas limitadas, prazo,

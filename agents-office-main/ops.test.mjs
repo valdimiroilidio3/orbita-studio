@@ -1013,3 +1013,173 @@ test('csrf: credencial em cookie de outra origem é recusada; cabeçalho e GET p
   assert.equal(csrfOk({ method: 'POST', headers: { 'x-orbita-admin': 'abc', origin: 'https://mau.example' } }).ok, true, 'sem cookie não há CSRF');
   assert.equal(sameOrigin({ headers: { origin: 'https://orbita.example', host: 'orbita.example' } }).ok, true);
 });
+
+/* ---------- passo 8: contas, sessões e papéis (autenticação ≠ autorização) ---------- */
+
+import * as auth from './src/ops/auth.mjs';
+import { authenticate, sessionCookie, clearSessionCookie, wantsSecureCookie } from './src/ops/guard.mjs';
+
+const dono = (db, over = {}) => auth.createUser(db, { email: 'dono@orbita.pt', name: 'Chelton', password: 'uma-frase-bem-comprida', role: 'dono', ...over });
+
+test('palavras-passe: scrypt com sal, nunca iguais, e as fracas são recusadas com o motivo', () => {
+  const a = auth.hashPassword('uma-frase-bem-comprida');
+  const b = auth.hashPassword('uma-frase-bem-comprida');
+  assert.notEqual(a, b, 'duas hashes da mesma palavra-passe não podem ser iguais (sal próprio)');
+  assert.match(a, /^scrypt\$16384\$8\$1\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/);
+  assert.equal(auth.verifyPassword('uma-frase-bem-comprida', a), true);
+  assert.equal(auth.verifyPassword('outra-frase-bem-comprida', a), false);
+  assert.equal(auth.verifyPassword('qualquer', 'lixo'), false, 'formato desconhecido não autentica');
+  assert.match(auth.checkPassword('curta'), /12 caracteres/);
+  assert.match(auth.checkPassword('aaaaaaaaaaaaaa'), /mesmo carácter/);
+  assert.match(auth.checkPassword('password1234'), /primeiras que alguém tenta/);
+  assert.match(auth.checkPassword('clinica-aurora-2026', { email: 'clinica@x.pt' }), /o teu email/);
+  assert.equal(auth.checkPassword('uma-frase-bem-comprida'), null);
+});
+
+test('papéis: a hierarquia decide, e o leitor não escreve nem aprova', () => {
+  assert.deepEqual(auth.ROLE_KEYS, ['dono', 'gestor', 'operador', 'leitor']);
+  assert.equal(auth.can('leitor', 'read'), true);
+  assert.equal(auth.can('leitor', 'write'), false);
+  assert.equal(auth.can('operador', 'write'), true);
+  assert.equal(auth.can('operador', 'approve'), false);
+  assert.equal(auth.can('gestor', 'approve'), true);
+  assert.equal(auth.can('gestor', 'admin'), false);
+  assert.equal(auth.can('dono', 'admin'), true);
+  assert.equal(auth.can('inexistente', 'read'), false);
+  assert.equal(auth.can('dono', 'inventada'), false);
+});
+
+test('contas: email único e normalizado, papel válido, e a primeira conta só nasce uma vez', () => {
+  const db = fresh();
+  const u = auth.createFirstOwner(db, { email: '  Dono@Orbita.PT ', name: 'Chelton', password: 'uma-frase-bem-comprida' });
+  assert.equal(u.email, 'dono@orbita.pt');
+  assert.equal(u.role, 'dono');
+  assert.equal(u.password_hash, undefined, 'a hash nunca sai da camada de autenticação');
+  assert.throws(() => auth.createFirstOwner(db, { email: 'outro@orbita.pt', password: 'outra-frase-comprida' }), (e) => e.status === 409);
+  assert.throws(() => auth.createUser(db, { email: 'dono@orbita.pt', password: 'outra-frase-comprida', role: 'leitor' }), (e) => e.status === 409);
+  assert.throws(() => auth.createUser(db, { email: 'nao-e-email', password: 'outra-frase-comprida' }), /email inválido/);
+  assert.throws(() => auth.createUser(db, { email: 'a@b.pt', password: 'outra-frase-comprida', role: 'imperador' }), /papel desconhecido/);
+  assert.equal(auth.listUsers(db).length, 1);
+  // não se fica sem dono activo
+  assert.throws(() => auth.setRole(db, u.id, 'leitor'), (e) => e.status === 409);
+  const segundo = auth.createUser(db, { email: 'segundo@orbita.pt', password: 'outra-frase-comprida', role: 'dono' });
+  assert.equal(auth.setRole(db, u.id, 'gestor').role, 'gestor', 'com dois donos já se pode descer um');
+  // agora só resta um dono: descer esse é recusado — a instalação não fica sem ninguém que administre
+  assert.throws(() => auth.setRole(db, segundo.id, 'operador'), (e) => e.status === 409 && /sem nenhum dono/.test(e.message));
+  const terceiro = auth.createUser(db, { email: 'terceiro@orbita.pt', password: 'outra-frase-comprida', role: 'dono' });
+  assert.equal(auth.setRole(db, segundo.id, 'operador').role, 'operador');
+  assert.ok(terceiro.id);
+});
+
+test('sessões: expiram, revogam-se e o token não fica guardado em claro', () => {
+  const db = fresh();
+  const u = dono(db);
+  const { token } = auth.openSession(db, u, { hours: 1, at: Date.parse('2026-10-26T10:00:00Z') });
+  assert.ok(token.length >= 40);
+  const guardado = db.prepare('SELECT token_hash FROM sessions').get().token_hash;
+  assert.notEqual(guardado, token, 'na base fica o sha256, nunca o token');
+  // dentro do prazo
+  assert.equal(auth.sessionUser(db, token, { at: Date.parse('2026-10-26T10:30:00Z') }).user.id, u.id);
+  // depois do prazo
+  assert.match(auth.sessionUser(db, token, { at: Date.parse('2026-10-26T11:01:00Z') }).error, /expirada/);
+  // revogada
+  const outra = auth.openSession(db, u, { at: Date.now() });
+  auth.revokeSession(db, outra.id, { actor: 'dono', reason: 'teste' });
+  assert.match(auth.sessionUser(db, outra.token).error, /terminada/);
+  // desactivar a conta fecha tudo — e não se desactiva o último dono
+  assert.throws(() => auth.deactivate(db, u.id), /sem nenhum dono/);
+  auth.createUser(db, { email: 'outro-dono@orbita.pt', password: 'outra-frase-comprida', role: 'dono' });
+  const terceira = auth.openSession(db, u, { at: Date.now() });
+  auth.deactivate(db, u.id);
+  assert.match(auth.sessionUser(db, terceira.token).error, /terminada/);
+  // e a conta desactivada já não entra, mesmo com a palavra-passe certa
+  assert.throws(() => auth.login(db, { email: u.email, password: 'uma-frase-bem-comprida', at: Date.now() }), (e) => e.status === 401);
+  assert.equal(auth.sessionUser(db, 'token-inventado').error !== undefined, true);
+});
+
+test('sessões: trocar a palavra-passe fecha todas as sessões antigas', () => {
+  const db = fresh();
+  const u = dono(db);
+  const s = auth.openSession(db, u);
+  assert.equal(auth.sessionUser(db, s.token).user.id, u.id);
+  const r = auth.setPassword(db, u.id, 'outra-frase-muito-boa');
+  assert.equal(r.sessoes_fechadas, 1);
+  assert.match(auth.sessionUser(db, s.token).error, /terminada/);
+  assert.throws(() => auth.setPassword(db, u.id, 'curta'), /12 caracteres/);
+});
+
+test('entrar: palavra-passe errada não entra e cinco falhas bloqueiam — sem revelar quem tem conta', () => {
+  const db = fresh();
+  dono(db);
+  const t0 = Date.parse('2026-10-26T09:00:00Z');
+  assert.throws(() => auth.login(db, { email: 'dono@orbita.pt', password: 'errada-mas-comprida', at: t0 }), (e) => e.status === 401);
+  const desconhecido = (() => { try { auth.login(db, { email: 'ninguem@orbita.pt', password: 'errada-mas-comprida', at: t0 }); } catch (e) { return e; } })();
+  assert.equal(desconhecido.status, 401);
+  assert.equal(desconhecido.message, 'email ou palavra-passe errados', 'a mesma frase para os dois casos');
+  for (let i = 0; i < 4; i++) { try { auth.login(db, { email: 'dono@orbita.pt', password: 'errada-mas-comprida', at: t0 + i * 1000 }); } catch { /* esperado */ } }
+  assert.throws(() => auth.login(db, { email: 'dono@orbita.pt', password: 'uma-frase-bem-comprida', at: t0 + 6000 }), (e) => e.status === 423 && /demasiadas tentativas/.test(e.message));
+  // o registo não guarda o email em claro
+  const linhas = db.prepare('SELECT * FROM auth_attempts').all();
+  assert.ok(linhas.length >= 5);
+  assert.equal(JSON.stringify(linhas).includes('dono@orbita.pt'), false, 'o email vai em hash, não em claro');
+  // passada a janela, entra
+  const ok = auth.login(db, { email: 'DONO@orbita.pt', password: 'uma-frase-bem-comprida', at: t0 + 16 * 60000 });
+  assert.equal(ok.user.role, 'dono');
+  assert.ok(ok.token);
+});
+
+test('guarda: sessão manda no papel; máquina vale como dono; local só quando não há contas', () => {
+  const db = fresh();
+  const u = auth.createUser(db, { email: 'leitor@orbita.pt', password: 'uma-frase-bem-comprida', role: 'leitor' });
+  const s = auth.openSession(db, u, { at: Date.now() });
+  const req = (headers = {}) => ({ method: 'GET', headers });
+  // sem credencial, com contas → 401 a pedir entrada
+  const anon = authenticate(req(), { db, env: {} });
+  assert.equal(anon.ok, false);
+  assert.equal(anon.hint, 'sessao');
+  // sessão válida → leitor, sem escrita
+  const comSessao = authenticate(req({ cookie: `orbita_sessao=${s.token}` }), { db, env: {} });
+  assert.equal(comSessao.ok, true);
+  assert.equal(comSessao.mode, 'sessao');
+  assert.equal(comSessao.role, 'leitor');
+  assert.deepEqual(comSessao.perms, { read: true, write: false, approve: false, admin: false });
+  // token de máquina, com contas → dono, mas marcado como máquina
+  const envToken = { ORBITA_ADMIN_TOKEN: 'um-token-de-maquina-comprido' };
+  const maquina = authenticate(req({ 'x-orbita-admin': 'um-token-de-maquina-comprido' }), { db, env: envToken });
+  assert.equal(maquina.ok, true);
+  assert.equal(maquina.mode, 'token');
+  assert.equal(maquina.machine, true);
+  assert.equal(maquina.can('admin'), true);
+  // ORBITA_AUTH=sessao desliga a credencial de máquina
+  const estrito = authenticate(req({ 'x-orbita-admin': 'um-token-de-maquina-comprido' }), { db, env: { ...envToken, ORBITA_AUTH: 'sessao' } });
+  assert.equal(estrito.ok, false);
+  // base sem contas e sem token → modo local explícito
+  const vazia = fresh();
+  const local = authenticate(req(), { db: vazia, env: {} });
+  assert.equal(local.ok, true);
+  assert.equal(local.local, true);
+  assert.equal(local.can('admin'), true);
+});
+
+test('cookies: HttpOnly, SameSite=Strict, Path=/ e Secure só onde faz sentido', () => {
+  const c = sessionCookie('abc123', { maxAgeSeconds: 3600, secure: true });
+  assert.match(c, /^orbita_sessao=abc123; Path=\/; HttpOnly; SameSite=Strict; Max-Age=3600; Secure$/);
+  assert.doesNotMatch(sessionCookie('abc', { maxAgeSeconds: 60, secure: false }), /Secure/);
+  assert.match(clearSessionCookie(), /Max-Age=0/);
+  assert.equal(wantsSecureCookie({ headers: { 'x-forwarded-proto': 'https' } }, {}), true);
+  assert.equal(wantsSecureCookie({ headers: {} }, {}), false);
+  assert.equal(wantsSecureCookie({ headers: {} }, { ORBITA_SECURE_COOKIE: '1' }), true);
+});
+
+test('estado de autenticação: diz em palavras o que está aberto', () => {
+  const db = fresh();
+  assert.equal(auth.authState(db, {}).modo, 'local');
+  assert.match(auth.authState(db, {}).descricao, /MODO LOCAL/);
+  dono(db);
+  const comContas = auth.authState(db, {});
+  assert.equal(comContas.modo, 'sessao');
+  assert.match(comContas.descricao, /1 conta/);
+  const comToken = auth.authState(db, { ORBITA_ADMIN_TOKEN: 'um-token-de-maquina-comprido' });
+  assert.equal(comToken.token, true);
+  assert.equal(comToken.modo, 'sessao', 'com contas, quem manda são as contas');
+});

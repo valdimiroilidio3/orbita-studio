@@ -506,6 +506,7 @@ else {
 {
   const port = 4600 + Math.floor(Math.random() * 300);
   const env = { ...process.env, PORT: String(port) };
+  let donoCookie = '', leitorCookie = '';
   let srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   const base = `http://localhost:${port}`;
@@ -845,6 +846,7 @@ else {
   const port = 4700 + Math.floor(Math.random() * 200);
   // ORBITA_PESQUISA_PERMITIR_PRIVADO: só aqui, para o passo 3 poder ler um site falso local
   const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db'), ORBITA_PESQUISA_PERMITIR_PRIVADO: '1' };
+  let donoCookie = '', leitorCookie = '';
   let srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   const base = `http://localhost:${port}`;
@@ -1330,6 +1332,130 @@ else {
       if (tarefasDepois !== tarefasAntes) throw new Error(`tarefas: ${tarefasAntes} → ${tarefasDepois}`);
       if (projetosDepois !== projetosAntes) throw new Error(`projetos: ${projetosAntes} → ${projetosDepois}`);
       return `${depois} leads · ${tarefasDepois} tarefas · ${projetosDepois} projetos intactos`;
+    });
+
+    // --- passo 8: contas, sessões e papéis ---
+    // Um cliente HTTP mínimo com cookie jar, para provar a sessão como o browser a vive.
+    const comCookie = async (method, p, payload, cookie, extra = {}) => {
+      const r = await fetch(base + p, {
+        method,
+        headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...extra },
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+      });
+      const set = r.headers.get('set-cookie') || '';
+      return { status: r.status, body: await r.json().catch(() => ({})), set, cookie: set ? set.split(';')[0] : '' };
+    };
+
+    await step('passo 8: a primeira conta só nasce enquanto não há nenhuma', async () => {
+      const fraca = await comCookie('POST', '/api/auth/primeiro-dono', { email: 'dono@orbita.pt', password: '1234' });
+      if (fraca.status !== 400) throw new Error('aceitou uma palavra-passe fraca (' + fraca.status + ')');
+      const r = await comCookie('POST', '/api/auth/primeiro-dono', { email: 'Dono@Orbita.PT', name: 'Chelton', password: 'uma-frase-bem-comprida' });
+      if (r.status !== 201) throw new Error('HTTP ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 140));
+      if (r.body.user.role !== 'dono') throw new Error('a primeira conta não é dona');
+      if (JSON.stringify(r.body).includes('password_hash')) throw new Error('a hash saiu na resposta');
+      if (!/HttpOnly/.test(r.set) || !/SameSite=Strict/.test(r.set)) throw new Error('cookie sem HttpOnly/SameSite: ' + r.set);
+      const outra = await comCookie('POST', '/api/auth/primeiro-dono', { email: 'outra@orbita.pt', password: 'outra-frase-comprida' });
+      if (outra.status !== 409) throw new Error('deixou criar uma segunda «primeira conta»');
+      return `${r.body.user.email} criada como dono · cookie HttpOnly+SameSite=Strict · segunda tentativa → 409`;
+    });
+
+    await step('passo 8: sem sessão não se entra (e o pedido diz porquê)', async () => {
+      const r = await comCookie('GET', '/api/ops/summary');
+      if (r.status !== 401) throw new Error('abriu sem sessão: HTTP ' + r.status);
+      if (r.body.hint !== 'sessao') throw new Error('não disse que faltava entrar');
+      const errada = await comCookie('POST', '/api/auth/entrar', { email: 'dono@orbita.pt', password: 'errada-mas-comprida' });
+      if (errada.status !== 401) throw new Error('aceitou a palavra-passe errada (' + errada.status + ')');
+      const inexistente = await comCookie('POST', '/api/auth/entrar', { email: 'ninguem@orbita.pt', password: 'errada-mas-comprida' });
+      if (inexistente.body.error !== errada.body.error) throw new Error('as mensagens revelam se o email existe');
+      return '401 com motivo · mesma frase para conta inexistente e palavra-passe errada';
+    });
+
+    await step('passo 8: entrar devolve uma sessão que abre /api/ops', async () => {
+      const r = await comCookie('POST', '/api/auth/entrar', { email: 'dono@orbita.pt', password: 'uma-frase-bem-comprida' });
+      if (r.status !== 200 || !r.cookie) throw new Error('não entrou: ' + r.status);
+      donoCookie = r.cookie;
+      const s = await comCookie('GET', '/api/ops/summary', undefined, donoCookie);
+      if (s.status !== 200) throw new Error('com sessão: HTTP ' + s.status);
+      const eu = await comCookie('GET', '/api/auth/eu', undefined, donoCookie);
+      if (eu.body.papel !== 'dono' || !eu.body.perms.admin) throw new Error('o papel não veio: ' + JSON.stringify(eu.body).slice(0, 120));
+      return `sessão aberta · papel ${eu.body.papel} · perms ${JSON.stringify(eu.body.perms)}`;
+    });
+
+    await step('passo 8: cada papel só faz o que lhe compete (autenticação ≠ autorização)', async () => {
+      const criar = async (email, role) => {
+        const r = await comCookie('POST', '/api/ops/utilizadores', { email, password: 'palavra-comprida-2026', role }, donoCookie);
+        if (r.status !== 201) throw new Error('criar ' + role + ': ' + r.status + ' ' + JSON.stringify(r.body).slice(0, 120));
+        return r.body.utilizador;
+      };
+      await criar('gestor@orbita.pt', 'gestor');
+      await criar('operador@orbita.pt', 'operador');
+      await criar('leitor@orbita.pt', 'leitor');
+      const entrar = async email => {
+        const r = await comCookie('POST', '/api/auth/entrar', { email, password: 'palavra-comprida-2026' });
+        if (r.status !== 200) throw new Error('entrar ' + email + ': ' + r.status);
+        return r.cookie;
+      };
+      const leitor = await entrar('leitor@orbita.pt');
+      const operador = await entrar('operador@orbita.pt');
+      const gestor = await entrar('gestor@orbita.pt');
+      const t = async (cookie, method, p, body) => (await comCookie(method, p, body, cookie)).status;
+      const linhas = [];
+      linhas.push(`leitor lê=${await t(leitor, 'GET', '/api/ops/leads')} escreve=${await t(leitor, 'POST', '/api/ops/leads', { leads: [{ name: 'L', phone: '+351 911 000 111' }] })}`);
+      linhas.push(`operador escreve=${await t(operador, 'POST', '/api/ops/leads', { leads: [{ name: 'O ' + Date.now(), phone: '+351 911 000 222' }] })} aprova=${await t(operador, 'POST', '/api/ops/stop', { stop: false })}`);
+      linhas.push(`gestor aprova=${await t(gestor, 'POST', '/api/ops/stop', { stop: false })} contas=${await t(gestor, 'GET', '/api/ops/utilizadores')}`);
+      linhas.push(`dono contas=${await t(donoCookie, 'GET', '/api/ops/utilizadores')}`);
+      if (!/leitor lê=200 escreve=403/.test(linhas[0])) throw new Error(linhas[0]);
+      if (!/operador escreve=201 aprova=403/.test(linhas[1])) throw new Error(linhas[1]);
+      if (!/gestor aprova=200 contas=403/.test(linhas[2])) throw new Error(linhas[2]);
+      if (!/dono contas=200/.test(linhas[3])) throw new Error(linhas[3]);
+      leitorCookie = leitor;
+      return linhas.join(' · ');
+    });
+
+    await step('passo 8: cinco falhas seguidas bloqueiam a conta por 15 minutos', async () => {
+      const alvo = 'bloqueio@orbita.pt';
+      const criada = await comCookie('POST', '/api/ops/utilizadores', { email: alvo, password: 'palavra-comprida-2026', role: 'leitor' }, donoCookie);
+      if (criada.status !== 201) throw new Error('não criou a conta do teste: ' + criada.status);
+      const estados = [];
+      for (let i = 0; i < 5; i++) {
+        const r = await comCookie('POST', '/api/auth/entrar', { email: alvo, password: 'errada-mas-comprida' });
+        estados.push(r.status);
+      }
+      const certo = await comCookie('POST', '/api/auth/entrar', { email: alvo, password: 'palavra-comprida-2026' });
+      if (certo.status !== 423) throw new Error('com a palavra-passe certa devia estar bloqueada; veio ' + certo.status);
+      if (estados.filter(s => s === 401).length !== 5) throw new Error('estados inesperados: ' + estados.join(','));
+      if (!/demasiadas tentativas/.test(certo.body.error || '')) throw new Error('a recusa não explica o bloqueio: ' + certo.body.error);
+      // o bloqueio não deixa rasto do email em claro: os eventos dizem o motivo, não quem
+      const eventos = await comCookie('GET', '/api/ops/eventos?limit=50', undefined, donoCookie);
+      const texto = JSON.stringify(eventos.body || {});
+      if (/bloqueio@orbita\.pt/.test(texto)) throw new Error('o email ficou em claro no registo de eventos');
+      return `5×401 → tentativa certa 423 «${String(certo.body.error).slice(0, 42)}…» · sem email em claro nos eventos`;
+    });
+
+    await step('passo 8: sair fecha a sessão e o cookie antigo deixa de valer', async () => {
+      const antes = await comCookie('GET', '/api/ops/leads', undefined, leitorCookie);
+      if (antes.status !== 200) throw new Error('a sessão do leitor não estava válida');
+      const fora = await comCookie('POST', '/api/auth/sair', {}, leitorCookie);
+      if (fora.status !== 200) throw new Error('sair: HTTP ' + fora.status);
+      const depois = await comCookie('GET', '/api/ops/leads', undefined, leitorCookie);
+      if (depois.status !== 401) throw new Error('o cookie antigo ainda vale (' + depois.status + ')');
+      const revogada = await comCookie('POST', '/api/auth/entrar', { email: 'operador@orbita.pt', password: 'palavra-comprida-2026' });
+      const lista = await comCookie('GET', '/api/ops/sessoes', undefined, donoCookie);
+      if (!Array.isArray(lista.body.sessoes) || !lista.body.sessoes.length) throw new Error('a lista de sessões veio vazia');
+      const alvo = lista.body.sessoes.find(x => x.user === 'operador@orbita.pt' && x.state === 'activa');
+      const r = await comCookie('DELETE', '/api/ops/sessoes/' + alvo.id, undefined, donoCookie);
+      if (r.status !== 200) throw new Error('revogar: HTTP ' + r.status);
+      const depoisRevogar = await comCookie('GET', '/api/ops/leads', undefined, revogada.cookie);
+      if (depoisRevogar.status !== 401) throw new Error('a sessão revogada ainda vale');
+      return `${lista.body.sessoes.length} sessões · sair e revogar fecham na hora`;
+    });
+
+    await step('passo 8: cookie de sessão de outra origem é recusado (CSRF), na origem certa passa', async () => {
+      const mau = await comCookie('POST', '/api/ops/stop', { stop: true }, donoCookie, { origin: 'https://mau.example' });
+      if (mau.status !== 403) throw new Error('aceitou um POST de outra origem com cookie (' + mau.status + ')');
+      const bom = await comCookie('POST', '/api/ops/stop', { stop: false }, donoCookie, { origin: base });
+      if (bom.status !== 200) throw new Error('recusou um POST da nossa origem (' + bom.status + ')');
+      return 'outra origem → 403 · mesma origem → 200';
     });
 
   } catch (e) { bad('operação: servidor isolado', e.message); }

@@ -89,6 +89,23 @@
 - **Na mesa**: secções **Tarefas** (filtros por departamento e estado, correr/repetir/aprovar/rejeitar, resultado e evidência) e **Agentes**; cartão do **Funil** nos leads; pesquisa global em leads e projetos; barra de navegação com seis secções no telemóvel.
 - **Provas:** `ops.test.mjs` **54 testes** (11 novos: duplicados, falha sem motor, prazo, tentativas, aprovação, recuperação, painel, funil, paradas, pesquisa, CSRF); `check.mjs` **85/86** com dez passos novos de ponta a ponta — incluindo **quatro pedidos em paralelo a criar uma só tarefa** e **reinício do servidor com dados intactos** (3 leads, 6 tarefas, 1 projeto). Só a verificação de navegador falha, por não haver Chrome.
 
+## 1.8.0 — 26 out 2026 · Contas, sessões e papéis
+
+- **Autenticação ≠ autorização, finalmente separadas.** Havia uma palavra-passe para a instalação toda: quem a tinha podia tudo. Agora há **contas** (esquema **v7**: `users`, `sessions`, `auth_attempts`), **sessões** com prazo e revogação, e **quatro papéis** com permissões declaradas:
+  - **dono** — tudo: contas, aprovações, entregas, dinheiro e oferta;
+  - **gestor** — aprova, entrega e pára envios; não mexe em contas;
+  - **operador** — cria e edita leads, projetos, mensagens e tarefas; não aprova nem entrega;
+  - **leitor** — vê tudo, não altera nada.
+- **A regra vive no servidor.** `permFor(método, rota)` mapeia cada rota para `read`, `write`, `approve` ou `admin`; a mesa esconde o que o papel não permite (cortesia), mas quem recusa é o servidor com **403** e o motivo em palavras.
+- **Palavras-passe com scrypt** (N=16384, sal próprio) — nunca em claro, nunca em log, nunca devolvidas por uma API. Política mínima de 12 caracteres que recusa as óbvias, o próprio email e o próprio nome.
+- **Sessões** com token de 32 bytes aleatórios; na base fica só o **sha256**. Cookie **HttpOnly + SameSite=Strict + Path=/** (e `Secure` quando é https). Prazo de 12 h configurável, revogação individual na mesa, e trocar a palavra-passe fecha todas as sessões.
+- **Primeira conta** criada em `/app` e só enquanto não existir nenhuma — depois disso, só um dono cria contas. O arranque passa a dizer em palavras o modo: contas, token de máquina ou **modo local sem palavra-passe**.
+- **Força bruta**: 20 tentativas de entrada por minuto e por IP, e **5 falhas numa conta bloqueiam-na 15 minutos**; o email vai em **hash** para o registo de tentativas, para não deixar dados pessoais em claro. A resposta é a mesma para conta inexistente e palavra-passe errada.
+- **O escritório 3D** passa a estar sob a mesma guarda (`/api/tasks`, `/api/chat`, `/api/email`, `/api/deploy`, …): em modo local continua aberto; com contas, quem não entrou é levado a `/app`.
+- **Na mesa**: ecrã de entrada (e de criação da primeira conta), nome e papel no rodapé, «Sair», e a secção **Contas** (só para dono) com lista de contas, mudança de papel, criação, desactivação e sessões activas com botão para fechar.
+- **Configuração**: `ORBITA_SESSION_HOURS`, `ORBITA_SECURE_COOKIE` e `ORBITA_AUTH=sessao` (desliga a credencial de máquina — o modo certo para expor na internet). O SQL de Postgres ganha `orbita_users`, `orbita_sessions` e `orbita_auth_attempts`, com RLS e sem qualquer política para `anon`.
+- **Provas:** `ops.test.mjs` **63 testes** (9 novos: hashing e política, hierarquia de papéis, contas e primeira conta única, expiração/revogação de sessões, troca de palavra-passe que fecha tudo, bloqueio após 5 falhas sem email em claro, guarda com sessão/máquina/local, flags do cookie, estado de autenticação); `check.mjs` **92/93** com sete passos novos por HTTP — primeira conta e cookie `HttpOnly`, 401 com motivo, sessão a abrir `/api/ops`, matriz de papéis (`leitor lê=200 escreve=403 · operador escreve=201 aprova=403 · gestor aprova=200 contas=403 · dono contas=200`), bloqueio de 5 falhas, sair/revogar a fechar na hora e CSRF com cookie de sessão. Só a verificação de navegador falha, por não haver Chrome.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

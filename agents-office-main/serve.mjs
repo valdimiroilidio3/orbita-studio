@@ -55,7 +55,11 @@ import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · G
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
 import * as ops from './src/ops/index.mjs';
-import { createLimiter, authorized, adminMode, csrfOk } from './src/ops/guard.mjs';
+import {
+  createLimiter, authorized, adminMode, csrfOk,
+  authenticate, sessionCookie, clearSessionCookie, sessionToken, wantsSecureCookie, SESSION_COOKIE,
+} from './src/ops/guard.mjs';
+import * as auth from './src/ops/auth.mjs';
 import { zipBuffer } from './src/ops/zip.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
@@ -591,6 +595,25 @@ const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.fi
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
 const limiter = createLimiter({ windowMs: 60000, max: 300 });
+// Entrar é o alvo natural de força bruta: mais apertado do que o resto, por IP.
+const loginLimiter = createLimiter({ windowMs: 60000, max: 20 });
+
+/**
+ * Que permissão cada rota exige. A regra é explícita e curta — o que não estiver listado é
+ * leitura (GET) ou escrita (restantes métodos). Aprovar, entregar e parar envios são «approve»;
+ * contas, sessões, dinheiro e oferta são «admin».
+ */
+function permFor(method, pathname) {
+  // Contas, sessões, dinheiro e oferta são de dono — mesmo para ler: a lista de emails não é
+  // matéria de leitor.
+  if (/^\/api\/ops\/(utilizadores|sessoes)/.test(pathname)) return 'admin';
+  if (/^\/api\/ops\/(receita|clientes|oferta|autonomia\/limiar)/.test(pathname)) return 'admin';
+  if (method === 'GET' || method === 'HEAD') return 'read';
+  if (/\/(aprovar|entregar|rejeitar|approve|enviar|send|stop)$/.test(pathname)) return 'approve';
+  if (/^\/api\/ops\/(ensaio|evals\/correr|consent\/opt-out)/.test(pathname)) return 'approve';
+  if (/^\/api\/ops\/(tarefas\/[^/]+\/aprovar|tarefas\/[^/]+\/rejeitar)/.test(pathname)) return 'approve';
+  return 'write';
+}
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
@@ -599,23 +622,49 @@ const server = http.createServer(async (req, res) => {
       const hit = limiter.check(req.socket.remoteAddress || 'local');
       if (!hit.ok) return json(res, 429, { ok: false, error: `demasiados pedidos — tenta daqui a ${hit.espera}s`, retryAfter: hit.espera });
     }
-    // 2) autenticação: só quando há ORBITA_ADMIN_TOKEN. Em modo local (a omissão) ninguém é
-    //    barrado — e o arranque di-lo em voz alta, para não haver dúvidas sobre o que está aberto.
+    // 2) autenticação: quem está do outro lado. Uma pessoa (sessão com papel), uma máquina
+    //    (token da instalação, vale como dono) ou o modo local — que só existe quando não há
+    //    contas nem token, e que o arranque anuncia em voz alta.
+    let AUTH = null;
     if (url.pathname.startsWith('/api/ops')) {
-      const auth = authorized(req);
-      if (!auth.ok) return json(res, 401, { ok: false, ...auth });
+      AUTH = authenticate(req, { db: OPS?.db });
+      if (!AUTH.ok) return json(res, 401, { ok: false, ...AUTH });
       // 3) CSRF: uma credencial em cookie não pode ser usada por outro site. O cabeçalho
       //    `x-orbita-admin` não tem este problema (um site estranho não o consegue pôr).
       const csrf = csrfOk(req);
       if (!csrf.ok) return json(res, 403, { ok: false, error: csrf.error });
+      // 4) autorização: autenticado não quer dizer autorizado. O papel decide.
+      const perm = permFor(req.method, url.pathname);
+      if (!AUTH.can(perm)) {
+        OPS?.audit?.({ actor: AUTH.user?.email || AUTH.mode, action: 'acesso.negado', entity: 'rota', entityId: url.pathname, detail: { papel: AUTH.role, permissao: perm } });
+        return json(res, 403, {
+          ok: false, error: `o papel «${AUTH.roleLabel || AUTH.role}» não permite ${perm} nesta rota`,
+          papel: AUTH.role, permissao: perm, precisa: perm,
+        });
+      }
     }
+    // 5) o escritório 3D e as suas rotas de dados seguem a mesma guarda que a mesa. Em modo local
+    //    (sem contas nem token) continuam abertas; com contas, o browser leva o cookie de sessão
+    //    sozinho no mesmo domínio — e quem não entrou é convidado a entrar em /app.
+    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|google)(\/|$)/;
+    if (ESCritorio.test(url.pathname)) {
+      const a = authenticate(req, { db: OPS?.db });
+      if (!a.ok) return json(res, 401, { ok: false, ...a, entrar: '/app' });
+      const csrf = csrfOk(req);
+      if (!csrf.ok) return json(res, 403, { ok: false, error: csrf.error });
+      const perm = req.method === 'GET' || req.method === 'HEAD' ? 'read' : 'write';
+      if (!a.can(perm)) return json(res, 403, { ok: false, error: `o papel «${a.roleLabel}» não permite ${perm} aqui`, papel: a.role });
+    }
+
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/command-centre-v2.html' || url.pathname === '/dark')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       let page = fs.readFileSync(HTML, 'utf8');
       if (url.pathname === '/dark') page = page.replace('<body>', '<body class="dark">'); // /dark: o mesmo ficheiro, em modo escuro
       // Se a instalação está protegida, o escritório precisa de mandar o token em cada pedido. O
       // token não vai aqui dentro: fica no browser (localStorage) e é pedido uma vez.
-      if (adminMode() === 'token') page = page.replace('</head>', `<script>(function(){var k='orbita.admin.token';if(!localStorage.getItem(k)){var t=prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');if(t)localStorage.setItem(k,t);}var f=window.fetch;window.fetch=function(u,o){o=o||{};var t=localStorage.getItem(k);if(t&&String(u).indexOf('/api/')===0){o.headers=Object.assign({},o.headers,{'x-orbita-admin':t});}return f(u,o);};})();</script></head>`);
+      // Quem não entrou é levado à mesa: uma sessão serve as duas superfícies.
+      page = page.replace('</head>', `<script>(function(){var f=window.fetch;window.fetch=function(u,o){return f(u,o).then(function(r){if(r.status===401&&String(u).indexOf('/api/auth')!==0&&String(u).indexOf('/api/')===0){location.href='/app';}return r;});};})();</script></head>`);
+      if (adminMode() === 'token' && (auth.countUsers(OPS?.db) === 0)) page = page.replace('</head>', `<script>(function(){var k='orbita.admin.token';if(!localStorage.getItem(k)){var t=prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');if(t)localStorage.setItem(k,t);}var f=window.fetch;window.fetch=function(u,o){o=o||{};var t=localStorage.getItem(k);if(t&&String(u).indexOf('/api/')===0){o.headers=Object.assign({},o.headers,{'x-orbita-admin':t});}return f(u,o);};})();</script></head>`);
       return res.end(page);
     }
     // A mesa de trabalho (26 out 2026): a superfície limpa para decidir. O escritório 3D fica onde
@@ -914,6 +963,76 @@ const server = http.createServer(async (req, res) => {
       const r = await chat(agent, String(text).trim(), history);
       return json(res, 200, { ...r, interview: false });
     }
+    // ---------- /api/auth: contas, sessões e o que cada papel pode fazer ----------
+    // Fora de /api/ops de propósito: entrar não exige estar dentro.
+    if (url.pathname.startsWith('/api/auth')) {
+      const badAuth = e => json(res, e.status || 400, { ok: false, error: e.message });
+      const secure = wantsSecureCookie(req);
+      const horas = auth.sessionHours(process.env);
+      const cookieFor = token => sessionCookie(token, { maxAgeSeconds: horas * 3600, secure });
+      const quem = req => authenticate(req, { db: OPS?.db });
+      try {
+        if (url.pathname === '/api/auth/estado' && req.method === 'GET') {
+          return json(res, 200, {
+            ok: true, ...auth.authState(OPS?.db), papeis: auth.ROLES, permissoes: auth.PERMS,
+            horasSessao: horas, primeiraContaPossivel: !OPS?.db || auth.countUsers(OPS.db) === 0,
+          });
+        }
+        if (url.pathname === '/api/auth/primeiro-dono' && req.method === 'POST') {
+          if (!OPS) return json(res, 503, { ok: false, error: 'a operação não está ligada' });
+          const lim = loginLimiter.check(req.socket.remoteAddress || 'local');
+          if (!lim.ok) return json(res, 429, { ok: false, error: `demasiadas tentativas — tenta daqui a ${lim.espera}s`, retryAfter: lim.espera });
+          const b = await limitedBody(req, 8000);
+          const user = auth.createFirstOwner(OPS.db, { email: b.email, name: b.name || '', password: b.password });
+          const { token } = auth.openSession(OPS.db, user, { hours: horas, agent: req.headers['user-agent'] || '' });
+          res.setHeader('set-cookie', cookieFor(token));
+          console.log(`★ primeira conta criada: ${user.email} (${user.role})`);
+          return json(res, 201, { ok: true, user, papeis: auth.ROLES });
+        }
+        if (url.pathname === '/api/auth/entrar' && req.method === 'POST') {
+          if (!OPS) return json(res, 503, { ok: false, error: 'a operação não está ligada' });
+          const lim = loginLimiter.check(req.socket.remoteAddress || 'local');
+          if (!lim.ok) return json(res, 429, { ok: false, error: `demasiadas tentativas de entrada — tenta daqui a ${lim.espera}s`, retryAfter: lim.espera });
+          const b = await limitedBody(req, 8000);
+          const out = auth.login(OPS.db, {
+            email: b.email, password: b.password, hours: horas,
+            agent: req.headers['user-agent'] || '', ip: req.socket.remoteAddress || '',
+          });
+          res.setHeader('set-cookie', cookieFor(out.token));
+          return json(res, 200, { ok: true, user: out.user, expira: out.expires_at, papeis: auth.ROLES });
+        }
+        if (url.pathname === '/api/auth/sair' && req.method === 'POST') {
+          const token = sessionToken(req);
+          const r = token && OPS ? auth.closeSession(OPS.db, token, { actor: 'sessao' }) : { ok: true };
+          res.setHeader('set-cookie', clearSessionCookie({ secure }));
+          return json(res, 200, { ok: true, ...r });
+        }
+        if (url.pathname === '/api/auth/eu' && req.method === 'GET') {
+          const a = quem(req);
+          if (!a.ok) return json(res, 401, { ok: false, ...a, estado: auth.authState(OPS?.db), primeiraContaPossivel: !OPS?.db || auth.countUsers(OPS.db) === 0 });
+          return json(res, 200, {
+            ok: true, modo: a.mode, user: a.user, papel: a.role, roleLabel: a.roleLabel,
+            perms: a.perms, maquina: !!a.machine, local: !!a.local, papeis: auth.ROLES,
+            horasSessao: horas,
+          });
+        }
+        if (url.pathname === '/api/auth/palavra-passe' && req.method === 'POST') {
+          if (!OPS) return json(res, 503, { ok: false, error: 'a operação não está ligada' });
+          const a = quem(req);
+          if (!a.ok || !a.user) return json(res, 401, { ok: false, error: 'entra com a tua conta para trocar a palavra-passe' });
+          const csrf = csrfOk(req);
+          if (!csrf.ok) return json(res, 403, { ok: false, error: csrf.error });
+          const b = await limitedBody(req, 8000);
+          const row = OPS.db.prepare('SELECT * FROM users WHERE id = ?').get(a.user.id);
+          if (!row || !auth.verifyPassword(b.atual, row.password_hash)) return json(res, 401, { ok: false, error: 'a palavra-passe actual não confere' });
+          const r = auth.setPassword(OPS.db, a.user.id, b.nova, a.user.email);
+          res.setHeader('set-cookie', clearSessionCookie({ secure }));
+          return json(res, 200, { ok: true, ...r, nota: 'todas as sessões foram fechadas — entra outra vez' });
+        }
+      } catch (e) { return badAuth(e); }
+      return json(res, 404, { ok: false, error: 'rota de autenticação desconhecida' });
+    }
+
     // ---------- /api/ops: o trabalho real ----------
     // Envio de email exige o token (é o único sítio desta camada que fala com o mundo).
     if (OPS && url.pathname.startsWith('/api/ops')) {
@@ -1229,6 +1348,32 @@ const server = http.createServer(async (req, res) => {
           OPS.personalize.recalibrate(OPS.db);
           return json(res, 200, { ok: true, ...out, lead: OPS.leads.getLead(OPS.db, m.lead_id) });
         }
+        // ---------- contas e sessões (só dono: o permFor já o garantiu) ----------
+        if (url.pathname === '/api/ops/utilizadores' && req.method === 'GET') {
+          return json(res, 200, { ok: true, utilizadores: auth.listUsers(OPS.db), papeis: auth.ROLES, permissoes: auth.PERMS, minimo: auth.PASSWORD_MIN });
+        }
+        if (url.pathname === '/api/ops/utilizadores' && req.method === 'POST') {
+          const b = await limitedBody(req, 8000);
+          const user = auth.createUser(OPS.db, { email: b.email, name: b.name || '', password: b.password, role: b.role || 'leitor', actor: AUTH.user?.email || 'dono' });
+          return json(res, 201, { ok: true, utilizador: user });
+        }
+        const userMatch = url.pathname.match(/^\/api\/ops\/utilizadores\/([^/]+)\/(papel|palavra-passe|desactivar)$/);
+        if (userMatch && req.method === 'POST') {
+          const id = decodeURIComponent(userMatch[1]);
+          const b = await limitedBody(req, 8000);
+          const actor = AUTH.user?.email || 'dono';
+          if (userMatch[2] === 'papel') return json(res, 200, { ok: true, utilizador: auth.setRole(OPS.db, id, b.role, actor) });
+          if (userMatch[2] === 'palavra-passe') return json(res, 200, { ok: true, ...auth.setPassword(OPS.db, id, b.password, actor) });
+          return json(res, 200, { ok: true, utilizador: auth.deactivate(OPS.db, id, actor) });
+        }
+        if (url.pathname === '/api/ops/sessoes' && req.method === 'GET') {
+          return json(res, 200, { ok: true, sessoes: auth.listSessions(OPS.db, url.searchParams.get('utilizador') || null), horas: auth.sessionHours(process.env) });
+        }
+        const sessMatch = url.pathname.match(/^\/api\/ops\/sessoes\/([^/]+)$/);
+        if (sessMatch && req.method === 'DELETE') {
+          const r = auth.revokeSession(OPS.db, decodeURIComponent(sessMatch[1]), { actor: AUTH.user?.email || 'dono', reason: 'revogada na mesa' });
+          return json(res, r.ok ? 200 : 404, { ok: r.ok, ...r });
+        }
         // ---------- passo 7: tarefas dos departamentos, funil, pesquisa e atividade ----------
         if (url.pathname === '/api/ops/agentes' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.tasks.board(OPS.db), resumo: OPS.tasks.summary(OPS.db), tipos: OPS.tasks.KINDS });
@@ -1296,9 +1441,11 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(cfg.port, () => {
   console.log(`Órbita ${version} → http://localhost:${cfg.port}`);
-  console.log(adminMode() === 'token'
-    ? '  acesso: protegido por ORBITA_ADMIN_TOKEN (as rotas /api/ops exigem o token)'
-    : '  acesso: MODO LOCAL, sem palavra-passe — só para esta máquina. Para expor na rede, define ORBITA_ADMIN_TOKEN (16+ caracteres) no .env.');
+  const estadoAcesso = auth.authState(OPS?.db);
+  const faltaConta = estadoAcesso.modo === 'sessao' && !estadoAcesso.usuarios;
+  console.log(`  acesso: ${estadoAcesso.descricao}${faltaConta ? ' → abre /app e cria a primeira conta' : ''}`);
+  if (estadoAcesso.modo === 'local') console.log('  aviso: sem contas e sem token, qualquer pessoa com acesso à porta manda. Para expor na rede, cria uma conta em /app (ou define ORBITA_ADMIN_TOKEN).');
+  if (estadoAcesso.modo === 'sessao' && estadoAcesso.token) console.log('  nota: há contas E token de máquina — o token vale como dono, sem deixar rasto de quem. Para o desligar: ORBITA_AUTH=sessao.');
   const avail = AI.candidates.filter(c => c.available).map(c => c.label);
   console.log(`  empresa: ${cfg.name}   cérebro: ${BRAIN} (${graph.notes} notas, ${graph.links.length} ligações)`);
   console.log(`  ia: ${AI.active ? AI.active.label + ' (' + backend + (AI.active.model ? ' · ' + AI.active.model : '') + ')' : 'NENHUM MOTOR DISPONÍVEL'} · ${modelName(cfg.model)}${cfg.effort ? ' · esforço ' + cfg.effort : ''} por omissão (encaminhamento no Sonnet)`);

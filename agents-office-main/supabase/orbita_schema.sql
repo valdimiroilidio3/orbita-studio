@@ -102,6 +102,55 @@ grant select, insert, update on table public.orbita_deliveries to service_role;
 
 create index if not exists orbita_deliveries_project_idx on public.orbita_deliveries (project_id, at desc);
 
+-- ---------- contas e sessões (espelha o esquema v7 do SQLite) ----------
+
+create table if not exists public.orbita_users (
+  id text primary key,
+  email citext not null unique,
+  name text not null default '',
+  role text not null default 'leitor' check (role in ('dono','gestor','operador','leitor')),
+  password_hash text not null,
+  active boolean not null default true,
+  last_login_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.orbita_users enable row level security;
+revoke all on table public.orbita_users from anon, authenticated;
+-- Ninguém lê a tabela de contas pelo browser, nem com a chave anon: só o servidor, com service_role.
+grant select, insert, update, delete on table public.orbita_users to service_role;
+
+create table if not exists public.orbita_sessions (
+  id text primary key,
+  user_id text not null references public.orbita_users (id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  last_seen_at timestamptz,
+  revoked_at timestamptz,
+  revoked_by text not null default '',
+  agent text not null default ''
+);
+create index if not exists orbita_sessions_user_idx on public.orbita_sessions (user_id, created_at desc);
+
+alter table public.orbita_sessions enable row level security;
+revoke all on table public.orbita_sessions from anon, authenticated;
+grant select, insert, update on table public.orbita_sessions to service_role;
+
+create table if not exists public.orbita_auth_attempts (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  email_hash text not null,
+  outcome text not null,
+  reason text not null default ''
+);
+create index if not exists orbita_auth_attempts_idx on public.orbita_auth_attempts (email_hash, at desc);
+
+alter table public.orbita_auth_attempts enable row level security;
+revoke all on table public.orbita_auth_attempts from anon, authenticated;
+grant select, insert on table public.orbita_auth_attempts to service_role;
+
 -- ---------- tarefas dos departamentos (espelha o esquema v6 do SQLite) ----------
 
 create table if not exists public.orbita_tasks (

@@ -27,12 +27,13 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Avaliações** | `src/ops/evals.mjs` + `evals.mjs` | Casos fixos com expectativas; resultado guardado por versão de prompt |
 | **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 54 testes, tudo em memória, sem tocar em serviços |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 63 testes, tudo em memória, sem tocar em serviços |
 | **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
 | **Projetos** | `src/ops/projects.mjs` | Do lead ao projeto, com máquina de estados e um projeto por negócio |
 | **Geração** | `src/ops/generate.mjs` | Quatro pontos de partida, ficheiros reais, sem dependências |
 | **QA** | `src/ops/qa.mjs` | Estrutura, sintaxe, acessibilidade e honestidade — com manifesto sha256 |
 | **Guarda** | `src/ops/guard.mjs` + `src/ops/zip.mjs` | Ritmo por IP, token opcional, e o ZIP da entrega |
+| **Contas** | `src/ops/auth.mjs` | Papéis, palavras-passe com scrypt, sessões, bloqueio por falhas |
 | **Tarefas** | `src/ops/tasks.mjs` | Os seis departamentos como máquina de estados com prazo, tentativas e aprovação |
 | **Pesquisa e atividade** | `src/ops/search.mjs` | Pesquisa global sem acentos e painel do que correu ou falhou |
 
@@ -380,8 +381,49 @@ agentes leem estes estados: sem tarefa em `running`, ninguém aparece a trabalha
 - taxa por **origem** (com primeira e última recolha) e por **mês** de recolha;
 - **oportunidades paradas**: abertas, sem toque há mais de 14 dias, com os dias contados.
 
+## Contas, papéis e sessões (passo 8)
+
+A credencial única da instalação confundia duas perguntas: *quem és* e *o que podes fazer*. Agora:
+
+```
+POST /api/auth/primeiro-dono   → cria o dono (só enquanto não há contas) e abre sessão
+POST /api/auth/entrar          → email + palavra-passe → cookie orbita_sessao
+GET  /api/auth/eu              → quem sou, papel, permissões
+POST /api/auth/sair            → revoga esta sessão e limpa o cookie
+```
+
+| Papel | `read` | `write` | `approve` | `admin` |
+|---|---|---|---|---|
+| dono | ✓ | ✓ | ✓ | ✓ |
+| gestor | ✓ | ✓ | ✓ | — |
+| operador | ✓ | ✓ | — | — |
+| leitor | ✓ | — | — | — |
+
+**Como se aplica.** `permFor(método, rota)` em `serve.mjs` decide a permissão; o `authenticate`
+devolve `{ ok, mode, user, role, can(perm) }`. Rotas `/api/ops/utilizadores` e `/api/ops/sessoes`
+são sempre `admin` (mesmo para ler: emais não são matéria de leitor). `aprovar`, `entregar`,
+`rejeitar`, `stop`, `ensaio`, `evals/correr` e `consent/opt-out` são `approve`. O resto é `write`
+(não-GET) ou `read` (GET).
+
+**Sessões.** Token de 32 bytes; na base só o `sha256`. Prazo de `ORBITA_SESSION_HOURS` (12 h).
+Cookie `HttpOnly; SameSite=Strict; Path=/` e `Secure` quando a ligação é https
+(`ORBITA_SECURE_COOKIE=1` força, `0` desliga). `revokeAll` corre ao trocar a palavra-passe e ao
+desactivar a conta.
+
+**Força bruta.** 20 tentativas de entrada por minuto e por IP (`loginLimiter`); 5 falhas numa conta
+bloqueiam-na 15 minutos (`auth_attempts`, email em hash). A resposta é sempre a mesma frase para
+conta inexistente e palavra-passe errada.
+
+**Modos.** `authState()` devolve um de três: `sessao` (há contas, ou `ORBITA_AUTH=sessao`),
+`token` (só `ORBITA_ADMIN_TOKEN` — credencial de máquina, vale como dono) ou `local` (nem contas nem
+token — só nesta máquina). O arranque imprime o modo; a mesa mostra o ecrã de entrada quando recebe
+`401 { hint: 'sessao' }`.
+
 ## A guarda da porta
 
+- **Contas**: a partir da primeira conta, `/api/ops` e as rotas de dados do escritório
+  (`/api/tasks`, `/api/chat`, `/api/email`, `/api/deploy`, …) exigem sessão; `/api/health`,
+  `/api/auth/*` e as páginas continuam públicos (a página de entrada tem de carregar).
 - **Ritmo**: 300 pedidos por minuto por IP; acima disso, **429** com o tempo de espera.
 - **CSRF**: um pedido que muda estado e que traz a credencial em **cookie** é recusado se vier de
   outra origem (**403**). O cabeçalho `x-orbita-admin` e o `Bearer` não têm este problema.
@@ -492,6 +534,11 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 - **Testes de navegador.** Não há Chromium neste ambiente: o QA reporta `navegador.executado=false`
   com o motivo, e o smoke com Chrome falha. A verificação do preview é feita por HTTP (200 + HTML/CSS
   esperados) e com jsdom, não por renderização real.
+- **Uma instalação, um conjunto de contas.** Não há multi-tenant com contas separadas por cliente:
+  os espaços de cliente (`tenants`) isolam dados, mas as contas vivem todas na mesma instalação.
+  Para servir vários clientes expostos, falta ligar contas a espaços e RLS a sério.
+- **Sem 2FA, sem recuperação de palavra-passe.** Um dono repõe a palavra-passe de outra conta pelo
+  servidor; não há email de recuperação (exigiria Resend configurado e consentimento).
 - **Lint e tipos.** A stack gerada é HTML/CSS/JS sem build: não há ESLint nem `tsc` a correr no QA.
   O que existe é verificação de sintaxe (`vm.Script`), CSS e JSON — e é isso que o relatório diz.
 - **Agente de código.** `projeto.corrigir` exige IA e falha sem chave; a correcção é manual, na
@@ -502,7 +549,7 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 54 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 63 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

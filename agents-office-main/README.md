@@ -229,6 +229,32 @@ Segurança: 300 pedidos/minuto por IP, `/api/ops` exige o token quando `ORBITA_A
 definido (cabeçalho `x-orbita-admin`), e um pedido mutável autenticado por cookie vindo de outra
 origem é recusado (CSRF, 403). Sem a variável o arranque diz que está em **modo local**.
 
+## Quem entra, e o que pode fazer
+
+Autenticação e autorização são coisas diferentes, e aqui estão separadas. A partir da primeira
+conta, o Órbita pede entrada em `/app` e cada rota exige uma permissão concreta:
+
+| Papel | Lê | Escreve | Aprova e entrega | Contas e definições |
+|---|---|---|---|---|
+| **dono** | sim | sim | sim | sim |
+| **gestor** | sim | sim | sim | não |
+| **operador** | sim | sim | não | não |
+| **leitor** | sim | não | não | não |
+
+- **Palavras-passe** com scrypt e sal próprio; mínimo de 12 caracteres, sem as óbvias e sem o
+  próprio email. Nunca aparecem numa resposta, num log ou na UI.
+- **Sessões** com prazo (`ORBITA_SESSION_HOURS`, 12 h por omissão), cookie `HttpOnly` +
+  `SameSite=Strict` (+ `Secure` em https), revogação individual e fecho imediato ao sair.
+- **A primeira conta** cria-se em `/app` («Criar conta de dono», no rodapé da mesa enquanto estiver
+  em modo local) e só enquanto não existir nenhuma; depois, só um dono cria contas em **Contas**.
+  `GET /api/auth/estado` diz sempre em que modo a instalação está.
+- **Força bruta**: 20 tentativas/min por IP e 5 falhas por conta bloqueiam-na 15 minutos. O email
+  vai em hash para o registo de tentativas — não fica em claro.
+- **A credencial de máquina** (`ORBITA_ADMIN_TOKEN`, 16+ caracteres) continua a existir para
+  scripts e CI e vale como dono. Com contas, o normal é desligá-la: `ORBITA_AUTH=sessao`.
+- **Sem contas nem token** o Órbita fica em **modo local** — e o arranque di-lo em voz alta, porque
+  é só para esta máquina.
+
 ## Tarefas: trabalho com dono, prazo e resultado
 
 Os seis departamentos — **ORION** (command), **LUNA** (prospect), **KAI** (sales), **NOVA** (design),
@@ -405,8 +431,8 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 ## Verificação
 
 ```bash
-npm run check         # 85 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, tarefas, servidor)
-npm run test:ops      # 54 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 92 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, tarefas, contas, servidor)
+npm run test:ops      # 63 testes da operação: base de dados em memória, nenhum serviço externo
 node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude

@@ -8,6 +8,10 @@
 // aberto à mão e confirmado depois; o email só sai com token e consentimento, e a recusa é
 // mostrada por palavras; e nenhum número aparece sem vir da base de dados.
 const API = '/api';
+// Autenticado não é autorizado: a mesa esconde o que o papel não permite (o servidor recusa de
+// qualquer forma — isto é cortesia, não é a segurança).
+const may = perm => S.eu?.perms?.[perm] !== false;
+const papelLabel = () => S.eu?.user?.roleLabel || S.eu?.roleLabel || (S.eu?.modo === 'local' ? 'modo local' : '');
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const money = c => (Number(c || 0) / 100).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
 const LONG_DATE = (() => {
@@ -40,6 +44,7 @@ const IC = {
   pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
   tarefa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 5.6 8 8.5 5"/><path d="M4 12.5 5.6 14l2.9-3"/><path d="M4 18.5 5.6 20l2.9-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/></svg>',
   agentes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.6"/><circle cx="17" cy="9.5" r="2.2"/><path d="M3 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6"/><path d="M14.8 14.7c2.6-.4 5.2 1.2 5.2 4.3"/></svg>',
+  contas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.4 3-5.6 7-5.6s7 2.2 7 5.6"/></svg>',
   vazio: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
 };
 
@@ -49,6 +54,7 @@ const NAV = [
   { k: 'projetos', label: 'Projetos', ic: 'pastas' },
   { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
   { k: 'agentes', label: 'Agentes', ic: 'agentes' },
+  { k: 'contas', label: 'Contas', ic: 'contas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
 ];
@@ -61,6 +67,7 @@ const S = {
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
+  eu: null, needLogin: false, authEstado: null, primeiraConta: false, contas: null, sessoes: [],
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -80,8 +87,13 @@ async function call(path, method = 'GET', body) {
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
   if (r.status === 401) {
-    // instalação protegida: pede o token uma vez e guarda-o no browser
-    const given = S.tokenPrompted ? prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:') : prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');
+    if (j.hint || j.mode === 'sessao' || j.error === 'entra') {
+      // instalação com contas: mostra o ecrã de entrada (não um prompt do browser)
+      S.needLogin = true;
+      throw Object.assign(new Error(j.error || 'entra para continuar'), { login: true, body: j });
+    }
+    // token de máquina (instalação sem contas): pede uma vez e guarda no browser
+    const given = prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');
     S.tokenPrompted = true;
     if (given) {
       S.token = given;
@@ -106,18 +118,19 @@ function toast(msg, bad = false) {
 function parseHash() {
   const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes'];
+  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
 function paintNav() {
+  if (S.needLogin) { $('#nav').innerHTML = ''; $('#tabbar').innerHTML = ''; return; }
   const cur = S.route.name === 'lead' ? 'leads' : S.route.name;
   const pend = S.today?.decidir?.length || 0;
-  const nav = NAV.map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
+  const nav = NAV.filter(n => n.k !== 'contas' || may('admin')).map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
   $('#nav').innerHTML = nav;
   // No telemóvel cabem seis: o resto (Conversas) fica a um toque a partir de Hoje.
   const TABS = ['hoje', 'leads', 'projetos', 'tarefas', 'agentes', 'saldo'];
-  $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k))
+  $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k) && (n.k !== 'contas' || may('admin')))
     .map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span></a>`).join('');
 }
 
@@ -129,6 +142,11 @@ function paintSideFoot() {
   const clientes = S.clientes?.clientes || [];
   const activo = S.clientes?.activo?.id || '';
   $('#sideFoot').innerHTML = `
+    ${S.eu ? `<div class="meter" style="margin-bottom:var(--s3)">
+      <div class="mrow"><span class="lbl">${esc(S.eu.user?.name || S.eu.user?.email || 'modo local')}</span><b>${esc(papelLabel())}</b></div>
+      <button class="btn quiet small" data-act="abrir-contas" style="margin-top:6px">${S.eu.user ? 'Sair' : (may('admin') ? 'Ver contas' : 'Sair')}</button>
+      ${S.eu.local ? '<button class="btn quiet small" data-act="abrir-primeira-conta" style="margin-top:6px">Criar conta de dono</button>' : ''}
+    </div>` : ''}
     ${clientes.length ? `<div class="espaco"><label for="espaco">Espaço</label>
       <select id="espaco" aria-label="espaço de cliente">${clientes.map(c => `<option value="${esc(c.id)}"${c.id === activo ? ' selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>` : ''}
     <div class="meter">
@@ -147,6 +165,33 @@ function paintSideFoot() {
 }
 
 /* ---------------- dados ---------------- */
+async function loadEu() {
+  try {
+    S.eu = await call('/auth/eu');
+    S.needLogin = false;
+    S.horasSessao = S.eu.horasSessao || S.horasSessao;
+    return true;
+  } catch (e) {
+    if (e.login) {
+      S.needLogin = true;
+      S.primeiraConta = !!e.body?.primeiraContaPossivel;
+      S.authEstado = e.body?.estado || null;
+      S.eu = null;
+      return false;
+    }
+    throw e;
+  }
+}
+
+async function loadContas() {
+  const [u, sessoes] = await Promise.all([
+    call('/ops/utilizadores').catch(() => ({ utilizadores: [], papeis: [] })),
+    call('/ops/sessoes').catch(() => ({ sessoes: [] })),
+  ]);
+  S.contas = u;
+  S.sessoes = sessoes.sessoes || [];
+}
+
 async function loadCommon() {
   const [summary, today, leads, messages, saldo, clientes, projetos] = await Promise.all([
     call('/ops/summary').catch(() => null),
@@ -206,11 +251,15 @@ async function loadLead(id) {
 
 async function boot(full = true) {
   try {
-    if (full) await loadCommon();
+    if (full) {
+      if (!(await loadEu())) { paintNav(); paint(); return; }
+      await loadCommon();
+    }
     if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
     if (S.route.name === 'projeto' && S.route.id) await loadProjeto(S.route.id);
     if (S.route.name === 'tarefas') await loadTarefas();
     if (S.route.name === 'agentes') await loadAgentes();
+    if (S.route.name === 'contas') await loadContas();
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
     S.error = '';
   } catch (e) { S.error = e.message; }
@@ -241,6 +290,7 @@ function headHTML({ title, sub, right = '' }) {
 
 function stopPill() {
   const parado = !!S.today?.presenca?.parado;
+  if (!may('approve')) return `<span class="pill" title="o teu papel não permite parar envios">${IC.enviar}<span>${parado ? 'Envios parados' : 'Envios ativos'}</span></span>`;
   return `<button class="pill ${parado ? 'stop' : ''}" data-act="toggle-stop" title="${parado ? 'retomar todos os envios' : 'parar todos os envios'}">
     ${IC.enviar}<span>${parado ? 'Envios parados' : 'Envios ativos'}</span></button>`;
 }
@@ -420,7 +470,7 @@ function viewLeads() {
     ${headHTML({
       title: 'Leads',
       sub: total ? `${total} guardados · ${alta} com nota alta · ${S.leads.filter(l => !['novo'].includes(l.status)).length} já contactados` : 'ainda não há nenhum lead guardado',
-      right: `<button class="btn small ghost" data-act="novo-lead">+ Lead</button>${stopPill()}`,
+      right: `${may('write') ? '<button class="btn small ghost" data-act="novo-lead">+ Lead</button>' : ''}${stopPill()}`,
     })}
     ${S.adding ? novoLeadForm() : ''}
     ${searchBar()}
@@ -619,7 +669,7 @@ function viewProjetos() {
     ${headHTML({
       title: 'Projetos',
       sub: list.length ? `${r.total} no total · ${r.emQa || 0} em QA · ${r.aprovados || 0} aprovados · ${r.entregues || 0} entregues` : 'ainda não há projetos',
-      right: `<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>${stopPill()}`,
+      right: `${may('write') ? '<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>' : ''}${stopPill()}`,
     })}
     ${S.addingProject ? novoProjetoForm() : ''}
     ${searchBar()}
@@ -657,10 +707,10 @@ function viewProjeto() {
       ${p.goals.length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
       ${p.acceptance.length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
       <div class="acts" style="margin-top:var(--s4)">
-        ${podeGerar ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
-        ${podeQa ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
-        ${podeAprovar ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
-        ${podeEntregar && qa?.passed ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
+        ${podeGerar && may('write') ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
+        ${podeQa && may('write') ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
+        ${podeAprovar && may('approve') ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
+        ${podeEntregar && qa?.passed && may('approve') ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
         ${p.preview_url ? `<a class="btn ghost" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
         ${d.files.length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
       </div>
@@ -697,6 +747,76 @@ function viewProjeto() {
   </div>`;
 }
 
+/* ---------------- entrar ---------------- */
+function viewLogin() {
+  const primeira = S.primeiraConta;
+  const estado = S.authEstado || {};
+  return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
+    <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
+    <div class="card">
+      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Criar a primeira conta' : 'Entrar'}</h1>
+      <p class="hint" style="margin-top:0">${primeira
+        ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e só pode ser criada uma vez.'
+        : 'Entra com o email e a palavra-passe que um dono te deu.'}</p>
+      <div class="form" style="grid-template-columns:1fr">
+        ${primeira ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
+        <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="">
+        <input class="in" id="lgPass" type="password" placeholder="${primeira ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira ? 'new-password' : 'current-password'}">
+        ${primeira ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
+        <button class="btn primary" data-act="${primeira ? 'criar-primeira-conta' : 'entrar'}">${primeira ? 'Criar conta e entrar' : 'Entrar'}</button>
+      </div>
+      <div class="hint" id="leadNote">${primeira
+        ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.'
+        : 'Sem conta, pede a um dono que crie uma em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e pode ser fechada a qualquer momento.'}</div>
+      ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
+      ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
+    </div>
+  </div>`;
+}
+
+/* ---------------- contas (só dono) ---------------- */
+function viewContas() {
+  const c = S.contas || { utilizadores: [], papeis: [] };
+  const papeis = c.papeis || [];
+  const eu = S.eu?.user?.email || '';
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Contas',
+      sub: `${c.utilizadores.length} conta(s) · ${S.sessoes.filter(s => s.state === 'activa').length} sessão(ões) activas · sessões de ${S.horasSessao || 12} h`,
+      right: `<button class="btn small ghost" data-act="sair">Sair</button>`,
+    })}
+    <div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>Quem entra</h3><span class="count">autenticação</span></div>
+      <table><tbody>${c.utilizadores.map(u => `<tr>
+        <td>${esc(u.name || u.email)}${u.name ? `<div class="count">${esc(u.email)}</div>` : ''}${u.email === eu ? ' <span class="tag">tu</span>' : ''}</td>
+        <td>${u.active ? '' : '<span class="tag perdido">inactiva</span>'}</td>
+        <td class="n">
+          <select class="in" data-act="papel" data-id="${esc(u.id)}" aria-label="papel de ${esc(u.email)}" style="padding:6px">
+            ${papeis.map(p => `<option value="${esc(p.key)}"${p.key === u.role ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
+          </select>
+        </td>
+        <td class="n">${u.active && u.role !== 'dono' ? `<button class="btn quiet" data-act="desactivar-conta" data-id="${esc(u.id)}" title="desactivar">✕</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table>
+      <div class="form" style="margin-top:var(--s3);grid-template-columns:1fr 140px 1fr auto">
+        <input class="in" id="ctEmail" type="email" placeholder="email" aria-label="email da nova conta">
+        <select class="in" id="ctPapel" aria-label="papel">${papeis.map(p => `<option value="${esc(p.key)}"${p.key === 'leitor' ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>
+        <input class="in" id="ctPass" type="password" placeholder="palavra-passe (12+)" aria-label="palavra-passe">
+        <button class="btn primary small" data-act="criar-conta">Criar</button>
+      </div>
+      <div class="hint">${papeis.map(p => `<b>${esc(p.label)}</b>: ${esc(p.does)}`).join(' · ')}</div>
+    </div>
+    <div class="card">
+      <div class="sec-h"><h3>Sessões</h3><span class="count">fechar é imediato</span></div>
+      ${S.sessoes.length ? `<table><tbody>${S.sessoes.map(s => `<tr>
+        <td>${esc(s.user)}</td><td><span class="tag ${s.state === 'activa' ? 'respondeu' : 'perdido'}">${esc(s.state)}</span></td>
+        <td class="n count">${esc(hhmm(s.created_at))} → ${esc(hhmm(s.expires_at))}</td>
+        <td class="n">${s.state === 'activa' ? `<button class="btn quiet" data-act="revogar-sessao" data-id="${esc(s.id)}" title="fechar sessão">✕</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table>` : '<div class="hint">Sem sessões registadas.</div>'}
+      <div class="hint">O token de máquina (ORBITA_ADMIN_TOKEN), quando existe, não aparece aqui: não é uma pessoa.</div>
+    </div>
+  </div>`;
+}
+
 /* ---------------- Tarefas ---------------- */
 const TASK_TAG = { queued: '', running: 'novo', succeeded: 'respondeu', failed: 'perdido', awaiting_approval: 'cliente', cancelled: '' };
 const TASK_LABEL = { queued: 'à espera', running: 'a correr', succeeded: 'concluída', failed: 'falhou', awaiting_approval: 'espera aprovação', cancelled: 'cancelada' };
@@ -722,9 +842,9 @@ function tarefaCard(t) {
       ${ev.length ? `<div class="hint">Evidência: ${ev.slice(0, 6).map(e => esc(e.label)).join(' · ')}</div>` : ''}</details>` : ''}
     ${ev.length && t.state !== 'succeeded' ? `<div class="hint">Evidência: ${ev.slice(0, 4).map(e => esc(e.label)).join(' · ')}</div>` : ''}
     <div class="acts" style="margin-top:var(--s3)">
-      ${t.state === 'queued' ? `<button class="btn primary small" data-act="correr-tarefa" data-id="${esc(t.id)}">Correr</button>` : ''}
-      ${t.state === 'failed' && podeCorrer ? `<button class="btn ghost small" data-act="correr-tarefa" data-id="${esc(t.id)}">Repetir</button>` : ''}
-      ${t.state === 'awaiting_approval' ? `<button class="btn ghost small" data-act="rejeitar-tarefa" data-id="${esc(t.id)}">Rejeitar</button><button class="btn primary small" data-act="aprovar-tarefa" data-id="${esc(t.id)}">Aprovar</button>` : ''}
+      ${t.state === 'queued' && may('write') ? `<button class="btn primary small" data-act="correr-tarefa" data-id="${esc(t.id)}">Correr</button>` : ''}
+      ${t.state === 'failed' && podeCorrer && may('write') ? `<button class="btn ghost small" data-act="correr-tarefa" data-id="${esc(t.id)}">Repetir</button>` : ''}
+      ${t.state === 'awaiting_approval' && may('approve') ? `<button class="btn ghost small" data-act="rejeitar-tarefa" data-id="${esc(t.id)}">Rejeitar</button><button class="btn primary small" data-act="aprovar-tarefa" data-id="${esc(t.id)}">Aprovar</button>` : ''}
       ${t.state === 'failed' && !podeCorrer ? '<span class="count">tentativas esgotadas — abre uma tarefa nova</span>' : ''}
     </div>
   </div>`;
@@ -752,7 +872,7 @@ function viewTarefas() {
     ${headHTML({
       title: 'Tarefas',
       sub: list.length ? `${list.length} · ${conta('running')} a correr · ${conta('awaiting_approval')} à espera de ti · ${conta('failed')} falhadas` : 'ainda não há tarefas',
-      right: `<button class="btn small ghost" data-act="nova-tarefa">+ Tarefa</button>${stopPill()}`,
+      right: `${may('write') ? '<button class="btn small ghost" data-act="nova-tarefa">+ Tarefa</button>' : ''}${stopPill()}`,
     })}
     ${S.addingTask ? novaTarefaForm() : ''}
     <div class="filters" role="group" aria-label="filtrar por departamento" style="margin-bottom:var(--s3)">
@@ -880,6 +1000,9 @@ function viewSaldo() {
 
 /* ---------------- pintar ---------------- */
 function paint() {
+  if (S.needLogin) { main().innerHTML = viewLogin(); return; }
+  // uma rota que o papel não permite não se mostra: volta a Hoje, sem drama
+  if (S.route.name === 'contas' && !may('admin')) { S.route = { name: 'hoje', id: null }; }
   if (S.error && !S.summary) {
     main().innerHTML = `<div class="wrap"><div class="card empty"><h3>Não consegui falar com o Órbita</h3><p>${esc(S.error)}</p>
       <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
@@ -892,6 +1015,7 @@ function paint() {
           : S.route.name === 'projeto' ? viewProjeto()
             : S.route.name === 'tarefas' ? viewTarefas()
               : S.route.name === 'agentes' ? viewAgentes()
+              : S.route.name === 'contas' ? viewContas()
             : S.route.name === 'conversas' ? viewConversas()
               : viewSaldo();
 }
@@ -1012,6 +1136,58 @@ async function act(name, el, ev) {
     }
 
     if (name === 'novo-lead') { S.adding = !S.adding; paint(); return; }
+    if (name === 'entrar' || name === 'criar-primeira-conta') {
+      const email = String($('#lgEmail')?.value || '').trim();
+      const pass = String($('#lgPass')?.value || '');
+      if (!email || !pass) { toast('Diz o email e a palavra-passe.', true); return; }
+      if (name === 'criar-primeira-conta') {
+        if (pass !== String($('#lgPass2')?.value || '')) { toast('As palavras-passe não são iguais.', true); return; }
+        await call('/auth/primeiro-dono', 'POST', { email, password: pass, name: String($('#lgNome')?.value || '').trim() });
+        toast('Conta criada. Bem-vindo ao Órbita.');
+      } else {
+        await call('/auth/entrar', 'POST', { email, password: pass });
+      }
+      S.needLogin = false; S.primeiraConta = false;
+      await boot(true);
+      return;
+    }
+    if (name === 'voltar-modo-local') { S.needLogin = false; S.primeiraConta = false; await boot(true); return; }
+    if (name === 'abrir-primeira-conta') { S.needLogin = true; S.primeiraConta = true; paint(); return; }
+    if (name === 'abrir-contas') {
+      if (S.eu?.user) { await call('/auth/sair', 'POST', {}).catch(() => {}); S.eu = null; S.needLogin = true; S.summary = null; paintNav(); paint(); toast('Sessão fechada.'); return; }
+      if (may('admin')) { location.hash = '#/contas'; return; }
+      S.needLogin = true; paint();
+      return;
+    }
+    if (name === 'sair') {
+      await call('/auth/sair', 'POST', {}).catch(() => {});
+      S.eu = null; S.needLogin = true; S.summary = null; S.leads = []; S.projetos = [];
+      paintNav(); paint();
+      toast('Sessão fechada.');
+      return;
+    }
+    if (name === 'criar-conta') {
+      const email = String($('#ctEmail')?.value || '').trim();
+      const pass = String($('#ctPass')?.value || '');
+      const role = String($('#ctPapel')?.value || 'leitor');
+      if (!email || !pass) { toast('Email e palavra-passe são precisos.', true); return; }
+      const r = await call('/ops/utilizadores', 'POST', { email, password: pass, role, name: email.split('@')[0] });
+      toast(`Conta de ${r.utilizador.email} criada como ${r.utilizador.roleLabel}.`);
+      await loadContas(); paint();
+      return;
+    }
+    if (name === 'desactivar-conta') {
+      await call(`/ops/utilizadores/${encodeURIComponent(id)}/desactivar`, 'POST', {});
+      toast('Conta desactivada e sessões fechadas.');
+      await loadContas(); paint();
+      return;
+    }
+    if (name === 'revogar-sessao') {
+      await call(`/ops/sessoes/${encodeURIComponent(id)}`, 'DELETE', {});
+      toast('Sessão fechada.');
+      await loadContas(); paint();
+      return;
+    }
     if (name === 'nova-tarefa') { S.addingTask = !S.addingTask; paint(); return; }
     if (name === 'filtrar-tarefa') {
       S.tarefaFiltro[el.dataset.k] = el.dataset.v || null;
@@ -1163,6 +1339,15 @@ function start() {
     if (b.tagName === 'BUTTON') e.preventDefault();
     act(b.dataset.act, b, e);
   });
+  document.addEventListener('change', async e => {
+    const sel = e.target.closest('[data-act="papel"]');
+    if (!sel) return;
+    try {
+      const r = await call(`/ops/utilizadores/${encodeURIComponent(sel.dataset.id)}/papel`, 'POST', { role: sel.value });
+      toast(`Papel de ${r.utilizador.email} passou a ${r.utilizador.roleLabel}.`);
+      await loadContas(); paint();
+    } catch (err) { toast(err.message, true); }
+  });
   document.addEventListener('input', e => {
     if (e.target.id === 'gq') {
       S.gq = e.target.value;
@@ -1193,6 +1378,7 @@ function start() {
     if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'agentes') { try { await loadAgentes(); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'contas') { try { await loadContas(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'leads' && !S.pipeline) { try { await loadPipeline(); } catch (e) { toast(e.message, true); } }
     paintNav();
     paint();
