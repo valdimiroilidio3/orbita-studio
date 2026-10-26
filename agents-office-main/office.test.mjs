@@ -19,6 +19,10 @@ import {
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, assertOffice } from './src/data.js';
 import * as THREE from 'three';
 import { makePlant, leafGeometry, stemGeometry, seededRandom, PLANT_KINDS, makeDesk, makeChair } from './src/builders.js';
+import {
+  MODES, MODE_KEYS, fileProblem, packFiles, contextChoices, chatBody, metaLine, effortLabel,
+  loadPrefs, savePrefs, PREFS_KEY, FILES_MAX,
+} from './src/composer.js'; // 27 out 2026: o conversador
 
 /* ---------- cor: a matemática que tudo o resto usa ---------- */
 
@@ -372,4 +376,109 @@ test('as peças ficam fundidas: uma secretária são poucas malhas, não trinta'
   const { group } = makeDesk('#CFEBDD', null, { glass: '#1FA36B', seed: 0 });
   const n = malhasDe(group).length;
   assert.ok(n <= 12, `demasiadas malhas por secretária (${n}) — o custo é por posto, e são 35`);
+});
+
+
+/* ---------- o conversador (27 out 2026) ----------
+   O compositor não é decoração: cada peça que a página mostra é uma coisa que o servidor recebe.
+   Estes testes fixam o contrato entre os dois — os três modos, os três modelos que o servidor
+   conhece, os limites dos anexos e a honestidade do menu de contexto. */
+
+test('o compositor tem três modos, e são os que o servidor entende', () => {
+  assert.deepEqual(MODE_KEYS, ['plan', 'ask', 'build']);
+  assert.deepEqual(MODES.map((m) => m.name), ['Planear', 'Perguntar', 'Construir']);
+  for (const m of MODES) assert.ok(m.title && m.title.length > 20, `o modo ${m.key} tem de se explicar numa linha`);
+  assert.match(MODES.find((m) => m.key === 'plan').title, /sem ferramentas/i);
+  assert.match(MODES.find((m) => m.key === 'build').title, /tarefa/i);
+});
+
+test('anexos: só texto, com limites ditos por palavras', () => {
+  assert.equal(fileProblem({ name: 'notas.md', size: 1200 }), null);
+  assert.equal(fileProblem({ name: 'dados.csv', size: 1200 }), null);
+  assert.match(fileProblem({ name: 'foto.png', size: 1200 }), /só texto/);
+  assert.match(fileProblem({ name: 'contrato.pdf', size: 1200 }), /só texto/);
+  assert.match(fileProblem({ name: 'enorme.txt', size: 900000 }), /grande demais/);
+  assert.equal(fileProblem(null), 'ficheiro vazio');
+});
+
+test('packFiles respeita o máximo de ficheiros e nunca perde uma recusa em silêncio', () => {
+  const mk = (i) => ({ name: `n${i}.md`, size: 10, text: 'x'.repeat(100) });
+  const seis = Array.from({ length: FILES_MAX + 1 }, (_, i) => mk(i));
+  const { files, rejected } = packFiles([], seis);
+  assert.equal(files.length, FILES_MAX);
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0], new RegExp(`máximo são ${FILES_MAX}`));
+  const comImagem = packFiles([], [{ name: 'a.png', size: 10, text: '' }, mk(9)]);
+  assert.equal(comImagem.files.length, 1);
+  assert.match(comImagem.rejected[0], /só texto/);
+  const orcamento = packFiles([], Array.from({ length: FILES_MAX }, () => ({ name: 'g.txt', size: 999999, text: 'y'.repeat(40000) })));
+  assert.ok(orcamento.files.length < FILES_MAX, 'o orçamento total tem de cortar antes de mandar 200 kB para o motor');
+  assert.ok(orcamento.rejected.length > 0, 'cortar por orçamento tem de ser dito');
+});
+
+test('o @contexto só oferece o que existe, e o terminal é recusado com a razão', () => {
+  const vazio = contextChoices(null);
+  const cerebro = vazio.find((c) => c.key === 'brain');
+  assert.equal(cerebro.disabled, true);
+  assert.match(cerebro.why, /não tem notas/);
+  assert.equal(vazio.find((c) => c.key === 'docs').disabled, true);
+  const terminal = vazio.find((c) => c.key === 'terminal');
+  assert.equal(terminal.disabled, true, 'o terminal não existe nesta casa');
+  assert.match(terminal.why, /não há terminal/);
+  const cheio = contextChoices({ context: { notes: 35, docs: 11 } });
+  assert.equal(cheio.find((c) => c.key === 'brain').count, 35);
+  assert.equal(cheio.find((c) => c.key === 'brain').disabled, false);
+  assert.equal(cheio.find((c) => c.key === 'docs').count, 11);
+});
+
+test('o corpo do pedido diz ao servidor o modo, o modelo e o esforço — e cala-se no Auto', () => {
+  const auto = chatBody({ text: 'olá', mode: 'ask', model: 'opus', effort: 'high', auto: true });
+  assert.equal(auto.model, undefined);
+  assert.equal(auto.effort, undefined);
+  assert.equal(auto.auto, true);
+  const escolhido = chatBody({ text: 'olá', mode: 'plan', model: 'opus', effort: 'max', auto: false });
+  assert.equal(escolhido.mode, 'plan');
+  assert.equal(escolhido.model, 'opus');
+  assert.equal(escolhido.effort, 'max');
+  assert.equal(escolhido.model === undefined && escolhido.effort === undefined, false);
+  assert.equal(chatBody({ text: 'x', mode: 'inventado' }).mode, 'ask');
+  assert.equal(chatBody({ text: 'x', context: [] }).context, undefined);
+  assert.deepEqual(chatBody({ text: 'x', context: ['brain', 'docs'] }).context, ['brain', 'docs']);
+  assert.equal(chatBody({ text: 'x', history: Array.from({ length: 20 }, (_, i) => ({ who: 'user', text: String(i) })) }).history.length, 8);
+  const grande = chatBody({ text: 'x', files: [{ name: 'a.txt', text: 'z'.repeat(90000) }] });
+  assert.equal(grande.files[0].text.length, 40000, 'o que sai da página já vai cortado');
+});
+
+test('a linha por baixo da resposta diz o que correu, não o que se esperava', () => {
+  const dito = metaLine({ modelName: 'Opus', effortName: 'X-high', mode: 'plan' }, { files: [{ name: 'a.md' }], context: ['brain'] });
+  assert.match(dito, /Opus/);
+  assert.match(dito, /x-high/i);
+  assert.match(dito, /plano/);
+  assert.match(dito, /1 ficheiro/);
+  assert.match(dito, /@Cérebro/);
+  const vazio = metaLine({}, { model: 'Sonnet' });
+  assert.equal(vazio, 'Sonnet · esforço auto');
+  assert.equal(effortLabel('max'), 'Max');
+  assert.equal(effortLabel(''), 'Auto');
+  assert.equal(effortLabel(undefined), 'Auto');
+});
+
+test('as preferências do compositor sobrevivem com bom senso (e não rebentam com lixo)', () => {
+  const mem = new Map();
+  const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
+  const base = loadPrefs(storage);
+  assert.deepEqual(base, { mode: 'ask', model: '', effort: '', auto: true, favs: [], tour: false, tab: 'all' });
+  savePrefs(storage, { mode: 'build', model: 'opus', effort: 'max', auto: false, favs: ['opus', 'fable'], tour: true });
+  const lido = loadPrefs(storage);
+  assert.equal(lido.mode, 'build');
+  assert.equal(lido.auto, false);
+  assert.deepEqual(lido.favs, ['opus', 'fable']);
+  assert.equal(lido.tour, true);
+  mem.set(PREFS_KEY, '{lixo');
+  assert.equal(loadPrefs(storage).mode, 'ask');
+  mem.set(PREFS_KEY, JSON.stringify({ mode: 'atirar', favs: 'não', auto: 'talvez' }));
+  const tolerante = loadPrefs(storage);
+  assert.equal(tolerante.mode, 'ask');
+  assert.deepEqual(tolerante.favs, []);
+  assert.equal(tolerante.auto, true);
 });

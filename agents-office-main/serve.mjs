@@ -451,20 +451,102 @@ function writeNote(task) { // the deliverable becomes a note in the brain, linke
   fs.writeFileSync(path.join(NOTES_DIR, name + '.md'), body);
   return name;
 }
-async function chat(agentId, text, history) {
+/* ---------- o conversador (27 out 2026) ----------
+   O compositor da página pode escolher o modelo e o esforço, pedir um plano em vez de trabalho
+   feito, anexar ficheiros de texto e dizer que contexto quer. Nada disto é decorativo: cada
+   campo muda o que o motor recebe, e o que ele recebeu volta na resposta (`model`, `effort`,
+   `mode`, `context`) para a página poder mostrá-lo sem inventar. */
+const CHAT_CONTEXT = {
+  brain: { label: 'Cérebro', what: 'as notas da empresa (o vault do Órbita)' },
+  docs: { label: 'Documentos', what: 'os documentos markdown do repositório (docs/)' },
+};
+const CHAT_FILE_MAX = 40000, CHAT_FILES_BUDGET = 60000, CHAT_FILES_MAX = 5;
+function docsDir() { return path.join(ROOT, 'docs'); }
+function docsList() {
+  try { return fs.readdirSync(docsDir()).filter(f => f.endsWith('.md')).sort(); } catch { return []; }
+}
+function docsContext() { // first heading + first lines of each document: real words, never a summary invented here
+  const names = docsList(); const out = [];
+  let budget = 6000;
+  for (const n of names) {
+    if (budget <= 0) break;
+    try {
+      const txt = fs.readFileSync(path.join(docsDir(), n), 'utf8').slice(0, 600);
+      const head = txt.split('\n').find(l => l.trim().startsWith('#')) || '';
+      const body = txt.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).slice(0, 4).join(' ');
+      const line = `- docs/${n}${head ? ' — ' + head.replace(/^#+\s*/, '').trim() : ''}${body ? ': ' + body.slice(0, 220).trim() : ''}`;
+      out.push(line); budget -= line.length;
+    } catch { out.push(`- docs/${n}`); }
+  }
+  return out.join('\n');
+}
+function chatFiles(files) {
+  const list = (Array.isArray(files) ? files : []).slice(0, CHAT_FILES_MAX)
+    .map(f => ({ name: String(f?.name || 'ficheiro').replace(/[^\w.\- ()]/g, '').slice(0, 80) || 'ficheiro', text: String(f?.text ?? '') }))
+    .filter(f => f.text.trim());
+  if (!list.length) return { text: '', names: [], cut: 0 };
+  let budget = CHAT_FILES_BUDGET, cut = 0;
+  const parts = list.map(f => {
+    let t = f.text.slice(0, CHAT_FILE_MAX);
+    if (t.length < f.text.length) cut++;
+    if (t.length > budget) { t = t.slice(0, Math.max(0, budget)); cut++; }
+    budget -= t.length;
+    return `--- ${f.name} (${f.text.length} caracteres${t.length < f.text.length ? ', só os primeiros ' + t.length : ''})\n${t}`;
+  });
+  return {
+    text: `\n\nFICHEIROS QUE O PROPRIETÁRIO ANEXOU NESTA MENSAGEM (lê-os; não os escrevas de volta)\n${parts.join('\n\n')}`,
+    names: list.map(f => f.name), cut,
+  };
+}
+function chatContext(context, index, dept, asked) { // what the owner ticked in @contexto, resolved here (not in the page)
+  const askedList = Array.isArray(context) ? context : [];
+  const want = [...new Set(askedList.filter(k => CHAT_CONTEXT[k]))];
+  const ignored = askedList.filter(k => !CHAT_CONTEXT[k]);
+  if (!want.length) return { text: '', kinds: [], read: [], ignored };
+  let text = `\n\nCONTEXTO PEDIDO PELO PROPRIETÁRIO (${want.map(k => CHAT_CONTEXT[k].label).join(' · ')})`;
+  const read = [];
+  if (want.includes('brain')) {
+    const extra = relevantNotes(index, dept, asked, 5);
+    read.push(...extra);
+    text += `\n\nCÉREBRO — NOTAS ESCOLHIDAS\n${contextText(index, extra) || '(o Cérebro ainda não tem notas)'}`;
+  }
+  if (want.includes('docs')) {
+    const list = docsContext();
+    text += `\n\nDOCUMENTOS DO REPOSITÓRIO\n${list || '(não há documentos markdown em docs/)'}`;
+  }
+  return { text, kinds: want, read, ignored };
+}
+
+async function chat(agentId, text, opts = {}) {
   const a = AGENTS.find(x => x.id === agentId); if (!a) throw new Error('unknown agent');
   const d = DEPTS[a.department]; refreshSkills();
   const index = vaultIndex();
+  const { history = [], mode = 'ask', model = '', effort = '', auto = false } = opts;
+  const plan = mode === 'plan';
+  const pick = auto || !normModel(model) ? modelFor({ agent: a.model, office: cfg.model }) : { model: normModel(model), from: 'owner' };
+  const eff = auto || !normEffort(effort) ? effortFor({ agent: a.effort, office: cfg.effort, model: pick.model }) : { effort: normEffort(effort), from: 'owner' };
   const read = relevantNotes(index, a.department, text, 3);
+  const ctx = chatContext(opts.context, index, a.department, text);
+  for (const n of ctx.read) if (!read.includes(n)) read.push(n);
+  const files = chatFiles(opts.files);
   const mine = load().filter(t => t.agent === agentId).slice(-6).map(t => `- [${t.state}] ${t.title}`).join('\n');
   const system = `${a.name}, ${a.role || 'um agente'}, no departamento ${d.name} de ${cfg.name}. ${a.does}
 ${agentBrief(a)}` +
     'Estás a falar com o proprietário. Responde como este agente, na primeira pessoa, de forma breve (menos de 120 palavras, salvo se pedirem detalhe), simples, sem exageros. ' +
     'Usa as notas da empresa; di-lo quando algo não estiver nelas. Se o proprietário te pedir para procurar algo, usa as tuas ferramentas. Nada sai para fora sem o\' OK explícito do proprietário.\n\n' +
-    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}\n\nNOTAS RELEVANTES\n${contextText(index, read)}\n\nAS TUAS TAREFAS RECENTES\n${mine || '—'}`;
+    `${plan ? '' : mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}\n\nNOTAS RELEVANTES\n${contextText(index, read)}\n\nAS TUAS TAREFAS RECENTES\n${mine || '—'}` +
+    (plan ? '\n\nMODO PLANEAR: o proprietário quer um plano, não trabalho feito. Responde com 3 a 6 passos numerados, o que cada um muda e o que precisas dele. Não executes nada e não uses ferramentas.' : '') +
+    ctx.text + files.text;
   const convo = (history || []).slice(-8).map(m => `${m.who === 'user' ? 'Proprietário' : a.name}: ${m.text}`).join('\n');
-  const { text: reply, tools } = await askX(system, (convo ? convo + '\n' : '') + `Owner: ${text}\n${a.name}:`, { maxTokens: 1200, model: modelFor({ agent: a.model, office: cfg.model }).model, effort: effortFor({ agent: a.effort, office: cfg.effort, model: modelFor({ agent: a.model, office: cfg.model }).model }).effort });
-  return { reply, read, tools: toolKeys(tools), used: mcp.namesOf(tools) };
+  const { text: reply, tools } = await askX(system, (convo ? convo + '\n' : '') + `Owner: ${text}\n${a.name}:`, {
+    maxTokens: plan ? 900 : 1200, tools: !plan, model: pick.model, effort: eff.effort || null,
+  });
+  return {
+    reply, read, tools: plan ? [] : toolKeys(tools), used: plan ? [] : mcp.namesOf(tools),
+    mode: plan ? 'plan' : 'ask', model: pick.model, modelName: modelName(pick.model), modelFrom: pick.from,
+    effort: eff.effort || '', effortName: effortName(eff.effort || null), effortFrom: eff.from,
+    context: ctx.kinds, contextIgnored: ctx.ignored, files: files.names, filesCut: files.cut,
+  };
 }
 
 /* ---------- routines: the office's own clock (V3.5) ---------- */
@@ -715,7 +797,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(target));
     }
-    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
+    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), context: { notes: graph.notes, docs: docsList().length }, docList: docsList().slice(0, 60), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
     if (url.pathname === '/api/skills') return json(res, 200, refreshSkills().summary()); // reloads from disk: edit a skill, hit this, see it
@@ -909,7 +991,7 @@ const server = http.createServer(async (req, res) => {
       editRoutine(r.id, patch); return json(res, 200, { ok: true, routines: loadRoutines() });
     }
     if (url.pathname === '/api/tasks' && req.method === 'POST') {
-      const { dept, text, model, effort, team, at } = await body(req);
+      const { dept, text, model, effort, team, at, run: startNow } = await body(req);
       if (!DEPTS[dept] || dept === 'brain') return json(res, 400, { error: 'unknown department' });
       if (!text || !String(text).trim()) return json(res, 400, { error: 'empty task' });
       const dueAt = at ? (typeof at === 'number' ? at : Date.parse(at)) : null; // V3.2.1: a task for a date
@@ -922,6 +1004,9 @@ const server = http.createServer(async (req, res) => {
       if (dueAt) { task.state = 'scheduled'; task.dueAt = dueAt; task.needsOk = r.needsOk; } // waits for its minute; needsOk decides whether it then waits for the OK
       const list = load(); list.push(task); save(list);
       console.log(`+ ${task.id} → ${task.agent}: ${task.title}${asTeam ? ' (team)' : ''}${dueAt ? ' · scheduled ' + untilText(dueAt) : ''}`);
+      // 27 out 2026: o modo CONSTRUIR do compositor cria a tarefa e começa já a corrê-la. O pedido
+      // volta com o id (a página acompanha pelo /api/tasks); o trabalho corre na fila do servidor.
+      if (startNow === true && !dueAt) { task.state = 'doing'; task.startedAt = Date.now(); save(list); enqueue(() => runServerTask(task.id)); }
       return json(res, 200, task);
     }
     const m = url.pathname.match(/^\/api\/tasks\/([^/]+)(?:\/(run|revise|approve|reject))?$/);
@@ -962,20 +1047,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (m && req.method === 'APAGAR') { save(load().filter(t => t.id !== m[1])); return json(res, 200, { ok: true }); }
     if (url.pathname === '/api/chat' && req.method === 'POST') {
-      const { agent, text, history } = await body(req);
+      const { agent, text, history, mode, model, effort, auto, files, context } = await body(req);
       if (!text || !String(text).trim()) return json(res, 400, { error: 'empty message' });
       const a = AGENTS.find(x => x.id === agent); if (!a) return json(res, 400, { error: 'unknown agent' });
-      if (!onboard.active(DATA, a.department)) { // V3.5: "every weekday at 8am, …" · "routines" · "pause …" · "corre … agora" — unless the lead is mid-interview
+      const wantsPlan = mode === 'plan'; // MODO PLANEAR: nada aqui cria uma rotina ou abre uma entrevista — devolve-se um plano
+      if (!wantsPlan && !onboard.active(DATA, a.department)) { // V3.5: "every weekday at 8am, …" · "routines" · "pause …" · "corre … agora" — unless the lead is mid-interview
         const rc = await routinesChat(a, String(text).trim());
         if (rc) return json(res, 200, { reply: rc.reply, read: [], tools: [], interview: false, routine: rc.routine || null, routines: true });
       }
-      if (leadOf(a.department).id === a.id) { // the department lead can run the set-up interview
+      if (!wantsPlan && leadOf(a.department).id === a.id) { // the department lead can run the set-up interview
         refreshSkills();
         const o = await onboard.handle(String(text).trim(), { dept: a.department, deptName: DEPTS[a.department].name, lead: a, agents: AGENTS.filter(x => x.department === a.department),
           connected: mcp.summary().servers?.filter(x => x.status === 'connected').map(x => x.name || x.key) || [], brainPath: BRAIN, dataDir: DATA, ask, business: cfg.name, afterWrite: refreshSkills });
         if (o) { if (o.wrote) console.log(`★ ${a.name} configurou ${DEPTS[a.department].name}: ${o.wrote.briefs.length} briefings${o.wrote.skill ? ', competência ' + o.wrote.skill.name : ''}`); return json(res, 200, { reply: o.reply, read: [], tools: [], interview: !o.wrote, setup: setupMap() }); }
       }
-      const r = await chat(agent, String(text).trim(), history);
+      const r = await chat(agent, String(text).trim(), { history, mode, model, effort, auto: auto === true, files, context });
       return json(res, 200, { ...r, interview: false });
     }
     // ---------- /api/auth: contas, sessões e o que cada papel pode fazer ----------

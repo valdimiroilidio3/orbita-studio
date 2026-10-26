@@ -48,8 +48,11 @@ Atalho: `./setup` faz as três coisas e arranca o escritório uma vez para testa
 2. Na barra do topo do painel escolhe um departamento, escreve a tarefa em palavras simples e
    prime **Adicionar**. O Claude escolhe o agente e dá-lhe nome; a tarefa aparece na lista, o
    agente pega nela, trabalha, e o resultado cai na conversa desse agente e na tua pasta de notas.
-3. Clica num agente para falares com ele. Responde no seu papel, ancorado nas tuas notas.
-   Diz `revê: mais curto` e ele refaz a última entrega.
+3. Clica num agente para falares com ele. O cartão da conversa deixa escolher o **modo**
+   (Planear · Perguntar · Construir), o **modelo e o esforço**, anexar ficheiros de texto, pedir
+   **@contexto** e ditar. Responde no seu papel, ancorado nas tuas notas. Diz `revê: mais curto` e
+   ele refaz a última entrega. O que cada peça faz — e o que não faz — está em
+   **[docs/CONVERSA.md](docs/CONVERSA.md)**.
 4. Prime **G**, ou clica no Cérebro, para ver as notas como grafo. Passa o rato numa nota para ver
    as ligações, clica para ler onde está e quem a leu ou escreveu.
 5. A barra do topo mostra os conectores a que o teu Claude Code está ligado. Quando um agente usa

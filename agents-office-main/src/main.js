@@ -13,6 +13,7 @@ import {
   makePlant, makeWalkway, makeWarnSprite, makeRoomWalls,
 } from './builders.js';
 import { initMcp } from './mcp.js';
+import { initComposer, chatBody, metaLine } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
 import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
@@ -729,8 +730,8 @@ function chatPush(id, msg) {
 function renderChat(id) {
   const r = R[id];
   mMsgs.innerHTML = chatHist[id].map((m, i) => {
-    if (m.who === 'agent') return `<div class="m-agent">${esc(m.text)}</div>`;
-    if (m.who === 'user') return `<div class="m-user">${esc(m.text)}</div>`;
+    if (m.who === 'agent') return `<div class="m-agent">${esc(m.text)}${m.meta ? `<div class="m-meta">${esc(m.meta)}</div>` : ''}</div>`;
+    if (m.who === 'user') return `<div class="m-user">${esc(m.text)}${m.meta ? `<div class="m-meta">${esc(m.meta)}</div>` : ''}</div>`;
     if (m.who === 'work') return `<div class="m-work"><span class="wi">${m.i || '▸'}</span>${esc(m.text)}</div>`;
     if (m.who === 'file') return `
       <div class="m-file" data-i="${i}">
@@ -946,84 +947,90 @@ function setTab(tab) {
 }
 document.querySelectorAll('#rail .mtabs button').forEach(b =>
   b.addEventListener('click', () => setTab(b.dataset.tab)));
-function sendChat(text) {
-  const id = modalOpen;
-  if (!id || !text.trim()) return;
+/* ---------- enviar (27 out 2026) ----------
+   O compositor escolhe modo, modelo, esforço, anexos e contexto; esta função entrega-os ao
+   servidor e mostra o que ele respondeu. Nada acontece a fingir: «Construir» cria mesmo uma
+   tarefa na base de dados, «Planear» pede um plano ao motor sem ferramentas, e o resto é a
+   conversa de sempre. O que correu volta por baixo da resposta (modelo · esforço · modo). */
+const CHAT_MODES = ['ask', 'plan', 'build'];
+function dropWork(id, text) {
+  const h = chatHist[id] || [];
+  const k = h.findIndex(m => m.who === 'work' && m.text === text);
+  if (k >= 0) h.splice(k, 1);
+}
+async function buildFromChat(id, text, m) {
   const r = R[id];
-  chatPush(id, { who: 'user', text });
-  composerClear();
-  const low = text.toLowerCase();
-  setTimeout(() => {
-    if (tasks && tasks.pendingReject(id)) { tasks.rejectLive(id, text); return; } // V3.5: the line after REJECT is the note the agent reworks with
-    if (r.state === 'stuck' && /\b(approve|reject)\b/.test(low)) {
-      resolveApproval(id, /approve/.test(low));
-      return;
-    }
-    const rv = tasks && tasks.isLive() && text.match(/^\s*revise\s*[:\-–]\s*(.+)$/i); // LIVE: "revise: …" re-runs the last deliverable
-    if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'Já vou — a rever agora. Aparece aqui quando estiver pronto.' }); return; }
-    const tr = tasks && tasks.handleChat(id, text); // "adicionar tarefa: …" / "o que está no quadro"
-    if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
-    if (tasks && tasks.isLive()) { // LIVE: a real conversation with the agent, grounded in the brain
-      chatPush(id, { who: 'work', i: '…', text: `${r.a.name} está a pensar` });
-      fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agent: id, text, history: chatHist[id].filter(m => m.who === 'user' || m.who === 'agent').slice(-8) }) })
-        .then(async res => { if (!res.ok) throw new Error((await res.json()).error || res.statusText); return res.json(); })
-        .then(j => {
-          const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} está a pensar`); if (k >= 0) h.splice(k, 1);
-          chatPush(id, { who: 'agent', text: j.reply });
-          if (j.routines && tasks.refresh) tasks.refresh(); // a routine was set, paused, run or deleted in chat
-          if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
-          if (j.tools && j.tools.length) mcp.onToolsUsed(id, j.tools);
-        })
-        .catch(e => chatPush(id, { who: 'agent', text: `Não consegui chegar ao Claude (${e.message}).` }));
-      return;
-    }
-    // sem motor de IA não há conversa inventada: pergunta ao servidor e mostra o que ele responder
-    chatPush(id, { who: 'work', i: '…', text: `${r.a.name} está a ler o pedido` });
-    fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent: id, text, history: chatHist[id].filter(m => m.who === 'user' || m.who === 'agent').slice(-8) }) })
-      .then(async res => {
-        const j = await res.json().catch(() => ({}));
-        const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} está a ler o pedido`); if (k >= 0) h.splice(k, 1);
-        if (!res.ok) throw new Error(j.error || res.statusText);
-        chatPush(id, { who: 'agent', text: j.reply });
-        if (j.routines && tasks.refresh) tasks.refresh();
-        if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
-        if (j.tools && j.tools.length) mcp.onToolsUsed(id, j.tools);
-      })
-      .catch(e => {
-        const h = chatHist[id]; const k = h.findIndex(m => m.who === 'work' && m.text === `${r.a.name} está a ler o pedido`); if (k >= 0) h.splice(k, 1);
-        chatPush(id, { who: 'agent', text: `Não consigo responder: ${e.message}. Sem um motor de IA ligado, este posto não inventa uma resposta — o painel AO VIVO mostra o trabalho real.` });
-      });
-  }, 450 + Math.random() * 500);
-}
-/* ---------- o compositor da conversa (26 out 2026) ----------
-   Três coisas que uma caixa de uma linha não sabia fazer: crescer com o texto (até 132 px,
-   depois rola), aceitar uma segunda linha com Shift + Enter, e dizer quando está vazia — a
-   seta fica apagada e não responde. Enter envia, como em qualquer conversa; Shift + Enter
-   escreve uma linha nova, como no ChatGPT. Nada disto inventa uma acção: é o mesmo `sendChat`
-   de sempre, e a tecla continua a não fugir para os atalhos da cena. */
-const mIn = document.getElementById('mIn');
-const mSend = document.getElementById('mSend');
-function composerSync() {
-  mIn.style.height = 'auto';
-  mIn.style.height = Math.min(mIn.scrollHeight || 21, 132) + 'px';
-  mSend.disabled = !mIn.value.trim();
-}
-function composerClear() {
-  mIn.value = '';
-  composerSync();
-}
-mIn.addEventListener('input', composerSync);
-mIn.addEventListener('keydown', (e) => {
-  e.stopPropagation(); // a escrever, «g», «b», «l» e «1–6» são letras e não atalhos
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    if (mIn.value.trim()) sendChat(mIn.value); // o Enter do teclado e o clique na seta fazem o mesmo
+  if (!tasks || !tasks.isLive()) throw new Error('Construir precisa do servidor: uma tarefa criada só no ecrã seria ficção. Arranca o Órbita com «npm start».');
+  const line = 'A criar a tarefa no quadro…';
+  chatPush(id, { who: 'work', i: '…', text: line });
+  try {
+    const res = await fetch('/api/tasks', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ dept: r.a.dept, text, run: true, model: m.auto ? undefined : (m.model || undefined), effort: m.auto ? undefined : (m.effort || undefined) }) });
+    const st = await res.json().catch(() => ({}));
+    dropWork(id, line);
+    if (!res.ok) throw new Error(st.error || res.statusText);
+    const who = R[st.agent]?.a?.name || st.agent;
+    if (spawnEmote && R[st.agent]) spawnEmote(R[st.agent], '📋');
+    const mdl = { sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable' }[st.model];
+    chatPush(id, { who: 'agent', text: `Tarefa criada — «${st.title}» ficou com ${who}${st.why ? ' (' + st.why + ')' : ''}. Está no quadro com o id ${st.id} e já está a correr; o resultado cai aqui e na nota do Cérebro.`, meta: 'Construir · ' + (mdl || 'modelo do escritório') });
+    if (tasks.refresh) tasks.refresh();
+    composer?.toast('Tarefa criada no quadro.', 'ok');
+  } catch (e) {
+    dropWork(id, line);
+    throw new Error('Não foi criada: ' + e.message);
   }
-});
-mSend.addEventListener('click', () => { if (mIn.value.trim()) sendChat(mIn.value); });
-composerSync();
+}
+async function sendChat(text, meta = {}) {
+  const id = modalOpen;
+  const clean = String(text || '').trim();
+  if (!id || !clean) return;
+  const r = R[id];
+  const m = {
+    mode: CHAT_MODES.includes(meta.mode) ? meta.mode : 'ask',
+    auto: meta.auto !== false,
+    model: meta.model || '',
+    effort: meta.effort || '',
+    files: Array.isArray(meta.files) ? meta.files.slice(0, 5) : [],
+    context: Array.isArray(meta.context) ? meta.context : [],
+  };
+  if (m.mode === 'build') { chatPush(id, { who: 'user', text: clean }); return buildFromChat(id, clean, m); }
+
+  const hist = (chatHist[id] || []).filter(x => x.who === 'user' || x.who === 'agent').slice(-8).map(x => ({ who: x.who, text: x.text }));
+  chatPush(id, { who: 'user', text: clean });
+
+  if (m.mode === 'ask') { // os atalhos da casa só valem a perguntar: planear e construir não mexem em nada por baixo
+    const low = clean.toLowerCase();
+    if (tasks && tasks.pendingReject(id)) { tasks.rejectLive(id, clean); return; } // V3.5: a linha depois de REJECT é a nota com que o agente refaz
+    if (r.state === 'stuck' && /\b(approve|reject)\b/.test(low)) { resolveApproval(id, /approve/.test(low)); return; }
+    const rv = tasks && tasks.isLive() && clean.match(/^\s*revise\s*[:\-–]\s*(.+)$/i); // LIVE: "revise: …" corre outra vez a última entrega
+    if (rv && tasks.revise(id, rv[1].trim())) { chatPush(id, { who: 'agent', text: 'Já vou — a rever agora. Aparece aqui quando estiver pronto.' }); return; }
+    const tr = tasks && tasks.handleChat(id, clean); // "adicionar tarefa: …" / "o que está no quadro"
+    if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
+  }
+
+  const line = m.mode === 'plan' ? `${r.a.name} está a preparar o plano` : `${r.a.name} está a pensar`;
+  chatPush(id, { who: 'work', i: '…', text: line });
+  try {
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent: id, ...chatBody({ text: clean, mode: m.mode, model: m.model, effort: m.effort, auto: m.auto, files: m.files, context: m.context, history: hist }) }) });
+    const j = await res.json().catch(() => ({}));
+    dropWork(id, line);
+    if (!res.ok) throw new Error(j.error || res.statusText);
+    chatPush(id, { who: 'agent', text: j.reply, meta: metaLine(j, m) });
+    if (j.routines && tasks.refresh) tasks.refresh(); // uma rotina foi criada, pausada ou apagada na conversa
+    if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
+    if (j.tools && j.tools.length) mcp.onToolsUsed(id, j.tools);
+    if (j.contextIgnored && j.contextIgnored.length) composer?.toast(`O servidor não conhece @${j.contextIgnored.join(', @')} — não foi enviado.`, 'err');
+  } catch (e) {
+    dropWork(id, line);
+    chatPush(id, { who: 'agent', text: `Não consigo responder: ${e.message}. Sem um motor de IA ligado, este posto não inventa uma resposta — o painel AO VIVO mostra o trabalho real.` });
+    throw e;
+  }
+}
+/* ---------- o compositor (27 out 2026) ----------
+   O cartão substitui o campo de uma linha. Toda a lógica de desenho e de teclado vive em
+   src/composer.js; aqui só se liga o envio. */
+const composer = initComposer({ onSubmit: (text, meta) => sendChat(text, meta) });
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);

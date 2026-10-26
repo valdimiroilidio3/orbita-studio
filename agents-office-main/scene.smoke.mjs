@@ -296,6 +296,56 @@ if (mIn && mSend) {
   ok(mSend.disabled === true, 'ao esvaziar, a seta volta a apagar-se');
 }
 
+// 27 out 2026: o conversador. O cartão tem de ter os três modos, o menu do modelo, os anexos, o
+// contexto e o aviso do motor — e o aviso tem de estar calado quando o servidor responde.
+{
+  const modes = doc.querySelectorAll('#mcModes button');
+  ok(modes.length === 3, `o compositor devia ter três modos (tem ${modes.length})`);
+  const nomes = [...modes].map((b) => b.textContent.trim()).join(' · ');
+  ok(nomes === 'Planear · Perguntar · Construir', `os modos lêem-se «${nomes}»`);
+  ok([...modes].filter((b) => b.getAttribute('aria-pressed') === 'true').length === 1, 'só um modo pode estar escolhido');
+  ok(modes[1].classList.contains('on'), 'o modo por omissão é Perguntar');
+  modes[0].dispatchEvent(new win.Event('click', { bubbles: true }));
+  ok(modes[0].getAttribute('aria-pressed') === 'true' && modes[1].getAttribute('aria-pressed') === 'false', 'carregar em Planear tem de trocar o modo');
+  ok(doc.getElementById('mc').dataset.mode === 'plan', 'o cartão tem de dizer em que modo está');
+  modes[1].dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  const mb = doc.getElementById('mcModel'), menu = doc.getElementById('mcMenu');
+  ok(!!mb && mb.getAttribute('aria-haspopup') === 'menu', 'o modelo tem de ser um botão com menu');
+  ok(!!menu && menu.hidden === true, 'o menu do modelo começa fechado');
+  mb.dispatchEvent(new win.Event('click', { bubbles: true }));
+  ok(menu.hidden === false && mb.getAttribute('aria-expanded') === 'true', 'o botão do modelo tem de abrir o menu');
+  ok(!!doc.querySelector('#mcMenu .mc-tabs button[data-tab="all"]'), 'o menu tem de ter os separadores de favoritos e todos');
+  mb.dispatchEvent(new win.Event('click', { bubbles: true }));
+  ok(menu.hidden === true, 'o mesmo botão fecha o menu');
+
+  ok(!!doc.getElementById('mcAdd') && !!doc.getElementById('mcFile'), 'falta o botão de anexar ficheiros');
+  ok(doc.getElementById('mcFile').type === 'file', 'os anexos têm de ser um seletor de ficheiros a sério');
+  const ctx = doc.getElementById('mcCtx');
+  ok(!!ctx && ctx.getAttribute('aria-haspopup') === 'menu', 'falta o menu de contexto');
+  ctx.dispatchEvent(new win.Event('click', { bubbles: true }));
+  const ctxMenu = doc.getElementById('mcCtxMenu');
+  ok(ctxMenu.hidden === false, 'o menu de contexto tem de abrir');
+  const rows = ctxMenu.querySelectorAll('.mc-crow');
+  ok(rows.length === 3, `o menu de contexto devia ter três linhas (tem ${rows.length})`);
+  const term = [...rows].find((r) => r.dataset.ctx === 'terminal');
+  ok(term && term.disabled === true, 'o terminal não existe: a linha tem de estar desactivada, não a fingir');
+  ok(/terminal/i.test(term.textContent) && /não há terminal/i.test(term.textContent), 'a linha do terminal tem de dizer porque não está disponível');
+  ctx.dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  ok(!!doc.getElementById('mcMic'), 'falta o botão de ditar');
+  ok(!!doc.querySelector('#mc .mc-pop'), 'o menu tem de viver dentro do cartão');
+
+  // o aviso do motor: o harness responde 503, logo não há motor — tem de estar visível e explicado
+  const pro = doc.getElementById('mcPro');
+  ok(!!pro && pro.hidden === false, 'sem motor ligado, o aviso tem de aparecer');
+  ok(/motor/i.test(pro.textContent), 'o aviso tem de dizer que falta o motor');
+  ok(!!doc.getElementById('mcProBtn') && !!doc.getElementById('mcModal'), 'o aviso tem de abrir o estado do motor');
+
+  // o modal não pode viver dentro da gaveta: #rail tem overflow e transform, e um fixed lá dentro fica cortado
+  ok(!doc.getElementById('rail').contains(doc.getElementById('mcModal')), 'o modal do motor tem de estar fora do #rail');
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);

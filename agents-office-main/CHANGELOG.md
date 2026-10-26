@@ -1,3 +1,90 @@
+## 1.9.9 — 27 out 2026 · O conversador
+
+Pedido 27: *«implementa este conversador de IA, substituindo o atual»*, com um componente React
+(`ai-prompt-composer-with-model-selector.tsx`) e as instruções de integração shadcn.
+
+O que existia era um campo de uma linha e uma seta. O que o dono mandou é um compositor: modos,
+modelo com provedor e esforço, anexos, contexto, voz, favoritos, aviso e tour. **Foi esse desenho
+que substituiu o antigo** — e cada peça faz alguma coisa no servidor, ou está desligada a dizer
+porquê.
+
+### A decisão: portar, não colar
+
+O projecto não tem React, Tailwind, TypeScript, `tsconfig`, `tailwind.config` nem `components.json`
+— e, de propósito, o Órbita é **um ficheiro HTML** que abre offline, construído por esbuild a partir
+de módulos JS. Instalar React + Tailwind para um componente punha um runtime de ~140 kB entre o dono
+e uma caixa de texto e acabava com o «um ficheiro só». O desenho e o comportamento foram **portados**
+para `src/composer.js` (557 linhas, zero dependências): mesmos elementos, mesmas regras, mesma calma.
+O detalhe (e o que fazer se algum dia o projecto passar a React) está em **[docs/CONVERSA.md](docs/CONVERSA.md)**.
+
+### O que o cartão tem
+
+- **Modos** — `Planear` (o servidor desliga as ferramentas e pede um plano), `Perguntar` (a conversa
+  com as notas da empresa) e `Construir` (**cria mesmo a tarefa** em `/api/tasks` com `run: true`, começa a corrê-la na fila do servidor e diz o id).
+- **Modelo e esforço** — a lista vem de `/api/health` (`sonnet · opus · fable`, `low … max`), com
+  separadores **Favoritos/Todos**, estrela, pílula de provedor e `Auto` (a precedência da casa).
+  Escolher um modelo ou esforço envia-o naquela mensagem; o servidor devolve o que usou.
+- **+ Ficheiros** — texto até 5 ficheiros, 40 000 caracteres cada, 60 000 no total, só naquela
+  mensagem. Imagens e PDF dizem que não são lidos.
+- **@ Contexto** — `@Cérebro` e `@Documentos` reais (com os números que o servidor declara);
+  `@Terminal` **desactivado com a razão**, porque não há terminal ligado ao agente.
+- **Ditar** — a `SpeechRecognition` do browser quando existe; desactivado com a razão quando não.
+- **Aviso do motor** (o lugar do «Upgrade to Pro») — o Órbita não vende planos, por isso não há
+  preço: no mesmo sítio aparece o estado real (motor, modelo, esforço, notas, documentos) quando
+  falta motor, e desaparece quando há.
+- **Tour** de quatro passos, dispensável, e **avisos** com `aria-live`.
+
+### O que se recusou copiar
+
+- **«Upgrade to Pro» com planos e preços** — não há faturação no Órbita; um preço inventado seria
+  dado de demonstração (pedido 19). O lugar do banner ficou com o aviso do motor.
+- **A lista de modelos de exemplo** (`kimi-k3`, `gpt-56-terra`, `sonnet-5`, `opus-48`…) — a lista é
+  a que o servidor sabe correr. Sem motor, o botão diz «sem motor».
+- **O `@terminal`** — não existe, e fingir que existe era mentir no sítio onde se pede contexto.
+
+### O que mudou no servidor
+
+`POST /api/chat` passou a aceitar `mode`, `model`, `effort`, `auto`, `files` e `context`, e a
+responder com `mode`, `model`, `modelName`, `modelFrom`, `effort`, `effortName`, `context` e
+`files`. `GET /api/health` passou a declarar o tamanho do contexto (`context.notes`, `context.docs`).
+Em modo `Planear` não há rotinas nem entrevistas: o pedido só devolve um plano, sem ferramentas. `POST /api/tasks` aceita `run: true`: a tarefa nasce em `doing` e entra na fila do servidor no mesmo instante (era só `next`, à espera de um RUN à mão).
+
+### Provas
+
+- **`test:office` — 38/38** (eram 31). Sete testes novos: os três modos e o que cada um promete, os
+  anexos (limites e recusas), o `@contexto` com o terminal desactivado, o corpo do pedido (Auto cala
+  o modelo; lixo cai em `ask`; história limitada a 8), a linha do que correu, e as preferências
+  guardadas (incluindo lixo no `localStorage`).
+- **`test:scene` — ✓** com 24 asserções novas no bundle real: os três modos trocam com
+  `aria-pressed`, o menu do modelo abre e fecha com `aria-expanded`, o seletor de ficheiros, o menu
+  de contexto com a linha do terminal desactivada **e a razão escrita**, o aviso do motor visível
+  quando o servidor não responde (o harness responde 503) e o `#mcModal` **fora do `#rail`** (a
+  gaveta tem `overflow:hidden` e `transform`; um `fixed` lá dentro ficava cortado). *O teste tem
+  dentes:* mudei o id do menu de contexto e ele caiu na hora.
+- **Contra um motor de teste local** (um servidor OpenAI-compatible de 40 linhas, sem tocar no
+  repositório): `mode: "plan"` chegou ao motor com a regra de planear, `tools: false` e
+  `max_tokens: 900`; `files` levou o conteúdo do `brief.md`; `context: ["brain","docs"]` levou as
+  notas escolhidas e `docs/CENA.md`; e `auto:false, model:"opus", effort:"max"` foi corrido com o
+  modelo que o fornecedor declara para `opus`.
+- `test:a11y` **21/21** · `ops` **71/71** · `integrations` **18/18** · `check.mjs` **94/95** (só
+  `smoke: browser`, que precisa de Chrome) · build **1380 KB** + `mesa.html` 86 KB.
+- **Vi o cartão antes de o entregar:** `docs/conversor-claro.png`, `docs/conversor-escuro.png` e
+  `docs/conversor-modelo.png` são capturas do CSS real, com o Chromium headless — foi assim que
+  corrigi a pílula do modelo a cortar «Sonnet» em «S…» e o menu a crescer para fora do ecrã.
+
+### Limitações, declaradas
+
+- **O esforço só existe nos motores CLI.** Nas APIs compatíveis com OpenAI o protocolo não tem
+  esse campo: vai o modelo, não vai o esforço — e o menu diz isso quando o motor é desse tipo.
+- **Numa API, os três nomes da casa podem responder com o mesmo modelo**, se o fornecedor não
+  declarar um por nome.
+- **Anexos são texto.** PDF, DOCX e imagens não são extraídos; 60 kB é o tecto por mensagem.
+- **`@Documentos` lê o título e as primeiras linhas** de cada markdown (até 6 000 caracteres).
+- **Sem motor ligado, a conversa não inventa:** responde com a razão da falha. Nesta máquina não há
+  `claude`, `codex` nem `gemini` no `PATH`, por isso o aviso do compositor é o estado normal aqui.
+- **A cena 3D continua sem captura neste sandbox** (SwiftShader sem bibliotecas de sistema); as
+  imagens do conversador são DOM puro, por isso são reais.
+
 ## 1.9.8 — 26 out 2026 · A secretária: preta, com a luz da sala
 
 Pedido 26: *«melhorias nível Apple design 3D mais moderna e elegante, com LEDs Aukora combinando com a cor da sala, uma vibe de mesa moderna preta com LED, e acessórios gamers, muito bonito e chamativo»*.
