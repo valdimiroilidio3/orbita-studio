@@ -59,7 +59,7 @@ import { parseWhen, describe, valid as validWhen, untilText } from './src/when.j
 
 const cfg = loadConfig();
 const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by build.mjs; shipped so npm start works without a build
-const DATA = path.join(ROOT, 'data');
+const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
 const FILE = path.join(DATA, 'tasks.json');
 const BRAIN = cfg.brainPath;
 const NOTES_DIR = path.join(BRAIN, 'Órbita');
@@ -589,7 +589,9 @@ const server = http.createServer(async (req, res) => {
         const found = kind === 'places'
           ? await google.searchPlaces({ what: b.what, where: b.where, limit, lang: b.lang || 'pt-PT', region: b.region || 'PT' })
           : await google.searchWeb({ q: b.q || [b.what, b.where].filter(Boolean).join(' '), limit });
-        const saved = b.save === false ? { added: 0, updated: 0, total: google.stats(DATA).total, leads: found } : google.saveAll(found, DATA);
+        // 26 out 2026: a pesquisa web devolve informação, não empresas — só entra para os leads com save:true explícito.
+        const keep = b.save === true || (kind === 'places' && b.save !== false);
+        const saved = keep ? google.saveAll(found, DATA) : { added: 0, updated: 0, total: google.stats(DATA).total, leads: found };
         console.log(`🔎 ${kind === 'places' ? 'Places' : 'Pesquisa web'}: "${[b.what, b.where].filter(Boolean).join(' em ') || b.q}" → ${found.length} resultados · +${saved.added} novos`);
         return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, results: found.slice(0, limit) });
       } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
