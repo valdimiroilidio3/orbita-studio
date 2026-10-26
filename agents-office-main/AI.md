@@ -14,7 +14,7 @@ está escrita em português, na gaveta **IA** do painel de tarefas.
 |---|---|---|
 | `claude-cli` **Claude Code** | `claude -p … --output-format stream-json` | `npm i -g @anthropic-ai/claude-code` e entrar uma vez |
 | `codex-cli` **Codex** | `codex exec --skip-git-repo-check --model {model} {prompt}` | `npm i -g @openai/codex` e `codex` uma vez |
-| `antigravity` **Antigravity** | `agy --print-timeout 15m -p {prompt}` (o system prompt entra no prompt; a resposta JSON é desembrulhada) | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, e `agy` uma vez para entrar |
+| `antigravity` **Antigravity** | `agy --print-timeout 15m --output-format json -p {prompt}` (o system prompt entra no prompt; o envelope JSON é desembrulhado; saída vazia com código 0 é recusada — issue #76 do antigravity-cli) | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` → `~/.local/bin/agy`, e `agy` uma vez para entrar |
 | `gemini-cli` **Gemini** | `gemini -p {prompt} --model {model}` | `npm i -g @google/gemini-cli` e `gemini` uma vez — **substituído pelo Antigravity em junho de 2026**; fica por compatibilidade |
 | `cli` **CLI personalizada** | o que puseres em `ai.providers.cli` | um binário, `args` com `{prompt}` `{system}` `{model}` |
 | `anthropic` **Claude (API)** | `POST /v1/messages` | `ANTHROPIC_API_KEY` |

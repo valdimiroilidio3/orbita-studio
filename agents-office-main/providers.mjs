@@ -42,7 +42,7 @@ export const PRESETS = {
     // Google Antigravity CLI — o binário é `agy`, um executável Go (não é npm). É o sucessor do
     // Gemini CLI. Não tem --system-prompt: o system prompt entra no próprio prompt.
     label: 'Antigravity', kind: 'cli', bin: 'agy', tools: false, noSystemFlag: true,
-    args: ['--print-timeout', '15m', '-p', '{prompt}'], // o prompt fica por último, como o `agy` espera
+    args: ['--print-timeout', '15m', '--output-format', 'json', '-p', '{prompt}'], // o prompt fica por último, como o `agy` espera; JSON porque o envelope é desembrulhado por cliText
     models: { sonnet: '', opus: '', fable: '' },
     hint: 'instala com `curl -fsSL https://antigravity.google/cli/install.sh | bash` (~/.local/bin/agy) e corre `agy` uma vez para entrar',
   },
@@ -336,7 +336,12 @@ function askCli(d, { system, user, timeout = 300000, model }) {
     p.on('close', code => {
       clearTimeout(timer);
       if (code !== 0 && !out.trim()) return reject(new Error(`${d.bin} saiu com ${code}${err ? ': ' + err.trim().slice(0, 300) : ''}`));
-      resolve({ text: cliText(out), tools: [], modelId: want || d.bin });
+      const text = cliText(out);
+      // 26 out 2026: `agy -p` em não-TTY já devolveu stdout vazio com código 0 (issue #76 do
+      // antigravity-cli). Uma entrega vazia não é uma resposta: falha com a razão, em vez de
+      // gravar uma tarefa «feita» sem texto nenhum.
+      if (!text.trim()) return reject(new Error(`${d.label || d.bin} não devolveu nada${err.trim() ? ': ' + err.trim().slice(0, 200) : ''} — se for o Antigravity, corre \`agy\` uma vez num terminal para entrar (e vê a issue #76: stdout vazio em modo não-TTY)`));
+      resolve({ text, tools: [], modelId: want || d.bin });
     });
   });
 }

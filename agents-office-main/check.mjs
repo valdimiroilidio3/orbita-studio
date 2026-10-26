@@ -5,6 +5,7 @@
 // loop the Beta was built against: change something, run it, fix what is red, repeat.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { loadConfig, ROOT } from './config.mjs';
 
@@ -514,6 +515,32 @@ else {
       if (r.status === 200 || j.ok) throw new Error('aceitou um motor que não existe');
       if (!/motor-imaginario/.test(j.error || '')) throw new Error('não explicou: ' + JSON.stringify(j).slice(0, 120));
       return 'recusado · ' + String(j.error).slice(0, 60);
+    });
+    await step('motores: o Antigravity responde, desembrulha o JSON e recusa saída vazia', async () => {
+      // Um `agy` falso no PATH: prova o caminho inteiro (deteção, argumentos, envelope, erro) sem
+      // instalar nada nem tocar na conta do dono.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-agy-'));
+      const bin = path.join(dir, 'agy');
+      fs.writeFileSync(bin, `#!/usr/bin/env node\nif (process.env.FAKE_AGY_EMPTY === '1') process.exit(0);\nprocess.stdout.write(JSON.stringify({ result: 'resposta do agy falso' }) + '\\n');\n`, { mode: 0o755 });
+      const oldPath = process.env.PATH;
+      process.env.PATH = dir + path.delimiter + oldPath;
+      try {
+        const ai = await import('./providers.mjs?agy=' + Date.now());
+        const entry = ai.resolve({ model: 'sonnet', ai: { providers: {} } }, null).candidates.find(c => c.id === 'antigravity');
+        if (!entry.available) throw new Error('agy não foi detetado: ' + entry.reason);
+        const hooks = { allowedTools: () => [], modelArgs: () => [], ranOn: () => null, cliArgs: () => [] };
+        const out = await ai.makeRunner({ ...entry, available: true }, { model: 'sonnet' }, hooks).askX({ system: 'SYS', user: 'Olá', tools: false });
+        if (out.text !== 'resposta do agy falso') throw new Error('texto inesperado: ' + JSON.stringify(out.text));
+        process.env.FAKE_AGY_EMPTY = '1';
+        let honest = '';
+        try { await ai.makeRunner({ ...entry, available: true }, { model: 'sonnet' }, hooks).askX({ system: 'SYS', user: 'Olá', tools: false }); }
+        catch (e) { honest = e.message; }
+        if (!/não devolveu nada/.test(honest)) throw new Error('saída vazia não foi recusada: ' + (honest || 'resolveu com texto vazio'));
+        return `--output-format json · envelope desembrulhado · vazio recusado`;
+      } finally {
+        process.env.PATH = oldPath; delete process.env.FAKE_AGY_EMPTY;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
     await step('server: o Antigravity (agy) está na lista de motores, com a instalação certa', async () => {
       const a = await (await fetch(base + '/api/ai')).json();
