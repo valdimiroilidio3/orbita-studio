@@ -258,6 +258,27 @@ conta, o Órbita pede entrada em `/app` e cada rota exige uma permissão concret
 - **Sem contas nem token** o Órbita fica em **modo local** — e o arranque di-lo em voz alta, porque
   é só para esta máquina.
 
+## A oficina: os agentes forjam as próprias ferramentas
+
+Um agente que precisa de olhar para o negócio e não tem com que o fazer não inventa números: pede
+uma ferramenta. A **oficina** escolhe a receita, escreve o código, **prova-o contra os dados reais
+desta máquina** (o cérebro, as tarefas, a documentação), repara-o uma ou duas vezes se ele se
+partir, e só depois o deixa no catálogo da sala. A partir daí a ferramenta corre **antes** de o
+agente escrever — e o que ela leu entra no prompt como dados.
+
+E vê-se tudo. A tecla **F** abre o **terminal da oficina**: um painel escuro sobre o escritório onde
+cada linha é uma coisa que aconteceu (a receita escolhida, o código a ser escrito, cada prova, a
+reparação, a activação, o primeiro resultado real). O mesmo fluxo, na linha de comandos:
+
+```bash
+node tools/forge.mjs forge marketing "contar as palavras das notas do cérebro"
+node tools/forge.mjs watch
+```
+
+As ferramentas vivem em `data/forge/tools/<sala>/<id>/` (com histórico de versões), correm num
+contexto isolado com prazo de CPU e sem `process`, `require` ou rede, e as que **escrevem** só
+activam com a tua mão. Guia completo, com a régua de segurança e os limites ditos: **[FORGE.md](FORGE.md)**.
+
 ## Tarefas: trabalho com dono, prazo e resultado
 
 Os seis departamentos — **ORION** (command), **LUNA** (prospect), **KAI** (sales), **NOVA** (design),

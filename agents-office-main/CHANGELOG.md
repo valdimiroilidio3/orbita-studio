@@ -1,3 +1,86 @@
+## 1.11.0 — 27 out 2026 · A oficina: os agentes forjam as próprias ferramentas
+
+Pedido: *«implementa um sistema capaz de cada agente criar próprias ferramentas para operar e
+possibilidade de eu poder ver o que está a fazer através do terminal»*.
+
+### O que é
+
+Cada sala tem uma **oficina**. Quando falta uma ferramenta, a oficina: escolhe a receita, escreve o
+código, grava-o em disco, **prova-o contra os dados reais**, repara-o se ele se partir, e só então o
+põe no catálogo — em rascunho se a ferramenta escreve, porque aí quem decide é o dono. A ferramenta
+passa a correr **antes de o agente escrever** e o resultado entra no prompt como dados.
+
+```
+⌁ mlead precisa de uma ferramenta: “contar as palavras das notas do cérebro”
+▸ receita escolhida: notas-contagem (contar, palavras, notas, cerebro) · segunda: notas-procura
+⌸ gravada marketing/contagem-do-cerebro v1 · data/forge/tools/marketing/contagem-do-cerebro/
+✓ prova 1/1 · 7 ms · {"notas":35,"palavras":1122,"ligacoes":80,…}
+✦ contagem-do-cerebro v1 ACTIVA · 1/1 provas · escopos brain:read
+▶ primeira execução: {"notas":35,"palavras":1122,"ligacoes":80,"maiores":[…]}
+⌁ marketing: Contagem do cérebro v1 (active) · 13 ms
+```
+
+Isto é saída real, copiada de uma execução nesta máquina.
+
+### O terminal (a segunda metade do pedido)
+
+- **Tecla F** (ou o botão `›_` ao lado do zoom) — painel escuro sobre a cena clara, com filtros por
+  sala, contadores (`activas/total · execuções · falhas · média ms`) e um prompt de comandos:
+  `:ls`, `:forge <sala> <necessidade>`, `:run`, `:adopt`, `:activate`, `:eventos`, `:help`.
+- **`node tools/forge.mjs watch`** — o mesmo fluxo na linha de comandos, com cores; `ls`, `forge`,
+  `run`, `adopt`, `activate`, `log`.
+- **`GET /api/forge/stream`** é SSE; o histórico fica em `data/forge/log.ndjson`.
+- **Sem encenação**: cada linha do terminal nasceu de um evento emitido pelo servidor depois de uma
+  execução. Um terminal que caia não derruba a oficina (os subscritores são isolados).
+
+### Como está construído
+
+| peça | papel |
+|---|---|
+| `forge/manifest.mjs` | o portão: valida o manifesto e recusa código perigoso (diz a linha) |
+| `forge/primitives.mjs` | as únicas funções que uma ferramenta tem — atrás de escopos |
+| `forge/sandbox.mjs` | contexto `vm`, ponte só de texto, prazo de 400 ms, tecto de saída |
+| `forge/compose.mjs` | 7 receitas, escolhedor com «porquê», duas regras de reparação |
+| `forge/registry.mjs` | gravação atómica, versões, histórico, uso, adopção com proveniência |
+| `forge/bus.mjs` | eventos → SSE + `log.ndjson` |
+| `src/forge.js` · `tools/forge.mjs` | o terminal no browser e na linha de comandos |
+
+### Segurança, dita sem marketing
+
+Três vedações: **o portão** (recusa `require`, `import`, `process`, `eval`, `Function`,
+`constructor`, `prototype`, rede, temporizadores, ciclos infinitos — com a linha), **o contexto**
+(reino próprio, geração de código desligada, primitivas devolvem JSON em texto para que os dados não
+tragam protótipos do anfitrião) e **o prazo** (400 ms por execução, cortados à força). O que isto não
+é: um sandbox de segurança a sério — está escrito no `FORGE.md`, com o comando `--permission` do Node
+para quem quiser mais. As ferramentas que escrevem nascem em **rascunho** e as provas correm em
+**ensaio** (`dry: true`): provar nunca suja o cérebro.
+
+### Integração com os agentes
+
+- O prompt de cada tarefa ganhou a lista das ferramentas da sala e a instrução `FORGE: <o que falta>`.
+- O servidor lê essa linha do resultado e **forja-a** (uma por tarefa), dizendo-o no fim do trabalho.
+- `sense()` corre as ferramentas-sensor antes de o agente escrever e entrega os dados no prompt.
+- `adopt` leva uma ferramenta a outra sala com proveniência e volta a prová-la **com os dados da
+  sala de destino**.
+
+### Provas
+
+`test:forge` **29/29** (novo): o portão recusa seis formas de escapar e exige provas que olhem para
+`result`; dentro do sandbox `process`/`require`/`fetch` não existem; um ciclo infinito é cortado em
+menos de 3 s; o tecto de saída recusa em vez de corromper; sem escopo a primitiva recusa; a escrita
+em ensaio não toca no disco; o compositor escolhe a receita certa e mais nenhuma; a reparação só
+actua em falhas que reconhece; uma ferramenta partida fica `broken`; a adopção guarda a proveniência;
+os eventos chegam por ordem ao terminal e ao `log.ndjson`.
+`test:scene` ganhou o painel: existe no bundle, começa fechado, abre e fecha, tem 7 abas — e não
+rebenta sem servidor nem `EventSource` (o caso de abrir o ficheiro com duplo clique).
+Restantes: `test:office` 51/51 · `test:a11y` 21/21 · `test:ops` 71/71 · build 1 429 kB.
+
+### Limites, ditos
+
+Sem motor de IA ligado, quem escolhe é o compositor (7 receitas determinísticas) — com motor, o
+mesmo portão aceita código escrito pelo modelo. A ponte MCP (expor as ferramentas ao `claude -p`) é o
+passo seguinte; hoje as ferramentas correm no servidor, antes de o agente escrever.
+
 ## 1.10.4 — 27 out 2026 · A mesa no fim da sala (as salas de sete)
 
 Pedido: *«nas salas com 7 agentes a mesa no fim da sala ficou com uma apresentação feia, melhore isso

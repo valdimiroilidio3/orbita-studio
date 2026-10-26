@@ -218,6 +218,25 @@ for (const a of aderecos) {
 // nenhum adereço pode cair em cima de um posto: a mesa do salão fica à frente da última fila
 for (const a of aderecos) ok(a.table.z > a.deskFront + 1, `${a.dept}: a mesa do salão encosta às secretárias`);
 
+/* ---------- o terminal da oficina (1.11.0) ---------- */
+// O dono pediu «poder ver o que está a fazer através do terminal». O que aqui se prova é que o
+// painel existe no bundle, que está fechado à partida, que abre e fecha com uma chamada e que NÃO
+// rebenta quando não há servidor nem EventSource (é o caso de abrir o ficheiro com duplo clique —
+// e é o caso deste teste, sem rede nenhuma).
+{
+  const term = win.document.getElementById('term');
+  ok(!!term, 'falta o terminal da oficina (#term) no bundle');
+  ok(!!(win.CC.forge && typeof win.CC.forge.toggle === 'function'), 'CC.forge não está exposto');
+  ok(win.CC.forge.isOpen() === false, 'o terminal devia começar fechado');
+  win.CC.forge.open();
+  ok(win.CC.forge.isOpen() === true, 'o terminal não abriu');
+  ok(!win.document.getElementById('term').hidden, 'o #term devia estar visível com o terminal aberto');
+  const tabs = win.document.querySelectorAll('#term .tm-tab');
+  ok(tabs.length === 7, `esperava 7 abas (todas + 6 salas), há ${tabs.length}`);
+  win.CC.forge.close();
+  ok(win.CC.forge.isOpen() === false && win.document.getElementById('term').hidden, 'o terminal não fechou');
+}
+
 /* ---------- as 35 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
 // O pedido foi «mesa preta com LED na cor da sala». Aqui lê-se a cena MONTADA, posto a posto:
 // cada secretária tem de ter a malha do LED com a cor emissiva igual ao vidro daquela sala, e o
@@ -487,6 +506,6 @@ const avatares = (() => {
   if (!av.stats) return 'sem avatares';
   return `${av.stats.total} avatares (${av.stats.women} mulheres · ${av.stats.hats} chapéus · ${av.stats.beards} barbas · ${av.stats.glasses} óculos · ${av.stats.styles} estilos), 57 teclas e 1 rato por posto`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, 35 secretárias pretas com LED na cor da sala, ${avatares}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

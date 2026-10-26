@@ -55,6 +55,8 @@ import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · G
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
 import * as ops from './src/ops/index.mjs';
+import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
+import { createBus } from './forge/bus.mjs';
 import {
   createLimiter, authorized, adminMode, csrfOk,
   authenticate, sessionCookie, clearSessionCookie, sessionToken, wantsSecureCookie, SESSION_COOKIE,
@@ -162,6 +164,16 @@ mcp.useConfig(ensureCliMcpConfig()); // se o .mcp.json do projeto existir, os ag
 const TEAMS = teams.settings(cfg); // V3.2 (16 Sep): { enabled, max }
 const roster = loadRoster(BRAIN);
 const AGENTS = roster.agents; // id · department · lead · name · role · does · tools · brief
+/* ---------- A OFICINA (27 out 2026) ----------
+   Cada agente pode forjar uma ferramenta própria. A oficina grava-a em data/forge, prova-a contra
+   os dados reais desta máquina, e tudo o que faz sai em eventos — os mesmos que o terminal do
+   browser (`F`) e o `node tools/forge.mjs watch` mostram. Se apareceu no terminal, aconteceu. */
+const forgeBus = createBus({ file: path.join(DATA, 'forge', 'log.ndjson') });
+const FORGE = createForge({
+  root: path.join(DATA, 'forge'),
+  brainDir: BRAIN, dataDir: DATA, docsDir: path.join(ROOT, 'docs'),
+  rooms: DEPT_KEYS, agents: AGENTS.map(a => a.id), bus: forgeBus,
+});
 // para o ao vivo: nome, função e departamento de cada posto vêm da mesma lista que a cena usa
 const ROSTER = Object.fromEntries(AGENTS.map(a => [a.id, { name: a.name, role: a.role, dept: a.department }]));
 for (const w of roster.problems) console.warn('agents:', w);
@@ -352,7 +364,7 @@ function agentSystem(a, index, read, { extra = '', words = 260 } = {}) {
     'Escreve o próprio trabalho final, não uma descrição do que farias. Texto simples: um título curto e depois secções curtas ou tópicos. ' +
     `No máximo ${words} palavras, salvo se uma competência ou as instruções do proprietário definirem outra forma — essas ganham. Sem preâmbulo, sem despedida. Fundamenta no contexto da empresa abaixo; onde faltar um facto, assume algo razoável e marca (assumido).` +
     'Se usaste uma ferramenta, di-lo numa linha no fim ("Usado: Gmail — procurei a conversa com o cliente").\n\n' +
-    `${mcp.promptText(a.tools)}\n\nNOTAS DA EMPRESA\n${businessContext(index)}${leadBlock(a)}\n\nNOTAS QUE LESTE PARA ESTA TAREFA\n${contextText(index, read)}`;
+    `${mcp.promptText(a.tools)}${(() => { const t = FORGE.promptText(a.department); return t ? '\n\n' + t : ''; })()}\n\nNOTAS DA EMPRESA\n${businessContext(index)}${leadBlock(a)}\n\nNOTAS QUE LESTE PARA ESTA TAREFA\n${contextText(index, read)}`;
 }
 const modeLineFor = (mode, task) => mode === 'draft' ? '\nPrepara tudo, mas envia, publica, paga ou altera NADA fora desta máquina: o proprietário lê isto primeiro e aprova. Termina com uma linha a dizer exatamente o que vai sair quando for aprovado (ou que nada tem de sair).'
   : mode === 'approve' ? `
@@ -383,9 +395,28 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const user = `Tarefa: ${task.title}\nPedido do proprietário: ${task.text}` + (task.plan?.length ? `\nPlano acordado: ${task.plan.join(' → ')}` : '') + routineLine + modeLine +
     (feedback && mode !== 'approve' ? `\n\nO proprietário reviu a tua versão anterior e pediu alterações: "${feedback}"\nVersão anterior:\n${task.result}` : '');
   const { pick, eff } = pickFor(task, a);
-  const { text, tools, modelId: ran } = await askX(system, user, { model: pick.model, effort: eff.effort });
+  // 27 out 2026: as ferramentas que esta sala já forjou correm ANTES de o agente escrever. O que
+  // elas leram entra no prompt como dados, não como promessa: o agente escreve sobre números
+  // reais (tarefas, notas, documentos) em vez de os inventar.
+  const sensed = FORGE.sense({ room: a.department, limit: 3 });
+  const senseBlock = sensed.filter(x => x.ok).map(x =>
+    `--- ${x.id} · ${x.name} · ${x.ms} ms ---\n${JSON.stringify(x.result).slice(0, 900)}`).join('\n');
+  const userFull = senseBlock ? `${user}\n\nDADOS DAS TUAS FERRAMENTAS (lidos agora, nesta máquina)\n${senseBlock}` : user;
+  const { text, tools, modelId: ran } = await askX(system, userFull, { model: pick.model, effort: eff.effort });
   if (!text) throw new Error('O Claude não devolveu nada');
-  return { result: text, read, tools: toolKeys(tools), used: mcp.namesOf(tools), skills: skills.names(a), modelUsed: pick.model, modelFrom: pick.from, modelId: ran, effortUsed: eff.effort || '', effortFrom: eff.from };
+  // e se o agente pediu uma ferramenta que não tem (linha `FORGE: …`), a oficina forja-a já — uma
+  // por tarefa, para que o terminal não seja um dilúvio e o catálogo não encha de duplicados.
+  const forged = [];
+  for (const need of FORGE.parseRequests(text).slice(0, 1)) {
+    try {
+      const made = FORGE.forge({ room: a.department, agent: a.id, need });
+      if (made?.tool) forged.push(made.tool);
+    } catch (e) { console.warn('oficina: ' + e.message); }
+  }
+  const result = forged.length
+    ? `${text}\n\nOficina: forjei ${forged.map(t => `${t.id} v${t.version} (${t.state === 'active' ? 'activa' : 'em rascunho'}, ${t.examples} prova(s))`).join(' · ')} — está em data/forge/tools/${a.department}/.`
+    : text;
+  return { result, read, tools: toolKeys(tools), used: mcp.namesOf(tools), skills: skills.names(a), modelUsed: pick.model, modelFrom: pick.from, modelId: ran, effortUsed: eff.effort || '', effortFrom: eff.from };
 }
 
 /* ---------- V3.2 (16 Sep) Agent Teams: the lead plans, the desks work at once, the lead writes the final ---------- */
@@ -964,6 +995,52 @@ const server = http.createServer(async (req, res) => {
         const draft = b.draftId ? integrations.markContentPublished(DATA, b.draftId, published) : null;
         return { ...published, draft };
       }, 201);
+    }
+    /* ---------- a oficina: catálogo, forja, execução, adopção e o terminal ao vivo ---------- */
+    if (url.pathname === '/api/forge' && req.method === 'GET') return json(res, 200, FORGE.catalogue());
+    if (url.pathname === '/api/forge/events' && req.method === 'GET') {
+      const n = Math.min(400, Math.max(1, +(url.searchParams.get('n') || 120)));
+      return json(res, 200, { events: FORGE.recent(n), stats: FORGE.stats() });
+    }
+    if (url.pathname === '/api/forge/stream' && req.method === 'GET') {
+      res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-transform', connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      });
+      const send = (event, data) => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); return true; } catch { return false; } };
+      res.write('retry: 3000\n\n');
+      send('hello', { stats: FORGE.stats(), events: FORGE.recent(80) });
+      const off = FORGE.subscribe((e) => send('forge', e));
+      const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { /* sai no close */ } }, 25000);
+      req.on('close', () => { clearInterval(ping); off(); });
+      return;
+    }
+    if (url.pathname === '/api/forge/draft' && req.method === 'POST') {
+      const b = await body(req);
+      if (!DEPTS[b.room] || b.room === 'brain') return json(res, 400, { error: 'sala desconhecida' });
+      const agent = AGENTS.find(a => a.id === b.agent && a.department === b.room) ? b.agent : (AGENTS.find(a => a.department === b.room && a.lead) || AGENTS.find(a => a.department === b.room)).id;
+      const r = FORGE.forge({ room: b.room, agent, need: String(b.need || '').slice(0, 300), name: b.name, code: b.code || null, scopes: b.scopes, examples: b.examples, activate: b.activate === true });
+      // um rascunho NÃO é um erro: a ferramenta foi forjada e provada, só espera o dono. Só as
+      // recusas a sério (sem receita, manifesto proibido, provas falhadas) é que voltam 422.
+      return json(res, r.ok || r.draft ? 200 : 422, r);
+    }
+    if (url.pathname === '/api/forge/run' && req.method === 'POST') {
+      const b = await body(req);
+      if (!DEPTS[b.room] || !b.id) return json(res, 400, { error: 'faltam room e id' });
+      return json(res, 200, FORGE.run({ room: b.room, id: String(b.id), input: b.input && typeof b.input === 'object' ? b.input : {}, force: b.force === true }));
+    }
+    if (url.pathname === '/api/forge/activate' && req.method === 'POST') {
+      const b = await body(req);
+      const r = FORGE.activate({ room: b.room, id: String(b.id || '') });
+      return json(res, r.ok ? 200 : 422, r);
+    }
+    if (url.pathname === '/api/forge/adopt' && req.method === 'POST') {
+      const b = await body(req);
+      if (!b.to || !DEPTS[b.to]) return json(res, 400, { error: 'sala de destino desconhecida' });
+      const agent = (AGENTS.find(a => a.department === b.to && a.lead) || {}).id;
+      const r = FORGE.adopt({ room: b.room, id: String(b.id || ''), to: b.to, agent });
+      return json(res, r.ok ? 200 : 422, r);
     }
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
     if (url.pathname === '/api/routines' && req.method === 'GET') return json(res, 200, routinesOut());
@@ -1595,6 +1672,8 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { console.error(e); json(res, 500, { error: e.message }); }
 });
 server.listen(cfg.port, () => {
+  const fs0 = FORGE.stats();
+  console.log(`  oficina: ${fs0.tools} ferramenta(s) · ${fs0.active} activa(s) · ${fs0.runs} execuções · terminal em /api/forge/stream e na tecla F`);
   console.log(`Órbita ${version} → http://localhost:${cfg.port}`);
   const estadoAcesso = auth.authState(OPS?.db);
   const faltaConta = estadoAcesso.modo === 'sessao' && !estadoAcesso.usuarios;

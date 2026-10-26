@@ -2643,12 +2643,88 @@
   <button id="zOut" title="reduzir (−)">−</button>
   <button id="zHome" title="visão geral (0)">⌂</button>
   <button id="zIndex" title="lista do escritório (L)" aria-label="lista do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></button>
+  <!-- 27 out 2026: o terminal da oficina também tem de ser encontrável sem saber atalhos -->
+  <button id="zTerm" title="terminal da oficina (F)" aria-label="terminal da oficina"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 3.4h10.8v9.2H2.6z"/><path d="M4.6 6.4 6.8 8l-2.2 1.6M8.2 9.9h3.2"/></svg></button>
 </div>
 <!-- 27 out 2026: o estado do motor vive fora do #rail — a gaveta tem overflow e um transform, e um
      `fixed` lá dentro ficaria preso (e cortado) à largura de 400 px. -->
     <div id="mcModal" class="mc-modal" role="dialog" aria-modal="true" aria-labelledby="mcModalTitle" hidden>
       <div id="mcSheet" class="mc-sheet"></div>
     </div>
+
+<!-- 27 out 2026 · O TERMINAL DA OFICINA (tecla F).
+     Um painel escuro sobre um escritório claro, de propósito: a cena é a empresa, isto é a máquina.
+     Tudo o que aparece aqui veio por SSE de uma execução real do servidor — nada é escrito à mão. -->
+<style>
+  #term {
+    position: fixed; inset: 26px 26px 26px 26px; z-index: 62;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: #0E1113; color: #D9E6D6; border-radius: 16px;
+    border: 1px solid #2A312E;
+    box-shadow: 0 40px 120px rgba(10, 12, 10, .55), inset 0 0 120px rgba(120, 255, 190, .03);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  #term[hidden] { display: none; }
+  .tm-head {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    background: linear-gradient(180deg, #151A1C, #111517); border-bottom: 1px solid #242B29;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #8FA39B;
+  }
+  .tm-head b { color: #E9F3E7; font-weight: 700; letter-spacing: .18em; }
+  .tm-dot { width: 8px; height: 8px; border-radius: 50%; background: #6EF3A8; box-shadow: 0 0 12px #6EF3A8; }
+  .tm-stats { font-size: 10px; letter-spacing: .04em; text-transform: none; color: #7E8F88; }
+  .tm-stats b { color: #CFE9D2; }
+  .tm-tabs { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  .tm-tab {
+    font: inherit; font-size: 9.5px; letter-spacing: .1em; color: #8FA39B; background: none;
+    border: 1px solid #2A312E; border-radius: 999px; padding: 3px 8px; cursor: pointer;
+  }
+  .tm-tab:hover { color: #E9F3E7; border-color: #4A5A52; }
+  .tm-tab.on { color: #0E1113; background: #B9D9BE; border-color: #B9D9BE; }
+  .tm-x { font: inherit; font-size: 13px; color: #8FA39B; background: none; border: 0; cursor: pointer; padding: 2px 6px; }
+  .tm-x:hover { color: #FF9B8A; }
+  .tm-body { flex: 1; overflow-y: auto; padding: 12px 14px 16px; scrollbar-width: thin; }
+  .tm-row { display: grid; grid-template-columns: 62px 92px 1fr; gap: 10px; font-size: 12px; line-height: 1.55; padding: 1px 0; }
+  .tm-ts { color: #4E5C57; font-variant-numeric: tabular-nums; }
+  .tm-room { color: #5E7A6E; font-size: 10px; letter-spacing: .08em; padding-top: 2px; }
+  .tm-tx { white-space: pre-wrap; word-break: break-word; }
+  .t-think .tm-tx { color: #9FB6C4; }
+  .t-match .tm-tx, .t-repair .tm-tx { color: #E2B96B; }
+  .t-code .tm-tx { color: #86D8C6; font-size: 11.5px; }
+  .t-save .tm-tx { color: #93A79B; }
+  .t-ok .tm-tx, .t-pass .tm-tx { color: #7BE495; }
+  .t-fail .tm-tx, .t-broken .tm-tx { color: #FF7B72; }
+  .t-active .tm-tx { color: #A8E6A1; font-weight: 700; }
+  .t-draft .tm-tx { color: #D9C79B; }
+  .t-first .tm-tx { color: #C9E8FF; }
+  .t-done .tm-tx { color: #EDEDE7; }
+  .t-run .tm-tx { color: #B9CBD6; }
+  .t-sense .tm-tx, .t-adopt .tm-tx { color: #A9CBF5; }
+  .t-muted .tm-tx { color: #74837D; }
+  .tm-prompt { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid #242B29; background: #111517; }
+  .tm-ps { color: #6EF3A8; }
+  .tm-in {
+    flex: 1; font: inherit; font-size: 12.5px; color: #E9F3E7; background: none; border: 0; outline: none;
+  }
+  .tm-in::placeholder { color: #55635D; }
+  .tm-prompt button { font: inherit; font-size: 11px; color: #0E1113; background: #B9D9BE; border: 0; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+  @media (max-width: 760px) { #term { inset: 8px; } .tm-row { grid-template-columns: 52px 1fr; } .tm-room { display: none; } }
+  body.dark #term { box-shadow: 0 40px 120px rgba(0, 0, 0, .8), inset 0 0 120px rgba(120, 255, 190, .04); }
+</style>
+<div id="term" hidden aria-hidden="true" role="dialog" aria-label="Terminal da oficina">
+  <div class="tm-head">
+    <span class="tm-dot" aria-hidden="true"></span><b>OfiCina</b>
+    <span class="tm-stats">a ligar…</span>
+    <div class="tm-tabs" role="tablist" aria-label="filtrar por sala"></div>
+    <button class="tm-x" title="fechar (Esc)" aria-label="fechar o terminal">✕</button>
+  </div>
+  <div class="tm-body"><div class="tm-lines" role="log" aria-live="polite" aria-relevant="additions"></div></div>
+  <form class="tm-prompt" autocomplete="off">
+    <span class="tm-ps" aria-hidden="true">›</span>
+    <input class="tm-in" placeholder=":ls · :forge marketing contar as palavras do cérebro · :help" aria-label="comando do terminal" autocomplete="off" spellcheck="false">
+    <button type="submit">executar</button>
+  </form>
+</div>
 <!--APP-->
 </body>
 </html>

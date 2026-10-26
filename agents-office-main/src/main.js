@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, stationSpot, deskFront } from './data.js';
 import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (teclado e leitor de ecrã)
+import { createForgeTerminal } from './forge.js'; // 27 out 2026: o terminal da oficina de ferramentas
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
 // V7: só o que este ficheiro usa. Saíram sete nomes importados e nunca chamados (TOKENS,
@@ -198,6 +199,9 @@ scene.add(ground);
 
 /* ---------- build the office ---------- */
 const hud = document.getElementById('hud');
+/* 27 out 2026 — o terminal da oficina (tecla F). Escuta o SSE do servidor: cada linha é uma coisa
+   que ACONTECEU (uma ferramenta provada, uma nota lida, uma tarefa contada). Nada aqui é encenação. */
+const forgeTerm = createForgeTerminal({ rooms: DEPT_KEYS });
 const clickTargets = [];   // plinth meshes -> dept key
 const personTargets = [];  // person meshes -> agent id
 const R = {};              // runtime per agent
@@ -690,6 +694,7 @@ addEventListener('pointerup', (e) => {
 });
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // typing in the bar, the big editor or a menu never fires a hotkey
+  if (e.key === 'Escape' && forgeTerm.isOpen()) { forgeTerm.close(); return; }
   if (e.key === 'Escape') { if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else zoomOut(); }
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
   else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar ficou com elas own keys (← → W M T)
@@ -709,6 +714,7 @@ addEventListener('keydown', (e) => {
       if (a) openAgentRail(a.id, 'chat');
     }
   }
+  else if (e.key === 'f' || e.key === 'F') { forgeTerm.toggle(); } // 27 out 2026: o terminal da oficina
   else if (e.key === 'v' || e.key === 'V') setCam(!document.body.classList.contains('cam'));
   else if (e.key === 'd' || e.key === 'D') setDark(!darkOn);
 });
@@ -793,6 +799,7 @@ function zoomStep(f) {
 document.getElementById('zIn').addEventListener('click', () => zoomStep(1.5));
 document.getElementById('zOut').addEventListener('click', () => zoomStep(1 / 1.5));
 document.getElementById('zHome').addEventListener('click', zoomOut);
+document.getElementById('zTerm')?.addEventListener('click', () => forgeTerm.toggle());
 
 function zoomToDept(k) { enterFocus(k); }
 function zoomOut() {
@@ -1618,6 +1625,8 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
     },
   },
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
+  forge: { toggle: () => forgeTerm.toggle(), open: () => forgeTerm.open(), close: () => forgeTerm.close(),
+    isOpen: () => forgeTerm.isOpen(), command: (c) => forgeTerm.command(c), stats: () => forgeTerm.stats() },
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
 
 /* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
