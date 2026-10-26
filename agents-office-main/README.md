@@ -394,6 +394,7 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET | `/api/leads` | a lista de leads guardada, por nota |
 | POST | `/api/leads/status` | mudar o estado de um lead |
 | GET | `/api/ops/summary` | funil, conversão, custos e estado da fila |
+| GET | `/api/ops/aovivo` · `/aovivo/stream` | o que cada posto está a fazer (SSE; 401 sem sessão) |
 | GET/POST | `/api/ops/leads` | os leads guardados / importar (um ou `{ leads: [...] }`) |
 | PATCH | `/api/ops/leads/:id` | andar um passo no funil (`{ "status": "contactado" }`) |
 | POST | `/api/ops/consent/opt-out` | bloquear um email/telefone para sempre |
@@ -431,8 +432,9 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 ## Verificação
 
 ```bash
-npm run check         # 92 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, tarefas, contas, servidor)
-npm run test:ops      # 63 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 94 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, tarefas, contas, ao vivo, servidor)
+npm run test:ops      # 69 testes da operação: base de dados em memória, nenhum serviço externo
+# os monitores do escritório 3D leem a base de dados por SSE: GET /api/ops/aovivo · /api/ops/aovivo/stream
 node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude

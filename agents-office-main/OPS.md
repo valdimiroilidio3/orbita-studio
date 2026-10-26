@@ -27,7 +27,7 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Avaliações** | `src/ops/evals.mjs` + `evals.mjs` | Casos fixos com expectativas; resultado guardado por versão de prompt |
 | **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 63 testes, tudo em memória, sem tocar em serviços |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 69 testes, tudo em memória, sem tocar em serviços |
 | **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
 | **Projetos** | `src/ops/projects.mjs` | Do lead ao projeto, com máquina de estados e um projeto por negócio |
 | **Geração** | `src/ops/generate.mjs` | Quatro pontos de partida, ficheiros reais, sem dependências |
@@ -419,6 +419,38 @@ conta inexistente e palavra-passe errada.
 token — só nesta máquina). O arranque imprime o modo; a mesa mostra o ecrã de entrada quando recebe
 `401 { hint: 'sessao' }`.
 
+## O escritório ao vivo (passo 9)
+
+Os monitores do escritório 3D mostram **o trabalho registado**, não uma animação. A regra é a de
+sempre: *se não está na base de dados, não aparece no ecrã*.
+
+- **Fonte.** `src/ops/live.mjs` lê `tasks`, `jobs`, `projects` e `qa_runs`. O mapa `SEAT` liga cada
+  tipo de tarefa ao **posto que já existe** na cena (`lead.pesquisar → AUDITOR DE WEBSITES`,
+  `projeto.qa → QA E TESTES`, …). Não há agentes novos, nem nomes novos, nem departamentos novos.
+- **Transporte.** SSE em `GET /api/ops/aovivo/stream`. O servidor calcula uma **impressão digital**
+  das tabelas a cada 800 ms e só emite `update` quando muda; entre mudanças manda `ping`. Cada
+  `update` leva `alteracoes` (`{ agente, estado, tarefa, idTarefa, at }`) e o retrato completo.
+  Sem WebSocket, sem dependências novas, sem polling do cliente.
+- **Estados.** `live` (tarefa `running` ou evento nos últimos 2 min) · `waiting` (`queued`,
+  `awaiting_approval`) · `error` (falha nos últimos 30 min) · `idle` (diz «sem tarefa registada»).
+  Não há percentagens: mostra-se tentativa x/y, hora de início e o que a tarefa produziu.
+- **Quando a ligação cai.** Silêncio de 20 s ou erro do `EventSource` → tudo passa a
+  **DESATUALIZADO** com a hora do último dado bom, e o botão **ATUALIZAR AGORA** volta a pedir o
+  retrato. O `retry: 3000` faz o cliente voltar sozinho. Nunca se chama «ao vivo» a dados velhos.
+- **O painel.** Clicar num agente abre o separador **AO VIVO** do rail: identidade que já existia,
+  estado, atividade com passos reais, o monitor em direto, verificações de QA, artefactos com link
+  (`/preview/…`, `/api/ops/projetos/:id`, `…/zip`), histórico e eventos. Sem informação, di-lo por
+  palavras. Fechar volta à cena no mesmo sítio.
+- **O que sai do servidor.** `redact()` abrevia caminhos absolutos e oculta chaves/tokens; o
+  `payload` da tarefa não é enviado. As rotas exigem sessão (`read`), como as restantes.
+- **DEMO.** Com `window.SCREENS` (a cena de demonstração, sessões gravadas de outra empresa) os
+  monitores continuam a ser gravações e o painel marca **DEMO** — não se chama «ao vivo» a isso.
+
+**Limitações, ditas:** os postos mostram apenas os tipos de tarefa do mapa `SEAT`; os outros agentes
+da cena não têm trabalho na base de dados, por isso ficam `idle` (não inventamos trabalho para eles).
+O `projeto.gerar` corre em minutos, não em segundos: o monitor atualiza ao ritmo do trabalho, não a
+cada linha de código. Não há histórico de linhas — só o retrato mais recente de cada posto.
+
 ## A guarda da porta
 
 - **Contas**: a partir da primeira conta, `/api/ops` e as rotas de dados do escritório
@@ -460,6 +492,8 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | GET/POST | `/api/ops/tarefas` | Tarefas / criar (`correr: true` executa já) |
 | POST | `/api/ops/tarefas/:id/correr` · `/aprovar` · `/rejeitar` | Correr, aprovar, rejeitar |
 | GET | `/api/ops/agentes` | Estado real dos seis departamentos |
+| GET | `/api/ops/aovivo` | Retrato de cada posto: estado, tarefa, linhas do monitor, artefactos, QA, histórico e eventos |
+| GET | `/api/ops/aovivo/stream` | O mesmo em **SSE**: `hello`, `update` só quando muda, `ping` de 800 ms, `retry: 3000` |
 | GET | `/api/ops/pipeline` | Funil por fase, por origem, e paradas |
 | GET | `/api/ops/pesquisa?q=` | Pesquisa global |
 | GET | `/api/ops/atividade` | Fila, tarefas e eventos recentes |
@@ -549,7 +583,7 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 63 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 69 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

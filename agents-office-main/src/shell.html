@@ -364,7 +364,7 @@
     padding: 8px 12px; cursor: pointer; color: var(--grey); transition: all .4s var(--ease);
   }
   #rail .mtabs button.on { color: var(--ink); border-bottom-color: var(--ink); }
-  #rail .mtabs { display: none; } /* V3.4: chat only */
+  #rail .mtabs { display: flex; } /* 26 out 2026: conversa + painel ao vivo */
   #rail .mpane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   #mMsgs { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 9px;
     scroll-behavior: smooth; min-height: 120px; border-top: 1px solid var(--hairline); margin-top: 10px; }
@@ -459,7 +459,83 @@
     background: var(--ink); color: var(--cream); border: 1px solid var(--ink);
     border-radius: 99px; padding: 0 18px; cursor: pointer; }
   /* activity pane */
-  #mAct { overflow-y: auto; padding: 14px 18px 18px; gap: 12px; }
+  #mAct { overflow-y: auto; padding: 12px 16px 18px; gap: 10px; }
+  /* painel de inspeção (26 out 2026) — o monitor é o único bloco escuro: é um ecrã, não um cartão */
+  .mh-live {
+    margin: 10px 16px 0; display: flex; align-items: center; gap: 7px; cursor: pointer;
+    font-family: var(--ui); font-size: 9.5px; letter-spacing: .14em; font-weight: 700;
+    padding: 6px 10px; border-radius: 9px; border: 1px solid var(--hairline);
+    background: color-mix(in srgb, var(--cream) 88%, transparent); color: var(--ink);
+    transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+  }
+  .mh-live:hover { border-color: var(--ink); }
+  .mh-live .d { width: 7px; height: 7px; border-radius: 50%; background: #B9A05A; flex: none; }
+  .mh-live .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; letter-spacing: .02em; font-size: 11px; font-family: var(--serif); text-transform: none; color: var(--grey); }
+  .mh-live[data-s="live"] .d { background: #7FD11F; animation: liveBlink 1.6s steps(1) infinite; }
+  .mh-live[data-s="waiting"] .d { background: #C9973A; }
+  .mh-live[data-s="error"] .d { background: #C94F3D; }
+  .mh-live[data-s="stale"] .d, .mh-live[data-s="off"] .d { background: #8A8A8A; }
+  .lh, .lv-bar {
+    display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 11px;
+    border: 1px solid var(--hairline); background: color-mix(in srgb, var(--cream) 92%, transparent);
+  }
+  .lv-bar .lv-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--grey); flex: none; }
+  .lv-bar[data-s="live"] .lv-dot { background: #7FD11F; animation: liveBlink 1.6s steps(1) infinite; }
+  .lv-bar[data-s="waiting"] .lv-dot { background: #C9973A; }
+  .lv-bar[data-s="error"] .lv-dot { background: #C94F3D; }
+  .lv-bar[data-s="stale"] .lv-dot, .lv-bar[data-s="off"] .lv-dot { background: #8A8A8A; }
+  .lv-bar b { font-size: 9.5px; letter-spacing: .16em; font-weight: 700; }
+  .lv-bar span:last-child { font-size: 11px; color: var(--grey); margin-left: auto; text-align: right; }
+  .lv-mon {
+    border-radius: 13px; overflow: hidden; border: 1px solid #26262A; background: #101113;
+    box-shadow: 0 10px 26px rgba(21,20,20,.16);
+  }
+  .lv-mon canvas { display: block; width: 100%; height: auto; }
+  .lv-cap {
+    display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px;
+    font-family: var(--ui); font-size: 8.5px; letter-spacing: .16em; color: #9A9DA3;
+    background: #17181B; border-top: 1px solid #232427;
+  }
+  #mAct .lv-sec { font-size: 8.5px; letter-spacing: .18em; color: var(--grey); margin: 12px 2px 5px; }
+  .lv-now { display: flex; flex-direction: column; gap: 5px; }
+  .lv-now .n-t { font-family: var(--serif); font-size: 16px; line-height: 1.25; }
+  .lv-now .n-m { font-size: 11px; color: var(--grey); line-height: 1.5; }
+  .lv-now .n-l { font-family: var(--ui); font-size: 11px; line-height: 1.45; display: flex; gap: 7px; }
+  .lv-now .n-l i { font-style: normal; flex: none; width: 12px; text-align: center; color: var(--grey); }
+  .lv-now .n-l.err i, .lv-now .n-l.err { color: #B23B2B; }
+  .lv-list { display: flex; flex-direction: column; gap: 4px; }
+  .lv-list .r {
+    display: flex; gap: 8px; align-items: baseline; font-size: 11px; line-height: 1.4;
+    padding: 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 60%, transparent);
+  }
+  .lv-list .r:last-child { border-bottom: 0; }
+  .lv-list .r .k { font-family: var(--ui); font-size: 9px; letter-spacing: .1em; color: var(--grey); flex: none; min-width: 62px; }
+  .lv-list .r .v { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .lv-list .r a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+  .lv-list .r .t { color: var(--grey); font-size: 9.5px; flex: none; font-family: var(--ui); }
+  .lv-list .empty { font-size: 11px; color: var(--grey); line-height: 1.45; padding: 2px 0; }
+  .lv-list .empty b { color: var(--ink); font-weight: 600; }
+  .lv-foot { margin-top: 14px; padding-top: 9px; border-top: 1px solid var(--hairline); font-size: 10px; color: var(--grey); line-height: 1.5; }
+  .lv-foot button {
+    margin-top: 7px; font-family: var(--ui); font-size: 9px; letter-spacing: .14em; font-weight: 700;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--hairline); background: none; cursor: pointer; color: var(--ink);
+  }
+  .lv-foot button:hover { border-color: var(--ink); }
+  /* mobile: a rail ocupa quase o ecrã, por isso o painel aperta os espaçamentos e o monitor
+     continua a caber inteiro (a proporção 16:10 vem do canvas, nunca é cortada) */
+  @media (max-width: 560px) {
+    #mAct { padding: 10px 12px 16px; }
+    .mh-live { margin: 8px 12px 0; }
+    .lv-bar { padding: 8px 9px; }
+    .lv-bar span:last-child { font-size: 10px; }
+    .lv-list .r { font-size: 10.5px; }
+    .lv-now .n-t { font-size: 15px; }
+    .lv-foot { font-size: 9.5px; }
+    .lv-foot button { width: 100%; padding: 9px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mh-live[data-s="live"] .d, .lv-bar[data-s="live"] .lv-dot { animation: none; }
+  }
   #mNow { font-size: 12px; color: var(--grey); }
   #mNow b { color: var(--ink); font-weight: 600; }
   #mStats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1453,11 +1529,12 @@
     </div>
     <div class="mh-tag"></div>
     <div id="mRt" class="mrt" hidden></div>
+    <div id="mhLive" class="mh-live" hidden></div>
     <div class="mtabs">
-      <button data-tab="chat" class="on">CONVERSA</button>
-      <button data-tab="activity">ATIVIDADE</button>
+      <button data-tab="live" class="on">AO VIVO</button>
+      <button data-tab="chat">CONVERSA</button>
     </div>
-    <div id="mChat" class="mpane">
+    <div id="mChat" class="mpane" style="display:none">
       <div id="mMsgs"></div>
       <div id="mChips"></div>
       <div class="mInput">
@@ -1466,10 +1543,24 @@
       </div>
     </div>
     <div id="mAct" class="mpane" style="display:none">
-      <div id="mNow"></div>
-      <div id="mStats"></div>
-      <div id="mChart"><div class="ch-lbl"></div><div class="ch-bars"></div></div>
-      <div id="mFeed"></div>
+      <!-- 26 out 2026: o painel de inspeção. Tudo o que aparece aqui foi lido da base de dados do
+           Órbita pelo servidor; o que não existe é dito por palavras, nunca preenchido com exemplo. -->
+      <div id="lvBar" class="lv-bar" role="status" aria-live="polite" aria-atomic="true"><span class="lv-dot" aria-hidden="true"></span><b id="lvState">—</b><span id="lvNote"></span></div>
+      <div class="lv-mon">
+        <canvas id="lvCanvas" width="512" height="320" aria-label="monitor do posto, em direto"></canvas>
+        <div class="lv-cap"><span>MONITOR DO POSTO</span><span id="lvCapAt"></span></div>
+      </div>
+      <div class="lv-sec">ATIVIDADE ATUAL</div>
+      <div id="lvNow" class="lv-now"></div>
+      <div class="lv-sec">VERIFICAÇÕES</div>
+      <div id="lvChecks" class="lv-list"></div>
+      <div class="lv-sec">ARTEFACTOS</div>
+      <div id="lvArt" class="lv-list"></div>
+      <div class="lv-sec">HISTÓRICO</div>
+      <div id="lvHist" class="lv-list"></div>
+      <div class="lv-sec">EVENTOS</div>
+      <div id="lvEv" class="lv-list"></div>
+      <div id="lvFoot" class="lv-foot"></div>
     </div>
   </div>
   </div>

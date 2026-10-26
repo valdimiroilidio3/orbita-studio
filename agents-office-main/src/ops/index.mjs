@@ -20,6 +20,7 @@ import * as tenantsModule from './tenants.mjs';
 import * as projectsModule from './projects.mjs';
 import * as tasksModule from './tasks.mjs';
 import * as searchModule from './search.mjs';
+import * as liveModule from './live.mjs';
 
 export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500, autostart = true } = {}) {
   const file = dbFile || process.env.ORBITA_DB || path.join(dataDir, 'orbita.db');
@@ -31,6 +32,7 @@ export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500
   const autonomy = autonomyModule, evals = evalsModule, money = moneyModule, tenants = tenantsModule, projects = projectsModule;
   const tasks = tasksModule;
   const search = searchModule;
+  const live = liveModule;
 
   // ---- tarefas dos departamentos: tratadores determinísticos, um por tipo ----
   // Nada aqui inventa: cada um lê a base, faz trabalho verificável e devolve resultado + evidência.
@@ -188,7 +190,7 @@ export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500
   const recuperadas = tasks.recover(db);
 
   return {
-    db, queue, leads, messages, metrics, outbox, events, today, research, personalize, autonomy, evals, money, tenants, projects, tasks, search,
+    db, queue, leads, messages, metrics, outbox, events, today, research, personalize, autonomy, evals, money, tenants, projects, tasks, search, live,
     taskHandlers, runTask, recuperadas,
     drainOutbox,
     audit: (event) => audit(db, event),

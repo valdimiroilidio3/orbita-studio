@@ -1183,3 +1183,112 @@ test('estado de autenticação: diz em palavras o que está aberto', () => {
   assert.equal(comToken.token, true);
   assert.equal(comToken.modo, 'sessao', 'com contas, quem manda são as contas');
 });
+
+/* ---------- 26 out 2026: o que o escritório 3D mostra em cada monitor ---------- */
+import * as live from './src/ops/live.mjs';
+import { AGENTS } from './src/data.js';
+
+test('ao vivo: cada monitor pertence a um agente que já existia — nenhum posto inventado', () => {
+  const ids = new Set(AGENTS.map(a => a.id));
+  for (const [kind, seat] of Object.entries(live.SEAT)) {
+    assert.ok(ids.has(seat), `${kind} → ${seat} não existe no escritório`);
+  }
+  assert.equal(new Set(Object.keys(live.SEAT)).size, Object.keys(live.SEAT).length, 'um tipo de tarefa por chave');
+  for (const [op, scene] of Object.entries(live.DEPT_BRIDGE)) {
+    assert.ok(AGENTS.some(a => a.dept === scene), `departamento ${op} → ${scene} não existe na cena`);
+  }
+});
+
+test('ao vivo: sem trabalho registado o posto está idle e di-lo por palavras', () => {
+  const db = fresh();
+  const snap = live.snapshot(db);
+  assert.equal(Object.keys(snap.agents).length, new Set(Object.values(live.SEAT)).size);
+  for (const a of Object.values(snap.agents)) {
+    assert.equal(a.state, 'idle');
+    assert.equal(a.hasData, false);
+    assert.match(a.lines[0].text, /sem tarefas registadas/);
+    assert.deepEqual(a.artifacts, []);
+    assert.equal(a.verification, null, 'sem QA não há resultado para mostrar');
+  }
+  assert.equal(snap.totais.live, 0);
+  assert.match(snap.fonte, /base de dados/);
+});
+
+test('ao vivo: running → live, queued → waiting, falhada → error, e nada de percentagens', () => {
+  const db = fresh();
+  const r = tasks.create(db, { kind: 'projeto.gerar', entity: 'projeto', entityId: 'p_live' });
+  db.prepare("UPDATE tasks SET state='running', started_at=?, attempts=2 WHERE id=?").run(new Date().toISOString(), r.task.id);
+  const a1 = live.snapshot(db).agents.crep;
+  assert.equal(a1.state, 'live');
+  assert.equal(a1.task.id, r.task.id);
+  assert.ok(a1.lines.some(l => /tentativa 2\/3/.test(l.text)), 'mostra a tentativa real, não uma percentagem');
+  assert.ok(!a1.lines.some(l => /%/.test(l.text)), 'nenhuma percentagem inventada');
+
+  const q = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_live' });
+  assert.equal(live.snapshot(db).agents.qa.state, 'waiting');
+  assert.match(live.snapshot(db).agents.qa.lines.map(l => l.text).join(' '), /Auditar|à espera/);
+  assert.equal(tasks.get(db, q.task.id).state, 'queued');
+});
+
+test('ao vivo: uma falha pinta o posto de error, mas só enquanto é recente', () => {
+  const db = fresh();
+  const r = tasks.create(db, { kind: 'projeto.entregar', entity: 'projeto', entityId: 'p_f' });
+  db.prepare("UPDATE tasks SET state='failed', error=?, finished_at=? WHERE id=?")
+    .run('sem permissão no alvo /home/chelton/segredo', new Date().toISOString(), r.task.id);
+  const agora = live.snapshot(db).agents.apay;
+  assert.equal(agora.state, 'error');
+  assert.ok(agora.lines.some(l => l.k === 'error'));
+  assert.doesNotMatch(JSON.stringify(agora), /\/home\/chelton/, 'caminhos absolutos não saem do servidor');
+  const tarde = live.snapshot(db, { now: Date.now() + 31 * 60 * 1000 }).agents.apay;
+  assert.notEqual(tarde.state, 'error', 'uma falha de ontem não fica vermelha para sempre');
+});
+
+test('ao vivo: a impressão digital só muda quando o trabalho muda', () => {
+  const db = fresh();
+  const db2 = fresh();
+  assert.equal(live.fingerprint(db), live.fingerprint(db2), 'bases iguais, impressões iguais');
+  const before = live.fingerprint(db);
+  const r = tasks.create(db, { kind: 'lead.qualificar', entity: 'lead', entityId: 'l_1' });
+  const after = live.fingerprint(db);
+  assert.notEqual(before, after, 'uma tarefa nova muda a impressão');
+  db.prepare("UPDATE tasks SET state='running', started_at=? WHERE id=?").run(new Date().toISOString(), r.task.id);
+  assert.notEqual(live.fingerprint(db), after, 'mudar de estado muda a impressão');
+  const stable = live.fingerprint(db);
+  assert.equal(live.fingerprint(db), stable, 'o tempo a passar, sozinho, não gera eventos');
+});
+
+test('ao vivo: redact esconde chaves, tokens e caminhos antes de chegarem ao cliente', () => {
+  assert.doesNotMatch(live.redact('ficheiro /home/chelton/orbita/db.sqlite'), /\/home\/chelton/);
+  assert.match(live.redact('/home/chelton/orbita/db.sqlite'), /…\/orbita\/db\.sqlite/);
+  assert.equal(live.redact('ORBITA_ADMIN_TOKEN=abc123segredo'), 'ORBITA_ADMIN_TOKEN=[oculto]');
+  assert.match(live.redact('chave ghp_abcdefghijklmnop'), /\[chave oculta\]/);
+  assert.match(live.redact('jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefgh'), /\[token oculto\]/);
+});
+
+test('ao vivo: uma tarefa falhada nunca aparece escrita como «concluída»', () => {
+  const db = fresh();
+  const r = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_sem' });
+  db.prepare("UPDATE tasks SET state='failed', error='projeto não encontrado', finished_at=? WHERE id=?")
+    .run(new Date().toISOString(), r.task.id);
+  const a = live.snapshot(db).agents.qa;
+  const texto = a.lines.map(l => l.text).join(' / ');
+  assert.equal(a.state, 'error');
+  assert.match(texto, /falhou/);
+  assert.doesNotMatch(texto, /concluída/);
+});
+
+test('ao vivo: um posto sem tarefas próprias mostra a atividade do departamento, rotulada', () => {
+  const db = fresh();
+  const r = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_dep' });
+  db.prepare("UPDATE tasks SET state='running', started_at=? WHERE id=?").run(new Date().toISOString(), r.task.id);
+  const snap = live.snapshot(db, {
+    agents: ['dlead', 'qa'],
+    roster: { dlead: { dept: 'delivery' }, qa: { dept: 'delivery' } },
+  });
+  const outro = snap.agents.dlead;
+  assert.equal(outro.hasData, false, 'o posto dlead não tem tarefas próprias');
+  assert.ok(outro.deptActivity, 'mas o departamento dele tem trabalho');
+  assert.equal(outro.deptActivity.dept, 'delivery');
+  assert.equal(outro.deptActivity.task.state, 'running');
+  assert.equal(snap.agents.qa.hasData, true, 'o dono da tarefa tem o trabalho no seu próprio registo');
+});

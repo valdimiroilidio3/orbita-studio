@@ -1458,6 +1458,73 @@ else {
       return 'outra origem → 403 · mesma origem → 200';
     });
 
+    // --- passo 9: o escritório ao vivo (SSE) — 26 out 2026 ---
+    await step('passo 9: o retrato dos postos lê a base de dados e exige sessão', async () => {
+      const sem = await comCookie('GET', '/api/ops/aovivo');
+      if (sem.status !== 401) throw new Error('o retrato abriu sem sessão (' + sem.status + ')');
+      const r = await comCookie('GET', '/api/ops/aovivo', undefined, donoCookie);
+      if (r.status !== 200) throw new Error('HTTP ' + r.status);
+      if (!r.body.agents || !r.body.agents.ilm) throw new Error('falta o posto do qualificador');
+      if (!/base de dados/.test(r.body.fonte || '')) throw new Error('não diz de onde vêm os dados');
+      const semTrabalho = Object.values(r.body.agents).every(a => a.state === 'idle');
+      return `${Object.keys(r.body.agents).length} postos · fonte declarada · sem sessão → 401${semTrabalho ? ' · tudo idle (nada inventado)' : ''}`;
+    });
+
+    await step('passo 9: o fluxo SSE emite quando o trabalho muda, com heartbeat e sem tempestade', async () => {
+      const lead = await comCookie('POST', '/api/ops/leads', { leads: [{ name: 'Ao Vivo Lda', city: 'Coimbra', phone: '+351 916 555 444' }] }, donoCookie);
+      if (lead.status !== 201) throw new Error('não criou o lead de prova (' + lead.status + ')');
+      const lista = await comCookie('GET', '/api/ops/leads?order=recent&limit=1', undefined, donoCookie);
+      const leadId = (lista.body.leads && lista.body.leads[0] && lista.body.leads[0].id) || '';
+      if (!leadId) throw new Error('o lead de prova não ficou na base de dados');
+
+      const ctrl = new AbortController();
+      const res = await fetch(base + '/api/ops/aovivo/stream', {
+        headers: { cookie: donoCookie, accept: 'text/event-stream' }, signal: ctrl.signal,
+      });
+      if (res.status !== 200) throw new Error('o fluxo devolveu ' + res.status);
+      if (!/text\/event-stream/.test(res.headers.get('content-type') || '')) throw new Error('não é SSE: ' + res.headers.get('content-type'));
+      if (!/no-transform/.test(res.headers.get('cache-control') || '')) throw new Error('sem cache-control de fluxo');
+      const reader = res.body.getReader(); const dec = new TextDecoder();
+      const eventos = []; let buf = ''; let bufInicial = '';
+      const ler = (async () => {
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const pedaco = dec.decode(value, { stream: true });
+            buf += pedaco; if (bufInicial.length < 400) bufInicial += pedaco;
+            let i;
+            while ((i = buf.indexOf('\n\n')) >= 0) {
+              const bloco = buf.slice(0, i); buf = buf.slice(i + 2);
+              const ev = (bloco.match(/^event: (.*)$/m) || [])[1];
+              const dado = (bloco.match(/^data: (.*)$/m) || [])[1];
+              if (ev) eventos.push({ ev, dado: dado ? JSON.parse(dado) : null });
+            }
+          }
+        } catch { /* fechado no fim */ }
+      })();
+      await new Promise(r => setTimeout(r, 900));
+      await comCookie('POST', '/api/ops/tarefas', { kind: 'lead.qualificar', entidade: 'lead', entityId: leadId, correr: true }, donoCookie);
+      await Promise.race([ler, new Promise(r => setTimeout(r, 5000))]);
+      ctrl.abort();
+
+      const tipos = eventos.map(e => e.ev);
+      if (!tipos.includes('hello')) throw new Error('o fluxo não começou com o retrato');
+      if (!tipos.includes('ping')) throw new Error('sem heartbeat');
+      const updates = eventos.filter(e => e.ev === 'update');
+      if (!updates.length) throw new Error('a tarefa mudou e o fluxo não disse nada');
+      const ultimo = updates[updates.length - 1].dado;
+      const il = ultimo.agents.ilm;
+      if (!il || !il.hasData) throw new Error('o retrato atualizado não traz o trabalho do posto');
+      if (il.lines.some(l => /%/.test(l.text))) throw new Error('apareceu uma percentagem inventada');
+      if (eventos.length > 40) throw new Error('demasiados eventos sem mudanças (' + eventos.length + ') — o fluxo estaria a inundar');
+      if (!/retry: 3000/.test(bufInicial)) throw new Error('o fluxo não diz ao cliente para voltar sozinho (retry)');
+      const alt = (updates[updates.length - 1].dado.alteracoes || []).find(x => x.agente === 'ilm');
+      if (!alt) throw new Error('o evento não identifica o posto que mudou');
+      if (!alt.idTarefa || !alt.estado || !alt.at) throw new Error('a mudança não diz tarefa, estado e momento');
+      return `hello → ${updates.length} update(s) reais após a tarefa · ${tipos.filter(t => t === 'ping').length} heartbeat(s) · ${eventos.length} eventos no total`;
+    });
+
   } catch (e) { bad('operação: servidor isolado', e.message); }
   finally { try { srv.kill(); } catch {} try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 }

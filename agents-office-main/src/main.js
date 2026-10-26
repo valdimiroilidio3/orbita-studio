@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { TOKENS, DEPTS, DEPT_KEYS, AGENTS, LAYOUT, WORKLINES, APPROVAL_ASKS, APPROVAL_BY_AGENT } from './data.js';
 import { hasScreens, makeScreen } from './screens.js'; // live screens (14 Sep): no-op without window.SCREENS
+import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { V1, FILE_GEN, STATS, KPIS, P, rnd, ri, person, money } from './v1data.js';
 import { PROFILE, profileRows, profileTickKpi, profileMockup, applyTopbar } from './profile.js';
 import {
@@ -215,6 +216,19 @@ deptRT.brain.group.traverse(o => { if ((o.isMesh || o.isSprite) && !o.userData.d
 /* (M5.3 per AJ: the bridge cables are gone — the walkways alone carry the connection;
    the brain↔dept relationship shows through the badge sweep + meetings.) */
 
+/* AO VIVO (26 out 2026): cada monitor passa a mostrar o trabalho registado no posto dele. A fonte é
+   o servidor (`/api/ops/aovivo/stream`, SSE); sem eventos recentes o painel diz «sem tarefa» em vez
+   de rodar texto de exemplo. Em demo (window.SCREENS) os ecrãs continuam a ser as sessões gravadas e
+   o painel marca-se DEMO — nunca se chama «ao vivo» a uma gravação. */
+const DEMO_SCREENS = hasScreens();
+const liveUi = createLive({ agents: AGENTS.map(x => x.id), demo: DEMO_SCREENS });
+function agentInfo(id) {
+  const a = AGENTS.find(x => x.id === id);
+  if (!a) return { id };
+  const v = V1.find(x => x.id === id) || {};
+  return { id, name: a.name, role: v.role || '', tagline: v.tagline || '', chip: DEPTS[a.dept].chip, deptName: DEPTS[a.dept].name };
+}
+
 /* desks + people per dept */
 const COLS = { emails: 2, sales: 2, marketing: 2, ops: 2, fin: 2, delivery: 2 };
 for (const a of AGENTS) {
@@ -233,10 +247,10 @@ for (const a of AGENTS) {
   const station = new THREE.Group();
   station.position.copy(base);
   station.rotation.y = ANG;
-  const live = hasScreens() ? makeScreen(a.id, a.name) : null;
+  const live = hasScreens() ? makeScreen(a.id, a.name) : liveUi.attach(agentInfo(a.id));
   const { group: desk, screenSet } = makeDesk(dept.chip, live);
   station.add(desk);
-  screenSets.push({ screenSet, dept: a.dept, live });
+  screenSets.push({ screenSet, dept: a.dept, live, agentId: a.id });
   const chair = makeChair();
   chair.position.set(0, 0, 1.75);
   station.add(chair);
@@ -257,7 +271,7 @@ for (const a of AGENTS) {
   const pill = document.createElement('div');
   pill.className = 'pill';
   pill.innerHTML = (a.lead ? '<span class="star">★</span>' : '') + a.name;
-  pill.addEventListener('click', () => openAgent(a.id, 'chat'));
+  pill.addEventListener('click', () => openAgent(a.id, R[a.id] && R[a.id].state === 'stuck' ? 'chat' : 'live'));
   hud.appendChild(pill);
 
   R[a.id] = {
@@ -502,8 +516,9 @@ addEventListener('pointerup', (e) => {
   }
   const pHits = ray.intersectObjects(personTargets, false);
   if (pHits.length) {
-    // clicking an agent opens its rail — a stuck agent opens straight to Chat (v1 rule)
-    openAgent(pHits[0].object.userData.agentId, 'chat');
+    // clicar num agente abre o painel de inspeção; quem está preso numa aprovação vai direto à conversa
+    const clicked = pHits[0].object.userData.agentId;
+    openAgent(clicked, R[clicked] && R[clicked].state === 'stuck' ? 'chat' : 'live');
     return;
   }
   const hits = ray.intersectObjects(clickTargets, false);
@@ -654,21 +669,24 @@ function renderChat(id) {
     el.addEventListener('click', () => resolveApproval(id, false)));
   mMsgs.scrollTop = mMsgs.scrollHeight;
 }
+// 26 out 2026: a aba ATIVIDADE passa a ser o painel de inspeção — identidade, estado operacional,
+// atividade real, monitor, verificações, artefactos, histórico e eventos. O que não existe é dito
+// por palavras (o painel faz isso); os números de exemplo que aqui estavam foram retirados.
 function renderActivity(id) {
-  const r = R[id], v = r.v1;
-  const task = rnd(v.tasks || ['A avançar na fila'])
-    .replace('{co}', rnd(P.co)).replace('{person}', person()).replace('{count}', ri(3, 9));
-  document.getElementById('mNow').innerHTML = `AGORA &nbsp;<b>${esc(task)}</b>`;
-  document.getElementById('mStats').innerHTML = (v.stats || []).map(([l, val]) => `
-    <div class="st"><div class="st-l">${esc(l)}</div><div class="st-v">${esc(String(typeof val === 'function' ? val() : val))}</div></div>`).join('');
-  const chip = DEPTS[r.a.dept].chip;
-  const mx = Math.max(...(v.chart || [1]));
-  document.querySelector('#mChart .ch-lbl').textContent = v.chartLbl || '';
-  document.querySelector('#mChart .ch-bars').innerHTML = (v.chart || []).map(n =>
-    `<i style="height:${Math.round(n / mx * 100)}%;background:${chip}"></i>`).join('');
-  document.getElementById('mFeed').innerHTML = r.feed.map(f => `
-    <div class="fe"><span class="fi">${f.i}</span><span>${esc(f.text)}</span><span class="ft">${ago(f.ts)}</span></div>`).join('');
+  liveUi.renderPanel(id, agentInfo(id));
 }
+function renderLiveChip(id) {
+  const chip = document.getElementById('mhLive');
+  if (!chip) return;
+  const d = liveUi.forAgent(id);
+  const st = DEMO_SCREENS ? 'demo' : d ? (liveUi.status() === 'stale' || liveUi.status() === 'off' ? 'stale' : d.state) : 'off';
+  chip.dataset.s = st;
+  chip.hidden = false;
+  const label = DEMO_SCREENS ? 'DEMO' : ({ live: 'AO VIVO', waiting: 'À ESPERA', error: 'FALHOU', idle: 'SEM TAREFA', stale: 'DESATUALIZADO' }[st] || 'SEM DADOS');
+  chip.innerHTML = `<span class="d"></span>${label}<span class="t">${esc(d?.task?.title || d?.last?.title || 'sem tarefa registada')}</span>`;
+  chip.title = 'Abrir o painel ao vivo deste posto';
+}
+document.getElementById('mhLive')?.addEventListener('click', () => setTab('live'));
 /* camera target offset so the pod sits beside the rail, not behind it */
 function focusTarget(k, atPos) {
   const base = atPos ? [atPos.x, 0, atPos.z] : [LAYOUT[k].pos[0], 0, LAYOUT[k].pos[1] + 1];
@@ -802,6 +820,7 @@ function openAgentRail(id, tab = 'chat', fly = true) {
   document.getElementById('mChips').querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => sendChat(b.textContent)));
   rail.classList.add('agentOpen');
+  renderLiveChip(id);
   setTab(tab);
   if (tasks && tasks.railFor) tasks.railFor(id); // V3.5: the agent's routines strip
   if (fly) { const t = focusTarget(r.a.dept, r.seat); flyTo(t.pos, t.zoom, 500); }
@@ -829,12 +848,13 @@ function openAgent(id, tab = 'chat') {
   enterFocus(dept, id);
 }
 function setTab(tab) {
-  modalTab = tab;
+  const live = tab === 'live' || tab === 'activity';
+  modalTab = live ? 'live' : 'chat';
   document.querySelectorAll('#rail .mtabs button').forEach(b =>
-    b.classList.toggle('on', b.dataset.tab === tab));
-  document.getElementById('mChat').style.display = tab === 'chat' ? 'flex' : 'none';
-  document.getElementById('mAct').style.display = tab === 'activity' ? 'flex' : 'none';
-  if (tab === 'chat') renderChat(modalOpen); else renderActivity(modalOpen);
+    b.classList.toggle('on', (b.dataset.tab === 'live') === live));
+  document.getElementById('mChat').style.display = live ? 'none' : 'flex';
+  document.getElementById('mAct').style.display = live ? 'flex' : 'none';
+  if (live) renderActivity(modalOpen); else renderChat(modalOpen);
 }
 document.querySelectorAll('#rail .mtabs button').forEach(b =>
   b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -1282,15 +1302,9 @@ function tickSim(now, dt) {
     const slow = view.zoom < 1.4;
     for (const ss of screenSets) if (ss.live) ss.live.tick(now, slow);
   }
-  // rotate desk screen content — a couple of screens refresh every beat so the room reads busy
-  else if (Math.floor(now / 1800) !== Math.floor((now - dt * 1000) / 1800)) {
-    const n = 1 + (Math.random() < 0.5 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const ss = screenSets[Math.floor(Math.random() * screenSets.length)];
-      ss.screenSet.draw(sample(WORKLINES[ss.dept], 3).map(l => l.slice(0, 28)));
-      ss.screenSet.tex.needsUpdate = true;
-    }
-  }
+  // monitores: o que mudou no servidor é redesenhado; o resto fica quieto (sem tremor, sem sorteio).
+  // Longe, cada ecrã só se repinta quando o estado muda; perto, também mantém o relógio certo.
+  else liveUi.tick(now, view.zoom < 1.4);
 }
 
 /* ---------- zoom LOD + HTML overlay projection ---------- */
@@ -1438,6 +1452,15 @@ resize();
 window.CC = { hero, flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(performance.now()),
   toggleBoard: () => tasks.toggle(), addTask: (agentId, title) => tasks.addTask(agentId, title), tasks, routines: () => tasks.routines };
+
+/* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
+liveUi.onChange(() => {
+  if (!modalOpen) return;
+  renderLiveChip(modalOpen);
+  if (modalTab === 'live') renderActivity(modalOpen);
+});
+liveUi.start();
+window.CC.live = liveUi; // para inspeção: CC.live.status(), CC.live.all()
 
 let last = performance.now();
 function loop(now) {

@@ -151,6 +151,8 @@ mcp.useConfig(ensureCliMcpConfig()); // se o .mcp.json do projeto existir, os ag
 const TEAMS = teams.settings(cfg); // V3.2 (16 Sep): { enabled, max }
 const roster = loadRoster(BRAIN);
 const AGENTS = roster.agents; // id · department · lead · name · role · does · tools · brief
+// para o ao vivo: nome, função e departamento de cada posto vêm da mesma lista que a cena usa
+const ROSTER = Object.fromEntries(AGENTS.map(a => [a.id, { name: a.name, role: a.role, dept: a.department }]));
 for (const w of roster.problems) console.warn('agents:', w);
 let skills = loadSkills(BRAIN, AGENTS); // reloaded before every task and chat, so a new skill needs no restart
 for (const w of skills.problems) console.warn('skills:', w);
@@ -1375,6 +1377,60 @@ const server = http.createServer(async (req, res) => {
           return json(res, r.ok ? 200 : 404, { ok: r.ok, ...r });
         }
         // ---------- passo 7: tarefas dos departamentos, funil, pesquisa e atividade ----------
+        // ---------- ao vivo: o estado real de cada posto, e o fluxo que o mantém fresco ----------
+        // O `/aovivo` é um retrato; o `/aovivo/stream` é SSE — o servidor compara a impressão
+        // digital do que interessa a cada 800 ms e só fala quando algo mudou de verdade.
+        if (url.pathname === '/api/ops/aovivo' && req.method === 'GET') {
+          const quem = String(url.searchParams.get('agentes') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 60);
+          return json(res, 200, { ...OPS.live.snapshot(OPS.db, { agents: quem, roster: ROSTER }), serverTime: Date.now() });
+        }
+        if (url.pathname === '/api/ops/aovivo/stream' && req.method === 'GET') {
+          res.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-cache, no-transform',
+            connection: 'keep-alive',
+            'x-accel-buffering': 'no', // nginx e afins não podem guardar o fluxo num buffer
+          });
+          const send = (event, data) => {
+            try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); return true; } catch { return false; }
+          };
+          res.write('retry: 3000\n\n'); // se a ligação cair, o cliente volta sozinho em 3 s
+          const agents = String(url.searchParams.get('agentes') || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 60);
+          let fp = '';
+          let vivo = true;
+          // `alteracoes` diz, em cada evento, que postos mudaram e para que tarefa/estado — o
+          // cliente não tem de adivinhar olhando para o retrato inteiro.
+          let anterior = {};
+          const mudancas = (snap) => {
+            const out = [];
+            for (const [id, a] of Object.entries(snap.agents)) {
+              const chave = `${a.state}|${a.task ? a.task.id : ''}|${a.task ? a.task.state : ''}|${a.last ? a.last.id : ''}`;
+              if (anterior[id] !== undefined && anterior[id] !== chave) {
+                out.push({ agente: id, estado: a.state, tarefa: a.task?.title || a.last?.title || null, idTarefa: a.task?.id || a.last?.id || null, at: snap.at });
+              }
+              anterior[id] = chave;
+            }
+            return out;
+          };
+          send('hello', { ok: true, serverTime: Date.now(), agents: OPS.live.snapshot(OPS.db, { agents, roster: ROSTER }), intervalo: 800 });
+          mudancas(OPS.live.snapshot(OPS.db, { agents, roster: ROSTER }));
+          const timer = setInterval(() => {
+            if (!vivo) return;
+            try {
+              const next = OPS.live.fingerprint(OPS.db);
+              if (next !== fp) {
+                fp = next;
+                const snap = OPS.live.snapshot(OPS.db, { agents, roster: ROSTER });
+                if (!send('update', { ...snap, alteracoes: mudancas(snap), serverTime: Date.now() })) return;
+              } else if (!send('ping', { serverTime: Date.now() })) return;
+            } catch (e) {
+              send('erro', { error: String(e.message || e).slice(0, 200) });
+            }
+          }, 800);
+          if (timer.unref) timer.unref();
+          req.on('close', () => { vivo = false; clearInterval(timer); try { res.end(); } catch { /* já fechado */ } });
+          return; // nunca `return json` — a resposta é um fluxo aberto
+        }
         if (url.pathname === '/api/ops/agentes' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.tasks.board(OPS.db), resumo: OPS.tasks.summary(OPS.db), tipos: OPS.tasks.KINDS });
         }
