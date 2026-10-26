@@ -170,13 +170,32 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   deptRT[key_] = { group: g, L, walls };
 }
 
+// 1.9.6: o que cada planta é, e o que ela mede — lido depois por `window.CC.office.plants`
+// e pelo teste de cena (nenhuma folha atravessa uma parede).
+const plantsRT = [];
+function plantHeight(g) {
+  let h = 0;
+  g.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox;
+    if (b) h = Math.max(h, b.max.y + o.position.y);
+  });
+  return Math.round(h * 1000) / 1000;
+}
+
 // brain centre (V3.6, AJ 6 Sep 2026): the particle nebula is RETIRED. The vault's wiki-link graph
 // is etched into the pod floor (src/brain.js); reads glint, writes add notes, G opens the full graph.
 let brain;
 {
   const bg = deptRT.brain.group;
   brain = initBrain({ scene, brainGroup: bg, getR: () => R, esc: (t) => esc(t), hud, toScreen: (p) => toScreen(p), getCamera: () => camera });
-  const plant = makePlant(); plant.position.set(6.2, 0.12, -5.8); bg.add(plant);
+  // 1.9.6: a planta do centro é a peça de apresentação — folha larga, um pouco maior.
+  const plant = makePlant({ seed: 11, kind: 'broad', scale: 1.05 });
+  plant.position.set(5.3, 0.12, -5.0);
+  plant.rotation.y = 0.6;
+  bg.add(plant);
+  plantsRT.push({ dept: 'brain', kind: 'broad', seed: 11, leaves: plant.userData.plant.leaves, scale: 1.05, x: 5.3, z: -5.0, top: 0.12 + plantHeight(plant) });
 }
 
 /* 26 out 2026: o «sweep» que acendia as salas uma a uma saiu. Era teatro: dava a ideia de que a
@@ -296,14 +315,48 @@ loadConnectors()
   // 26 out 2026: uma falha nos conectores nunca pode derrubar a cena — fica sem a barra e diz porquê
   .catch(e => console.warn('conectores indisponíveis: ' + e.message));
 
-// plants on outer corners
-for (const k of ['emails', 'sales', 'marketing', 'ops', 'delivery']) {
-  const L = LAYOUT[k];
-  const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
-  const p = makePlant();
-  p.position.set(L.pos[0] + sx * (L.w / 2 - 1.6), 0.12, L.pos[1] + sz * (L.d / 2 - 1.6));
-  p.traverse(o => { if (o.isMesh) o.userData.dept = k; });
-  scene.add(p);
+/* ---------- as plantas (26 out 2026, 1.9.6) ----------
+   Antes: cinco vasos iguais, com cinco esferas verdes cada, encostados ao canto a olho.
+   Agora: uma espécie por sala (alto e vertical onde há pouco espaço, largo e aberto onde há
+   mais), semente própria (a mesma planta em cada recarregamento) e — o que faltava — o LUGAR
+   MEDIDO: mede-se o raio que a folhagem ocupa e afasta-se o vaso do canto o suficiente para
+   nenhuma folha atravessar a parede de vidro. Duas plantas a mais: a DESIGN LAB, que não tinha
+   nenhuma, e a do centro, que passa a ser a peça de apresentação. */
+const PLANT_OF = { emails: 'upright', delivery: 'broad', sales: 'upright', marketing: 'broad', fin: 'upright', ops: 'broad' };
+{
+  let semente = 3;
+  for (const [k, kind] of Object.entries(PLANT_OF)) {
+    const L = LAYOUT[k];
+    const p = makePlant({ seed: semente, kind });
+    const caixa = new THREE.Box3().setFromObject(p);
+    const raio = Math.max(-caixa.min.x, caixa.max.x, -caixa.min.z, caixa.max.z); // raio da folhagem
+    const sx = Math.sign(L.pos[0]) || 1, sz = Math.sign(L.pos[1]) || 1;
+    const folga = 0.45; // entre a última folha e a parede
+    const dx = Math.max(1.2, L.w / 2 - raio - folga);
+    const dz = Math.max(1.2, L.d / 2 - raio - folga);
+    p.position.set(L.pos[0] + sx * dx, 0.12, L.pos[1] + sz * dz);
+    p.rotation.y = (semente * 1.7) % (Math.PI * 2); // cada uma olha para um lado diferente
+    p.traverse(o => { if (o.isMesh) o.userData.dept = k; });
+    scene.add(p);
+    plantsRT.push({
+      dept: k, kind, seed: semente, leaves: p.userData.plant.leaves, scale: 1,
+      x: Math.round(p.position.x * 100) / 100, z: Math.round(p.position.z * 100) / 100,
+      radius: Math.round(raio * 100) / 100,
+      top: Math.round((0.12 + plantHeight(p)) * 100) / 100,
+      inside: Math.abs(p.position.x - L.pos[0]) + raio <= L.w / 2 && Math.abs(p.position.z - L.pos[1]) + raio <= L.d / 2,
+    });
+    semente++;
+  }
+  // a folhagem não pode entrar numa secretária: mede-se a distância do vaso a cada cadeira.
+  // (as secretárias já existem — este bloco corre depois do ciclo dos postos.)
+  for (const pl of plantsRT) {
+    let perto = Infinity;
+    for (const id of Object.keys(R)) {
+      const st = R[id] && R[id].seat;
+      if (st) perto = Math.min(perto, Math.hypot(pl.x - st.x, pl.z - st.z));
+    }
+    if (Number.isFinite(perto)) pl.deskGap = Math.round(perto * 100) / 100;
+  }
 }
 
 /* ---------- focus dim: unfocused depts genuinely darken/desaturate in-scene ---------- */
@@ -1377,7 +1430,7 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
-  office: { depts: DEPTS, floors: floorReport(), problems: officeProblems() },
+  office: { depts: DEPTS, floors: floorReport(), plants: plantsRT, problems: officeProblems() },
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
 

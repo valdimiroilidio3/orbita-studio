@@ -70,15 +70,66 @@ O `chip` (pastel) continua a ser a cor de marca — cartões, secretárias, avat
 desaparecer, o teste di-lo pelo nome. Se a cor mudar de família, o teste di-lo também — não é
 preciso ninguém se lembrar da regra.
 
+## As plantas (1.9.6, 26 out 2026)
+
+Pedido do dono: *«melhorias nível Apple design 3D nas plantas, dando total realismo nelas»*.
+O que havia era um vaso de tronco-de-cone com cinco esferas verdes — a peça que mais denunciava a
+cena, ao lado de pessoas com pescoço e ombros.
+
+| | `upright` (figueira/oliveira) | `broad` (monstera/filodendron) |
+|---|---|---|
+| Onde | emails, sales, fin (pods de 20×26/30) | delivery, marketing, ops, e o centro |
+| Vaso | Ø 0,72 × 0,70 | Ø 0,84 × 0,62 |
+| Folhas | 24, pequenas, em três andares | 15, grandes, em pecíolos que arqueiam |
+| Altura final | ≈ 2,5 | ≈ 2,1 |
+
+O que está desenhado, e porquê:
+
+1. **A folha é uma superfície, não uma esfera.** `leafGeometry()` gera uma grelha paramétrica:
+   estreita na base, larga a um terço, em bico no fim; **dobrada ao meio** (o nervo central é uma
+   aresta, não uma linha pintada); bordo ondulado; e uma queda que cresce com o quadrado do
+   comprimento — é assim que uma folha real pendura quando o pecíolo a larga.
+2. **A cor varia onde a luz varia.** Cada vértice leva a sua cor (`color`): escuro na base e na
+   nervura, claro a meio do limbo, e cada folha tem o seu desvio de matiz. O material é
+   `vertexColors` — uma folha pintada de uma cor só parece plástico, mesmo com a melhor luz.
+3. **O pecíolo é um tubo.** `stemGeometry()` segue uma Catmull-Rom (sai do tronco, arqueia,
+   entrega a folha) e afina da base para a ponta. O caule principal é o mesmo tubo, inclinado.
+4. **Filotaxia.** As folhas nascem em espiral de ângulo dourado (137,5°), com as velhas a pendurar
+   (`pitchOld`) e as novas a abrir (`pitchNew`). É o que dá silhueta em vez de volume.
+5. **O vaso é cerâmica torneada.** `LatheGeometry` com pé, pança e lábio virado para dentro; terra
+   escura abaixo do lábio e umas pedras; e uma **sombra de contacto** (disco com gradiente em
+   `MeshBasicMaterial`, `depthWrite: false`) a 0,010 do chão — sem ela o objeto flutua.
+6. **Tudo determinístico.** `seededRandom()` (mulberry32) por planta; os testes comparam duas
+   construções com a mesma semente e exigem vértices iguais. A cena não muda entre recarregamentos.
+7. **Cabe no pod.** O lugar não é a olho: mede-se o raio da folhagem (`Box3`), afasta-se o vaso do
+   canto o suficiente para nenhuma folha atravessar a parede de vidro (folga 0,45) e mede-se a
+   distância à cadeira mais próxima. `window.CC.office.plants` publica `{dept, kind, seed, leaves,
+   radius, top, inside, deskGap}` — e o teste de cena exige `inside: true` nas seis salas.
+
+**Materiais:** `MeshStandardMaterial` simples (`roughness` 0,58 nas folhas, 0,58 no vaso, 0,98 na
+terra). Não há environment map nem tone mapping: o brilho é o especular largo da luz-chave que já
+existia — o polimento de 1.9.1 continua revertido, como o dono pediu. O realismo vem da forma e da
+cor, não de um truque de render.
+
+**Custo:** 5–6 malhas por planta (folhagem, caules, vaso, terra, pedras, sombra), 7 plantas, ~110 k
+triângulos no total. As folhas e os caules são *merged* por geometria — não há 40 draw calls por
+planta.
+
+Retratos (rasterizados fora do browser, luz de estudo — servem para ver a forma, não para julgar a
+luz da cena): `docs/planta-vertical.png`, `docs/planta-folha-larga.png`.
+
 ## O que prova o quê
 
-- `npm run test:office` — `office.test.mjs`, 17 testes puros: matemática de cor, famílias,
-  derivação das camadas, e as invariantes dos dados (7 pods, 35 agentes, um chefe por sala,
-  duas pessoas na mesma secretária, `officeProblems()` vazio).
+- `npm run test:office` — `office.test.mjs`, 25 testes puros: matemática de cor, famílias,
+  derivação das camadas, as invariantes dos dados (7 pods, 35 agentes, um chefe por sala,
+  duas pessoas na mesma secretária, `officeProblems()` vazio) e **a forma das plantas**: a folha
+  estreita-engorda-acaba-em-bico, a dobra e a queda, a cor variável, o pecíolo que afina, a
+  planta leve e determinística, e as duas espécies distintas.
 - `npm run test:scene` — carrega o bundle num DOM com WebGL falso, corre o ciclo de desenho e
   **lê o material que ficou desenhado** (`window.CC.office.floors`): 7 pods, 4 camadas cada, a
   laje translúcida, e cada uma das seis famílias presente exactamente uma vez, com o centro em
-  vidro fosco.
+  vidro fosco. Também as **7 plantas**: duas espécies, altura razoável, e nenhuma folhagem a sair
+  do seu pod.
 - `npm run check` — o servidor, as rotas, a sessão, o SSE.
 
 ## Código sem uso, declarado

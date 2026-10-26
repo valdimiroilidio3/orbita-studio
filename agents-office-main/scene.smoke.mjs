@@ -173,6 +173,22 @@ for (const k of pods) {
 }
 for (const cor of CORES) ok(familiaDaSala.has(cor), `falta a cor pedida: ${cor}`);
 
+/* ---------- as plantas: sete, duas espécies, e nenhuma folha dentro de uma parede ---------- */
+// 1.9.6: a planta deixou de ser cinco esferas. O que aqui se prova não é o desenho (isso é o olho
+// do dono) — é que existem sete, que cada uma é uma planta a sério (folhagem em malha própria,
+// vaso, terra) e que CABE no seu pod: o raio da folhagem somado ao afastamento do canto não passa
+// da meia-largura do pod, senão uma folha atravessava a parede de vidro.
+const plantas = (office.plants || []);
+ok(plantas.length === 7, `esperava 7 plantas (6 salas + centro), encontrei ${plantas.length}`);
+for (const p of plantas) {
+  const L = (office.depts && win.CC.office.depts) ? null : null;
+  ok(['upright', 'broad'].includes(p.kind), `${p.dept}: espécie desconhecida (${p.kind})`);
+  ok(p.leaves >= 10, `${p.dept}: uma planta com ${p.leaves} folhas não é folhagem`);
+  ok(p.top > 1.6 && p.top < 4.2, `${p.dept}: altura fora do razoável (${p.top})`);
+  if (p.dept !== 'brain') ok(p.inside === true, `${p.dept}: a folhagem sai do pod (raio ${p.radius})`);
+}
+ok(plantas.filter(p => p.dept === 'brain').length === 1, 'o centro devia ter uma planta, a peça de apresentação');
+
 /* ---------- o espelho acessível: a mesma cena, por palavras (V8, 26 out 2026) ---------- */
 // A cena correu; agora exige-se que o escritório exista TAMBÉM fora dela. Não se testa a cor de
 // um anel de foco (isso é o olho), testa-se o que um leitor de ecrã e um teclado precisam: nome no
@@ -215,6 +231,13 @@ if (falhas.length) {
   process.exit(1);
 }
 const mapaCores = [...familiaDaSala.entries()].map(([cor, sala]) => `${sala} ${cor}`).join(' · ');
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), espelho acessível com 7 salas + 35 agentes (tecla L), sem erros no bundle (${path.basename(ALVO)})`);
+const resumoPlantas = (() => {
+  const ps = (office.plants || []);
+  if (!ps.length) return 'sem plantas';
+  const alturas = ps.map(p => p.top);
+  const up = ps.filter(p => p.kind === 'upright').length;
+  return `${ps.length} plantas (${up} verticais · ${ps.length - up} de folha larga, ${Math.min(...alturas).toFixed(1)}–${Math.max(...alturas).toFixed(1)} de altura)`;
+})();
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, espelho acessível com 7 salas + 35 agentes (tecla L), sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

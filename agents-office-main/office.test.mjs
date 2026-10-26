@@ -17,6 +17,8 @@ import {
   parseHex, toHex, mix, shade, tint, hsl, familyOf, glassLayers, GLASS_FAMILIES,
 } from './src/palette.js';
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, assertOffice } from './src/data.js';
+import * as THREE from 'three';
+import { makePlant, leafGeometry, stemGeometry, seededRandom, PLANT_KINDS } from './src/builders.js';
 
 /* ---------- cor: a matemática que tudo o resto usa ---------- */
 
@@ -195,4 +197,109 @@ test('assertOffice() apanha um erro de dados e diz qual é', () => {
     DEPTS.fin.glass = antes;
   }
   assert.deepEqual(officeProblems(), [], 'depois de repor, tem de voltar a estar limpo');
+});
+
+/* ---------- as plantas (1.9.6): geometria de folha, não esferas ----------
+   Estes testes correm sem DOM e sem WebGL: as texturas (nervuras, sombra de contacto) são
+   opcionais por desenho — sem `document` ficam nulas e a geometria é a mesma. É isso que
+   permite provar a forma de uma folha em `node --test`. */
+
+test('o sorteio é reprodutível: a mesma semente dá sempre a mesma sequência', () => {
+  const a = seededRandom(7), b = seededRandom(7), c = seededRandom(8);
+  const A = [a(), a(), a()], B = [b(), b(), b()], C = [c(), c(), c()];
+  assert.deepEqual(A, B);
+  assert.notDeepEqual(A, C);
+  for (const v of A) assert.ok(v >= 0 && v < 1);
+});
+
+test('a folha estreita na base, engorda a um terço e acaba em bico', () => {
+  const g = leafGeometry({ len: 1, wid: 0.5, droop: 0, fold: 0, wave: 0, ring: 20, seg: 10 });
+  const p = g.attributes.position;
+  const larguraEm = (v) => { // a largura da linha v é a distância entre o primeiro e o último vértice
+    const i0 = Math.round(v * 20) * 11, i1 = i0 + 10;
+    return Math.abs(p.getX(i1) - p.getX(i0));
+  };
+  assert.ok(larguraEm(0) < 0.02, 'a base da folha tem de ser estreita');
+  const meio = larguraEm(0.35);
+  assert.ok(meio > 0.3, 'a folha tem de abrir (' + meio.toFixed(2) + ')');
+  assert.ok(larguraEm(1) < meio, 'a ponta tem de ser mais estreita que o ombro');
+  assert.ok(larguraEm(1) < 0.12, 'a ponta tem de acabar em bico');
+  assert.ok(Math.abs(p.getZ(p.count - 1) - 1) < 0.01, 'a folha começa na base e acaba no comprimento');
+});
+
+test('a folha dobra ao meio e pende — é isso que a separa de uma esfera', () => {
+  const plana = leafGeometry({ len: 1, wid: 0.5, droop: 0, fold: 0, wave: 0 });
+  const dobrada = leafGeometry({ len: 1, wid: 0.5, droop: 0, fold: 0.2, wave: 0 });
+  // numa linha a meio da folha: o bordo (j=0) sobe em relação à nervura (j=seg/2)
+  const vAoMeio = 6 * 11; // linha 6 de 10, 11 vértices por linha
+  const dobra = (g) => { const p = g.attributes.position; return p.getY(vAoMeio) - p.getY(vAoMeio + 5); };
+  assert.ok(Math.abs(dobra(plana)) < 0.001, 'sem `fold` a folha é plana');
+  assert.ok(dobra(dobrada) > 0.02, 'os bordos têm de subir em relação à nervura: ' + dobra(dobrada).toFixed(3));
+
+  const caida = leafGeometry({ len: 1, wid: 0.5, droop: 0.4, fold: 0, wave: 0 });
+  const p = caida.attributes.position;
+  const yPonta = p.getY(p.count - 1), yBase = p.getY(0);
+  assert.ok(yPonta < yBase - 0.3, `a ponta tem de cair (${yPonta.toFixed(2)} vs ${yBase.toFixed(2)})`);
+});
+
+test('a cor da folha varia dentro da folha: escura na base e na nervura, clara no limbo', () => {
+  const g = leafGeometry({ len: 1, wid: 0.5, droop: 0.2, fold: 0.1, wave: 0.03, ring: 12, seg: 8 });
+  const c = g.attributes.color;
+  const lum = (i) => c.getX(i) + c.getY(i) + c.getZ(i);
+  // linha a meio (índice 6 de 12), 9 vértices por linha: base (v=0), nervura (u=0) e limbo (u≈0,5)
+  const linha = 6 * 9;
+  const base = lum(0), meio = lum(linha), nervura = lum(linha + 4), limbo = lum(linha + 2);
+  assert.ok(meio > base, `o meio da folha tem de ser mais claro que a base (${meio.toFixed(2)} vs ${base.toFixed(2)})`);
+  assert.ok(nervura < limbo, `a nervura central tem de ser mais escura que o limbo (${nervura.toFixed(2)} vs ${limbo.toFixed(2)})`);
+  for (let i = 0; i < c.count; i++) assert.ok(lum(i) > 0 && c.getX(i) <= 1.001, 'cor fora de 0..1');
+});
+
+test('o pecíolo é um tubo que afina da base para a ponta', () => {
+  const g = stemGeometry([
+    new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.2, 0.3, 0), new THREE.Vector3(0.5, 0.35, 0),
+  ], 0.06, 0.015, 10, 6);
+  const p = g.attributes.position;
+  // o raio de um anel: a maior distância ao CENTRO do anel (a curva dobra, a origem não serve)
+  const raio = (anel) => {
+    const ids = Array.from({ length: 7 }, (_, j) => anel * 7 + j);
+    const cx = ids.reduce((s, i) => s + p.getX(i), 0) / 7, cy = ids.reduce((s, i) => s + p.getY(i), 0) / 7;
+    return Math.max(...ids.map((i) => Math.hypot(p.getX(i) - cx, p.getY(i) - cy)));
+  };
+  assert.ok(raio(0) > raio(10) * 2, 'o pecíolo tem de afinar');
+  assert.ok(g.attributes.normal, 'sem normais não há luz');
+});
+
+test('a planta monta-se em poucas malhas: vaso, terra, pedras, caules e folhagem', () => {
+  const g = makePlant({ seed: 2, kind: 'upright' });
+  const malhas = g.children.filter((c) => c.isMesh);
+  assert.ok(malhas.length >= 4 && malhas.length <= 7, `devia ser uma planta leve, tem ${malhas.length} malhas`);
+  const folha = malhas.find((m) => m.material && m.material.vertexColors);
+  assert.ok(folha, 'falta a malha da folhagem (com cor por vértice)');
+  assert.ok(folha.material.side === THREE.DoubleSide, 'uma folha tem duas faces');
+  assert.ok(folha.geometry.attributes.color.count === folha.geometry.attributes.position.count);
+  assert.ok(folha.geometry.attributes.position.count > 3000, 'folhagem com poucos vértices lê-se como esferas');
+  assert.deepEqual(g.userData.plant && g.userData.plant.kind, 'upright');
+});
+
+test('as duas espécies são plantas diferentes, e cada uma cabe na sua altura', () => {
+  for (const kind of Object.keys(PLANT_KINDS)) {
+    const g = makePlant({ seed: 4, kind });
+    const caixa = new THREE.Box3().setFromObject(g);
+    const altura = caixa.max.y - caixa.min.y, largura = caixa.max.x - caixa.min.x;
+    assert.ok(altura > 1.4 && altura < 3.4, `${kind}: altura fora do razoável (${altura.toFixed(2)})`);
+    assert.ok(largura > 0.9 && largura < 3.8, `${kind}: largura fora do razoável (${largura.toFixed(2)})`);
+    assert.ok(caixa.min.y > -0.01 && caixa.min.y < 0.05, `${kind}: o vaso tem de assentar no chão`);
+  }
+  const u = PLANT_KINDS.upright, b = PLANT_KINDS.broad;
+  assert.ok(u.rise > b.rise, 'a vertical tem de crescer mais para cima');
+  assert.ok(b.wid > u.wid, 'a de folha larga tem de ter folhas mais largas');
+});
+
+test('a mesma semente dá a mesma planta; sementes diferentes dão plantas diferentes', () => {
+  const posicoes = (seed) => makePlant({ seed, kind: 'upright' }).children
+    .filter((c) => c.isMesh && c.material && c.material.vertexColors)[0]
+    .geometry.attributes.position.array;
+  const a = posicoes(12), b = posicoes(12), c = posicoes(13);
+  assert.deepEqual([...a].slice(0, 300), [...b].slice(0, 300));
+  assert.notDeepEqual([...a].slice(0, 300), [...c].slice(0, 300));
 });

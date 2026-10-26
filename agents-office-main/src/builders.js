@@ -418,17 +418,373 @@ function roundRect(x, a, b, w, h, r) {
 }
 
 /* ---------- props ---------- */
-export function makePlant() {
-  const g = new THREE.Group();
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.8, 10), mat('#B96A4B'));
-  pot.position.y = 0.4; pot.castShadow = true; g.add(pot);
-  const foliage = mat('#5F8A5C', { rough: 1 });
-  const foliage2 = mat('#6F9B68', { rough: 1 });
-  for (let i = 0; i < 5; i++) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(0.42 + Math.sin(i * 7) * 0.12, 10, 8), i % 2 ? foliage : foliage2);
-    s.position.set(Math.sin(i * 2.4) * 0.35, 1.15 + i * 0.28, Math.cos(i * 2.4) * 0.35);
-    s.castShadow = true; g.add(s);
+
+/* ===========================================================================
+   PLANTAS (26 out 2026) — pedido do dono: «melhorias nível Apple design 3D nas
+   plantas, dando total realismo nelas».
+
+   O que havia: um vaso de tronco-de-cone e cinco esferas verdes. Lia-se como um
+   arbusto de plástico — e, ao lado de pessoas com pescoço, era a peça que mais
+   denunciava a cena.
+
+   O que há agora: uma planta construída como uma planta. As regras que fazem a
+   diferença entre «esferas» e «folhagem»:
+
+     1 · A FOLHA NÃO É UMA ESFERA. É uma superfície paramétrica: estreita na base,
+         larga a um terço, em bico no fim; dobrada ao meio (o nervo central é uma
+         aresta, não uma linha pintada), com o bordo ondulado e uma queda que
+         cresce com o quadrado do comprimento — é assim que uma folha real
+         pendura quando o pecíolo a larga.
+     2 · A COR VARIA ONDE A LUZ VARIA. Cada vértice leva a sua própria cor
+         (escura na base e na nervura, mais clara a meio e nos bordos) e cada
+         folha leva um desvio de matiz próprio. Uma folha pintada de uma cor só
+         parece plástico, mesmo com a melhor luz do mundo.
+     3 · O PECÍOLO É UM TUBO, NÃO UM CILINDRO. Segue uma curva (sai do tronco,
+         arqueia, entrega a folha) e afina da base para a ponta.
+     4 · FILOTAXIA. As folhas nascem em espiral de ângulo dourado (137,5°), em
+         três alturas, com as velhas a pendurar e as novas a apontar para cima.
+         É o que faz a planta ter silhueta em vez de ter volume.
+     5 · O VASO É CERÂMICA. Perfil torneado (LatheGeometry) com lábio e pé, terra
+         escura por dentro, pedras à superfície, e uma sombra de contacto suave
+         na base — sem ela, o objeto flutua, por muito bom que seja o material.
+     6 · TUDO É DETERMINÍSTICO. Cada planta tem uma semente; a mesma semente dá
+         sempre a mesma planta. Sem isto, a cena mudava a cada recarregamento e
+         nenhum teste podia olhar para ela.
+
+   E, porque o dono mandou reverter o polimento de 1.9.1 (sem PMREM, sem tone
+   mapping, sem vernizes), o realismo vem de geometria e de cor — não de um
+   environment map. Os materiais são MeshStandardMaterial simples: o brilho das
+   folhas é o especular largo da luz-chave que já existia.
+   =========================================================================== */
+
+/** sorteio reprodutível (mulberry32): a mesma semente, a mesma planta, sempre. */
+export function seededRandom(seed) {
+  let a = (seed >>> 0) || 0x9E3779B9;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** junta geometrias nossas (posição, normal, uv, cor). Evita uma malha por folha. */
+function mergeGeos(geos) {
+  let nVert = 0, nIdx = 0;
+  for (const g of geos) {
+    nVert += g.attributes.position.count;
+    nIdx += g.index ? g.index.count : g.attributes.position.count;
   }
+  const pos = new Float32Array(nVert * 3), nor = new Float32Array(nVert * 3);
+  const uv = new Float32Array(nVert * 2), col = new Float32Array(nVert * 3).fill(1);
+  const idx = new Uint32Array(nIdx);
+  let vo = 0, io = 0;
+  for (const g of geos) {
+    const p = g.attributes.position;
+    pos.set(p.array, vo * 3);
+    if (g.attributes.normal) nor.set(g.attributes.normal.array, vo * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, vo * 2);
+    if (g.attributes.color) col.set(g.attributes.color.array, vo * 3);
+    if (g.index) {
+      const a = g.index.array;
+      for (let i = 0; i < a.length; i++) idx[io + i] = a[i] + vo;
+      io += a.length;
+    } else {
+      for (let i = 0; i < p.count; i++) idx[io + i] = vo + i;
+      io += p.count;
+    }
+    vo += p.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+
+/**
+ * Uma folha: grelha paramétrica no plano local (comprimento em +Z, largura em X).
+ * A cor de cada vértice vem em `color` e multiplica o verde do material — é o que
+ * dá a variação dentro da folha sem uma textura por folha.
+ */
+export function leafGeometry({
+  len = 0.9, wid = 0.42, droop = 0.30, fold = 0.16, wave = 0.05,
+  ring = 16, seg = 10, tint = 1, warm = 0,
+} = {}) {
+  const pos = [], uv = [], col = [], idx = [];
+  for (let i = 0; i <= ring; i++) {
+    const v = i / ring;
+    // perfil da folha: bico na base, ombro a ~35 %, ponta fina
+    const w = wid * Math.pow(Math.sin(Math.PI * Math.pow(v, 0.78)), 0.85) * (1 - 0.22 * v);
+    for (let j = 0; j <= seg; j++) {
+      const x = ((j / seg) * 2 - 1) * w;
+      const u = w > 1e-5 ? x / w : 0;
+      // dobra em V ao longo do nervo + queda quadrática + bordo ondulado
+      const y = fold * Math.abs(u) * w * 2.4 - droop * v * v + wave * Math.sin(v * 7.5) * u * u * w;
+      pos.push(x, y, len * v);
+      uv.push(j / seg, v);
+      // luz dentro da folha: escura na base, clara a meio, levemente escura na ponta
+      const fv = 0.64 + 0.36 * Math.sin(Math.PI * Math.min(1, 0.10 + 0.90 * v));
+      const fu = 1 - 0.10 * Math.pow(Math.abs(u), 1.6); // o nervo é mais escuro que o limbo
+      const rib = Math.abs(u) < 0.085 ? 0.90 : 1;       // a nervura central, marcada
+      const f = fv * fu * rib * tint;
+      col.push(
+        Math.min(1, f * (1 + 0.06 * warm)),
+        Math.min(1, f * (1 + 0.015 * Math.abs(warm))),
+        Math.min(1, f * (1 - 0.07 * warm)),
+      );
+    }
+  }
+  for (let i = 0; i < ring; i++) {
+    for (let j = 0; j < seg; j++) {
+      const a = i * (seg + 1) + j, b = a + seg + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Um pecíolo/caule: tubo ao longo de uma curva, a afinar da base para a ponta. */
+export function stemGeometry(points, r0 = 0.045, r1 = 0.022, segs = 12, radial = 5) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const frames = curve.computeFrenetFrames(segs, false);
+  const pos = [], uv = [], idx = [];
+  const p = new THREE.Vector3();
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    curve.getPointAt(t, p);
+    const N = frames.normals[i], B = frames.binormals[i];
+    const r = r0 + (r1 - r0) * t;
+    for (let j = 0; j <= radial; j++) {
+      const a = (j / radial) * Math.PI * 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      pos.push(p.x + (N.x * ca + B.x * sa) * r, p.y + (N.y * ca + B.y * sa) * r, p.z + (N.z * ca + B.z * sa) * r);
+      uv.push(j / radial, t);
+    }
+  }
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < radial; j++) {
+      const a = i * (radial + 1) + j, b = a + radial + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/* o desenho das nervuras: cinzento muito claro, para multiplicar o verde e não o lavar.
+   Sem `document` (testes em Node) não há textura — a geometria fica igual. */
+let veinTex = null;
+function veinTexture() {
+  if (veinTex !== null) return veinTex;
+  if (typeof document === 'undefined' || !document.createElement) return (veinTex = null);
+  const W = 64, H = 128;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+  x.strokeStyle = 'rgba(52,74,44,.105)'; x.lineWidth = 1.5;
+  x.beginPath(); x.moveTo(W / 2, H); x.lineTo(W / 2, 0); x.stroke();      // nervo central
+  x.strokeStyle = 'rgba(52,74,44,.055)'; x.lineWidth = 1;
+  for (let k = 0; k < 9; k++) {                                            // nervuras laterais
+    const y = H * (0.06 + k * 0.105);
+    x.beginPath(); x.moveTo(W / 2, y); x.lineTo(W * 0.03, y - H * 0.075); x.stroke();
+    x.beginPath(); x.moveTo(W / 2, y); x.lineTo(W * 0.97, y - H * 0.075); x.stroke();
+  }
+  x.fillStyle = 'rgba(52,74,44,.022)';                                     // manchas
+  for (let k = 0; k < 90; k++) {
+    const r = 1 + (k % 4);
+    x.beginPath(); x.arc((k * 37) % W, (k * 61) % H, r, 0, 7); x.fill();
+  }
+  veinTex = new THREE.CanvasTexture(c);
+  veinTex.colorSpace = THREE.SRGBColorSpace;
+  veinTex.anisotropy = 4;
+  return veinTex;
+}
+
+/* a sombra de contacto: um disco com gradiente radial. Sem ela, o vaso flutua. */
+let contactTex = null;
+function contactTexture() {
+  if (contactTex !== null) return contactTex;
+  if (typeof document === 'undefined' || !document.createElement) return (contactTex = null);
+  const S = 128;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(S / 2, S / 2, S * 0.04, S / 2, S / 2, S * 0.5);
+  g.addColorStop(0, 'rgba(20,24,18,.40)');
+  g.addColorStop(0.45, 'rgba(20,24,18,.16)');
+  g.addColorStop(1, 'rgba(20,24,18,0)');
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  contactTex = new THREE.CanvasTexture(c);
+  contactTex.colorSpace = THREE.SRGBColorSpace;
+  return contactTex;
+}
+
+/** As duas espécies. Números em unidades de cena (as pessoas têm ~3,3 de altura). */
+export const PLANT_KINDS = {
+  upright: { // ficus/oliveira: tronco alto e limpo, folhas pequenas e muitas, em três andares
+    potR: 0.36, potH: 0.70, trunkTo: 1.72, trunkR: 0.070, leaves: 24, lowLeaf: 0.40, rise: 1.22,
+    reach: 0.50, len: 0.56, wid: 0.26, droop: 0.24, fold: 0.07, wave: 0.035,
+    pitchOld: -0.78, pitchNew: -0.06, // radianos: as velhas pendem, as novas abrem para fora
+    leaf: '#71975B', stem: '#5D7B49',
+  },
+  broad: { // monstera/philodendron: sem tronco à vista, folhas grandes em pecíolos que arqueiam
+    potR: 0.42, potH: 0.62, trunkTo: 1.00, trunkR: 0.050, leaves: 15, lowLeaf: 0.04, rise: 1.15,
+    reach: 0.64, len: 0.98, wid: 0.62, droop: 0.40, fold: 0.12, wave: 0.05,
+    pitchOld: -0.62, pitchNew: -0.05,
+    leaf: '#4F7F53', stem: '#4C6B40',
+  },
+};
+
+let plantMats = null;
+function plantMaterials() {
+  if (plantMats) return plantMats;
+  const std = (o) => new THREE.MeshStandardMaterial({ metalness: 0, ...o });
+  plantMats = {
+    pot: std({ color: '#E6DED0', roughness: 0.58 }),           // cerâmica mate: brilho largo, não espelho
+    foot: std({ color: '#CFC5B4', roughness: 0.7 }),
+    soil: std({ color: '#3A2C24', roughness: 0.98 }),
+    pebble: std({ color: '#A9A39A', roughness: 0.9 }),
+    contact: new THREE.MeshBasicMaterial({
+      map: contactTexture(), transparent: true, opacity: 0.42, depthWrite: false,
+    }),
+  };
+  for (const [k, p] of Object.entries(PLANT_KINDS)) {
+    plantMats[`leaf_${k}`] = std({
+      color: p.leaf, roughness: 0.58, side: THREE.DoubleSide,
+      vertexColors: true, map: veinTexture(),
+    });
+    plantMats[`stem_${k}`] = std({ color: p.stem, roughness: 0.82 });
+  }
+  return plantMats;
+}
+
+/**
+ * A planta. `seed` fixa a forma; `kind` escolhe a espécie; `scale` ajusta o tamanho.
+ * Devolve um Group com poucas malhas (folhagem, caules, vaso, terra, pedras, sombra):
+ * uma planta = 6 draw calls, não 40.
+ */
+export function makePlant({ seed = 1, kind = 'upright', scale = 1 } = {}) {
+  const P = PLANT_KINDS[kind] || PLANT_KINDS.upright;
+  const rnd = seededRandom(seed);
+  const M = plantMaterials();
+  const g = new THREE.Group();
+  const potR = P.potR * scale, potH = P.potH * scale, trunkTop = P.trunkTo * scale;
+
+  /* o vaso: perfil torneado — pé, pança, lábio que se vira para dentro */
+  const perfil = [
+    [0.00, 0.000], [potR * 0.78, 0.000], [potR * 0.84, 0.022], [potR * 0.90, 0.080],
+    [potR * 0.99, potH * 0.70], [potR * 1.04, potH * 0.90], [potR * 1.11, potH * 0.97],
+    [potR * 1.12, potH * 1.02], [potR * 1.06, potH * 1.045], [potR * 0.97, potH * 1.03],
+    [potR * 0.94, potH * 0.96],
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const pot = new THREE.Mesh(new THREE.LatheGeometry(perfil, 30), M.pot);
+  pot.castShadow = true; pot.receiveShadow = true;
+  pot.position.y = 0.004;
+  g.add(pot);
+
+  /* a boca do vaso: terra escura (abaixo do lábio) e umas pedras */
+  const soilY = potH * 0.90;
+  const soil = new THREE.Mesh(new THREE.CircleGeometry(potR * 0.96, 28), M.soil);
+  soil.rotation.x = -Math.PI / 2; soil.position.y = soilY;
+  soil.receiveShadow = true;
+  g.add(soil);
+  const pedras = [];
+  const nPedras = 4 + Math.floor(rnd() * 3);
+  for (let i = 0; i < nPedras; i++) {
+    const a = rnd() * Math.PI * 2, dd = (0.28 + rnd() * 0.52) * potR;
+    const r = (0.030 + rnd() * 0.022) * scale;
+    const geo = new THREE.IcosahedronGeometry(r, 0);
+    geo.scale(1, 0.7, 1);
+    geo.translate(Math.cos(a) * dd, soilY + r * 0.18, Math.sin(a) * dd);
+    pedras.push(geo);
+  }
+  if (pedras.length) {
+    const m = new THREE.Mesh(mergeGeos(pedras), M.pebble);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m);
+    pedras.forEach((geo) => geo.dispose());
+  }
+
+  /* o caule principal: um tubo que afina, ligeiramente inclinado (nada na natureza é vertical) */
+  const inclina = (rnd() - 0.5) * 0.18 * scale;
+  const tronco = stemGeometry([
+    new THREE.Vector3(0, soilY - 0.08 * scale, 0),
+    new THREE.Vector3(inclina * 0.35, soilY + (trunkTop - soilY) * 0.45, 0.01),
+    new THREE.Vector3(inclina, trunkTop, 0),
+  ], P.trunkR * scale, P.trunkR * 0.55 * scale, 12, 7);
+
+  const folhas = [], caules = [];
+  const GOLD = 2.399963229728653; // o ângulo dourado: 137,5°
+  const up = new THREE.Vector3(0, 1, 0);
+  const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
+  for (let i = 0; i < P.leaves; i++) {
+    const t = P.leaves > 1 ? i / (P.leaves - 1) : 0.5;      // 0 = velha (baixa) · 1 = nova (alta)
+    const ang = i * GOLD + (rnd() - 0.5) * 0.40;
+    const dir = new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang));
+    const tt = Math.pow(t, 0.86); // mais folhas em baixo do que no topo, como numa planta que cresceu
+    const y0 = soilY + P.lowLeaf * (trunkTop - soilY) + tt * P.rise * scale + (rnd() - 0.5) * 0.17 * scale;
+    const alcance = P.reach * scale * (0.55 + 0.45 * Math.sin(Math.PI * (0.22 + 0.62 * t)));
+    const arco = alcance * (0.30 + 0.20 * (1 - t));         // o pecíolo sobe antes de sair para fora
+    const raiz = new THREE.Vector3(dir.x * 0.05 * scale, y0, dir.z * 0.05 * scale);
+    const p1 = raiz.clone().addScaledVector(dir, alcance * 0.34); p1.y += arco * 0.70;
+    const p2 = raiz.clone().addScaledVector(dir, alcance * 0.76); p2.y += arco * 0.95;
+    const ponta = raiz.clone().addScaledVector(dir, alcance); ponta.y += arco * 0.82;
+
+    caules.push(stemGeometry([raiz, p1, p2, ponta], 0.042 * scale, 0.017 * scale, 10, 5));
+
+    const q = (0.66 + 0.42 * Math.sin(Math.PI * (0.22 + 0.72 * t))) * (0.94 + rnd() * 0.12) * scale;
+    const pitch = P.pitchOld + (P.pitchNew - P.pitchOld) * t + (rnd() - 0.5) * 0.26;
+    const geo = leafGeometry({
+      len: P.len * q, wid: P.wid * q,
+      droop: P.droop * (0.60 + 0.60 * (1 - t)),   // as velhas pendem mais
+      fold: P.fold, wave: P.wave,
+      tint: 0.92 + rnd() * 0.10,
+      warm: (rnd() - 0.5) * 2,
+    });
+    // a folha inclina-se para baixo (a ponta cai) e rola um pouco; só depois é levada para a ponta
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationX(pitch));   // -0 em cima · velhas pendem
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationZ((rnd() - 0.5) * 0.45));
+    const z = dir.clone();                                        // +Z da folha: para fora, na horizontal
+    const x = new THREE.Vector3().crossVectors(up, z).normalize();
+    const y = new THREE.Vector3().crossVectors(z, x).normalize();
+    geo.applyMatrix4(new THREE.Matrix4().makeBasis(x, y, z));
+    geo.translate(ponta.x, ponta.y, ponta.z);
+    folhas.push(geo);
+  }
+  caules.unshift(tronco);
+
+  const foliage = new THREE.Mesh(mergeGeos(folhas), M[`leaf_${kind}`] || M.leaf_upright);
+  foliage.castShadow = true; foliage.receiveShadow = true;
+  g.add(foliage);
+  const stems = new THREE.Mesh(mergeGeos(caules), M[`stem_${kind}`] || M.stem_upright);
+  stems.castShadow = true;
+  g.add(stems);
+  folhas.forEach((geo) => geo.dispose());
+  caules.forEach((geo) => geo.dispose());
+
+  /* a sombra de contacto (aditiva ao shadow map, muito discreta) */
+  if (M.contact && M.contact.map) {
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(potR * 1.75, 24), M.contact);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = 0.010; // acima da poça de luz do chão (0,122), para não haver z-fighting
+    blob.renderOrder = 1;
+    g.add(blob);
+  }
+
+  g.userData.plant = { kind, seed, leaves: P.leaves, scale };
   return g;
 }
 

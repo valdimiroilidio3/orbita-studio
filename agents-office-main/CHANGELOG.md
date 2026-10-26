@@ -1,3 +1,43 @@
+## 1.9.6 — 26 out 2026 · As plantas: forma em vez de esferas
+
+Pedido 24: *«dá melhorias nível Apple design 3D nas plantas, dando total realismo nelas»*.
+
+O que havia era um vaso de tronco-de-cone com **cinco esferas verdes** — e era a peça que mais denunciava a cena, ao lado de pessoas com pescoço e ombros. Não faltava material: faltava forma. Uma esfera iluminada por muito boa luz continua a ser uma esfera.
+
+### A folha
+
+- **Uma superfície, não um sólido.** `leafGeometry()` gera uma grelha paramétrica: estreita na base, larga a um terço, em bico no fim. **Dobrada ao meio** — o nervo central é uma aresta, não uma linha pintada — com o bordo ondulado e uma **queda que cresce com o quadrado do comprimento**: é assim que uma folha real pendura quando o pecíolo a larga.
+- **A cor varia onde a luz varia.** Cada vértice leva a sua cor: escura na base e na nervura, clara a meio do limbo, e cada folha com o seu desvio de matiz (`warm`). O material é `vertexColors`, com uma textura de nervuras muito discreta por cima. Uma folha pintada de uma cor só parece plástico, mesmo com a melhor luz do mundo.
+- **O pecíolo é um tubo.** `stemGeometry()` segue uma Catmull-Rom — sai do tronco, arqueia, entrega a folha — e afina da base para a ponta. O caule principal é o mesmo tubo, inclinado: nada na natureza é vertical.
+
+### A planta
+
+- **Filotaxia, não simetria.** As folhas nascem em espiral de **ângulo dourado (137,5°)**, em três andares, com alturas e comprimentos que variam (< 0,86 de expoente: mais folhas em baixo, como numa planta que cresceu) e um rolamento próprio. As velhas **pendem** (`pitchOld`), as novas **abrem** (`pitchNew`) — é o que dá silhueta em vez de volume.
+- **Duas espécies.** `upright` (figueira/oliveira): tronco alto e limpo, 24 folhas pequenas, ≈ 2,5 de altura — para as salas onde há pouco espaço. `broad` (monstera/filodendron): sem tronco à vista, 15 folhas grandes em pecíolos que arqueiam, ≈ 2,1 — para as salas largas e para o centro, que passa a ser a peça de apresentação.
+- **O vaso é cerâmica torneada.** `LatheGeometry` com pé, pança e **lábio virado para dentro**; terra escura abaixo do lábio e umas pedras. E, o que faltava: uma **sombra de contacto** (disco com gradiente, `depthWrite: false`, a 0,010 do chão). Sem ela, o objeto flutua por muito bom que seja o resto.
+- **Tudo determinístico.** `seededRandom()` (mulberry32) por planta: a mesma semente dá sempre a mesma planta. A cena deixou de mudar a cada recarregamento — e passou a poder ser testada.
+- **O lugar é medido, não escolhido a olho.** Mede-se o raio da folhagem (`Box3`), afasta-se o vaso do canto o suficiente para **nenhuma folha atravessar a parede de vidro** (folga 0,45) e mede-se a distância à cadeira mais próxima. Antes eram cinco vasos encostados ao canto «mais ou menos».
+- **Duas plantas a mais.** A DESIGN LAB não tinha nenhuma; o centro passou a ter a peça de apresentação. São **sete**.
+
+### O que não mudou
+
+- **Nada do resto da cena.** Nem chão, nem paredes, nem secretárias, nem pessoas, nem câmara. O chão de vidro, as 35 secretárias e o espelho acessível da 1.9.5 continuam a passar os seus testes sem uma linha alterada.
+- **O polimento de 1.9.1 continua revertido**, como o dono pediu: **sem** environment map, **sem** tone mapping, **sem** vernizes novos. O realismo vem de geometria e de cor — os materiais são `MeshStandardMaterial` simples e o brilho das folhas é o especular largo da luz-chave que já existia. Um realismo que dependesse de um PMREM seria o mesmo truque que foi rejeitado.
+- **Custo controlado:** 5–6 malhas por planta (folhagem, caules, vaso, terra, pedras, sombra), com as folhas e os caules *merged* por geometria. Sete plantas ≈ 110 k triângulos e ~35 draw calls — não 40 por planta.
+
+### Provas
+
+- **`test:office` — 25/25** (eram 17): oito testes novos sobre a forma. A folha estreita na base, engorda a um terço e acaba em bico; dobra ao meio e a ponta cai; a cor varia dentro da folha (base escura, limbo claro, nervura mais escura que o limbo); o pecíolo afina; a planta monta-se em poucas malhas com cor por vértice e duas faces; as duas espécies são diferentes e cada uma tem altura e largura razoáveis; e a mesma semente dá a mesma planta.
+- **`test:scene` — ✓ 35 postos, chão de vidro em 7 pods, 7 plantas (3 verticais · 4 de folha larga, 2,1–2,6 de altura)**. O teste novo exige `inside: true` em cada sala: o raio da folhagem somado ao afastamento do canto tem de caber no pod.
+- **O teste tem dentes.** Repus as plantas no canto à força (`dx = dz = 9.5`) e voltei a correr: `✗ · delivery: a folhagem sai do pod (raio 1,7) · sales · marketing · fin · ops`. Depois reposto: ✓.
+- **Vi a planta antes de a entregar.** Sem Chrome nesta máquina, escrevi um rasterizador mínimo (ortográfico, Lambert, z-buffer, sRGB) para olhar para as duas espécies em `node`. Foi ele que mostrou dois erros que os testes não apanhavam: folhas demasiado horizontais (a planta lia-se como um prato) e o vaso de Ø 1,10 para folhas de 0,6 — um vaso de árvore com uma planta de sala dentro. Ambos corrigidos; os retratos ficam em `docs/planta-vertical.png` e `docs/planta-folha-larga.png`.
+- `ops.test` **71/71** · `integrations` **18/18** · `check.mjs` **94/95** (só `smoke: browser`, sem navegador) · build **1327 KB** + `mesa.html` 86 KB.
+
+### Limitações, declaradas
+
+- **Continuo sem ver a cena com a luz real.** Os retratos são de um rasterizador meu, com luz de estudo: provam a **forma**, não julgam a luz, as sombras ou o tom final. O olho do dono, na cena servida, é a última prova.
+- **As folhas são planas** (uma superfície de duas faces). De perto e de lado vê-se a ausência de espessura. Fechar as folhas em sólidos custaria três a quatro vezes mais triângulos por uma diferença que se nota a 30 cm de um ecrã — não vale a pena nesta escala, e fica escrito.
+
 ## 1.9.5 — 26 out 2026 · O escritório, para quem não usa rato
 
 Pedido 23: *«O escritório é rato-apenas — 18 handlers de clique em `div`/sprite; o `<canvas>` não tem `role`/`aria-label`; nem os 7 cartões de sala nem as 35 pastilhas entram no Tab. Um espelho acessível (as salas e os agentes navegáveis por teclado, com `Enter`) resolve sem tocar no 3D.»*
