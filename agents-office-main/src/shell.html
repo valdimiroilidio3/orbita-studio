@@ -986,8 +986,74 @@
     border: 1.5px solid var(--ink); border-radius: 18px; background: #fff; padding: 5px 6px 6px 6px;
   }
   .tp-r1 { display: flex; align-items: flex-start; gap: 4px; }
-  .tp-r2 { display: flex; align-items: center; gap: 6px; padding: 0 2px 0 4px; }
-  .tp-r2 .sp { flex: 1; }
+  /* a barra: campos com rótulo em cima, um grupo segmentado, e o ADICIONAR sólido */
+  .tp-dd:hover { background: rgba(21,20,20,.04); }
+  .tp-cmd:focus-within { box-shadow: 0 0 0 3px rgba(21,20,20,.055); }
+  .tp-r2 {
+    display: flex; align-items: flex-end; gap: 10px;
+    padding: 7px 3px 0 6px; margin-top: 2px; border-top: 1px solid var(--hairline);
+  }
+  .tp-fld { display: flex; flex-direction: column; gap: 1px; min-width: 0; cursor: pointer; }
+  .tp-fld-k {
+    font-family: var(--ui); font-size: 8px; letter-spacing: .17em; font-weight: 700;
+    text-transform: uppercase; color: var(--grey); white-space: nowrap;
+  }
+  /* escolhido por ti (e não o padrão do escritório): uma marca verde no rótulo */
+  .tp-fld:has(select.set) .tp-fld-k { color: var(--ink); }
+  .tp-fld:has(select.set) .tp-fld-k::before {
+    content: ''; display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--ok); margin-right: 4px; vertical-align: 1px;
+  }
+  .tp-sel { position: relative; display: inline-flex; align-items: center; }
+  .tp-sel select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    font-family: var(--ui); font-size: 12.5px; font-weight: 600; letter-spacing: .01em;
+    color: var(--ink); background: none; border: 0; border-radius: 6px; margin: 0;
+    padding: 0 19px 0 0; max-width: 126px; cursor: pointer; text-overflow: ellipsis;
+    transition: color .25s var(--ease);
+  }
+  .tp-sel select:hover { color: #000; }
+  .tp-sel select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .tp-caret {
+    position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+    width: 10px; height: 10px; pointer-events: none;
+    fill: none; stroke: var(--grey); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+    transition: stroke .25s var(--ease);
+  }
+  .tp-fld:hover .tp-caret { stroke: var(--ink); }
+  .tp-sep { width: 1px; align-self: stretch; background: var(--hairline); margin: 2px 0 3px; }
+  .tp-r2 .tp-add {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--cream); cursor: pointer;
+    border-radius: 99px; padding: 7px 13px; font-family: var(--ui); font-size: 9.5px;
+    letter-spacing: .15em; font-weight: 700; white-space: nowrap;
+    transition: background .3s var(--ease), transform .25s var(--ease), box-shadow .3s var(--ease);
+    box-shadow: 0 1px 2px rgba(21,20,20,.14);
+  }
+  .tp-r2 .tp-add:hover { background: #000; transform: translateY(-1px); box-shadow: 0 5px 14px -6px rgba(21,20,20,.6); }
+  .tp-r2 .tp-add:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(21,20,20,.2); }
+  .tp-add-k { font-size: 11px; line-height: 1; opacity: .55; letter-spacing: 0; }
+  .tp-r3 { display: flex; align-items: center; gap: 9px; padding: 7px 4px 1px; min-width: 0; }
+  .tp-tools {
+    display: inline-flex; align-items: stretch; flex: none;
+    border: 1px solid var(--hairline); border-radius: 99px; overflow: hidden;
+    background: rgba(21,20,20,.025);
+  }
+  .tp-tools > button {
+    border: 0; background: none; cursor: pointer; margin: 0;
+    padding: 5px 11px; font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em;
+    font-weight: 700; color: var(--grey); white-space: nowrap; text-transform: uppercase;
+    transition: color .25s var(--ease), background .25s var(--ease);
+  }
+  .tp-tools > button + button { border-left: 1px solid var(--hairline); }
+  .tp-tools > button:hover { color: var(--ink); background: rgba(21,20,20,.05); }
+  .tp-tools > button:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; border-radius: 4px; }
+  .tp-tools > button.on { background: var(--ink); color: var(--cream); }
+  .tp-tools > button[hidden] { display: none; }
+  .tp-r3-note {
+    font-size: 9px; letter-spacing: .02em; color: var(--grey); opacity: .8;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
   .tp-dd {
     display: flex; align-items: center; gap: 6px; border: 0; background: none; cursor: pointer; flex: none;
     font-family: var(--ui); font-size: 10px; letter-spacing: .14em; font-weight: 600; color: var(--ink);
@@ -1118,27 +1184,13 @@
   .tp-rep-row { display: flex; gap: 6px; align-items: center; margin: -2px 0 6px; }
   .tp-at { width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
   .tp-rep-row[hidden], .tp-next[hidden], .mrt[hidden] { display: none; }
-  .tp-model { font-family: var(--ui); font-size: 8.5px; letter-spacing: .1em; font-weight: 700; text-transform: uppercase; color: var(--grey); background: none;
-    border: 1px solid var(--hairline); border-radius: 99px; padding: 4px 6px 4px 8px; cursor: pointer; max-width: 90px; flex: none; }
-  .tp-model:hover, .tp-effort:hover { border-color: var(--ink); color: var(--ink); }
-  .tp-effort { font-family: var(--ui); font-size: 8.5px; letter-spacing: .1em; font-weight: 700; text-transform: uppercase; color: var(--grey); background: none;
-    border: 1px solid var(--hairline); border-radius: 99px; padding: 4px 6px 4px 8px; cursor: pointer; max-width: 92px; flex: none; }
-  .tp-effort.set { color: var(--ink); }
-  .tp-model.set { color: var(--ink); }
-  .tp-cmd .tp-rep { font-size: 8.5px; padding: 4px 7px; }
-  .tp-cmd .tp-add { padding: 6px 10px; font-size: 9.5px; }
+  /* (27 out 2026: as pastilhas .tp-model/.tp-effort/.tp-cmd .tp-rep saíram — a barra tem agora
+     campos com rótulo e um grupo segmentado; ver .tp-r2/.tp-r3 acima) */
   /* V3.2 (16 Sep) Agent Teams: the TEAM toggle beside REPEAT, the TEAM / PIECE chips, ↳ on a piece row */
-  .tp-team { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; font-weight: 700; background: none; border: 1px solid var(--hairline); color: var(--grey);
-    border-radius: 99px; padding: 4px 7px; cursor: pointer; white-space: nowrap; transition: all .3s var(--ease); }
-  .tp-team:hover { border-color: var(--ink); color: var(--ink); }
-  .tp-team.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
-  .tp-team[hidden] { display: none; }
-  /* V4 (25 out 2026) o motor de IA: um botão que diz quem está a responder, e uma gaveta com todos */
-  .tp-ai { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; font-weight: 700; background: none; border: 1px solid var(--hairline); color: var(--grey);
-    border-radius: 99px; padding: 4px 7px; cursor: pointer; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; transition: all .3s var(--ease); }
-  .tp-ai:hover { border-color: var(--ink); color: var(--ink); }
-  .tp-ai.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
-  .tp-ai.dead { color: #B4391E; border-color: rgba(180,57,30,.45); }
+  /* o motor de IA dentro do grupo: diz quem está a responder (e a vermelho quando não há nenhum) */
+  .tp-ai { max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
+  .tp-ai.dead { color: #B4391E; }
+  .tp-tools > button.tp-ai.dead:hover { color: #8E2C17; background: rgba(180,57,30,.07); }
   .tp-ai.dead::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #B4391E; margin-right: 5px; vertical-align: 1px; }
   .tp-mode.off { color: #B4391E; border-color: rgba(180,57,30,.45); }
   #aiPop { position: absolute; z-index: 60; right: 14px; bottom: 96px; width: 372px; max-height: 62vh; overflow: hidden;
@@ -1178,8 +1230,14 @@
   body.dark #aiPop { background: #1E1F24; box-shadow: 0 22px 60px rgba(0,0,0,.6); }
   body.dark .ai-row.act { background: rgba(236,234,227,.05); }
   body.dark .ai-more code { background: rgba(236,234,227,.08); }
-  body.dark .tp-ai { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
-  body.dark .tp-ai.on { background: var(--ink); color: var(--cream); }
+  body.dark .tp-tools { background: rgba(255,255,255,.05); border-color: var(--hairline); }
+  body.dark .tp-tools > button { color: rgba(236,234,227,.62); }
+  body.dark .tp-tools > button:hover { background: rgba(255,255,255,.08); color: var(--ink); }
+  body.dark .tp-tools > button.on { background: var(--ink); color: #15161A; }
+  body.dark .tp-ai.dead { color: #E8846B; }
+  body.dark .tp-sel select { color: var(--ink); }
+  body.dark .tp-fld-k { color: rgba(236,234,227,.55); }
+  body.dark .tp-caret { stroke: rgba(236,234,227,.55); }
   /* V4 (25 out 2026) LEADS: a pesquisa real da Google — empresas (Places) e web (Programmable Search) */
   #topLeads { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--grey); background: none;
     border: 1px solid var(--hairline); border-radius: 99px; padding: 5px 11px; cursor: pointer; }
@@ -1432,8 +1490,6 @@
   }
   .tp-team-chip { font-size: 7.5px; letter-spacing: .12em; font-weight: 700; border: 1px solid var(--ink); color: var(--ink); border-radius: 99px; padding: 0 5px; vertical-align: 1px; }
   .tp-row.piece .tp-t::before { content: '↳ '; color: var(--grey); }
-  body.dark .tp-team { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
-  body.dark .tp-team.on { background: var(--ink); color: var(--cream); }
   /* V3.6 the usage gauge, top bar: SESSION [bar] 29% · WEEK [bar] 39% — the plan's own numbers */
   .tm-usage { display: flex; align-items: center; gap: 6px; margin-left: 8px; font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; font-weight: 700; color: var(--grey); white-space: nowrap; cursor: default; }
   .tm-usage b { font-family: var(--serif); font-weight: 400; font-size: 13px; letter-spacing: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -1442,14 +1498,10 @@
   .tm-usage .ub i.w { background: #B4830B; } .tm-usage .ub i.c { background: #B4391E; }
   .tm-usage .sep { color: var(--hairline); }
   .tm-usage.off { opacity: .7; }
-  body.dark .tp-model { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
   body.dark .tb-box { background: #1E1F24; }
   body.dark .tb-in { color: var(--ink); }
   body.dark .tp-big-btn:hover, body.dark .tb-close:hover { background: rgba(236,234,227,.1); }
   body.dark #tpBig { background: rgba(0,0,0,.55); }
-  body.dark .tp-model.set { color: var(--ink); border-color: var(--ink); }
-  body.dark .tp-effort { border-color: var(--hairline); color: var(--grey); background: #1B1C21; }
-  body.dark .tp-effort.set { color: var(--ink); border-color: var(--ink); }
   body.dark .tm-usage .ub { background: rgba(236,234,227,.16); }
   .tp-rep-row select, .tp-rep-row input.tp-at { font-family: var(--ui); font-size: 10.5px; letter-spacing: .04em; color: var(--ink); background: #fff;
     border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 7px; }
@@ -2458,14 +2510,36 @@
       <textarea class="tp-in" rows="1" placeholder="Escreve uma tarefa…" autocomplete="off" spellcheck="false"></textarea>
       <button class="tp-big-btn" title="abrir o editor grande (⌘⇧E)">⤢</button>
     </div>
+    <!-- 27 out 2026 · a barra do compositor. Antes eram seis pastilhas de 8,5 px na mesma linha
+         («SONNET · AUTOMÁTICO · REPETIR · EQUIPA · SEM IA · ADICIONAR»): lia-se como uma legenda e
+         nada dizia o que era o quê. Agora tem hierarquia — dois CAMPOS com rótulo em cima (modelo e
+         esforço, que são escolhas), um GRUPO segmentado para os interruptores (repetir, equipa,
+         motor) e o ADICIONAR como a única coisa sólida da caixa. -->
     <div class="tp-r2">
-      <select class="tp-model" title="qual o modelo que corre isto (o padrão do escritório, a menos que mudes)"></select>
-      <select class="tp-effort" title="quanto esforço aplica: Automático é o nível do próprio modelo; Baixo a Máximo como o Claude Code os designa"></select>
-      <button class="tp-rep" title="repetir segundo um horário (ou diz quando: todos os dias úteis às 8h, …)">REPETIR</button>
-      <button class="tp-team" title="uma equipa: o líder do departamento divide a tarefa pelas secretárias, trabalham ao mesmo tempo e o líder escreve a versão final (ou diz “em equipa”)">EQUIPA</button>
-      <button class="tp-ai" title="o motor de IA que está a responder — Claude Code, Codex, Gemini ou qualquer API; clica para ver, testar e trocar">IA</button>
-      <span class="sp"></span>
-      <button class="tp-add">ADICIONAR</button>
+      <label class="tp-fld" title="qual o modelo que corre isto (o padrão do escritório, a menos que mudes)">
+        <span class="tp-fld-k">Modelo</span>
+        <span class="tp-sel">
+          <select class="tp-model"></select>
+          <svg class="tp-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4 5 6.5 7.5 4"/></svg>
+        </span>
+      </label>
+      <span class="tp-sep" aria-hidden="true"></span>
+      <label class="tp-fld" title="quanto esforço aplica: Automático é o nível do próprio modelo; Baixo a Máximo como o Claude Code os designa">
+        <span class="tp-fld-k">Esforço</span>
+        <span class="tp-sel">
+          <select class="tp-effort"></select>
+          <svg class="tp-caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 4 5 6.5 7.5 4"/></svg>
+        </span>
+      </label>
+      <button class="tp-add" type="button">ADICIONAR<span class="tp-add-k" aria-hidden="true">↵</span></button>
+    </div>
+    <div class="tp-r3">
+      <div class="tp-tools" role="group" aria-label="opções da tarefa">
+        <button class="tp-rep" type="button" aria-pressed="false" title="repetir segundo um horário (ou diz quando: todos os dias úteis às 8h, …)">REPETIR</button>
+        <button class="tp-team" type="button" aria-pressed="false" title="uma equipa: o líder do departamento divide a tarefa pelas secretárias, trabalham ao mesmo tempo e o líder escreve a versão final (ou diz “em equipa”)">EQUIPA</button>
+        <button class="tp-ai" type="button" title="o motor de IA que está a responder — Claude Code, Codex, Gemini ou qualquer API; clica para ver, testar e trocar">IA</button>
+      </div>
+      <span class="tp-r3-note">o padrão do escritório, a menos que mudes</span>
     </div>
   </div>
   <div class="tp-rep-row" hidden>

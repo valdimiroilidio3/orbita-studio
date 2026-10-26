@@ -27,7 +27,7 @@ export const MODES = [
   { key: 'build', name: 'Construir', title: 'Construir: cria a tarefa no quadro e o servidor corre-a' },
 ];
 export const MODE_KEYS = MODES.map(m => m.key);
-export const EFFORT_LABEL = { '': 'Auto', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
+export const EFFORT_LABEL = { '': 'Auto', low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
 export const FILES_MAX = 5, FILE_MAX_CHARS = 40000, FILES_BUDGET = 60000;
 export const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|log|yml|yaml|js|mjs|cjs|jsx|ts|tsx|css|scss|html?|xml|sql|py|rb|go|rs|sh|toml|ini|env|diff|patch)$/i;
 export const PREFS_KEY = 'orbita_composer_v1';

@@ -134,3 +134,29 @@ com `mode: "plan"` o sistema recebeu a regra de planear e `tools: false`; com `f
 `brief.md` chegou ao motor; com `context: ["brain","docs"]` chegaram as notas escolhidas e
 `docs/CENA.md`; e a resposta devolveu `model`, `modelFrom`, `effort`, `effortName`, `mode`,
 `context` — que é exactamente o que a linha por baixo da resposta mostra.
+
+## A caixa de tarefas, ao lado (1.10.1)
+
+O conversador tem um irmão: o compositor da direita (`#tpanel .tp-cmd`), onde se escreve a tarefa
+de um departamento. Em 27 out 2026 o dono olhou para ele e disse *«o chat deve ter um design bonito
+nesta área»*. Tinha razão: a segunda linha eram **seis pastilhas de 8,5 px** — modelo, esforço,
+REPETIR, EQUIPA, SEM IA, ADICIONAR — todas do mesmo tamanho e da mesma cor. Nada dizia o que era
+uma escolha e o que era um interruptor, e o esforço estava em inglês (`LOW · MEDIUM · HIGH · X-HIGH
+· MAX`) dentro de uma casa que fala português.
+
+| Antes | Agora |
+|---|---|
+| 6 pastilhas iguais, 8,5 px | **2 campos com rótulo** (`Modelo`, `Esforço`), o valor em 12,5 px |
+| — | uma **marca verde** no rótulo quando a escolha é tua e não a do escritório |
+| REPETIR/EQUIPA/IA soltos | um **grupo segmentado** (uma moldura, divisórias de 1 px, o activo em tinta) |
+| — | uma **nota** que diz o que a tarefa usa por omissão (`padrão: Sonnet · Automático`) |
+| ADICIONAR igual às outras | a **única coisa sólida** da caixa, com a tecla `↵` |
+
+Porquê esta ordem: o que se **escolhe** (modelo, esforço) fica em cima, junto do texto; o que se
+**liga** (repetir, equipa, motor) fica em baixo, num grupo só; e a **acção** fica à direita, sozinha.
+O esforço passou a ler-se `Automático · Baixo · Médio · Alto · Muito alto · Máximo` — as mesmas
+chaves (`low … max`) no pedido para o servidor, só o rótulo mudou.
+
+O que se prova automaticamente: `test:scene` verifica a estrutura no bundle (dois campos com rótulo,
+três botões no grupo, `aria-pressed` nos interruptores, a nota com `padrão:`) e que as opções estão
+em português; `test:office` fixa os rótulos (`Máximo`, `Muito alto`, `Baixo`).

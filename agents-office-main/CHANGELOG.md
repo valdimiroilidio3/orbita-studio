@@ -1,3 +1,26 @@
+## 1.10.1 — 27 out 2026 · A barra do compositor de tarefas
+
+Pedido: *«o chat deve ter um design bonito nesta área»* — apontando para a caixa de tarefas da
+direita (`MEDIA · Escreve uma tarefa… · SONNET · AUTOMÁTICO · REPETIR · EQUIPA · SEM IA · ADICIONAR`).
+
+A segunda linha eram seis pastilhas de 8,5 px, todas iguais: o modelo, o esforço, dois
+interruptores, o motor e a acção. Lia-se como uma legenda e não dizia o que era o quê.
+
+- **Dois campos com rótulo** — `Modelo` e `Esforço`, o valor em 12,5 px em vez de maiúsculas de
+  8,5 px, com um caret próprio e uma marca verde no rótulo quando a escolha é tua (`.tp-fld`,
+  `.tp-sel`, `:has(select.set)`).
+- **Um grupo segmentado** para os interruptores (`.tp-tools`): uma moldura só, divisórias de 1 px,
+  o activo em tinta, `aria-pressed` a acompanhar o `.on` (que antes só existia na cor).
+- **Uma nota** que diz o que a tarefa usa por omissão, lida do servidor: `padrão: Sonnet · Automático`.
+- **O ADICIONAR é a única coisa sólida** da caixa, à direita, com o `↵` ao lado.
+- **O esforço em português**: `Automático · Baixo · Médio · Alto · Muito alto · Máximo` (as chaves
+  `low … max` no pedido não mudaram). O tooltip já dizia «Baixo a Máximo» enquanto o menu mostrava
+  `LOW … X-HIGH` — duas línguas no mesmo sítio. O mesmo se fez no conversador (`EFFORT_LABEL`).
+- Os modelos deixaram de ser gritados: `Sonnet · Opus · Fable`.
+
+Provas: `test:office` 49/49 (rótulos fixados), `test:scene` ✓ (estrutura nova no bundle: dois campos
+com rótulo, três botões no grupo, opções em português, a nota com `padrão:`), build 1 407 kB.
+
 ## 1.10.0 — 27 out 2026 · As pessoas
 
 Pedido 28: *«melhorar as interações do braço de avatar mexendo realmente o mouse e digitando nos

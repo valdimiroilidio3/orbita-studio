@@ -243,21 +243,21 @@ export function initTasks(ctx) {
   function mirrorHint() { B_.hint.innerHTML = P_.hint.innerHTML; B_.hint.className = P_.hint.className.replace('tp-hint', 'tp-hint tb-hint'); }
   // V3.6 (D2): the model menu — Sonnet · Opus · Fable. Shows the office default; change it and it applies to this task (or this routine, with REPEAT on)
   let officeModel = DEFAULT_MODEL, modelTouched = false;
-  P_.model.innerHTML = MODEL_KEYS.map(k => `<option value="${k}">${MODELS[k].name.toUpperCase()}</option>`).join('');
+  P_.model.innerHTML = MODEL_KEYS.map(k => `<option value="${k}">${MODELS[k].name}</option>`).join('');
   P_.model.value = officeModel;
   P_.model.addEventListener('change', () => { modelTouched = P_.model.value !== officeModel; P_.model.classList.toggle('set', modelTouched); updateHint(); });
   P_.model.addEventListener('keydown', e => e.stopPropagation());
-  function setOfficeModel(k) { officeModel = normModel(k) || DEFAULT_MODEL; if (!modelTouched) P_.model.value = officeModel; }
+  function setOfficeModel(k) { officeModel = normModel(k) || DEFAULT_MODEL; if (!modelTouched) P_.model.value = officeModel; paintDefaults(); }
   const chosenModel = () => (modelTouched ? P_.model.value : null);
   function resetModel() { modelTouched = false; P_.model.value = officeModel; P_.model.classList.remove('set'); resetEffort(); }
   const modelBit = t => t.modelUsed ? ` · ${modelName(t.modelUsed)}${t.effortUsed ? ' ' + t.effortUsed : ''}${t.modelFrom && t.modelFrom !== 'office' ? ' (' + FROM_TEXT[t.modelFrom] + ')' : ''}` : '';
   // V3.6.1: the EFFORT menu beside the model — AUTO (the model's own; Opus = high) · Low · Medium · High · Extra high · Max. Same precedence as the model.
   let officeEffort = '', effortTouched = false;
-  P_.effort.innerHTML = `<option value="">AUTOMÁTICO</option>` + EFFORT_KEYS.map(k => `<option value="${k}">${EFFORT_NAME[k].toUpperCase()}</option>`).join('');
+  P_.effort.innerHTML = `<option value="">Automático</option>` + EFFORT_KEYS.map(k => `<option value="${k}">${EFFORT_NAME[k]}</option>`).join('');
   P_.effort.value = officeEffort;
   P_.effort.addEventListener('change', () => { effortTouched = P_.effort.value !== officeEffort; P_.effort.classList.toggle('set', effortTouched); updateHint(); });
   P_.effort.addEventListener('keydown', e => e.stopPropagation());
-  function setOfficeEffort(k) { officeEffort = normEffort(k) || ''; if (!effortTouched) P_.effort.value = officeEffort; }
+  function setOfficeEffort(k) { officeEffort = normEffort(k) || ''; if (!effortTouched) P_.effort.value = officeEffort; paintDefaults(); }
   const chosenEffort = () => (effortTouched ? (P_.effort.value || 'auto') : null); // 'auto' = o proprietário escolheu o do modelo em vez do do escritório
   const effortSend = () => { const e = chosenEffort(); return e && e !== 'auto' ? e : undefined; };
   function resetEffort() { effortTouched = false; P_.effort.value = officeEffort; P_.effort.classList.remove('set'); }
@@ -266,11 +266,20 @@ export function initTasks(ctx) {
     const bits = []; if (modelTouched) bits.push(modelName(P_.model.value)); if (effortTouched) bits.push(effortName(P_.effort.value || ''));
     return bits.length ? ` · <b>${bits.join(' · ')}</b> para esta ${forWhat}` : '';
   };
+  // 27 out 2026: a nota à direita do grupo diz o que a tarefa VAI usar se não mexeres — o modelo e
+  // o esforço por omissão do escritório, lidos do servidor. Sem isto, os dois campos eram mudos.
+  function paintDefaults() {   // declaração (e não const) para poder ser chamada de setOfficeModel
+    const note = panel.querySelector('.tp-r3-note');
+    if (!note) return;
+    note.textContent = `padrão: ${modelName(officeModel)} · ${officeEffort ? effortName(officeEffort) : 'Automático'}`;
+    note.title = 'o que esta tarefa usa se não escolheres outra coisa nos campos acima';
+  }
+  paintDefaults();
   // the REPEAT picker (B1): cadence + time; "precisa do meu OK" defaults on (D1)
   let repeat = false;
   P_.cad.innerHTML = [['weekdays', 'Todos os dias úteis'], ['daily', 'todos os dias'], ['mon', 'Mondays'], ['tue', 'Tuesdays'], ['wed', 'Wednesdays'], ['thu', 'Thursdays'], ['fri', 'Fridays'], ['sat', 'Saturdays'], ['sun', 'Sundays'], ['hourly', 'De hora a hora, 9h–17h, dias úteis']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
   P_.at.addEventListener('blur', () => { const h = normaliseHour(P_.at.value); if (h) P_.at.value = h; }); // 9:5 → 09:05
-  P_.rep.addEventListener('click', () => { repeat = !repeat; P_.rep.classList.toggle('on', repeat); P_.repRow.hidden = !repeat; updateHint(); if (repeat) P_.input.focus(); });
+  P_.rep.addEventListener('click', () => { repeat = !repeat; P_.rep.classList.toggle('on', repeat); P_.rep.setAttribute('aria-pressed', String(repeat)); P_.repRow.hidden = !repeat; updateHint(); if (repeat) P_.input.focus(); });
   P_.cad.addEventListener('change', () => { P_.at.disabled = P_.cad.value === 'hourly'; updateHint(); });
   P_.at.addEventListener('change', updateHint);
   [P_.cad, P_.at, P_.okc].forEach(el => el.addEventListener('keydown', e => e.stopPropagation()));
@@ -280,7 +289,7 @@ export function initTasks(ctx) {
   const teamIntent = text => /\b(em equipa|team up|team this|get the (whole )?team|the (whole )?team (on|to|should|can)|with the team|(spawn|use|get) (\d+|two|three|four|five|a few|some) teammates?|\d+ teammates|split (it|this|the work) (up|across|between)|teammates|team:|whole department)\b/i.test(text);
   const asTeam = text => teamsCfg.enabled && (teamOn || teamIntent(text));
   const leadOf = k => AGENTS.find(x => x.dept === k && x.lead) || AGENTS.filter(x => x.dept === k)[0];
-  P_.team.addEventListener('click', () => { teamOn = !teamOn; P_.team.classList.toggle('on', teamOn); updateHint(); if (teamOn) P_.input.focus(); });
+  P_.team.addEventListener('click', () => { teamOn = !teamOn; P_.team.classList.toggle('on', teamOn); P_.team.setAttribute('aria-pressed', String(teamOn)); updateHint(); if (teamOn) P_.input.focus(); });
   /* ---------- V4 (25 out 2026) o motor de IA ----------
      O escritório não está preso a um fornecedor: GET /api/ai diz o que está realmente instalado
      nesta máquina (CLIs no PATH, chaves no ambiente, servidores locais a responder), o que falta e

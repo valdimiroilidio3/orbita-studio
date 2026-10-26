@@ -15,7 +15,10 @@ export const MODEL_KEYS = ['sonnet', 'opus', 'fable'];
 export const DEFAULT_MODEL = 'sonnet';
 export const FROM_TEXT = { task: 'esta tarefa', routine: 'esta rotina', agent: 'este agente', office: 'padrão do escritório', model: 'o do próprio modelo' };
 export const EFFORT_KEYS = ['low', 'medium', 'high', 'xhigh', 'max'];
-export const EFFORT_NAME = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
+// 27 out 2026: em português. O tooltip já dizia «Baixo a Máximo como o Claude Code os designa»
+// enquanto o menu mostrava LOW · MEDIUM · HIGH · X-HIGH · MAX — duas línguas no mesmo sítio.
+// As CHAVES não mudam (low/medium/high/xhigh/max): o que vai no pedido para o servidor é o valor.
+export const EFFORT_NAME = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' };
 
 /** "High" · "xhigh" · "extra high" → the CLI level; empty/auto/unknown → null. */
 export function normEffort(s) {

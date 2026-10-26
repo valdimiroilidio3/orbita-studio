@@ -346,6 +346,38 @@ if (mIn && mSend) {
   ok(!doc.getElementById('rail').contains(doc.getElementById('mcModal')), 'o modal do motor tem de estar fora do #rail');
 }
 
+/* ---------- o compositor de tarefas (27 out 2026) ----------
+   O dono apontou para esta caixa — «o chat deve ter um design bonito nesta área» — e o que lá estava
+   eram seis pastilhas de 8,5 px na mesma linha («SONNET · AUTOMÁTICO · REPETIR · EQUIPA · SEM IA ·
+   ADICIONAR»): lia-se como uma legenda e nada dizia o que era escolha e o que era interruptor.
+   Aqui verifica-se a ESTRUTURA que faz o desenho: dois campos com rótulo, um grupo segmentado, e o
+   ADICIONAR sólido. E verifica-se a língua: o esforço estava em inglês dentro de uma casa portuguesa. */
+{
+  const cmd = doc.querySelector('#tpanel .tp-cmd');
+  ok(!!cmd, 'falta o compositor de tarefas (#tpanel .tp-cmd)');
+  const flds = cmd.querySelectorAll('.tp-r2 .tp-fld');
+  ok(flds.length === 2, `a barra devia ter dois campos (modelo e esforço) — tem ${flds.length}`);
+  ok([...flds].every((f) => !!f.querySelector('.tp-fld-k') && !!f.querySelector('select')), 'cada campo tem um rótulo e um select');
+  const model = cmd.querySelector('.tp-model'), effort = cmd.querySelector('.tp-effort');
+  ok(!!model && !!effort, 'faltam os selects do modelo e do esforço');
+  ok(flds[0].contains(model) && flds[1].contains(effort), 'o modelo e o esforço têm de estar dentro dos seus campos');
+  const modelos = [...model.options].map((o) => o.textContent).join(' · ');
+  ok(modelos === 'Sonnet · Opus · Fable', `os modelos lêem-se «${modelos}»`);
+  const esforcos = [...effort.options].map((o) => o.textContent);
+  ok(esforcos[0] === 'Automático', `a primeira opção do esforço é «Automático» (é «${esforcos[0]}»)`);
+  ok(esforcos.includes('Muito alto') && esforcos.includes('Máximo') && !esforcos.includes('X-high'),
+    `o esforço tem de estar em português: ${esforcos.join(' · ')}`);
+  const tools = cmd.querySelectorAll('.tp-r3 .tp-tools > button');
+  ok(tools.length === 3, `o grupo dos interruptores devia ter três botões — tem ${tools.length}`);
+  ok(!!cmd.querySelector('.tp-tools .tp-rep') && !!cmd.querySelector('.tp-tools .tp-team') && !!cmd.querySelector('.tp-tools .tp-ai'),
+    'repetir, equipa e motor têm de viver no mesmo grupo');
+  ok([...tools].every((b) => b.classList.contains('on') === (b.getAttribute('aria-pressed') === 'true') || !b.hasAttribute('aria-pressed')),
+    'o estado dos interruptores tem de estar no aria-pressed, não só na cor');
+  ok(!!cmd.querySelector('.tp-r2 .tp-add'), 'o ADICIONAR tem de estar na barra dos campos');
+  const nota = cmd.querySelector('.tp-r3-note');
+  ok(!!nota && /padrão:/.test(nota.textContent), `a nota tem de dizer o que a tarefa usa por omissão («${nota && nota.textContent}»)`);
+}
+
 /* ---------- os avatares (27 out 2026) ----------
    O dono pediu 35 pessoas diferentes, com fato, chapéu e mulheres, e mãos que mexem mesmo o rato e
    o teclado. A geometria e o IK provam-se em `office.test.mjs`; aqui prova-se que a CENA é feita

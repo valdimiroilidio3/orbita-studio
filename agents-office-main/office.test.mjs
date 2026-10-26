@@ -465,7 +465,10 @@ test('a linha por baixo da resposta diz o que correu, não o que se esperava', (
   assert.match(dito, /@Cérebro/);
   const vazio = metaLine({}, { model: 'Sonnet' });
   assert.equal(vazio, 'Sonnet · esforço auto');
-  assert.equal(effortLabel('max'), 'Max');
+  // 27 out 2026: em português (era 'Max' — o tooltip já dizia «Baixo a Máximo»)
+  assert.equal(effortLabel('max'), 'Máximo');
+  assert.equal(effortLabel('xhigh'), 'Muito alto');
+  assert.equal(effortLabel('low'), 'Baixo');
   assert.equal(effortLabel(''), 'Auto');
   assert.equal(effortLabel(undefined), 'Auto');
 });
