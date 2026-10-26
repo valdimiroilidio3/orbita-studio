@@ -1235,6 +1235,9 @@
   body.dark .tp-tools > button:hover { background: rgba(255,255,255,.08); color: var(--ink); }
   body.dark .tp-tools > button.on { background: var(--ink); color: #15161A; }
   body.dark .tp-ai.dead { color: #E8846B; }
+  /* no escuro o ADICIONAR é claro (tinta = creme); o hover não pode ficar preto sobre preto */
+  body.dark .tp-r2 .tp-add:hover { background: #fff; }
+  body.dark .tp-r2 .tp-add:active { background: #F2F1E9; }
   body.dark .tp-sel select { color: var(--ink); }
   body.dark .tp-fld-k { color: rgba(236,234,227,.55); }
   body.dark .tp-caret { stroke: rgba(236,234,227,.55); }
