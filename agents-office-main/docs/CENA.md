@@ -275,7 +275,9 @@ teste de cena prova que nada por lá rebenta. Nada disto está importado no `mai
 | Peça | Construtor | Partes (`userData.part`) | Notas |
 |---|---|---|---|
 | passadeira | `makeWalkway(from, to, {glass})` | `walkwayFloor`, `walkwayKerb`, `walkwayLed`, `walkwayBelt` | tapete `#23252B` com `map` de ripas; `userData.walkway = {from,to,len,room,width:3.2,belt:true}` |
-| pórtico | `makeRoomEntrance({glass, at, dir})` | `entranceFrame`, `entranceLed`, `entranceSill` | `userData.entrance = {glass,at,dir,width:4.6,height:2.62}`; `rotation.y = atan2(dir.x, dir.z)` |
+| porta | `makeRoomEntrance({glass, at, dir, label})` | `entranceFrame`, `entranceLed`, `entranceSill`, `entranceGlass`, `entranceSign`, `entranceSpill` | `userData.entrance = {glass,at,dir,width:2.84,height:2.64,clear:{w:2.60,h:2.18},leaves:2,open:0.45,label}`; `rotation.y = atan2(dir.x, dir.z)` |
+| vão na parede | `makeRoomWalls(..., { opening: {x,w,h} })` | (o mesmo `wall`) | `userData.wall = {w,d,t,base,band,opening}`; sem `opening` a parede fica inteira |
+| medidas | `WALL` (0,34 / 2,8 / 1,9) e `DOOR` (2,60 × 2,18, perfil 0,12 × 0,24) | — | os dois ficheiros que assentam a porta e abrem o vão leem daqui |
 
 Regras que os testes guardam:
 

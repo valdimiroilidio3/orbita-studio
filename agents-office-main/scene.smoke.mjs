@@ -116,7 +116,7 @@ const dom = new JSDOM(html, {
 // passa a ser uma falha reportada como as outras
 const rejeicoes = [];
 process.on('unhandledRejection', (e) => rejeicoes.push(String((e && e.message) || e)));
-process.on('uncaughtException', (e) => { console.error('✗ cena: excepção não tratada — ' + ((e && e.message) || e)); process.exit(1); });
+process.on('uncaughtException', (e) => { console.error('✗ cena: excepção não tratada — ' + ((e && e.message) || e) + '\n' + String((e && e.stack) || '').split('\n').slice(0, 3).join(' | ')); process.exit(1); });
 
 await new Promise(r => setTimeout(r, 3000));
 const win = dom.window;
@@ -611,7 +611,20 @@ if (mIn && mSend) {
     const e = ent.find((x) => x.dept === k);
     return e && e.glass === office.depts[k].glass;
   }), 'uma entrada não está na cor do vidro da sua sala');
-  ok(ent.every((e) => e.width >= 4 && e.height >= 2.4), 'uma entrada é estreita demais para se ler como porta');
+  ok(ent.every((e) => e.width >= 2.7 && e.width <= 3.2), `o vão da porta devia ter 2,84 m de contorno: ${JSON.stringify(ent.map((e) => e.width))}`);
+  ok(ent.every((e) => e.clear && e.clear.w >= 2.4 && e.clear.h >= 2.0), 'o vão livre é pequeno demais para uma pessoa passar');
+  ok(ent.every((e) => e.leaves === 2 && e.open > 0.3), 'as duas folhas deviam estar abertas ao meio');
+  ok(salas.every((k) => ent.find((x) => x.dept === k).label === office.depts[k].short),
+    'a placa da porta devia dizer o nome da sala');
+  // a porta assenta num BURACO: metade das salas tem o pano de fundo aberto (as outras têm a
+  // entrada no bordo aberto, sem parede nenhuma — e isso também se verifica)
+  const paredes = office.walls || {};
+  const comVao = salas.filter((k) => paredes[k] && paredes[k].opening);
+  const semVao = salas.filter((k) => paredes[k] && !paredes[k].opening);
+  ok(comVao.length === 3 && semVao.length === 3,
+    `três salas deviam ter vão na parede e três a porta no bordo aberto: ${comVao.length}/${semVao.length}`);
+  ok(comVao.every((k) => paredes[k].opening.w >= 2.8 && paredes[k].opening.h >= 2.2),
+    'um vão é mais pequeno do que a porta que lá entra');
 }
 
 if (falhas.length) {

@@ -1,3 +1,64 @@
+## 1.13.1 — 28 out 2026 · As portas passaram a ser portas
+
+Pedido: *«melhore o design 3D das portas»*.
+
+### O que estava errado (e porquê)
+
+- **A porta flutuava.** O `rboxGeo` cresce a partir da BASE do objecto, e a primeira versão colocava os
+  montantes a meia altura (`H/2`): os postes começavam a 1,3 m do chão. Vê-se no primeiro desenho.
+- **A porta não tinha parede.** O corredor saía do *canto* da sala — a 1 m da esquina — e o pórtico
+  ficava 1,1 m à frente do pano, solto no ar. Não havia buraco, não havia passagem: de fora não se
+  via nada, e de dentro era um adereço ao lado de uma parede inteira.
+
+### O que mudou
+
+- **O corredor passa a nascer no MEIO do pano que dá para o Cérebro.** É a raiz da correcção: ao
+  centro há parede onde abrir um vão, e a porta assenta nele. As esquinas ficam livres.
+- **A parede abre-se.** `makeRoomWalls` aceita `opening: {x, w, h}` e parte o pano de fundo em dois
+  troços, com **verga** por cima, **rodapé partido** e **ripaado que não atravessa** o vão. Três salas
+  têm vão na parede; as outras três recebem a porta no bordo aberto (não há parede para abrir).
+- **Porta nova**, à escala de uma pessoa e de um corredor de 3,2 m:
+  - aro de latão **2,84 × 2,64** com 0,24 de fundo e **vão livre de 2,60 × 2,18**;
+  - **duas folhas de vidro fosco** (opacidade 0,26) que abrem **ao meio**, 0,45 cada — como uma porta
+    automática — com **puxador de latão** no bordo de ataque de cada uma;
+  - **carril** com carros à vista e **bolsos** nas pontas (a folha deslizada recolhe ali; sem eles, uma
+    folha aberta ficava pendurada no ar nas salas sem parede);
+  - **soleira**, dois **filetes de luz** no piso e uma **mancha de luz** que a entrada deixa cair no
+    corredor;
+  - **luz sob a padieira** dos dois lados e dentro do vão da parede;
+  - **placa com o NOME da sala** (1,12 × 0,26, duas faces, desenhada em canvas na cor do vidro) — é a
+    única peça escrita da cena, e diz o nome do sítio, não um número;
+  - **barra de topo acesa** na cor da sala: é a peça que se lê da câmara isométrica, que olha o
+    escritório de cima — antes de se ver a porta, vê-se a cor dela na entrada;
+  - **aro de latão na face do corredor**, para o mesmo desenho dos dois lados.
+- **`WALL` e `DOOR` exportados** por `src/builders.js`: a parede e a porta passam a ler as mesmas
+  medidas. Foi a falta disto que deixou a primeira versão 10 cm ao lado do buraco.
+- **Corrimãos do corredor encurtados** 1,15 m do lado da sala: passavam à frente da porta e cortavam a
+  entrada ao meio.
+- **No escuro**: latão velho, vidro mais denso, LED da entrada mais intenso — a porta é das últimas
+  coisas que se apagam numa sala sem luz.
+
+### Provas
+
+`node scene.smoke.mjs` passou a exigir, além das cores:
+
+```
+✓ contorno de 2,7–3,2 m e vão livre ≥ 2,4 × 2,0
+✓ duas folhas abertas mais de 0,3 m
+✓ a placa de cada porta diz o nome da sala
+✓ 3 salas com vão na parede (≥ 2,8 × 2,2) e 3 com a porta no bordo aberto
+```
+
+Desenhos do rascunho (o rasterizador caseiro não tem emissão nem texturas, por isso o LED e a placa
+aparecem sem brilho): `docs/porta-sala.png`, `docs/porta-corredor.png`, `docs/porta-na-sala.png`.
+
+### Dito sem enfeitar
+
+- A **placa não é legível de todos os ângulos**: a câmara é isométrica e olha as paredes de cima; o
+  nome lê-se, mas em escorço. A cor e a barra acesa é que fazem a identificação à distância.
+- O **vidro não é vidro**: é um material transparente com 0,26 de opacidade, sem refracção nem
+  reflexos do ambiente. À escala do escritório lê-se como vidro fosco; ao lado, não engana ninguém.
+
 ## 1.13.0 — 28 out 2026 · Passadeiras a andar, entradas à cor da sala, e a API que já está de pé
 
 Pedido: *«faça passadeiras rolantes no corredor, preta, e entradas na sala (roxa, azul e amarela); e

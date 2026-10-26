@@ -12,7 +12,7 @@ import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, de
 import {
   makePlinth, makeDesk, makeChair,
   makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing, makeMasterHall,
-  makeRoomEntrance,
+  makeRoomEntrance, DOOR, WALL,
 } from './builders.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
@@ -227,7 +227,12 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   let walls = null;
   if (key_ !== 'brain') {
     try {
-      walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass });
+      // o vão da porta: só no pano de fundo (-z), e só quando é ali que o corredor chega
+      const sz0 = Math.sign(L.pos[1]);
+      const opening = sz0 > 0
+        ? { x: 0, w: DOOR.clearW + DOOR.frameW * 2 + 0.04, h: DOOR.clearH + DOOR.frameW + 0.04 }
+        : null;
+      walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass, opening });
       walls.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
       g.add(walls);
     } catch (e) { walls = null; console.warn('paredes: ' + key_ + ' — ' + e.message); }
@@ -326,7 +331,11 @@ const entranceRT = [];   // 28 out 2026: o pórtico de cada sala (cor, sítio, d
 for (const k of DEPT_KEYS) {
   const L = LAYOUT[k];
   const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
-  const from = [L.pos[0] - sx * (L.w / 2 - 1), L.pos[1] - sz * (L.d / 2 - 1)];
+  /* 28 out 2026 (1.13.1): a boca do corredor passou do canto para o MEIO do pano que dá para o
+     Cérebro. Era a raiz do problema das portas: no canto não cabe uma porta (a esquina fica a 1 m),
+     e por isso o pórtico ficava solto no ar, 1,1 m à frente da parede. Ao centro, a porta assenta
+     no vão e o corredor entra por ela. */
+  const from = [L.pos[0], L.pos[1] - sz * (L.d / 2 - 1)];
   const to = [sx * 6.5, sz * 6.5];
   const walk = makeWalkway(from, to, { glass: DEPTS[k].glass, chip: DEPTS[k].chip });
   walk.userData.dept = k; walk.userData.part = 'walkway';
@@ -344,8 +353,14 @@ for (const k of DEPT_KEYS) {
   try {
     const dl = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
     const dir = { x: (to[0] - from[0]) / dl, z: (to[1] - from[1]) / dl };
-    const at = { x: from[0] - L.pos[0] - dir.x * 1.1, z: from[1] - L.pos[1] - dir.z * 1.1 };
-    const ent = makeRoomEntrance({ glass: DEPTS[k].glass, at, dir });
+    /* Onde é que a porta cai? Se o corredor sai pelo pano de fundo (-z), a parede é de verdade e a
+       porta assenta na face INTERIOR dela, com o vão aberto pelo `makeRoomWalls`. Se sai pelo bordo
+       aberto (+z), não há parede: a porta fica de pé no bordo, como entrada do jardim. */
+    const walled = sz > 0;
+    const at = walled
+      ? { x: 0, z: -L.d / 2 + WALL.t + DOOR.frameD / 2 }
+      : { x: 0, z: L.d / 2 - 0.60 };
+    const ent = makeRoomEntrance({ glass: DEPTS[k].glass, at, dir, label: DEPTS[k].short });
     ent.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
     deptRT[k].group.add(ent);
     deptRT[k].entrance = ent;
@@ -833,6 +848,21 @@ function setDark(on) {
       if (m.emissive) m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.5 : m.userData.baseEmissiveIntensity;
     }
     else if (o.userData.part === 'hallRing') m.color.set(darkOn ? '#7A6242' : m.userData.base);
+    /* 28 out 2026 (1.13.1): a porta da sala. De noite o latão fica velho, o vidro escurece, e a
+       luz da entrada — como o LED das paredes — é a última coisa que se apaga. */
+    else if (o.userData.part === 'entranceFrame') m.color.set(darkOn ? '#6E583A' : m.userData.base);
+    else if (o.userData.part === 'entranceSill') m.color.set(darkOn ? '#111216' : m.userData.base);
+    else if (o.userData.part === 'entranceLed') {
+      if (m.userData.baseEmissiveIntensity == null) m.userData.baseEmissiveIntensity = m.emissiveIntensity;
+      m.emissiveIntensity = darkOn ? m.userData.baseEmissiveIntensity * 1.45 : m.userData.baseEmissiveIntensity;
+    } else if (o.userData.part === 'entranceGlass') {
+      if (m.userData.baseOpacity == null) m.userData.baseOpacity = m.opacity;
+      m.opacity = darkOn ? Math.min(0.5, m.userData.baseOpacity * 1.35) : m.userData.baseOpacity;
+      m.color.copy(darkOn ? darken(m.userData.base, 0.45) : m.userData.base);
+    } else if (o.userData.part === 'entranceSpill') {
+      if (m.userData.baseOpacity == null) m.userData.baseOpacity = m.opacity;
+      m.opacity = darkOn ? m.userData.baseOpacity * 1.25 : m.userData.baseOpacity;
+    }
     // 26 out 2026: uma mesa preta sobre um fundo escuro desaparecia. No escuro, o corpo sobe um
     // tom (grafite) e o LED fica mais intenso — é assim que uma secretária com luz se comporta.
     else if (o.userData.part === 'desk') m.color.set(darkOn ? '#2E3138' : m.userData.base);
@@ -1710,6 +1740,8 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
     depts: DEPTS, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
     // 28 out 2026: a sala-mestre e a circulação, para se poder olhar para elas sem adivinhar
     hall: hall && { ...hall.userData.hall },
+    // 28 out 2026 (1.13.1): as paredes e o vão da porta — o teste lê daqui se a porta assenta num buraco
+    walls: Object.fromEntries(Object.entries(deptRT).filter(([, r]) => r.walls).map(([k, r]) => [k, { ...r.walls.userData.wall }])),
     // 28 out 2026: os pórticos de entrada e as passadeiras (para o teste poder olhar para eles)
     entrances: entranceRT,
     // 28 out 2026: as passadeiras — a cor do tapete, para onde vai e quanto já rolou (o teste lê isto)
