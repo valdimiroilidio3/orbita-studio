@@ -18,3 +18,7 @@ data/*.json
 # ZIPs novos ficam fora do git; os dois já versionados (agents-office-main.zip e
 # orbita-studio-integrations.zip) continuam lá por serem o material de origem.
 *.zip
+
+# artefactos de ferramentas locais
+__pycache__/
+*.pyc
