@@ -38,6 +38,8 @@ const IC = {
   chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
   lupa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
   pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
+  tarefa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 5.6 8 8.5 5"/><path d="M4 12.5 5.6 14l2.9-3"/><path d="M4 18.5 5.6 20l2.9-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/></svg>',
+  agentes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.6"/><circle cx="17" cy="9.5" r="2.2"/><path d="M3 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6"/><path d="M14.8 14.7c2.6-.4 5.2 1.2 5.2 4.3"/></svg>',
   vazio: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
 };
 
@@ -45,6 +47,8 @@ const NAV = [
   { k: 'hoje', label: 'Hoje', ic: 'hoje' },
   { k: 'leads', label: 'Leads', ic: 'leads' },
   { k: 'projetos', label: 'Projetos', ic: 'pastas' },
+  { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
+  { k: 'agentes', label: 'Agentes', ic: 'agentes' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
 ];
@@ -55,6 +59,8 @@ const S = {
   lead: null, leadMessages: [], dossier: null,
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
+  tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
+  pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -100,7 +106,7 @@ function toast(msg, bad = false) {
 function parseHash() {
   const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto'];
+  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -109,7 +115,10 @@ function paintNav() {
   const pend = S.today?.decidir?.length || 0;
   const nav = NAV.map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
   $('#nav').innerHTML = nav;
-  $('#tabbar').innerHTML = NAV.map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}">${IC[n.ic]}<span>${n.label}</span></a>`).join('');
+  // No telemóvel cabem seis: o resto (Conversas) fica a um toque a partir de Hoje.
+  const TABS = ['hoje', 'leads', 'projetos', 'tarefas', 'agentes', 'saldo'];
+  $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k))
+    .map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span></a>`).join('');
 }
 
 function paintSideFoot() {
@@ -159,6 +168,30 @@ async function loadCommon() {
   S.tipos = projetos.tipos || [];
 }
 
+async function loadTarefas() {
+  const f = S.tarefaFiltro || {};
+  const qs = new URLSearchParams({ limit: '100' });
+  if (f.dept) qs.set('departamento', f.dept);
+  if (f.state) qs.set('estado', f.state);
+  const r = await call('/ops/tarefas?' + qs.toString());
+  S.tarefas = r.tarefas || [];
+  S.tiposTarefa = r.tipos ? Object.entries(r.tipos).map(([id, t]) => ({ id, ...t })) : S.tiposTarefa;
+  S.deptos = r.departamentos || S.deptos;
+}
+
+async function loadAgentes() {
+  const [a, at] = await Promise.all([
+    call('/ops/agentes').catch(() => null),
+    call('/ops/atividade?limit=20').catch(() => null),
+  ]);
+  S.agentes = a;
+  S.atividade = at;
+}
+
+async function loadPipeline() {
+  S.pipeline = await call('/ops/pipeline').catch(() => null);
+}
+
 async function loadProjeto(id) {
   const r = await call(`/ops/projetos/${encodeURIComponent(id)}`);
   S.projeto = r;
@@ -176,6 +209,9 @@ async function boot(full = true) {
     if (full) await loadCommon();
     if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
     if (S.route.name === 'projeto' && S.route.id) await loadProjeto(S.route.id);
+    if (S.route.name === 'tarefas') await loadTarefas();
+    if (S.route.name === 'agentes') await loadAgentes();
+    if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
     S.error = '';
   } catch (e) { S.error = e.message; }
   paintNav();
@@ -331,6 +367,33 @@ function filteredLeads() {
   });
 }
 
+function searchBar() {
+  const r = S.results;
+  return `<div style="margin-bottom:var(--s4)">
+    <div class="search">${IC.lupa}<input id="gq" type="search" placeholder="Pesquisar leads, projetos e tarefas…" value="${esc(S.gq || '')}" aria-label="pesquisa global"></div>
+    ${r ? (r.total ? `<div class="card" style="margin-top:var(--s2)">
+      ${r.grupos.map(g => `<div class="sec-h" style="margin-top:0"><h3 style="font-size:var(--t-s)">${esc(g.label)}</h3><span class="count">${g.itens.length}</span></div>
+        <ul class="feed">${g.itens.map(i => `<li><a href="${esc(i.route)}" style="text-decoration:none;color:inherit"><b>${esc(i.name || i.title || i.id)}</b> <span class="count">${esc(i.city || i.client || i.kindLabel || '')}</span></a></li>`).join('')}</ul>`).join('')}
+    </div>` : `<div class="hint" style="margin-top:var(--s2)">Nada encontrado para «${esc(r.query)}» — nem leads, nem projetos, nem tarefas.</div>`)
+      : (r === null && S.gq ? '' : '')}
+  </div>`;
+}
+
+function pipelineCard() {
+  const p = S.pipeline;
+  if (!p || !p.totalLeads) return '';
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Funil</h3><span class="count">${p.totalLeads} leads · ${p.conversaoTotal ?? '—'}% chegam a ganho</span></div>
+    <div class="stats" style="margin-bottom:var(--s3)">
+      ${p.fases.map(f => `<div class="stat"><b>${f.leads}</b><span>${esc(f.label)}${f.conversao != null ? ` · ${f.conversao}%` : ''}</span></div>`).join('')}
+    </div>
+    ${p.porOrigem.length ? `<table><tbody>${p.porOrigem.map(o => `<tr><td>${esc(o.origem)}</td><td class="n">${o.total} leads</td><td class="n">${o.ganhos} ganhos</td><td class="n">${o.taxa != null ? o.taxa + '%' : '—'}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${p.paradas.lista.length ? `<div class="hint" style="margin-top:var(--s2)"><b>${p.paradas.lista.length} oportunidade(s)</b> sem atividade há mais de ${p.paradas.dias} dias: ${p.paradas.lista.slice(0, 4).map(l => esc(l.name) + ' (' + l.dias_parado + ' d)').join(' · ')}${p.paradas.lista.length > 4 ? ' …' : ''}</div>`
+      : '<div class="hint" style="margin-top:var(--s2)">Nenhuma oportunidade parada há mais de 14 dias.</div>'}
+    ${p.perdidos ? `<div class="hint">${p.perdidos} perdido(s) — o motivo fica nas notas do lead.</div>` : ''}
+  </div>`;
+}
+
 function novoLeadForm() {
   return `<div class="card" style="margin-bottom:var(--s4)">
     <div class="sec-h"><h3>Acrescentar um lead à mão</h3><span class="count">fica guardado e pontuado</span></div>
@@ -360,6 +423,8 @@ function viewLeads() {
       right: `<button class="btn small ghost" data-act="novo-lead">+ Lead</button>${stopPill()}`,
     })}
     ${S.adding ? novoLeadForm() : ''}
+    ${searchBar()}
+    ${pipelineCard()}
     <div class="tools">
       <div class="search">${IC.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho…" value="${esc(S.q)}" aria-label="procurar leads"></div>
       ${chips.map(([k, l]) => `<button class="chip ${S.filter === k ? 'on' : ''}" data-act="filter" data-k="${k}">${l}</button>`).join('')}
@@ -543,7 +608,8 @@ function qaReport(qa) {
       <span class="count">${qa.total === 0 ? 'nenhum problema encontrado' : `${qa.total} problemas · ${qa.critical} críticos · ${qa.important} importantes · ${qa.minor} menores`}</span>
     </div>
     ${qa.report.length ? `<ul class="qa-list">${qa.report.map(i => `<li class="${i.level}"><b>${esc(sev[i.level] || i.level)}</b> <code>${esc(i.code)}</code> ${esc(i.message)}${i.file ? ` <span class="count">(${esc(i.file)})</span>` : ''}</li>`).join('')}</ul>`
-      : '<div class="hint">Nenhum problema encontrado: estrutura, sintaxe, links, rótulos e honestidade do texto.</div>'}`;
+      : '<div class="hint">Nenhum problema encontrado: estrutura, sintaxe, links, rótulos e honestidade do texto.</div>'}
+    ${qa.navegador ? `<div class="hint">Testes de navegador: ${qa.navegador.executado ? 'correram' : 'não correram'} — ${esc(qa.navegador.motivo)}</div>` : ''}`;
 }
 
 function viewProjetos() {
@@ -556,6 +622,7 @@ function viewProjetos() {
       right: `<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>${stopPill()}`,
     })}
     ${S.addingProject ? novoProjetoForm() : ''}
+    ${searchBar()}
     ${list.length ? `<div class="rows">${list.map(p => `<button class="row" data-act="ver-projeto" data-id="${esc(p.id)}" style="grid-template-columns:1fr 150px 130px">
       <div><div class="nm">${esc(p.name)}</div><div class="mt">${esc([p.client, p.city].filter(Boolean).join(' · ') || 'sem cliente')} · ${esc((S.tipos.find(t => t.id === p.kind) || {}).label || p.kind)}</div></div>
       <div class="cell hide-m">${esc(when(p.updated_at))}</div>
@@ -625,6 +692,120 @@ function viewProjeto() {
       <div class="card">
         <div class="sec-h"><h3>Histórico</h3><span class="count">${d.events.length}</span></div>
         <ul class="feed">${d.events.slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------- Tarefas ---------------- */
+const TASK_TAG = { queued: '', running: 'novo', succeeded: 'respondeu', failed: 'perdido', awaiting_approval: 'cliente', cancelled: '' };
+const TASK_LABEL = { queued: 'à espera', running: 'a correr', succeeded: 'concluída', failed: 'falhou', awaiting_approval: 'espera aprovação', cancelled: 'cancelada' };
+const dur = ms => (ms == null ? '' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+
+function tarefaCard(t) {
+  const d = (S.deptos || []).find(x => x.key === t.dept) || {};
+  const podeCorrer = ['queued', 'failed'].includes(t.state) && t.attempts < t.max_attempts;
+  const ev = t.evidence || [];
+  return `<div class="card" style="margin-bottom:var(--s3)">
+    <div class="detail-top">
+      <div><h3 style="font-size:var(--t-m)">${esc(t.title)}</h3>
+        <div class="mt">${esc(d.name || t.dept)} · ${esc(d.role || '')}${t.entityId ? ` · <a href="${t.entity === 'projeto' ? '#/projeto/' + esc(t.entityId) : t.entity === 'lead' ? '#/lead/' + esc(t.entityId) : '#'}" style="text-decoration:underline">${esc(t.entityId)}</a>` : ''}</div></div>
+      <span class="tag ${TASK_TAG[t.state] || ''}">${esc(TASK_LABEL[t.state] || t.state)}</span>
+    </div>
+    <div class="mt" style="margin-top:var(--s2)">
+      ${t.attempts}/${t.max_attempts} tentativa(s)${t.duration_ms != null ? ` · ${dur(t.duration_ms)}` : ''}${t.started_at ? ` · começou ${esc(hhmm(t.started_at))}` : ''}
+      ${t.needsApproval ? ' · acção externa: exige aprovação' : ''}
+    </div>
+    ${t.error ? `<div class="hint bad" style="margin-top:var(--s2)">${esc(t.error)}</div>` : ''}
+    ${t.state === 'succeeded' && Object.keys(t.result || {}).length ? `<details class="why-box" style="margin-top:var(--s2)"><summary><span>Resultado<small>${esc(Object.keys(t.result).slice(0, 4).join(', '))}</small></span>${IC.chev}</summary>
+      <pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:0">${esc(JSON.stringify(t.result, null, 2).slice(0, 1600))}</pre>
+      ${ev.length ? `<div class="hint">Evidência: ${ev.slice(0, 6).map(e => esc(e.label)).join(' · ')}</div>` : ''}</details>` : ''}
+    ${ev.length && t.state !== 'succeeded' ? `<div class="hint">Evidência: ${ev.slice(0, 4).map(e => esc(e.label)).join(' · ')}</div>` : ''}
+    <div class="acts" style="margin-top:var(--s3)">
+      ${t.state === 'queued' ? `<button class="btn primary small" data-act="correr-tarefa" data-id="${esc(t.id)}">Correr</button>` : ''}
+      ${t.state === 'failed' && podeCorrer ? `<button class="btn ghost small" data-act="correr-tarefa" data-id="${esc(t.id)}">Repetir</button>` : ''}
+      ${t.state === 'awaiting_approval' ? `<button class="btn ghost small" data-act="rejeitar-tarefa" data-id="${esc(t.id)}">Rejeitar</button><button class="btn primary small" data-act="aprovar-tarefa" data-id="${esc(t.id)}">Aprovar</button>` : ''}
+      ${t.state === 'failed' && !podeCorrer ? '<span class="count">tentativas esgotadas — abre uma tarefa nova</span>' : ''}
+    </div>
+  </div>`;
+}
+
+function novaTarefaForm() {
+  const tipos = S.tiposTarefa.length ? S.tiposTarefa : [];
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Nova tarefa</h3><span class="count">fica guardada na base de dados</span></div>
+    <div class="form">
+      <select class="in" id="tfTipo" aria-label="tipo de tarefa">${tipos.map(t => `<option value="${esc(t.id)}">${esc(t.label)} · ${esc((S.deptos.find(d => d.key === t.dept) || {}).name || t.dept)}</option>`).join('')}</select>
+      <input class="in" id="tfEnt" placeholder="Projeto ou lead (id)" aria-label="entidade">
+      <label class="hint" style="display:flex;align-items:center;gap:var(--s2);white-space:nowrap"><input type="checkbox" id="tfAprov"> exige aprovação</label>
+      <button class="btn primary small" data-act="criar-tarefa" style="padding:0 var(--s5)">Criar e correr</button>
+    </div>
+    <div class="hint">O tipo decide o departamento. O que precisa de um motor de IA falha com o motivo escrito — não inventa um resultado.</div>
+  </div>`;
+}
+
+function viewTarefas() {
+  const f = S.tarefaFiltro || {};
+  const list = S.tarefas || [];
+  const conta = st => list.filter(t => t.state === st).length;
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Tarefas',
+      sub: list.length ? `${list.length} · ${conta('running')} a correr · ${conta('awaiting_approval')} à espera de ti · ${conta('failed')} falhadas` : 'ainda não há tarefas',
+      right: `<button class="btn small ghost" data-act="nova-tarefa">+ Tarefa</button>${stopPill()}`,
+    })}
+    ${S.addingTask ? novaTarefaForm() : ''}
+    <div class="filters" role="group" aria-label="filtrar por departamento" style="margin-bottom:var(--s3)">
+      <button class="chip ${!f.dept ? 'on' : ''}" data-act="filtrar-tarefa" data-k="dept" data-v="">Todos</button>
+      ${(S.deptos || []).map(d => `<button class="chip ${f.dept === d.key ? 'on' : ''}" data-act="filtrar-tarefa" data-k="dept" data-v="${esc(d.key)}">${esc(d.name)}</button>`).join('')}
+    </div>
+    <div class="filters" role="group" aria-label="filtrar por estado" style="margin-bottom:var(--s4)">
+      <button class="chip ${!f.state ? 'on' : ''}" data-act="filtrar-tarefa" data-k="state" data-v="">Todos</button>
+      ${['queued', 'running', 'awaiting_approval', 'succeeded', 'failed'].map(st => `<button class="chip ${f.state === st ? 'on' : ''}" data-act="filtrar-tarefa" data-k="state" data-v="${st}">${TASK_LABEL[st]}</button>`).join('')}
+    </div>
+    ${list.length ? list.map(tarefaCard).join('') : `<div class="card empty">${IC.vazio}<h3>${f.dept || f.state ? 'Nada neste filtro' : 'Sem tarefas'}</h3>
+      <p>${f.dept || f.state
+        ? 'Não há tarefas com este departamento e estado. Limpa os filtros — o que existe está todo aqui.'
+        : 'Uma tarefa é trabalho com dono, começo, fim e resultado. Cria uma para qualificar um lead, gerar o código de um projeto ou auditar a qualidade — o que corre fica escrito aqui, mesmo que o servidor reinicie.'}</p></div>`}
+  </div>`;
+}
+
+/* ---------------- Agentes ---------------- */
+function viewAgentes() {
+  const a = S.agentes;
+  const at = S.atividade;
+  if (!a) return `<div class="wrap"><div class="skeleton">a ler o estado dos agentes…</div></div>`;
+  const deptos = a.departamentos || [];
+  const resumo = a.resumo || {};
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Agentes',
+      sub: `${resumo.total || 0} tarefas registadas · ${resumo.running || 0} a correr · ${resumo.awaiting || 0} à espera de aprovação`,
+      right: stopPill(),
+    })}
+    <div class="hint" style="margin-bottom:var(--s4)">O estado vem da base de dados: um agente só aparece «a trabalhar» quando tem uma tarefa em curso. Sem tarefa, não há movimento.</div>
+    <div class="steps" style="grid-template-columns:repeat(3,1fr);margin-bottom:var(--s4)">
+      ${deptos.map(d => `<li class="${d.running ? 'now' : d.failed ? 'bad' : d.awaiting ? '' : 'done'}">
+        <b>${esc(d.n)} · ${esc(d.name)}</b>
+        <small>${esc(d.role)}</small>
+        <div class="mt" style="margin-top:var(--s2);font-size:11px">${d.running ? 'a trabalhar' : d.awaiting ? 'espera aprovação' : d.queued ? 'com trabalho na fila' : d.failed ? 'com falhas' : d.succeeded ? 'sem trabalho pendente' : 'sem tarefas'}</div>
+        <div class="count" style="margin-top:var(--s2)">${d.succeeded} feitas · ${d.failed} falhadas · ${d.queued} na fila</div>
+        ${d.last ? `<div class="count" style="margin-top:2px">${esc(String(d.last).slice(0, 60))}</div>` : ''}
+      </li>`).join('')}
+    </div>
+    <div class="cards2">
+      <div class="card">
+        <div class="sec-h"><h3>O que correu</h3><span class="count">tarefas</span></div>
+        ${(at?.tarefas || []).length ? `<table><tbody>${at.tarefas.slice(0, 10).map(t => `<tr>
+          <td>${esc(t.title)}<div class="count">${esc(t.deptName || t.dept)}</div></td>
+          <td><span class="tag ${TASK_TAG[t.state] || ''}">${esc(TASK_LABEL[t.state] || t.state)}</span></td>
+          <td class="n">${t.ms != null ? esc(dur(t.ms)) : ''}</td></tr>`).join('')}</tbody></table>`
+          : '<div class="hint">Ainda não correu nenhuma tarefa. Começa em Tarefas ou no projeto de um lead.</div>'}
+      </div>
+      <div class="card">
+        <div class="sec-h"><h3>Falhas e registo</h3><span class="count">${(at?.resumo?.falhasRecentes || 0)} falha(s)</span></div>
+        ${at?.resumo?.ultimaFalha ? `<div class="hint bad">Última: ${esc(at.resumo.ultimaFalha.title || at.resumo.ultimaFalha.kind || '')} — ${esc(String(at.resumo.ultimaFalha.error || '').slice(0, 120))}</div>` : '<div class="hint">Nenhuma falha registada.</div>'}
+        <ul class="feed" style="margin-top:var(--s2)">${(at?.eventos || []).slice(0, 10).map(e => `<li><b>${esc(e.action)}</b> <span class="count">${esc(hhmm(e.at))} · ${esc(e.actor)}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
       </div>
     </div>
   </div>`;
@@ -709,6 +890,8 @@ function paint() {
       : S.route.name === 'lead' ? viewLead()
         : S.route.name === 'projetos' ? viewProjetos()
           : S.route.name === 'projeto' ? viewProjeto()
+            : S.route.name === 'tarefas' ? viewTarefas()
+              : S.route.name === 'agentes' ? viewAgentes()
             : S.route.name === 'conversas' ? viewConversas()
               : viewSaldo();
 }
@@ -829,6 +1012,42 @@ async function act(name, el, ev) {
     }
 
     if (name === 'novo-lead') { S.adding = !S.adding; paint(); return; }
+    if (name === 'nova-tarefa') { S.addingTask = !S.addingTask; paint(); return; }
+    if (name === 'filtrar-tarefa') {
+      S.tarefaFiltro[el.dataset.k] = el.dataset.v || null;
+      await loadTarefas();
+      paint();
+      return;
+    }
+    if (name === 'criar-tarefa') {
+      const tipo = $('#tfTipo')?.value || '';
+      const ent = String($('#tfEnt')?.value || '').trim();
+      const aprov = !!$('#tfAprov')?.checked;
+      if (!tipo) { toast('Escolhe o tipo de tarefa.', true); return; }
+      const meta = S.tiposTarefa.find(t => t.id === tipo) || {};
+      const entidade = String(ent).startsWith('p_') ? 'projeto' : String(ent).startsWith('l_') ? 'lead' : '';
+      const r = await call('/ops/tarefas', 'POST', { kind: tipo, entityId: ent, entidade, aprovacao: aprov, correr: true });
+      const t = r.tarefa;
+      toast(t.state === 'succeeded' ? `Tarefa concluída (${meta.label || tipo}).` : t.state === 'awaiting_approval' ? 'Tarefa à espera da tua aprovação.' : `A tarefa não passou: ${t.error || 'sem motivo'}`, t.state !== 'succeeded' && t.state !== 'awaiting_approval');
+      S.addingTask = false;
+      await loadTarefas();
+      paint();
+      return;
+    }
+    if (name === 'correr-tarefa') {
+      const r = await call(`/ops/tarefas/${encodeURIComponent(id)}/correr`, 'POST', {});
+      toast(r.ok ? 'Tarefa concluída.' : `Falhou: ${r.error || 'sem motivo'}`, !r.ok);
+      await loadTarefas();
+      paint();
+      return;
+    }
+    if (name === 'aprovar-tarefa' || name === 'rejeitar-tarefa') {
+      const r = await call(`/ops/tarefas/${encodeURIComponent(id)}/${name === 'aprovar-tarefa' ? 'aprovar' : 'rejeitar'}`, 'POST', { note: 'revisto na mesa' });
+      toast(name === 'aprovar-tarefa' ? 'Aprovada e registada.' : 'Rejeitada.');
+      await loadTarefas();
+      paint();
+      return;
+    }
     if (name === 'novo-projeto') { S.addingProject = !S.addingProject; paint(); return; }
     if (name === 'ver-projeto') { location.hash = `#/projeto/${encodeURIComponent(id)}`; return; }
 
@@ -945,6 +1164,18 @@ function start() {
     act(b.dataset.act, b, e);
   });
   document.addEventListener('input', e => {
+    if (e.target.id === 'gq') {
+      S.gq = e.target.value;
+      clearTimeout(start._gq);
+      start._gq = setTimeout(async () => {
+        if (String(S.gq || '').trim().length < 2) { S.results = null; paint(); return; }
+        try { S.results = await call('/ops/pesquisa?q=' + encodeURIComponent(S.gq)); } catch { S.results = null; }
+        paint();
+        const inp = document.querySelector('#gq');
+        if (inp) { inp.focus(); try { inp.setSelectionRange(S.gq.length, S.gq.length); } catch { /* ok */ } }
+      }, 280);
+      return;
+    }
     if (e.target.id !== 'q') return;
     S.q = e.target.value;
     const at = e.target.selectionStart;
@@ -960,6 +1191,9 @@ function start() {
     S.pick = null;
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'agentes') { try { await loadAgentes(); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'leads' && !S.pipeline) { try { await loadPipeline(); } catch (e) { toast(e.message, true); } }
     paintNav();
     paint();
     main().scrollIntoView({ block: 'start' });

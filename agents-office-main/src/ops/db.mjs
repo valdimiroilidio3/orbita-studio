@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch { /* Node sem SQLite */ }
 
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '6';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -227,6 +227,38 @@ CREATE TABLE IF NOT EXISTS deliveries (
   detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS deliveries_project ON deliveries(project_id, at DESC);
+
+-- Tarefas dos departamentos: trabalho que se pode verificar. Uma máquina de estados guardada
+-- (queued → running → succeeded | failed | awaiting_approval), com tentativas limitadas, prazo,
+-- resultado e evidência. UMA tarefa aberta por chave e departamento — o índice parcial impede
+-- execuções duplicadas mesmo que dois pedidos cheguem ao mesmo tempo.
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  dept TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  entity TEXT NOT NULL DEFAULT '',
+  entity_id TEXT NOT NULL DEFAULT '',
+  payload TEXT NOT NULL DEFAULT '{}',
+  state TEXT NOT NULL DEFAULT 'queued',
+  result TEXT NOT NULL DEFAULT '{}',
+  evidence TEXT NOT NULL DEFAULT '[]',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  timeout_ms INTEGER NOT NULL DEFAULT 300000,
+  needs_approval INTEGER NOT NULL DEFAULT 0,
+  approved_by TEXT NOT NULL DEFAULT '',
+  approved_at TEXT,
+  dedupe TEXT NOT NULL DEFAULT '',
+  parent_id TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS tasks_dept ON tasks(dept, state);
+CREATE INDEX IF NOT EXISTS tasks_entity ON tasks(entity_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_open ON tasks(dedupe) WHERE state IN ('queued','running','awaiting_approval');
 
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,

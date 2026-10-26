@@ -225,8 +225,31 @@ preview é verdadeiro — `/preview/<id>/` serve os ficheiros gerados pelo próp
 credenciais, e uma recusa nomeia a variável que falta; um pedido de deployment fica registado como
 pedido, nunca como publicado.
 
-Segurança: 300 pedidos/minuto por IP e, com `ORBITA_ADMIN_TOKEN` definido, `/api/ops` exige o
-token (cabeçalho `x-orbita-admin`). Sem essa variável o arranque diz que está em **modo local**.
+Segurança: 300 pedidos/minuto por IP, `/api/ops` exige o token quando `ORBITA_ADMIN_TOKEN` está
+definido (cabeçalho `x-orbita-admin`), e um pedido mutável autenticado por cookie vindo de outra
+origem é recusado (CSRF, 403). Sem a variável o arranque diz que está em **modo local**.
+
+## Tarefas: trabalho com dono, prazo e resultado
+
+Os seis departamentos — **ORION** (command), **LUNA** (prospect), **KAI** (sales), **NOVA** (design),
+**ZEKE** (engineering) e **MIRA** (media) — trabalham por tarefas guardadas na base de dados:
+
+```
+queued → running → succeeded | failed | awaiting_approval
+```
+
+Cada tarefa tem departamento, tentativas limitadas, prazo, resultado e evidência. Uma só tarefa
+aberta por chave (o índice parcial impede duplicados mesmo com pedidos em paralelo). Um processo
+que morre a meio é recuperado no arranque. Acções de risco param em `awaiting_approval` e só
+avançam com a tua aprovação — fica escrito quem aprovou.
+
+O que precisa de um motor de IA (redigir mensagens, rascunhos de conteúdo, correcções de código)
+**falha com o motivo** quando não há chave; as tarefas determinísticas — qualificar um lead,
+pesquisar, preparar proposta, escrever o briefing, gerar o código, auditar, entregar o preview,
+revisão de prioridades — correm sempre.
+
+Na mesa: **Tarefas** (`#/tarefas`) para correr, repetir e aprovar; **Agentes** (`#/agentes`) mostra o
+estado real de cada departamento — «a trabalhar» só quando há uma tarefa em curso.
 
 ## A mesa de trabalho: leads e aprovação
 
@@ -371,13 +394,19 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET | `/api/ops/projetos/:id` | projeto, ficheiros, QA, entregas e histórico |
 | POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | o pipeline, passo a passo |
 | GET | `/api/ops/projetos/:id/zip` | os ficheiros gerados em ZIP |
+| GET/POST | `/api/ops/tarefas` | as tarefas / criar uma (`correr: true` executa já) |
+| POST | `/api/ops/tarefas/:id/correr` · `/aprovar` · `/rejeitar` | correr, aprovar ou rejeitar |
+| GET | `/api/ops/agentes` | estado real dos seis departamentos |
+| GET | `/api/ops/pipeline` | funil por fase, por origem e oportunidades paradas |
+| GET | `/api/ops/pesquisa?q=` | pesquisa global (leads, projetos, tarefas) |
+| GET | `/api/ops/atividade` | tarefas, fila e eventos recentes |
 | GET | `/preview/:id/…` | o preview real do projeto |
 
 ## Verificação
 
 ```bash
-npm run check         # 74 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, servidor)
-npm run test:ops      # 43 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 85 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, tarefas, servidor)
+npm run test:ops      # 54 testes da operação: base de dados em memória, nenhum serviço externo
 node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude

@@ -74,6 +74,21 @@
 - **Na mesa**: secção **Projetos**, com pipeline visual (briefing → código → qualidade → aprovação → entrega), relatório de QA legível, lista de ficheiros com marca de «alterado», entregas e histórico; no lead, «Criar projeto» quando ainda não existe.
 - **Provas:** `ops.test.mjs` **43 testes** (novos: geração dos quatro tipos, QA a apanhar links partidos/rótulos/lorem, entrega bloqueada por alteração, ZIP válido, funil comercial, guarda e ritmo) e `check.mjs` **74/75** — cinco passos novos de ponta a ponta contra um servidor isolado: lead → qualificar → projeto → gerar (4 ficheiros, 14 KB) → QA → aprovar → entregar → preview HTTP 200 com HTML e CSS reais → mexer invalida a aprovação → Vercel/GitHub recusam com o nome do que falta. A verificação do navegador continua a falhar sem Chrome.
 
+## 1.7.0 — 26 out 2026 · Tarefas com estado real, funil medido e a guarda fechada
+
+- **Tarefas dos seis departamentos** (`src/ops/tasks.mjs`, esquema **v6**): máquina de estados `queued → running → succeeded | failed | awaiting_approval`, com departamento, tentativas limitadas, prazo por tarefa, resultado, evidência e duração. **Uma tarefa aberta por chave** (índice parcial único) — dois pedidos simultâneos do mesmo trabalho devolvem a mesma tarefa. Um processo que morre a meio é recuperado no arranque: o que passou do prazo volta à fila ou falha com o motivo.
+- **Aprovação humana** para acções de risco: a tarefa corre, fica em `awaiting_approval` e só passa a `succeeded` com `aprovar` — quem aprovou e quando fica escrito. Repetir uma tarefa falhada é possível até ao limite de tentativas; a anterior fica no registo.
+- **Nada inventado sem motor**: as tarefas que precisam de IA (`mensagem.redigir`, `conteudo.rascunho`, `projeto.corrigir`) falham com o motivo escrito quando não há chave — não devolvem um resultado de faz-de-conta. As determinísticas (qualificar, pesquisar, proposta, briefing, gerar, QA, entregar preview, revisão de prioridades) correm sempre.
+- **Qualificar avança o funil**: um lead novo com nota ≥ 60 passa a `qualificado`, com o motivo em `events`.
+- **Painel de agentes com estado lido da base** (`#/agentes`): cada departamento mostra o que fez, o que falhou e o que está na fila; «a trabalhar» só quando há uma tarefa em `running`. Sem tarefa, sem movimento.
+- **Funil medido** (`metrics.pipeline`): quantos leads chegaram a cada fase (estado atual + histórico em `events`), conversão entre fases, taxa por origem com data de recolha, e **oportunidades paradas** há mais de 14 dias.
+- **Pesquisa global** (`src/ops/search.mjs`): leads, projetos e tarefas numa só resposta, sem depender de acentos; uma letra não pesquisa.
+- **Painel de atividade**: tarefas, jobs de fila e eventos recentes, com a última falha à vista.
+- **Guarda fechada**: além do ritmo (300/min por IP) e do token opcional, um pedido mutável autenticado por **cookie** vindo de outra origem é recusado (**403, CSRF**). O cabeçalho `x-orbita-admin` não sofre disto.
+- **QA honesto sobre o navegador**: o relatório passa a dizer se os testes de navegador correram; neste ambiente saem como **não executados, com o motivo** — nunca como aprovados.
+- **Na mesa**: secções **Tarefas** (filtros por departamento e estado, correr/repetir/aprovar/rejeitar, resultado e evidência) e **Agentes**; cartão do **Funil** nos leads; pesquisa global em leads e projetos; barra de navegação com seis secções no telemóvel.
+- **Provas:** `ops.test.mjs` **54 testes** (11 novos: duplicados, falha sem motor, prazo, tentativas, aprovação, recuperação, painel, funil, paradas, pesquisa, CSRF); `check.mjs` **85/86** com dez passos novos de ponta a ponta — incluindo **quatro pedidos em paralelo a criar uma só tarefa** e **reinício do servidor com dados intactos** (3 leads, 6 tarefas, 1 projeto). Só a verificação de navegador falha, por não haver Chrome.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

@@ -845,3 +845,171 @@ test('guarda: modo local sem segredo, token exigido quando configurado, ritmo li
   assert.equal(limiter.check('ip').ok, true, 'a janela volta a abrir');
   assert.equal(limiter.check('outro-ip').ok, true, 'um IP não paga pelo outro');
 });
+
+/* ---------- passo 7: tarefas dos departamentos, funil e pesquisa ---------- */
+
+import * as tasks from './src/ops/tasks.mjs';
+import * as search from './src/ops/search.mjs';
+import { csrfOk, sameOrigin } from './src/ops/guard.mjs';
+
+const semMotor = async () => { throw new Error('esta tarefa precisa de um motor de IA e não há nenhum configurado'); };
+
+test('tarefas: cada tipo tem departamento, e um duplicado aberto devolve a mesma tarefa', () => {
+  const db = fresh();
+  const a = tasks.create(db, { kind: 'lead.qualificar', entity: 'lead', entityId: 'l_1' });
+  const b = tasks.create(db, { kind: 'lead.qualificar', entity: 'lead', entityId: 'l_1' });
+  assert.equal(b.existed, true);
+  assert.equal(b.task.id, a.task.id, 'não pode haver duas abertas para o mesmo trabalho');
+  assert.equal(a.task.dept, 'prospect');
+  assert.equal(a.task.state, 'queued');
+  assert.equal(tasks.DEPARTMENTS.length, 6);
+  assert.deepEqual(tasks.DEPARTMENTS.map(d => d.name), ['ORION', 'LUNA', 'KAI', 'NOVA', 'ZEKE', 'MIRA']);
+  assert.throws(() => tasks.create(db, { kind: 'inventar.tarefa', entityId: 'x' }), (e) => e.status === 400);
+  // terminada, a chave volta a estar livre: repetir o trabalho é legítimo
+  db.prepare("UPDATE tasks SET state='succeeded', finished_at=? WHERE id=?").run(new Date().toISOString(), a.task.id);
+  const c = tasks.create(db, { kind: 'lead.qualificar', entity: 'lead', entityId: 'l_1' });
+  assert.equal(c.existed, false);
+});
+
+test('tarefas: corre, falha com motivo escrito e não inventa resultado sem motor', async () => {
+  const db = fresh();
+  const ok = tasks.create(db, { kind: 'lead.qualificar', entity: 'lead', entityId: 'l_1' });
+  const r1 = await tasks.run(db, ok.task.id, { handlers: { 'lead.qualificar': () => ({ result: { score: 70 }, evidence: [{ label: 'sem site (+25)' }] }) } });
+  assert.equal(r1.ok, true);
+  assert.equal(r1.task.state, 'succeeded');
+  assert.equal(r1.task.result.score, 70);
+  assert.equal(r1.task.evidence.length, 1);
+  assert.ok(r1.task.duration_ms !== null);
+
+  const sem = tasks.create(db, { kind: 'conteudo.rascunho', entity: 'projeto', entityId: 'p_1' });
+  const r2 = await tasks.run(db, sem.task.id, { handlers: {} });
+  assert.equal(r2.ok, false);
+  assert.equal(r2.task.state, 'failed');
+  assert.match(r2.task.error, /motor de IA/);
+  assert.deepEqual(r2.task.result, {}, 'uma falha não deixa resultado inventado');
+
+  const erro = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_2' });
+  const r3 = await tasks.run(db, erro.task.id, { handlers: { 'projeto.qa': semMotor } });
+  assert.equal(r3.task.state, 'failed');
+  assert.match(r3.task.error, /motor de IA/);
+});
+
+test('tarefas: prazo esgotado falha em vez de ficar pendurada', async () => {
+  const db = fresh();
+  const t = tasks.create(db, { kind: 'lead.pesquisar', entity: 'lead', entityId: 'l_9', timeoutMs: 60 });
+  const out = await tasks.run(db, t.task.id, { handlers: { 'lead.pesquisar': () => new Promise(r => setTimeout(() => r({ result: { tarde: true } }), 500)) } });
+  assert.equal(out.ok, false);
+  assert.equal(out.task.state, 'failed');
+  assert.match(out.task.error, /tempo esgotado/);
+});
+
+test('tarefas: tentativas limitadas, e um falhanço pode ser repetido até ao limite', async () => {
+  const db = fresh();
+  const t = tasks.create(db, { kind: 'projeto.gerar', entity: 'projeto', entityId: 'p_3', maxAttempts: 2 });
+  const boom = { 'projeto.gerar': () => { throw new Error('disco cheio'); } };
+  const um = await tasks.run(db, t.task.id, { handlers: boom });
+  assert.equal(um.task.attempts, 1);
+  const dois = await tasks.run(db, t.task.id, { handlers: boom });
+  assert.equal(dois.task.attempts, 2);
+  assert.equal(dois.task.state, 'failed');
+  await assert.rejects(() => tasks.run(db, t.task.id, { handlers: boom }), (e) => e.status === 409 && /esgotadas/.test(e.message));
+  // repetir depois de consertar o problema é permitido numa tarefa nova
+  const nova = tasks.create(db, { kind: 'projeto.gerar', entity: 'projeto', entityId: 'p_3' });
+  const bom = await tasks.run(db, nova.task.id, { handlers: { 'projeto.gerar': () => ({ result: { files: ['index.html'] } }) } });
+  assert.equal(bom.task.state, 'succeeded');
+});
+
+test('tarefas: acção de risco pára à espera do dono; aprovar e rejeitar ficam escritos', async () => {
+  const db = fresh();
+  const t = tasks.create(db, { kind: 'projeto.entregar', entity: 'projeto', entityId: 'p_4', approval: true });
+  const out = await tasks.run(db, t.task.id, { handlers: { 'projeto.entregar': () => ({ result: { url: '/preview/p_4/' } }) } });
+  assert.equal(out.task.state, 'awaiting_approval');
+  assert.equal(tasks.approve(db, t.task.id, { actor: 'dono', note: 'visto' }).state, 'succeeded');
+  assert.equal(tasks.get(db, t.task.id).approved_by, 'dono');
+  assert.throws(() => tasks.approve(db, t.task.id), (e) => e.status === 409, 'aprovar duas vezes não faz sentido');
+  const outra = tasks.create(db, { kind: 'projeto.entregar', entity: 'projeto', entityId: 'p_5', approval: true });
+  await tasks.run(db, outra.task.id, { handlers: { 'projeto.entregar': () => ({ result: {} }) } });
+  assert.equal(tasks.reject(db, outra.task.id, { reason: 'não é para já' }).state, 'cancelled');
+});
+
+test('tarefas: reinício recupera o que ficou a meio — volta à fila ou falha com o motivo', () => {
+  const db = fresh();
+  const velha = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_6', timeoutMs: 1000 });
+  const nova = tasks.create(db, { kind: 'projeto.qa', entity: 'projeto', entityId: 'p_7', timeoutMs: 600000 });
+  const atras = new Date(Date.now() - 60000).toISOString();
+  db.prepare("UPDATE tasks SET state='running', started_at=?, attempts=1 WHERE id=?").run(atras, velha.task.id);
+  db.prepare("UPDATE tasks SET state='running', started_at=? WHERE id=?").run(new Date().toISOString(), nova.task.id);
+  const out = tasks.recover(db);
+  assert.equal(out.requeued, 1);
+  assert.equal(tasks.get(db, velha.task.id).state, 'queued');
+  assert.equal(tasks.get(db, nova.task.id).state, 'running', 'a que ainda está dentro do prazo não se toca');
+});
+
+test('agentes: o painel lê estados reais e não inventa quem está a trabalhar', async () => {
+  const db = fresh();
+  const nada = tasks.board(db);
+  assert.deepEqual(nada.emCurso, [], 'sem tarefas, ninguém está a trabalhar');
+  assert.equal(nada.departamentos.length, 6);
+  const t = tasks.create(db, { kind: 'projeto.gerar', entity: 'projeto', entityId: 'p_8' });
+  db.prepare("UPDATE tasks SET state='running', started_at=? WHERE id=?").run(new Date().toISOString(), t.task.id);
+  const com = tasks.board(db);
+  assert.deepEqual(com.emCurso, ['ZEKE']);
+  assert.equal(com.departamentos.find(d => d.key === 'engineering').running, 1);
+});
+
+test('funil: conversão por fase e por origem sai dos registos, não de estimativas', () => {
+  const db = fresh();
+  const a = leads.upsertLead(db, { name: 'A', phone: '+351 911 000 001', source: 'osm' }).lead;
+  const b = leads.upsertLead(db, { name: 'B', phone: '+351 911 000 002', source: 'osm' }).lead;
+  const c = leads.upsertLead(db, { name: 'C', phone: '+351 911 000 003', source: 'manual' }).lead;
+  leads.setStatus(db, a.id, 'qualificado'); leads.setStatus(db, a.id, 'contactado'); leads.setStatus(db, a.id, 'em_negociacao'); leads.setStatus(db, a.id, 'proposta'); leads.setStatus(db, a.id, 'cliente');
+  leads.setStatus(db, b.id, 'qualificado'); leads.setStatus(db, b.id, 'perdido');
+  const p = metrics.pipeline(db);
+  const fase = k => p.fases.find(f => f.key === k).leads;
+  assert.equal(fase('novo'), 3);
+  assert.equal(fase('qualificado'), 2);
+  assert.equal(fase('cliente'), 1, 'só o A chegou a ganho');
+  assert.equal(p.perdidos, 1);
+  assert.equal(p.fases.find(f => f.key === 'qualificado').conversao, Math.round((2 / 3) * 1000) / 10);
+  const osm = p.porOrigem.find(o => o.origem === 'osm');
+  assert.equal(osm.total, 2);
+  assert.equal(osm.ganhos, 1);
+  assert.equal(osm.taxa, 50);
+  assert.equal(p.paradas.lista.length, 0, 'tudo acabou de ser tocado');
+  assert.ok(c.id);
+});
+
+test('funil: uma oportunidade abertas há semanas aparece como parada', () => {
+  const db = fresh();
+  const l = leads.upsertLead(db, { name: 'Parada', phone: '+351 911 000 009' }).lead;
+  leads.setStatus(db, l.id, 'qualificado');
+  db.prepare('UPDATE leads SET updated_at = ? WHERE id = ?').run(new Date(Date.now() - 30 * 86400000).toISOString(), l.id);
+  const p = metrics.pipeline(db);
+  assert.equal(p.paradas.lista.length, 1);
+  assert.ok(p.paradas.lista[0].dias_parado >= 29);
+});
+
+test('pesquisa: encontra sem acentos e distingue leads, projetos e tarefas', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-pesquisa-'));
+  const db = fresh();
+  const l = leads.upsertLead(db, { name: 'Clínica Aurora', city: 'Porto', category: 'dentista', phone: '+351 911 000 111' }).lead;
+  const p = projects.create(db, dir, { leadId: l.id, name: 'Aurora — Página de conversão', client: 'Clínica Aurora', kind: 'landing' });
+  tasks.create(db, { kind: 'projeto.gerar', entity: 'projeto', entityId: p.id, title: 'Gerar o código da Aurora' });
+  const porNome = search.search(db, 'clinica');
+  assert.equal(porNome.grupos.find(g => g.grupo === 'leads').itens[0].id, l.id);
+  const porProjeto = search.search(db, 'aurora');
+  assert.ok(porProjeto.grupos.some(g => g.grupo === 'projetos'));
+  assert.ok(porProjeto.grupos.some(g => g.grupo === 'tarefas'));
+  assert.equal(search.search(db, 'zzzz').total, 0);
+  assert.equal(search.search(db, 'a').total, 0, 'uma letra não é pesquisa');
+  assert.ok(porNome.grupos[0].itens[0].route.startsWith('#/lead/'));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('csrf: credencial em cookie de outra origem é recusada; cabeçalho e GET passam', () => {
+  assert.equal(csrfOk({ method: 'GET', headers: { cookie: 'orbita_admin=abc', origin: 'https://mau.example' } }).ok, true, 'GET não muda estado');
+  assert.equal(csrfOk({ method: 'POST', headers: { cookie: 'orbita_admin=abc', origin: 'https://mau.example', host: 'localhost:4520' } }).ok, false);
+  assert.equal(csrfOk({ method: 'POST', headers: { cookie: 'orbita_admin=abc', origin: 'http://localhost:4520', host: 'localhost:4520' } }).ok, true);
+  assert.equal(csrfOk({ method: 'POST', headers: { 'x-orbita-admin': 'abc', origin: 'https://mau.example' } }).ok, true, 'sem cookie não há CSRF');
+  assert.equal(sameOrigin({ headers: { origin: 'https://orbita.example', host: 'orbita.example' } }).ok, true);
+});

@@ -148,6 +148,7 @@ export function auditDir(dir, { kind = 'landing' } = {}) {
   for (const i of items) weight[i.level === 'critico' ? 'critico' : i.level === 'importante' ? 'importante' : 'menor'] += 1;
   const manifest = currentManifest(dir);
   return {
+    navegador: browserProbe(),
     at: new Date().toISOString(),
     dir,
     files: Object.keys(files).sort(),
@@ -159,6 +160,19 @@ export function auditDir(dir, { kind = 'landing' } = {}) {
     minor: weight.menor,
     passed: weight.critico === 0 && weight.importante === 0,
   };
+}
+
+/**
+ * Testes de navegador. Não há browser neste ambiente, e um teste que não correu não é um teste
+ * aprovado: devolvemos `executado: false` com o motivo, e o relatório diz isso mesmo. Se houver
+ * `playwright-core` e um Chromium instalado (E2E=1), o adaptador fica pronto a correr — mas o
+ * resultado só conta depois de correr de verdade.
+ */
+export function browserProbe() {
+  if (process.env.E2E !== '1') {
+    return { executado: false, motivo: 'testes de navegador desligados (define E2E=1 para os ligar)', conta: false };
+  }
+  return { executado: false, motivo: 'E2E=1 mas não há Chromium instalado nesta máquina — nenhum teste de navegador foi corrido', conta: false };
 }
 
 /** Compara o manifesto guardado com o disco: o que mudou depois da auditoria. */

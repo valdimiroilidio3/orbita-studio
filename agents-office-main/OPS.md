@@ -27,12 +27,14 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Avaliações** | `src/ops/evals.mjs` + `evals.mjs` | Casos fixos com expectativas; resultado guardado por versão de prompt |
 | **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 43 testes, tudo em memória, sem tocar em serviços |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 54 testes, tudo em memória, sem tocar em serviços |
 | **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
 | **Projetos** | `src/ops/projects.mjs` | Do lead ao projeto, com máquina de estados e um projeto por negócio |
 | **Geração** | `src/ops/generate.mjs` | Quatro pontos de partida, ficheiros reais, sem dependências |
 | **QA** | `src/ops/qa.mjs` | Estrutura, sintaxe, acessibilidade e honestidade — com manifesto sha256 |
 | **Guarda** | `src/ops/guard.mjs` + `src/ops/zip.mjs` | Ritmo por IP, token opcional, e o ZIP da entrega |
+| **Tarefas** | `src/ops/tasks.mjs` | Os seis departamentos como máquina de estados com prazo, tentativas e aprovação |
+| **Pesquisa e atividade** | `src/ops/search.mjs` | Pesquisa global sem acentos e painel do que correu ou falhou |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
 `ExperimentalWarning` no arranque — é do Node, não do Órbita; silencia-se com
@@ -337,9 +339,52 @@ ficheiros. Destinos:
 `GET /api/ops/projetos/:id/zip` devolve o projeto num ZIP (PKZIP «store», nomes UTF-8, sha256 no
 cabeçalho `x-orbita-sha256`).
 
+## Tarefas: os seis departamentos como cadeia de produção (passo 7)
+
+```
+queued ──correr──► running ──► succeeded | failed | awaiting_approval
+                     │                              │
+                     └── prazo esgotado ──► failed   └── aprovar ──► succeeded (quem aprovou fica escrito)
+```
+
+| Departamento | Trata de |
+|---|---|
+| 01 ORION · command | revisão de prioridades: o que espera aprovação, o que falhou, o que está parado |
+| 02 LUNA · prospect | pesquisar o site do lead, qualificar e pontuar (nota ≥ 60 → `qualificado`) |
+| 03 KAI · sales | preparar proposta a partir da oferta e dos factos; redigir mensagem (exige IA) |
+| 04 NOVA · design | briefing, páginas, critérios de aceitação e tokens do design system |
+| 05 ZEKE · engineering | gerar código, auditar QA, entregar preview; corrigir (exige IA) |
+| 06 MIRA · media | rascunhos e conteúdo (exige IA) |
+
+Regras que a base de dados impõe:
+
+- **uma tarefa aberta por chave** (`dedupe`) — índice parcial único; quatro pedidos em paralelo criam
+  uma só tarefa;
+- **tentativas limitadas** (`max_attempts`, 3 por omissão) com `attempts` a subir a cada corrida;
+- **prazo** (`timeout_ms`) — o que passa do prazo falha, não fica pendurado;
+- **recuperação no arranque** — `tasks.recover()` devolve à fila o que ficou em `running` e passou do
+  prazo, ou marca como falhado quando já não há tentativas;
+- **acções de risco** (`approval: true`) terminam em `awaiting_approval` e exigem `aprovar` humano;
+- **resultado e evidência** guardados na linha — nunca só na conversa.
+
+Sem motor de IA configurado, as tarefas que precisam de texto **falham com o motivo escrito**
+(`esta tarefa precisa de um motor de IA e não há nenhum configurado`). A cena 3D e o painel de
+agentes leem estes estados: sem tarefa em `running`, ninguém aparece a trabalhar.
+
+## O funil, medido
+
+`GET /api/ops/pipeline` devolve, a partir dos registos:
+
+- quantos leads **chegaram** a cada fase (estado atual + histórico `lead.estado` em `events`);
+- conversão entre fases e conversão total até ganho;
+- taxa por **origem** (com primeira e última recolha) e por **mês** de recolha;
+- **oportunidades paradas**: abertas, sem toque há mais de 14 dias, com os dias contados.
+
 ## A guarda da porta
 
 - **Ritmo**: 300 pedidos por minuto por IP; acima disso, **429** com o tempo de espera.
+- **CSRF**: um pedido que muda estado e que traz a credencial em **cookie** é recusado se vier de
+  outra origem (**403**). O cabeçalho `x-orbita-admin` e o `Bearer` não têm este problema.
 - **Palavra-passe opcional**: `ORBITA_ADMIN_TOKEN` (16+ caracteres). Com ela, todas as rotas
   `/api/ops` exigem `x-orbita-admin`, `Authorization: Bearer` ou o cookie `orbita_admin`; o
   escritório e a mesa pedem o token uma vez e guardam-no no browser.
@@ -370,6 +415,12 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | GET | `/api/ops/projetos/:id` | Projeto com ficheiros, QA, entregas e histórico |
 | POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | O pipeline |
 | GET | `/api/ops/projetos/:id/zip` | Os ficheiros em ZIP |
+| GET/POST | `/api/ops/tarefas` | Tarefas / criar (`correr: true` executa já) |
+| POST | `/api/ops/tarefas/:id/correr` · `/aprovar` · `/rejeitar` | Correr, aprovar, rejeitar |
+| GET | `/api/ops/agentes` | Estado real dos seis departamentos |
+| GET | `/api/ops/pipeline` | Funil por fase, por origem, e paradas |
+| GET | `/api/ops/pesquisa?q=` | Pesquisa global |
+| GET | `/api/ops/atividade` | Fila, tarefas e eventos recentes |
 | GET | `/preview/:id/…` | Preview real dos ficheiros gerados |
 | POST | `/api/ops/leads` | Um lead (`{…}`) ou vários (`{ leads: [...] }`) |
 | PATCH | `/api/ops/leads/:id` | Mudar de estado no funil (`{ status, note }`) |
@@ -438,15 +489,20 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
   apenas regista um pedido — o estado final tem de ser confirmado no serviço.
 - **Agente de código.** A geração é determinística, não é um agente a escrever código. Não há
   runner de IA configurado (`GEMINI_API_KEY` vazia): o fluxo manual é abrir a pasta e editar.
-- **Testes de navegador.** O smoke com Chrome falha neste ambiente (não há browser). A verificação
-  do preview é feita por HTTP (200 + HTML/CSS esperados), não por renderização.
+- **Testes de navegador.** Não há Chromium neste ambiente: o QA reporta `navegador.executado=false`
+  com o motivo, e o smoke com Chrome falha. A verificação do preview é feita por HTTP (200 + HTML/CSS
+  esperados) e com jsdom, não por renderização real.
+- **Lint e tipos.** A stack gerada é HTML/CSS/JS sem build: não há ESLint nem `tsc` a correr no QA.
+  O que existe é verificação de sintaxe (`vm.Script`), CSS e JSON — e é isso que o relatório diz.
+- **Agente de código.** `projeto.corrigir` exige IA e falha sem chave; a correcção é manual, na
+  pasta do projeto, e o QA volta a correr depois.
 - **Regras aprendidas com correções.** O `learn.mjs` já guarda lições e regras; ligá-las às
   aprovações (rejeitar uma mensagem e a razão virar regra) é o passo seguinte.
 
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 43 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 54 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

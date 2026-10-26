@@ -55,7 +55,7 @@ import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · G
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
 import * as ops from './src/ops/index.mjs';
-import { createLimiter, authorized, adminMode } from './src/ops/guard.mjs';
+import { createLimiter, authorized, adminMode, csrfOk } from './src/ops/guard.mjs';
 import { zipBuffer } from './src/ops/zip.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
@@ -604,6 +604,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/ops')) {
       const auth = authorized(req);
       if (!auth.ok) return json(res, 401, { ok: false, ...auth });
+      // 3) CSRF: uma credencial em cookie não pode ser usada por outro site. O cabeçalho
+      //    `x-orbita-admin` não tem este problema (um site estranho não o consegue pôr).
+      const csrf = csrfOk(req);
+      if (!csrf.ok) return json(res, 403, { ok: false, error: csrf.error });
     }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/command-centre-v2.html' || url.pathname === '/dark')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
@@ -1224,6 +1228,61 @@ const server = http.createServer(async (req, res) => {
           const out = OPS.personalize.recordSignal(OPS.db, { leadId: m.lead_id, messageId: m.id, kind: b.kind, note: b.note || '', actor: 'dono' });
           OPS.personalize.recalibrate(OPS.db);
           return json(res, 200, { ok: true, ...out, lead: OPS.leads.getLead(OPS.db, m.lead_id) });
+        }
+        // ---------- passo 7: tarefas dos departamentos, funil, pesquisa e atividade ----------
+        if (url.pathname === '/api/ops/agentes' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.tasks.board(OPS.db), resumo: OPS.tasks.summary(OPS.db), tipos: OPS.tasks.KINDS });
+        }
+        if (url.pathname === '/api/ops/tarefas' && req.method === 'GET') {
+          const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));
+          return json(res, 200, {
+            ok: true,
+            tarefas: OPS.tasks.list(OPS.db, { limit, dept: url.searchParams.get('departamento') || null, state: url.searchParams.get('estado') || null, entityId: url.searchParams.get('entidade') || null }),
+            estados: OPS.tasks.STATE,
+            departamentos: OPS.tasks.DEPARTMENTS,
+          });
+        }
+        if (url.pathname === '/api/ops/tarefas' && req.method === 'POST') {
+          const b = await limitedBody(req, 20000);
+          const { task, existed } = OPS.tasks.create(OPS.db, {
+            kind: b.kind, entity: b.entidade || '', entityId: b.entityId || '',
+            title: b.title || '', payload: b.payload || {}, approval: !!b.aprovacao,
+            timeoutMs: b.timeoutMs || undefined, maxAttempts: b.maxAttempts || undefined, actor: 'dono',
+          });
+          // com `correr: true` a tarefa corre já, pelo mesmo caminho dos tratadores (nada de atalhos).
+          // O estado devolvido é o que ficou escrito — não o que se esperava que acontecesse.
+          if (b.correr) {
+            if (task.state === 'queued') await OPS.runTask(task.id, { actor: 'dono' });
+            const depois = OPS.tasks.get(OPS.db, task.id);
+            const falhou = depois.state === 'failed';
+            return json(res, falhou ? 409 : existed ? 200 : 201, {
+              ok: !falhou, tarefa: depois, existia: existed, error: falhou ? depois.error : null,
+            });
+          }
+          return json(res, existed ? 200 : 201, { ok: true, tarefa: task, existia: existed });
+        }
+        const tarefaMatch = url.pathname.match(/^\/api\/ops\/tarefas\/([^/]+)\/(correr|aprovar|rejeitar)$/);
+        if (tarefaMatch && req.method === 'POST') {
+          const id = decodeURIComponent(tarefaMatch[1]), what = tarefaMatch[2];
+          const b = await limitedBody(req, 4000).catch(() => ({}));
+          if (what === 'correr') {
+            const out = await OPS.runTask(id, { actor: 'dono' });
+            return json(res, out.ok ? 200 : 409, { ok: out.ok, tarefa: out.task, error: out.error || null });
+          }
+          const t = what === 'aprovar'
+            ? OPS.tasks.approve(OPS.db, id, { actor: 'dono', note: b.note || '' })
+            : OPS.tasks.reject(OPS.db, id, { actor: 'dono', reason: b.reason || 'sem autorização' });
+          return json(res, 200, { ok: true, tarefa: t });
+        }
+        if (url.pathname === '/api/ops/pipeline' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.metrics.pipeline(OPS.db) });
+        }
+        if (url.pathname === '/api/ops/pesquisa' && req.method === 'GET') {
+          const q = url.searchParams.get('q') || '';
+          return json(res, 200, { ok: true, ...OPS.search.search(OPS.db, q, { limit: Math.max(1, Math.min(20, +url.searchParams.get('limit') || 6)) }) });
+        }
+        if (url.pathname === '/api/ops/atividade' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.search.activity(OPS.db, { limit: Math.max(1, Math.min(100, +url.searchParams.get('limit') || 25)) }) });
         }
         if (url.pathname === '/api/ops/usage' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.messages.usageSummary(OPS.db, Math.max(1, +url.searchParams.get('days') || 30)) });

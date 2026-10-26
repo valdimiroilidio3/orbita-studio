@@ -52,6 +52,34 @@ export function authorized(req, env = process.env) {
 }
 
 /**
+ * CSRF: se a credencial veio num cookie (o browser anexa-o sozinho a pedidos de outros sites) e o
+ * pedido muda estado, exigimos a mesma origem. Com o cabeçalho ou o Bearer isto é irrelevante —
+ * um site estranho não consegue pôr cabeçalhos no nosso domínio.
+ */
+export const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+export function sameOrigin(req, host = req.headers?.host || '') {
+  const origin = req.headers?.origin;
+  if (!origin) {
+    // sem Origin: ou não é um browser, ou é um `fetch` da mesma origem antigo. Nesse caso olhamos
+    // para o Referer; se também não houver, deixamos passar (não há cookie anexado por terceiros).
+    const ref = req.headers?.referer;
+    if (!ref) return { ok: true, reason: 'sem origem declarada' };
+    try { return { ok: new URL(ref).host === host, reason: 'referer' }; } catch { return { ok: false, reason: 'referer inválido' }; }
+  }
+  try { return { ok: new URL(origin).host === host, reason: 'origin' }; } catch { return { ok: false, reason: 'origin inválido' }; }
+}
+
+/** Um pedido mutável autenticado por cookie tem de vir da nossa origem. */
+export function csrfOk(req) {
+  if (SAFE_METHODS.includes(req.method)) return { ok: true };
+  if (!cookie(req, 'orbita_admin')) return { ok: true }; // sem cookie, não há CSRF por cookie
+  const host = req.headers?.host || '';
+  const r = sameOrigin(req, host);
+  return r.ok ? r : { ok: false, error: 'pedido de outra origem com credencial em cookie recusado (CSRF)' };
+}
+
+/**
  * Limitador por chave (IP) numa janela deslizante simples. Devolve `{ ok, restantes, espera }`.
  * Em memória de propósito: se o processo reinicia, a contagem recomeça — não é um facto de
  * negócio, é uma protecção.

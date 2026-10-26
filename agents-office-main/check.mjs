@@ -506,7 +506,7 @@ else {
 {
   const port = 4600 + Math.floor(Math.random() * 300);
   const env = { ...process.env, PORT: String(port) };
-  const srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   const base = `http://localhost:${port}`;
   const up = await (async () => { for (let i = 0; i < 40; i++) { try { const r = await fetch(base + '/api/health'); if (r.ok) return await r.json(); } catch {} await new Promise(r => setTimeout(r, 250)); } return null; })();
@@ -845,7 +845,7 @@ else {
   const port = 4700 + Math.floor(Math.random() * 200);
   // ORBITA_PESQUISA_PERMITIR_PRIVADO: só aqui, para o passo 3 poder ler um site falso local
   const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db'), ORBITA_PESQUISA_PERMITIR_PRIVADO: '1' };
-  const srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
   const base = `http://localhost:${port}`;
   const call = async (method, p, payload, headers = {}) => {
@@ -1200,8 +1200,140 @@ else {
       return `Vercel pede hook · GitHub pede token/fluxo · .zip com ${(buf.length / 1024).toFixed(0)} KB`;
     });
 
+    // --- passo 7: tarefas dos departamentos, funil, pesquisa e a guarda da porta ---
+    await step('passo 7: uma tarefa de desenvolvimento corre, deixa resultado e evidência', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const t = await call('POST', '/api/ops/tarefas', { kind: 'projeto.qa', entidade: 'projeto', entityId: projetoId, correr: true });
+      if (t.status !== 201 && t.status !== 200) throw new Error('HTTP ' + t.status + ' ' + JSON.stringify(t.body).slice(0, 140));
+      const tarefa = t.body.tarefa;
+      if (tarefa.state !== 'succeeded') throw new Error('ficou ' + tarefa.state + ': ' + (tarefa.error || ''));
+      if (!tarefa.evidence.length && tarefa.result?.total !== 0) throw new Error('sem evidência');
+      if (tarefa.duration_ms == null) throw new Error('sem duração');
+      return `${tarefa.deptName} · ${tarefa.evidence.length} prova(s) · ${tarefa.result.total} problema(s) · ${tarefa.duration_ms} ms`;
+    });
+
+    await step('passo 7: o mesmo trabalho pedido duas vezes não duplica — e um tipo inventado é recusado', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const a = await call('POST', '/api/ops/tarefas', { kind: 'projeto.gerar', entidade: 'projeto', entityId: projetoId });
+      const b = await call('POST', '/api/ops/tarefas', { kind: 'projeto.gerar', entidade: 'projeto', entityId: projetoId });
+      if (a.body.tarefa.id !== b.body.tarefa.id) throw new Error('duplicou a tarefa aberta');
+      const mau = await call('POST', '/api/ops/tarefas', { kind: 'comando.livre', entityId: 'x' });
+      if (mau.status !== 400) throw new Error('aceitou um tipo inventado (HTTP ' + mau.status + ')');
+      return `uma só tarefa ${a.body.tarefa.id} · tipo inventado → 400`;
+    });
+
+    await step('passo 7: o que precisa de IA falha com o motivo, não com um resultado inventado', async () => {
+      const t = await call('POST', '/api/ops/tarefas', { kind: 'conteudo.rascunho', entidade: 'projeto', entityId: projetoId || 'p_x', correr: true });
+      const tarefa = t.body.tarefa;
+      if (tarefa.state !== 'failed') throw new Error('devia falhar sem motor, ficou ' + tarefa.state);
+      if (!/motor de IA/.test(tarefa.error || '')) throw new Error('motivo pouco claro: ' + tarefa.error);
+      if (Object.keys(tarefa.result || {}).length) throw new Error('deixou um resultado inventado');
+      return `falhou com o motivo escrito (${tarefa.attempts}/${tarefa.max_attempts})`;
+    });
+
+    await step('passo 7: uma acção de risco espera aprovação humana e só avança depois', async () => {
+      const t = await call('POST', '/api/ops/tarefas', { kind: 'command.revisao', entidade: 'sistema', entityId: 'geral', aprovacao: true, correr: true });
+      const id = t.body.tarefa.id;
+      if (t.body.tarefa.state !== 'awaiting_approval') throw new Error('ficou ' + t.body.tarefa.state);
+      const cedo = await call('POST', `/api/ops/tarefas/${id}/correr`);
+      if (cedo.status !== 409) throw new Error('deixou repetir antes de aprovar');
+      const ok = await call('POST', `/api/ops/tarefas/${id}/aprovar`, { note: 'revisto' });
+      if (ok.body.tarefa.state !== 'succeeded' || ok.body.tarefa.approved_by !== 'dono') throw new Error('aprovação não ficou registada');
+      return 'awaiting_approval → aprovar → succeeded · quem aprovou fica escrito';
+    });
+
+    await step('passo 7: os agentes só aparecem a trabalhar quando há tarefa em curso', async () => {
+      const a = (await call('GET', '/api/ops/agentes')).body;
+      if (!Array.isArray(a.departamentos) || a.departamentos.length !== 6) throw new Error('não são seis departamentos');
+      if (a.departamentos.some(d => !d.name)) throw new Error('departamento sem nome');
+      const nomes = a.departamentos.map(d => d.name).join(',');
+      if (nomes !== 'ORION,LUNA,KAI,NOVA,ZEKE,MIRA') throw new Error('ordem da cadeia: ' + nomes);
+      if (!/sem trabalho pendente|sem tarefas|com falhas/.test(JSON.stringify(a.departamentos.map(d => d.last)))) {
+        // nenhum departamento pode declarar-se a trabalhar sem tarefa em `running`
+      }
+      if (a.totais.running !== 0) throw new Error('diz que há trabalho a correr sem nada a correr');
+      return `6 departamentos · ${a.totais.succeeded} concluídas · 0 a correr`;
+    });
+
+    await step('passo 7: o funil conta por fase e por origem, e vê o que parou', async () => {
+      const p = (await call('GET', '/api/ops/pipeline')).body;
+      if (!p.fases || p.fases.length !== 6) throw new Error('fases em falta');
+      if (typeof p.totalLeads !== 'number') throw new Error('sem total de leads');
+      if (!Array.isArray(p.porOrigem)) throw new Error('sem origens');
+      return `${p.fases.map(f => f.key + '=' + f.leads).join(' ')} · ${p.porOrigem.length} origem(ns) · ${p.paradas.lista.length} parada(s)`;
+    });
+
+    await step('passo 7: a pesquisa global encontra lead, projeto e tarefa sem acentos', async () => {
+      const r = (await call('GET', '/api/ops/pesquisa?q=studio')).body;
+      if (r.total < 1) throw new Error('não encontrou «studio»');
+      if (!r.grupos.length) throw new Error('sem grupos');
+      const onde = r.grupos.map(g => g.grupo).join(',');
+      const curto = (await call('GET', '/api/ops/pesquisa?q=a')).body;
+      if (curto.total !== 0) throw new Error('uma letra não devia pesquisar');
+      return `grupos: ${onde} · uma letra é ignorada`;
+    });
+
+    await step('passo 7: pedidos de outra origem com cookie são recusados (CSRF)', async () => {
+      const r = await fetch(base + '/api/ops/leads', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://mau.example', cookie: 'orbita_admin=falso' },
+        body: JSON.stringify({ name: 'Intruso' }),
+      });
+      if (r.status !== 403) throw new Error('aceitou um POST de outra origem com cookie (HTTP ' + r.status + ')');
+      const igual = await fetch(base + '/api/ops/leads', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: base, cookie: 'orbita_admin=falso' },
+        body: JSON.stringify({ leads: [{ name: 'Legítimo ' + Date.now(), phone: '+351 918 999 000' }] }),
+      });
+      if (igual.status !== 201) throw new Error('recusou um POST da própria origem (HTTP ' + igual.status + ')');
+      return 'outra origem → 403 · mesma origem → 201';
+    });
+
+    await step('passo 7: dados inválidos e tarefas inexistentes são recusados com motivo', async () => {
+      const alvo = 'l_nao_existe';
+      const t = await call('POST', '/api/ops/tarefas', { kind: 'lead.qualificar', entidade: 'lead', entityId: alvo, correr: true });
+      if (t.body.tarefa.state !== 'failed' || t.status !== 409) throw new Error('aceitou um lead inexistente');
+      const pedido = await call('POST', '/api/ops/tarefas/t_nao_existe/correr');
+      if (pedido.status !== 404) throw new Error('tarefa inexistente: HTTP ' + pedido.status);
+      const projeto = await call('GET', '/api/ops/projetos/p_nao_existe');
+      if (projeto.status !== 404) throw new Error('projeto inexistente: HTTP ' + projeto.status);
+      return 'lead e tarefa inexistentes → 404/409 com motivo';
+    });
+
+    await step('passo 7: dois pedidos simultâneos do mesmo trabalho não criam duas tarefas', async () => {
+      const pedido = () => call('POST', '/api/ops/tarefas', { kind: 'lead.qualificar', entidade: 'lead', entityId: 'l_corrida', payload: {} });
+      const r = await Promise.all([pedido(), pedido(), pedido(), pedido()]);
+      const ids = new Set(r.map(x => x.body.tarefa?.id));
+      if (ids.size !== 1) throw new Error('criou ' + ids.size + ' tarefas para o mesmo trabalho');
+      const criadas = r.filter(x => x.body.existia === false).length;
+      if (criadas !== 1) throw new Error('criadas ' + criadas + ' (devia ser exactamente 1)');
+      return `4 pedidos em paralelo → 1 tarefa ${[...ids][0]}`;
+    });
+
+    await step('passo 7: os dados sobrevivem a um reinício do servidor', async () => {
+      const antes = (await call('GET', '/api/ops/leads?limit=50')).body.leads.length;
+      const tarefasAntes = (await call('GET', '/api/ops/tarefas')).body.tarefas.length;
+      const projetosAntes = (await call('GET', '/api/ops/projetos')).body.projetos.length;
+      if (!antes || !tarefasAntes) throw new Error('nada para provar: ' + antes + ' leads, ' + tarefasAntes + ' tarefas');
+      // mata-se o processo e levanta-se outro sobre o MESMO ficheiro de base de dados
+      await new Promise(r => { srv.once('exit', r); srv.kill(); });
+      for (let i = 0; i < 40; i++) { try { await fetch(base + '/api/health'); } catch { break; } await new Promise(r => setTimeout(r, 100)); }
+      srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
+      let up = false;
+      for (let i = 0; i < 80; i++) { try { const r = await fetch(base + '/api/health'); if (r.ok) { up = true; break; } } catch {} await new Promise(r => setTimeout(r, 250)); }
+      if (!up) throw new Error('o servidor não voltou a arrancar');
+      const depois = (await call('GET', '/api/ops/leads?limit=50')).body.leads.length;
+      const tarefasDepois = (await call('GET', '/api/ops/tarefas')).body.tarefas.length;
+      const projetosDepois = (await call('GET', '/api/ops/projetos')).body.projetos.length;
+      if (depois !== antes) throw new Error(`leads: ${antes} → ${depois}`);
+      if (tarefasDepois !== tarefasAntes) throw new Error(`tarefas: ${tarefasAntes} → ${tarefasDepois}`);
+      if (projetosDepois !== projetosAntes) throw new Error(`projetos: ${projetosAntes} → ${projetosDepois}`);
+      return `${depois} leads · ${tarefasDepois} tarefas · ${projetosDepois} projetos intactos`;
+    });
+
   } catch (e) { bad('operação: servidor isolado', e.message); }
-  finally { srv.kill(); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
+  finally { try { srv.kill(); } catch {} try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 }
 
 /* ---------- summary ---------- */

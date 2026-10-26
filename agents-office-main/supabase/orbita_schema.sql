@@ -102,5 +102,43 @@ grant select, insert, update on table public.orbita_deliveries to service_role;
 
 create index if not exists orbita_deliveries_project_idx on public.orbita_deliveries (project_id, at desc);
 
+-- ---------- tarefas dos departamentos (espelha o esquema v6 do SQLite) ----------
+
+create table if not exists public.orbita_tasks (
+  id text primary key,
+  kind text not null,
+  dept text not null check (dept in ('command','prospect','sales','design','engineering','media')),
+  title text not null default '',
+  entity text not null default '',
+  entity_id text not null default '',
+  payload jsonb not null default '{}'::jsonb,
+  state text not null default 'queued'
+    check (state in ('queued','running','succeeded','failed','awaiting_approval','cancelled')),
+  result jsonb not null default '{}'::jsonb,
+  evidence jsonb not null default '[]'::jsonb,
+  attempts integer not null default 0,
+  max_attempts integer not null default 3,
+  timeout_ms integer not null default 300000,
+  needs_approval boolean not null default false,
+  approved_by text not null default '',
+  approved_at timestamptz,
+  dedupe text not null default '',
+  parent_id text not null default '',
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  finished_at timestamptz
+);
+
+-- UMA tarefa aberta por chave e departamento: o índice parcial impede execuções duplicadas
+create unique index if not exists orbita_tasks_open_uidx on public.orbita_tasks (dedupe)
+  where state in ('queued','running','awaiting_approval');
+create index if not exists orbita_tasks_dept_idx on public.orbita_tasks (dept, state);
+create index if not exists orbita_tasks_entity_idx on public.orbita_tasks (entity_id, created_at desc);
+
+alter table public.orbita_tasks enable row level security;
+revoke all on table public.orbita_tasks from anon, authenticated;
+grant select, insert, update, delete on table public.orbita_tasks to service_role;
+
 -- Sem políticas, de propósito: o servidor usa a chave service_role e protege /api/ops com
 -- ORBITA_ADMIN_TOKEN. Ver OPS.md → «A guarda da porta».
