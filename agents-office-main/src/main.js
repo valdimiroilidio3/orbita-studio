@@ -13,6 +13,7 @@ import {
 import { initMcp } from './mcp.js';
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
+import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
 import { initBrain } from './brain.js';
@@ -1392,6 +1393,7 @@ tasks = initTasks({
   toScreen: (p) => toScreen(p), reframe,
 });
 initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
+initOps({ api: '/api' }); // a gaveta OPERAÇÃO: o que está guardado, o que espera OK, e o rasto
 view.target.set(...overviewPos());
 addEventListener('resize', () => { if (!focused && !tween && !HERO) view.target.set(...overviewPos()); });
 const hero = HERO ? initHero({ THREE, scene, R, AGENTS, deptRT, LAYOUT, DEPTS, DEPT_KEYS, view, camera, spawnEmote, isBusy: () => !!focused || !!tween || !!drag }) : null;

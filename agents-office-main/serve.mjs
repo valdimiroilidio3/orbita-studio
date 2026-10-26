@@ -54,12 +54,35 @@ import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
+import * as ops from './src/ops/index.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
 const cfg = loadConfig();
 const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by build.mjs; shipped so npm start works without a build
 const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
+
+// ---------- operação a sério (26 out 2026) ----------
+// SQLite em data/orbita.db: leads, mensagens, fila, eventos e consumo das APIs. Sem estado
+// escondido em memória — um reinício não perde trabalho.
+const OPS = (() => {
+  try { return ops.openOps({ dataDir: DATA, concurrency: 2, pollMs: 2000 }); }
+  catch (e) { console.warn(`  operação indisponível: ${e.message}`); return null; }
+})();
+// como é que uma mensagem aprovada sai: email pelo Resend, WhatsApp por link revisto à mão
+const deliverOut = async (msg, lead) => {
+  if (msg.channel === 'whatsapp') {
+    const link = integrations.whatsappClickToChatUrl(lead.phone, msg.body);
+    return { doesNotSend: true, url: link.url, note: 'link wa.me pronto — o dono revê e envia no WhatsApp' };
+  }
+  if (lead.consent !== 'dado') {
+    throw new Error('sem consentimento registado para email — regista com POST /api/ops/leads/:id/consent antes de enviar');
+  }
+  return integrations.sendApprovedEmail(DATA, {
+    approved: true, recipientConsent: true, consentReference: `ops:${lead.id}:${msg.approved_at || ''}`,
+    purpose: 'requested_follow_up', to: lead.email, subject: msg.subject || 'Sem assunto', text: msg.body,
+  });
+};
 const FILE = path.join(DATA, 'tasks.json');
 const BRAIN = cfg.brainPath;
 const NOTES_DIR = path.join(BRAIN, 'Órbita');
@@ -529,6 +552,11 @@ await rebuildGraph();
   const g = google.state(), ls = google.stats(DATA);
   console.log(`  pesquisa google: ${g.places.available ? 'Places ligado' : 'Places sem chave (' + g.places.env + ')'} · ${g.web.available ? 'pesquisa web ligada' : 'pesquisa web sem chave'} · ${ls.total} leads guardados${ls.total ? ' (' + ls.noSite + ' sem site)' : ''}`);
 }
+if (OPS) {
+  globalThis.__orbitaDeliver = deliverOut; // a fila usa o mesmo caminho de envio do servidor
+  console.log(`  operação: ${OPS.metrics.summaryLine(OPS.db)} · fila: ${OPS.queue.stats().fila || 0} à espera`);
+  try { OPS.queue.enqueue('seguimento.verificar', {}, { maxAttempts: 1 }); } catch { /* sem fila, sem drama */ }
+}
 const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list + os do projeto)`); return l; });
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
@@ -592,8 +620,16 @@ const server = http.createServer(async (req, res) => {
         // 26 out 2026: a pesquisa web devolve informação, não empresas — só entra para os leads com save:true explícito.
         const keep = b.save === true || (kind === 'places' && b.save !== false);
         const saved = keep ? google.saveAll(found, DATA) : { added: 0, updated: 0, total: google.stats(DATA).total, leads: found };
+        // 26 out 2026: o que a pesquisa encontra entra também na base de dados a sério — pontuado,
+        // sem duplicados e pronto para o funil. A gaveta continua a ser a lista rápida; a verdade
+        // passa a viver em data/orbita.db.
+        let db = null;
+        if (OPS && keep && saved.leads?.length) {
+          try { db = OPS.leads.importLeads(OPS.db, saved.leads.map(l => ({ ...l, source: 'google' })), 'pesquisa', 'google'); }
+          catch (e) { console.warn('  operação: não consegui guardar os resultados na base de dados — ' + e.message); }
+        }
         console.log(`🔎 ${kind === 'places' ? 'Places' : 'Pesquisa web'}: "${[b.what, b.where].filter(Boolean).join(' em ') || b.q}" → ${found.length} resultados · +${saved.added} novos`);
-        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, results: found.slice(0, limit) });
+        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, baseDeDados: db, results: found.slice(0, limit) });
       } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
     }
     if (url.pathname === '/api/leads' && req.method === 'GET') {
@@ -795,6 +831,98 @@ const server = http.createServer(async (req, res) => {
       const r = await chat(agent, String(text).trim(), history);
       return json(res, 200, { ...r, interview: false });
     }
+    // ---------- /api/ops: o trabalho real ----------
+    // Envio de email exige o token (é o único sítio desta camada que fala com o mundo).
+    if (OPS && url.pathname.startsWith('/api/ops')) {
+      const bad = e => { const st = e.status || 400; return json(res, st, { ok: false, error: e.message }); };
+      try {
+        if (url.pathname === '/api/ops/summary' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.metrics.summary(OPS.db), fila: OPS.queue.stats() });
+        }
+        if (url.pathname === '/api/ops/leads' && req.method === 'GET') {
+          const limit = Math.max(1, Math.min(500, +url.searchParams.get('limit') || 50));
+          const status = url.searchParams.get('status') || null;
+          return json(res, 200, { ok: true, leads: OPS.leads.listLeads(OPS.db, { limit, status }), estados: OPS.leads.STATUSES });
+        }
+        if (url.pathname === '/api/ops/leads' && req.method === 'POST') {
+          const b = await limitedBody(req, 200000);
+          const list = Array.isArray(b.leads) ? b.leads : [b];
+          const out = OPS.leads.importLeads(OPS.db, list, 'dono', b.source || 'manual');
+          return json(res, 201, { ok: true, ...out });
+        }
+        if (url.pathname === '/api/ops/leads/importar-gravados' && req.method === 'POST') {
+          // traz para a base de dados o que a gaveta LEADS já tinha guardado (data/leads.json)
+          const saved = google.list({ limit: 500 }, DATA).leads || [];
+          const out = OPS.leads.importLeads(OPS.db, saved.map(l => ({ ...l, source: 'google' })), 'dono', 'google');
+          if (out.total) OPS.audit({ actor: 'dono', action: 'ops.importou_gravados', entity: 'leads', detail: out });
+          return json(res, 200, { ok: true, ...out });
+        }
+        const leadMatch = url.pathname.match(/^\/api\/ops\/leads\/([^/]+)(?:\/(consent|follow-up))?$/);
+        if (leadMatch) {
+          const id = decodeURIComponent(leadMatch[1]);
+          if (req.method === 'PATCH' && !leadMatch[2]) {
+            const b = await limitedBody(req, 8000);
+            const lead = b.status
+              ? OPS.leads.setStatus(OPS.db, id, b.status, 'dono', b.note || '')
+              : OPS.leads.getLead(OPS.db, id);
+            if (!lead) return json(res, 404, { ok: false, error: 'lead não encontrado' });
+            return json(res, 200, { ok: true, lead });
+          }
+          if (req.method === 'POST' && leadMatch[2] === 'consent') {
+            const b = await limitedBody(req, 4000);
+            return json(res, 200, { ok: true, lead: OPS.leads.setConsent(OPS.db, id, b.consent, 'dono', b.reference || '') });
+          }
+          if (req.method === 'POST' && leadMatch[2] === 'follow-up') {
+            const b = await limitedBody(req, 4000);
+            return json(res, 200, { ok: true, lead: OPS.leads.scheduleFollowUp(OPS.db, id, b.when) });
+          }
+          return json(res, 405, { ok: false, error: 'PATCH, POST …/consent ou …/follow-up' });
+        }
+        if (url.pathname === '/api/ops/messages' && req.method === 'GET') {
+          const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));
+          return json(res, 200, { ok: true, messages: OPS.messages.listMessages(OPS.db, { limit, status: url.searchParams.get('status') || null }) });
+        }
+        if (url.pathname === '/api/ops/messages' && req.method === 'POST') {
+          const b = await limitedBody(req, 30000);
+          return json(res, 201, { ok: true, message: OPS.messages.draftMessage(OPS.db, { leadId: b.leadId, channel: b.channel || 'email', subject: b.subject || '', body: b.body }, 'agente') });
+        }
+        const msgMatch = url.pathname.match(/^\/api\/ops\/messages\/([^/]+)\/(approve|reject|send|confirm)$/);
+        if (msgMatch && req.method === 'POST') {
+          const id = decodeURIComponent(msgMatch[1]), action = msgMatch[2];
+          if (action === 'approve') return json(res, 200, { ok: true, message: OPS.messages.approveMessage(OPS.db, id) });
+          if (action === 'reject') { const b = await limitedBody(req, 4000); return json(res, 200, { ok: true, message: OPS.messages.rejectMessage(OPS.db, id, b.reason || '') }); }
+          if (action === 'confirm') return json(res, 200, { ok: true, message: OPS.messages.confirmSent(OPS.db, id) });
+          // o estado primeiro, para a recusa ser honesta; depois o token — mas só para o que sai
+          // da máquina. O link do WhatsApp é preparado aqui e enviado à mão pelo dono.
+          const m = OPS.messages.getMessage(OPS.db, id);
+          if (!m) return json(res, 404, { ok: false, error: 'mensagem não encontrada' });
+          if (m.status !== 'aprovada') return json(res, 409, { ok: false, error: `só se envia uma mensagem aprovada (está «${m.status}»)` });
+          if (m.channel !== 'whatsapp' && !requireIntegrationToken(req, res)) return;
+          const out = await OPS.messages.sendMessage(OPS.db, id, { deliver: deliverOut, actor: 'dono' });
+          return json(res, 200, { ok: out.delivered || out.manual || false, ...out });
+        }
+        if (url.pathname === '/api/ops/consent/opt-out' && req.method === 'POST') {
+          const b = await limitedBody(req, 4000);
+          return json(res, 200, { ok: true, ...OPS.leads.optOut(OPS.db, { email: b.email, phone: b.phone }, b.reason || 'pedido do destinatário', 'dono') });
+        }
+        if (url.pathname === '/api/ops/queue' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.queue.stats(), jobs: OPS.queue.list({ limit: 25 }) });
+        }
+        if (url.pathname === '/api/ops/queue/tick' && req.method === 'POST') {
+          const done = await OPS.queue.tick();
+          return json(res, 200, { ok: true, feito: done });
+        }
+        if (url.pathname === '/api/ops/events' && req.method === 'GET') {
+          const limit = Math.max(1, Math.min(500, +url.searchParams.get('limit') || 100));
+          return json(res, 200, { ok: true, events: OPS.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT ?').all(limit) });
+        }
+        if (url.pathname === '/api/ops/usage' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.messages.usageSummary(OPS.db, Math.max(1, +url.searchParams.get('days') || 30)) });
+        }
+      } catch (e) { return bad(e); }
+      return json(res, 404, { ok: false, error: 'rota de operação desconhecida' });
+    }
+
     json(res, 404, { error: 'não encontrado' });
   } catch (e) { console.error(e); json(res, 500, { error: e.message }); }
 });
@@ -814,4 +942,10 @@ server.listen(cfg.port, () => {
   const sk = skills.summary(); const setup = setupMap(); const notYet = DEPT_KEYS.filter(k => !setup[k]);
   console.log(`  competências: ${sk.count} (${sk.shipped} incluídas em skills/, ${sk.brain} em ${path.join(NOTES_DIR, 'skills')})${sk.problems.length ? '   ⚠ ' + sk.problems.length + ' problema' + (sk.problems.length > 1 ? 's' : '') + ' — ver npm run check' : ''}`);
   console.log(`  configurado: ${notYet.length === DEPT_KEYS.length ? 'nenhum departamento ainda — abre a conversa de um líder e diz «configurar»' : notYet.length ? (DEPT_KEYS.length - notYet.length) + ' de 6 departamentos (ainda não: ' + notYet.map(k => DEPTS[k].name).join(', ') + ')' : 'os seis departamentos'}   lições: ${learn.dir(BRAIN)}`);
+});
+
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => {
+  console.log(`${sig}: a fechar.`);
+  try { OPS?.close(); } catch { /* já fechada */ }
+  process.exit(0);
 });

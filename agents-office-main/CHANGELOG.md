@@ -1,3 +1,18 @@
+## 1.1.0 — 26 out 2026 · Operação a sério
+
+- **Os dados ficam guardados.** Nova camada `src/ops/` sobre **SQLite** (`node:sqlite`, sem dependências): `leads`, `messages`, `events`, `jobs`, `consents`, `usage`, `meta` em `data/orbita.db`. Um reinício deixa de perder trabalho. O esquema é versionado (`SCHEMA_VERSION`), para o caminho para Postgres/Supabase ser escrito e não adivinhado.
+- **Pontuação explicada.** Cada lead tem `score` (0–100) **e** `score_reasons` («sem site (+25) · telefone público (+15) · avaliação 3,8 (+10)»). A nota recalcula-se sobre o lead completo — um segundo contacto sem telefone não apaga o que já se sabia.
+- **Sem duplicados, a sério.** Chave por domínio → 9 dígitos finais do telefone → email → nome+cidade. Uma segunda entrada atualiza os dados factuais e **preserva** o que é do dono: estado, notas, consentimento, seguimento.
+- **Funil com regras.** `novo → contactado → respondeu → reuniao → cliente`, com `perdido` em qualquer ponto; saltar de «novo» para «cliente» é recusado com a frase do funil.
+- **Mensagens com aprovação.** `rascunho → aprovada → enviada`; só o dono aprova, e só uma aprovada pode sair. Email exige `RESEND_API_KEY` **e** consentimento registado; o WhatsApp é um link `wa.me` revisto e enviado à mão, com **JÁ ENVIEI** a confirmar — o Órbita não finge que enviou.
+- **Opt-out que manda.** `POST /api/ops/consent/opt-out` bloqueia o email/telefone em definitivo; a partir daí as mensagens ficam `bloqueada` e o lead em `perdido` se ainda não era cliente.
+- **Aquecimento do número.** Poucos envios no primeiro dia, a subir por dia até um teto, mais limite por minuto (6) — e a recusa explica o limite em vez de falhar em seco.
+- **Fila com tentativas.** Trabalho persistente em `jobs`: falha → volta com espera crescente (15 s → 1 h) → desiste ao fim de `max_attempts`, com o erro escrito. O servidor drena a fila a cada 2 s.
+- **Auditoria e custos.** Cada ação escreve em `events` (quem, o quê, quando, sobre o quê). `usage` soma o consumo por fornecedor; `/api/ops/summary` mostra funil, conversão e margem — com `null` e a razão quando não há dados suficientes.
+- **A gaveta ◉ OPERAÇÃO.** Na barra: leads com nota e razões, mudança de estado no funil, mensagens à espera de OK (aprovar / rejeitar / abrir WhatsApp / já enviei), fila e rasto.
+- **A pesquisa passa a gravar na base de dados.** `/api/google/search` continua a guardar na gaveta e passa a gravar também em `orbita.db`, pontuado e sem duplicados (`baseDeDados: { created, updated, refused }`). O que já estava só em `data/leads.json` entra com `POST /api/ops/leads/importar-gravados`.
+- **Provas.** `ops.test.mjs` (12 testes, SQLite em memória, nenhum serviço externo) e cinco passos novos no `check.mjs` com um servidor isolado que exercita as rotas sem tocar nos dados do dono: **55 verificações** (a do navegador continua a falhar sem Chrome). Guia em **OPS.md**.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

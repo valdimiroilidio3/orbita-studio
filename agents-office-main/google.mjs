@@ -150,7 +150,12 @@ function read(dir) { try { return JSON.parse(fs.readFileSync(file_(dir), 'utf8')
 function write(dir, data) { fs.mkdirSync(dir || 'data', { recursive: true }); fs.writeFileSync(file_(dir), JSON.stringify(data, null, 2)); return data; }
 
 export const domainOf = url => {
-  try { return new URL(/^https?:/.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; }
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  try {
+    const host = new URL(/^https?:/i.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./, '').toLowerCase();
+    return host && host.includes('.') ? host : '';
+  } catch { return ''; }
 };
 const digits = s => String(s || '').replace(/\D+/g, '');
 const sluggy = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

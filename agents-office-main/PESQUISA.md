@@ -74,6 +74,24 @@ em cada tarefa da Prospeção.
 Uma segunda pesquisa da mesma zona atualiza os dados factuais (telefone, avaliação, site) sem
 duplicar e sem perder o que é teu: o **estado** (`novo`, `contactado`, …) e as notas.
 
+## Da gaveta para a base de dados
+
+A gaveta continua a ser a lista rápida (`data/leads.json`), mas a partir de 26 out 2026 cada
+pesquisa grava **também** na base de dados da operação (`data/orbita.db`): com a nota e as
+razões recalculadas, a chave de deduplicação do escritório e o estado do funil. A resposta de
+`POST /api/google/search` traz `baseDeDados` com `{ created, updated, refused }` — os números
+verdadeiros, não uma estimativa.
+
+O que já estava guardado só no ficheiro traz-se com:
+
+```bash
+curl -X POST http://localhost:4520/api/ops/leads/importar-gravados
+```
+
+A partir daí, o funil, as mensagens com aprovação e as métricas vivem em **◉ OPERAÇÃO**
+(ver **[OPS.md](OPS.md)**). A pontuação da gaveta (`score` da Google) e a da base de dados são
+calculadas com as mesmas regras; a da base de dados guarda as razões em `score_reasons`.
+
 ## O que os agentes recebem
 
 **Prospeção** e **Vendas** leem, no início de cada tarefa, um bloco `LEADS REAIS` com os oito melhores

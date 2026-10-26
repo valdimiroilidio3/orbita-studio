@@ -32,6 +32,14 @@ await step('integrações e Google: token, CRM, fila de conteúdo, Places e pesq
   return `${passed} testes (integrações + Google) · 0 falhas`;
 });
 
+await step('operação: base de dados, pontuação, funil, aprovação, opt-out e fila', async () => {
+  const out = await sh('node', ['--test', 'ops.test.mjs']);
+  const passed = [...out.matchAll(/# pass (\d+)/g)].reduce((a, m) => a + +m[1], 0);
+  const failed = [...out.matchAll(/# fail (\d+)/g)].reduce((a, m) => a + +m[1], 0);
+  if (!passed || failed) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
+  return `${passed} testes · SQLite em memória, nenhum serviço externo`;
+});
+
 /* ---------- 1. build ---------- */
 await step('build: braingraph + bundle', async () => {
   const out = await sh('node', ['build.mjs']);
@@ -812,6 +820,100 @@ else {
     } else ok('live: skipped', 'set CHECK_LIVE=1 to route one task and one chat through Claude');
   }
   srv.kill();
+}
+
+/* ---------- 4. operação: servidor isolado, dados deitados fora no fim ---------- */
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-ops-'));
+  const port = 4700 + Math.floor(Math.random() * 200);
+  const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db') };
+  const srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
+  const base = `http://localhost:${port}`;
+  const call = async (method, p, payload, headers = {}) => {
+    const r = await fetch(base + p, { method, headers: { 'content-type': 'application/json', ...headers }, body: payload === undefined ? undefined : JSON.stringify(payload) });
+    return { status: r.status, body: await r.json().catch(() => ({})) };
+  };
+  try {
+    const up = await (async () => { for (let i = 0; i < 60; i++) { try { const r = await fetch(base + '/api/health'); if (r.ok) return true; } catch {} await new Promise(r => setTimeout(r, 250)); } return false; })();
+    if (!up) { bad('operação: o servidor arranca com a base de dados', log.trim().split('\n').slice(-3).join(' | ')); throw new Error('sem /api/health'); }
+    if (!/opera[çc][ãa]o:/.test(log)) throw new Error('o arranque não anunciou a operação: ' + log.split('\n').filter(l => l.includes('opera')).join(' | '));
+
+    await step('operação: /api/ops/summary diz a verdade de uma base vazia', async () => {
+      const { status, body } = await call('GET', '/api/ops/summary');
+      if (status !== 200) throw new Error('HTTP ' + status);
+      if (body.leads.total !== 0) throw new Error('não está vazia: ' + body.leads.total);
+      if (body.conversao.taxaResposta !== null) throw new Error('inventou uma taxa com zero contactos');
+      if (!body.semDados?.taxaResposta) throw new Error('não explicou a ausência');
+      return 'zero leads · taxa null · razão dita';
+    });
+
+    await step('operação: um lead entra, é pontuado e uma segunda vez não duplica', async () => {
+      const a = await call('POST', '/api/ops/leads', { leads: [{ name: 'Clínica Teste', website: 'https://clinica-teste.pt', phone: '+351 210 111 222', city: 'Lisboa', category: 'dentista' }] });
+      if (a.status !== 201 || a.body.created !== 1) throw new Error(JSON.stringify(a.body).slice(0, 160));
+      const b = await call('POST', '/api/ops/leads', { leads: [{ name: 'Clínica Teste Lda', website: 'https://www.clinica-teste.pt/menu', rating: 3.8, reviews: 9 }] });
+      if (b.body.created !== 0) throw new Error('duplicou');
+      const list = await call('GET', '/api/ops/leads?limit=5');
+      const lead = list.body.leads.find(l => /Clínica Teste/.test(l.name));
+      if (!lead || !lead.score_reasons) throw new Error('sem pontuação explicada');
+      if (lead.rating !== 3.8) throw new Error('os dados frescos não entraram');
+      return `${list.body.leads.length} lead(s) · nota ${lead.score} · ${String(lead.score_reasons).slice(0, 60)}`;
+    });
+
+    await step('operação: mensagem nasce rascunho, não sai sem OK, e o opt-out trava-a', async () => {
+      const list = await call('GET', '/api/ops/leads?limit=1');
+      const lead = list.body.leads[0];
+      if (!lead) throw new Error('sem lead para testar');
+      if (!lead.email) {
+        // sem email não há envio de email: prova-se o caminho do WhatsApp (link revisto à mão)
+      }
+      const draft = await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'whatsapp', body: 'Olá, falo do site?' });
+      if (draft.status !== 201 || draft.body.message.status !== 'rascunho') throw new Error('não nasceu rascunho');
+      const early = await call('POST', `/api/ops/messages/${draft.body.message.id}/send`);
+      if (early.status !== 409) throw new Error(`devia recusar com 409, veio ${early.status}: ${JSON.stringify(early.body).slice(0, 120)}`);
+      if (!/aprovada/.test(early.body.error || '')) throw new Error('recusou sem dizer que falta a aprovação');
+      const okd = await call('POST', `/api/ops/messages/${draft.body.message.id}/approve`);
+      if (okd.body.message.status !== 'aprovada') throw new Error('não aprovou: ' + JSON.stringify(okd.body).slice(0, 120));
+      const sent = await call('POST', `/api/ops/messages/${draft.body.message.id}/send`);
+      if (sent.body.delivered) throw new Error('fingiu que enviou no WhatsApp');
+      if (!sent.body.manual || !/wa\.me/.test(sent.body.url || '')) throw new Error('não devolveu o link a rever');
+      // opt-out: a mensagem seguinte tem de ficar bloqueada, não enviada
+      const off = await call('POST', '/api/ops/consent/opt-out', { email: 'geral@clinica-teste.pt', phone: lead.phone , reason: 'pediu para parar' });
+      if (!off.body.ok) throw new Error('o opt-out foi recusado');
+      const after = await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'whatsapp', body: 'segunda' });
+      const blocked = await call('POST', `/api/ops/messages/${after.body.message.id}/approve`);
+      if (blocked.body.message.status !== 'bloqueada') throw new Error('aprovou depois do opt-out');
+      return 'rascunho → aprovada → link manual · opt-out bloqueia';
+    });
+
+    await step('operação: a fila aceita trabalho, corre e é auditável', async () => {
+      const q = await call('GET', '/api/ops/queue');
+      if (q.status !== 200) throw new Error('HTTP ' + q.status);
+      const tick = await call('POST', '/api/ops/queue/tick');
+      if (tick.status !== 200) throw new Error('tick HTTP ' + tick.status);
+      const ev = await call('GET', '/api/ops/events?limit=20');
+      const actions = ev.body.events.map(e => e.action);
+      for (const a of ['lead.criado', 'mensagem.rascunho', 'mensagem.aprovada', 'consentimento.opt_out']) {
+        if (!actions.includes(a)) throw new Error('sem rasto de ' + a);
+      }
+      return `${ev.body.events.length} eventos na auditoria · fila ${q.body.fila || 0} à espera`;
+    });
+
+    await step('operação: email exige token e consentimento; sem eles não sai', async () => {
+      const made = await call('POST', '/api/ops/leads', { leads: [{ name: 'Restaurante Email', website: 'https://restaurante-email.pt', email: 'geral@restaurante-email.pt' }] });
+      if (!made.body.total) throw new Error('não criou o lead de email');
+      const lead = (await call('GET', '/api/ops/leads?limit=10')).body.leads.find(l => l.email);
+      if (!lead) throw new Error('o lead de email desapareceu');
+      await call('POST', `/api/ops/leads/${lead.id}/consent`, { consent: 'dado', reference: 'formulário do site' });
+      const d = await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'email', subject: 'Olá', body: 'Uma proposta curta.' });
+      await call('POST', `/api/ops/messages/${d.body.message.id}/approve`);
+      const r = await call('POST', `/api/ops/messages/${d.body.message.id}/send`);
+      if (r.status === 200 && r.body.delivered) throw new Error('enviou sem token');
+      if (!/ORBITA_API_TOKEN|Token/i.test(r.body.error || '')) throw new Error('recusou sem dizer o que falta: ' + JSON.stringify(r.body).slice(0, 140));
+      return 'HTTP ' + r.status + ' · ' + String(r.body.error).slice(0, 60);
+    });
+  } catch (e) { bad('operação: servidor isolado', e.message); }
+  finally { srv.kill(); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 }
 
 /* ---------- summary ---------- */

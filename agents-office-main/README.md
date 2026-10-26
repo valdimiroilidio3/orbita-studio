@@ -157,6 +157,23 @@ Precisa de uma chave: `GOOGLE_MAPS_API_KEY` (leads) e, se quiseres pesquisa web 
 Search, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`. Sem chave o escritório diz exatamente o que falta — não
 inventa resultados. Guia completo, quotas e cuidados em **[PESQUISA.md](PESQUISA.md)**.
 
+## Operação: guardado, aprovado, com rasto
+
+Os leads, as mensagens, a fila e o registo do que aconteceu vivem numa base de dados SQLite
+(`data/orbita.db`, sem dependências — `node:sqlite`). O botão **◉ OPERAÇÃO**, na barra, abre a
+gaveta: os leads por nota com as **razões** dela, as mensagens à espera do teu OK, a fila de
+trabalho e a auditoria.
+
+Três regras que a camada faz cumprir: **nada sai sem aprovação** (uma mensagem nasce rascunho e
+só o dono a aprova), **o opt-out manda** (quem pede para parar fica bloqueado em definitivo) e
+**o funil não salta passos** (de «novo» para «cliente» é recusado). O envio de email exige
+consentimento registado e `RESEND_API_KEY`; o WhatsApp é um link revisto e enviado à mão — o
+Órbita não finge que enviou. O que falha fica na fila e volta a tentar, com espera crescente.
+
+A pesquisa da Google passa a gravar também nesta base de dados, já pontuada e sem duplicados.
+Detalhe completo — tabelas, rotas `/api/ops`, aquecimento do número, custos e **o que ainda não
+está** (Stripe, WhatsApp Business real, Postgres) — em **[OPS.md](OPS.md)**.
+
 ## Integrar outra IA (Codex, Antigravity, qualquer API)
 
 O escritório não está preso ao Claude Code. O botão **IA**, ao lado de EQUIPA no painel de tarefas,
@@ -230,11 +247,20 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | POST | `/api/google/search` | procurar empresas ou web (`{"kind":"places","what":"ginásios","where":"Porto"}`) |
 | GET | `/api/leads` | a lista de leads guardada, por nota |
 | POST | `/api/leads/status` | mudar o estado de um lead |
+| GET | `/api/ops/summary` | funil, conversão, custos e estado da fila |
+| GET/POST | `/api/ops/leads` | os leads guardados / importar (um ou `{ leads: [...] }`) |
+| PATCH | `/api/ops/leads/:id` | andar um passo no funil (`{ "status": "contactado" }`) |
+| POST | `/api/ops/consent/opt-out` | bloquear um email/telefone para sempre |
+| GET/POST | `/api/ops/messages` | mensagens / criar rascunho |
+| POST | `/api/ops/messages/:id/approve` · `/reject` · `/send` · `/confirm` | a decisão e o envio |
+| GET | `/api/ops/queue` · `/api/ops/events` · `/api/ops/usage` | fila, auditoria, consumo |
 
 ## Verificação
 
 ```bash
-npm run check         # 43 verificações locais (build, elenco, competências, rotinas, servidor)
+npm run check         # 55 verificações locais (build, elenco, competências, rotinas, operação, servidor)
+npm run test:ops      # 12 testes da operação: base de dados em memória, nenhum serviço externo
+npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```
 
