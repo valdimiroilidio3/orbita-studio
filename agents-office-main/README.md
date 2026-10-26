@@ -61,6 +61,21 @@ Os agentes podem chamar esses servidores enquanto trabalham, mais a pesquisa web
 Bash, ferramentas de ficheiros nem sub-agentes. A regra permanente: lê à vontade; enviar,
 publicar, pagar, apagar ou alterar só quando tu pedires.
 
+### As integrações do próprio Órbita
+
+Além do que estiver ligado no teu Claude Code, o escritório traz o seu próprio servidor MCP —
+`orbita_integrations`, em `mcp-servers/orbita-integrations/` — com 15 ferramentas: pesquisa de
+empresas no OpenStreetMap, CRM de leads, rascunhos com Gemini, email aprovado pelo Resend,
+metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo, publicação no
+Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
+e entregue aos agentes por `--mcp-config`; o estado real está em `GET /api/mcp`.
+
+As rotas HTTP equivalentes vivem em `/api/*` e exigem `Authorization: Bearer $ORBITA_API_TOKEN`
+com 32+ caracteres. Guia completo, limites e o que **não** existe (Stripe, envio pela WhatsApp
+Business API): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). O segundo servidor local,
+`mcp-servers/view-image-mcp/`, dá olhos aos agentes — abre qualquer URL pública como imagem e
+precisa de `npm install` dentro dessa pasta.
+
 ## Os 35 agentes
 
 | Sala | Quem lá está |

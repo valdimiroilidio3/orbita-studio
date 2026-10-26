@@ -9,6 +9,30 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
+// 26 out 2026: o .env do projeto é lido aqui, antes de qualquer configuração. Sem dependências e
+// sem sobrepor o que já está no ambiente (uma variável exportada ganha sempre ao ficheiro).
+// Sem isto, o passo "cp .env.example .env" do guia não teria efeito nenhum.
+export function loadEnv(file = path.join(ROOT, '.env')) {
+  const loaded = [];
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return loaded; } // sem .env é um estado válido
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim().replace(/^export\s+/, '');
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = line.slice(eq + 1).trim();
+    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+    if (process.env[key] !== undefined) continue; // o ambiente manda
+    process.env[key] = value;
+    if (value) loaded.push(key);
+  }
+  return loaded;
+}
+loadEnv();
+
 function readJSON(p) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; }
 }

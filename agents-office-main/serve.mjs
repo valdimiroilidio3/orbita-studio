@@ -50,6 +50,7 @@ import * as onboard from './onboard.mjs';
 import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
+import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
@@ -63,11 +64,33 @@ const FILE = path.join(DATA, 'tasks.json');
 const BRAIN = cfg.brainPath;
 const NOTES_DIR = path.join(BRAIN, 'Órbita');
 const CLI_CWD = path.join(os.tmpdir(), 'agents-office-cli'); // an empty cwd: no CLAUDE.md, no repo context
+const CLI_MCP_CONFIG = path.join(CLI_CWD, 'orbita-mcp.json');
+// The CLI runs in an empty cwd (no CLAUDE.md, no repo), so the project's .mcp.json never loads.
+// Write a standalone copy with an absolute path to the integrations server instead.
+function ensureCliMcpConfig() {
+  const projectConfig = path.join(ROOT, '.mcp.json');
+  if (!fs.existsSync(projectConfig)) return null;
+  try {
+    const servers = JSON.parse(fs.readFileSync(projectConfig, 'utf8')).mcpServers || {};
+    if (!servers.orbita_integrations) return null;
+    const standalone = { mcpServers: { orbita_integrations: {
+      type: 'stdio', command: process.execPath,
+      args: [path.join(ROOT, 'mcp-servers', 'orbita-integrations', 'index.mjs')],
+    } } };
+    fs.mkdirSync(CLI_CWD, { recursive: true });
+    fs.writeFileSync(CLI_MCP_CONFIG, JSON.stringify(standalone, null, 2), { mode: 0o600 });
+    return CLI_MCP_CONFIG;
+  } catch (error) {
+    console.warn(`config MCP do Órbita indisponível: ${error.message}`);
+    return null;
+  }
+}
 const version = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch { return '?'; } })();
 const RUN_TIMEOUT = Math.max(60, +cfg.timeout || 300) * 1000; // agents with tools take longer than a plain draft
 { const m = normModel(cfg.model); if (cfg.model && !m) console.warn(`config: o modelo tem de ser sonnet, opus ou fable (recebi "${cfg.model}") — a usar ${DEFAULT_MODEL}`); cfg.model = m || DEFAULT_MODEL; } // V3.6: three models, by name
 { const e = normEffort(cfg.effort); if (cfg.effort && !e) console.warn(`config: o esforço tem de ser low, medium, high, xhigh ou max (recebi "${cfg.effort}") — a usar o do modelo`); cfg.effort = e || ''; } // V3.6.1: the office's effort, empty = the model's own
 mcp.configure(cfg);
+mcp.useConfig(ensureCliMcpConfig()); // se o .mcp.json do projeto existir, os agentes recebem-no como --mcp-config
 const TEAMS = teams.settings(cfg); // V3.2 (16 Sep): { enabled, max }
 const roster = loadRoster(BRAIN);
 const AGENTS = roster.agents; // id · department · lead · name · role · does · tools · brief
@@ -484,13 +507,29 @@ async function routinesChat(a, text) {
 /* ---------- http ---------- */
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const body = req => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; }); req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } }); });
+// 26 out 2026: integrações. O corpo é limitado por rota (nada de 2 MB a entrar em memória) e tudo o
+// que escreve para fora exige ORBITA_API_TOKEN com 32+ caracteres — sem token, a rota nem existe.
+const limitedBody = (req, maxBytes = 25000) => new Promise((resolve, reject) => {
+  let s = '', done = false;
+  req.on('data', d => { if (done) return; s += d; if (Buffer.byteLength(s) > maxBytes) { done = true; reject(Object.assign(new Error('request body too large'), { status: 413 })); req.removeAllListeners('data'); req.resume(); } });
+  req.on('end', () => { if (done) return; try { resolve(s ? JSON.parse(s) : {}); } catch { reject(Object.assign(new Error('JSON inválido'), { status: 400 })); } });
+});
+const requireIntegrationToken = (req, res) => {
+  if ((process.env.ORBITA_API_TOKEN || '').length < 32) { json(res, 503, { error: 'Define ORBITA_API_TOKEN com pelo menos 32 caracteres no .env para ativar os endpoints privados.' }); return false; }
+  if (!integrations.apiTokenOk(req)) { json(res, 401, { error: 'Token de API inválido ou ausente.' }); return false; }
+  return true;
+};
+const integrationResponse = async (res, fn, successCode = 200) => {
+  try { return json(res, successCode, await fn()); }
+  catch (e) { const mapped = integrations.getIntegrationError(e); return json(res, mapped.status, { error: mapped.error }); }
+};
 
 await rebuildGraph();
 {
   const g = google.state(), ls = google.stats(DATA);
   console.log(`  pesquisa google: ${g.places.available ? 'Places ligado' : 'Places sem chave (' + g.places.env + ')'} · ${g.web.available ? 'pesquisa web ligada' : 'pesquisa web sem chave'} · ${ls.total} leads guardados${ls.total ? ' (' + ls.noSite + ' sem site)' : ''}`);
 }
-const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list)`); return l; });
+const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list + os do projeto)`); return l; });
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
 const server = http.createServer(async (req, res) => {
@@ -501,7 +540,7 @@ const server = http.createServer(async (req, res) => {
       const page = fs.readFileSync(HTML, 'utf8');
       return res.end(url.pathname === '/dark' ? page.replace('<body>', '<body class="dark">') : page); // /dark: the same file, opened in dark mode
     }
-    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
+    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
     if (url.pathname === '/api/skills') return json(res, 200, refreshSkills().summary()); // reloads from disk: edit a skill, hit this, see it
@@ -568,6 +607,97 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/brain') return json(res, 200, graph);
     if (url.pathname === '/api/usage') return json(res, 200, await getUsage(url.searchParams.get('refresh') === '1')); // V3.6: the plan's gauge (never a 500: unavailable is an answer)
+
+    // ---------- integrações (26 out 2026) ----------
+    // Leitura do estado é pública e não tem segredos: só diz o que está configurado.
+    if (url.pathname === '/api/integrations' && req.method === 'GET') return json(res, 200, integrations.integrationStatus());
+    if (url.pathname === '/api/github/file' && req.method === 'PUT') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 750000);
+      return integrationResponse(res, () => integrations.githubWriteFile({ ...b, approved: b.approved }), 201);
+    }
+    if (url.pathname === '/api/github/repo' && req.method === 'GET') {
+      if (!requireIntegrationToken(req, res)) return;
+      return integrationResponse(res, () => integrations.githubRepository(url.searchParams.get('owner'), url.searchParams.get('repo')));
+    }
+    if (url.pathname === '/api/whatsapp/link' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 5000);
+      return integrationResponse(res, () => integrations.whatsappClickToChatUrl(b.phone, b.message));
+    }
+    if (url.pathname === '/api/crm/leads/discover' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000);
+      return integrationResponse(res, async () => {
+        const result = await integrations.discoverBusinesses({ location: b.location, category: b.category, radiusMeters: b.radiusMeters, limit: b.limit });
+        if (b.save === true && result.results.length) result.saved = await integrations.saveLeads(DATA, result.results.map(x => ({ ...x, city: x.city || result.location, source: 'openstreetmap' })));
+        return result;
+      });
+    }
+    if (url.pathname === '/api/crm/leads' && req.method === 'GET') {
+      if (!requireIntegrationToken(req, res)) return;
+      return integrationResponse(res, async () => ({ ok: true, storage: process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? 'supabase' : 'local-json', leads: await integrations.listLeads(DATA, Number(url.searchParams.get('limit') || 100)) }));
+    }
+    if (url.pathname === '/api/crm/leads' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 50000);
+      const input = Array.isArray(b.leads) ? b.leads : [b];
+      return integrationResponse(res, () => integrations.saveLeads(DATA, input), 201);
+    }
+    const leadRoute = url.pathname.match(/^\/api\/leads\/([^/]+)$/);
+    if (leadRoute && req.method === 'PATCH') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000);
+      return integrationResponse(res, async () => {
+        const lead = await integrations.updateLead(DATA, decodeURIComponent(leadRoute[1]), b);
+        if (!lead) { const e = new Error('Lead não encontrado.'); e.status = 404; throw e; }
+        return { ok: true, lead };
+      });
+    }
+    if (url.pathname === '/api/ai/assist' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000);
+      return integrationResponse(res, () => integrations.geminiAssist({ task: b.task, data: b.data || {} }));
+    }
+    if (url.pathname === '/api/content/drafts' && req.method === 'GET') {
+      if (!requireIntegrationToken(req, res)) return;
+      return json(res, 200, { ok: true, drafts: integrations.listContentDrafts(DATA, Number(url.searchParams.get('limit') || 100)) });
+    }
+    if (url.pathname === '/api/content/drafts' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000);
+      return integrationResponse(res, () => integrations.createContentDraft(DATA, b), 201);
+    }
+    if (url.pathname === '/api/email/send' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 18000);
+      return integrationResponse(res, () => integrations.sendApprovedEmail(DATA, b), 201);
+    }
+    if (url.pathname === '/api/email/suppress' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 5000);
+      return integrationResponse(res, () => integrations.suppressEmail(DATA, b.email, b.reason));
+    }
+    if (url.pathname === '/api/deploy/vercel' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 5000);
+      return integrationResponse(res, () => integrations.triggerVercelDeploy({ approved: b.approved }), 202);
+    }
+    if (url.pathname === '/api/social/instagram/publish' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000);
+      return integrationResponse(res, async () => {
+        let target = b;
+        if (b.draftId) {
+          const draft = integrations.listContentDrafts(DATA, 500).find(x => x.id === b.draftId);
+          if (!draft) { const e = new Error('Rascunho não encontrado.'); e.status = 404; throw e; }
+          target = { ...b, imageUrl: draft.imageUrl, caption: [draft.caption, draft.hashtags].filter(Boolean).join('\n\n') };
+        }
+        const published = await integrations.publishInstagram(target);
+        const draft = b.draftId ? integrations.markContentPublished(DATA, b.draftId, published) : null;
+        return { ...published, draft };
+      }, 201);
+    }
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
     if (url.pathname === '/api/routines' && req.method === 'GET') return json(res, 200, routinesOut());
     if (url.pathname === '/api/routines' && req.method === 'POST') {

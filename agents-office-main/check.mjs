@@ -21,6 +21,14 @@ const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
 const cfg = loadConfig();
 const LIVE = process.env.CHECK_LIVE === '1';
 
+/* ---------- ORBITA API integrations (26 out 2026) ---------- */
+await step('integrações: token, CRM, fila de conteúdo e portas dos fornecedores', async () => {
+  const out = await sh('node', ['--test', 'integrations.test.mjs']);
+  const passed = /# pass (\d+)/.exec(out)?.[1];
+  if (!passed || !/# fail 0/.test(out)) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
+  return `${passed} testes de integração · 0 falhas`;
+});
+
 /* ---------- 1. build ---------- */
 await step('build: braingraph + bundle', async () => {
   const out = await sh('node', ['build.mjs']);
@@ -534,6 +542,33 @@ else {
       if (!l.ok || !Array.isArray(l.leads)) throw new Error('sem lista');
       if (typeof l.stats?.total !== 'number') throw new Error('sem contagem');
       return `${l.leads.length} leads · ${l.stats.total} no total`;
+    });
+    await step('server: /api/integrations é público e diz o que falta, sem segredos', async () => {
+      const r = await fetch(base + '/api/integrations'); if (r.status !== 200) throw new Error('status ' + r.status);
+      const j = await r.json();
+      if (!Array.isArray(j.providers)) throw new Error('sem providers');
+      if (!j.providers.some(p => p.id === 'openstreetmap' && p.ready)) throw new Error('OSM devia estar pronto');
+      if (JSON.stringify(j).includes('service_role') || /eyJ[A-Za-z0-9]{20}/.test(JSON.stringify(j))) throw new Error('a resposta parece trazer uma chave');
+      return `${j.providers.filter(p => p.ready).map(p => p.id).join(', ')} prontos · sem chave: ${j.providers.filter(p => !p.ready).map(p => p.id).join(', ') || 'nenhum'}`;
+    });
+    await step('server: o CRM das integrações só abre com o token', async () => {
+      const anon = await fetch(base + '/api/crm/leads');
+      if (![401, 503].includes(anon.status)) throw new Error('sem token: ' + anon.status);
+      const tok = process.env.ORBITA_API_TOKEN;
+      if (!tok) return 'sem ORBITA_API_TOKEN no ambiente — 503 como esperado';
+      const auth = await fetch(base + '/api/crm/leads', { headers: { authorization: 'Bearer ' + tok } });
+      if (auth.status !== 200) throw new Error('com token: ' + auth.status);
+      const j = await auth.json();
+      if (!Array.isArray(j.leads)) throw new Error('sem lista');
+      return `${anon.status} sem token · 200 com token · ${j.leads.length} leads em ${j.storage}`;
+    });
+    await step('server: os agentes recebem o servidor MCP orbita_integrations', async () => {
+      const m = await (await fetch(base + '/api/mcp')).json();
+      const s = m.servers.find(x => x.id === 'orbita_integrations');
+      if (!s) throw new Error('o servidor do projeto não aparece em /api/mcp');
+      if (s.status !== 'connected') throw new Error('estado: ' + s.status + (s.error ? ' — ' + s.error : ''));
+      if (!s.tools.includes('orbita_leads_list')) throw new Error('ferramentas: ' + s.tools.length);
+      return `${s.tools.length} ferramentas · ${s.name} (${s.status})`;
     });
     await step('server: serves the office', async () => { const r = await fetch(base + '/'); const t = await r.text(); if (!/ÓRBITA/.test(t)) throw new Error('html missing'); });
     await step('server: /api/brain has the live graph', async () => { const g = await (await fetch(base + '/api/brain')).json(); if (!g.nodes.length) throw new Error('empty'); return `${g.nodes.length} linked notes`; });

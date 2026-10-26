@@ -10,14 +10,21 @@
     "build": "node build.mjs",
     "check": "node check.mjs",
     "check:live": "CHECK_LIVE=1 node check.mjs",
-    "graph": "node graph-build.mjs"
+    "graph": "node graph-build.mjs",
+    "test:integrations": "node --test integrations.test.mjs"
   },
-  "engines": { "node": ">=20" },
-  "dependencies": { "d3-force": "^3.0.0" },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "d3-force": "^3.0.0"
+  },
   "devDependencies": {
     "esbuild": "^0.28.1",
     "three": "^0.185.1",
     "playwright-core": "^1.62.0"
   },
-  "optionalDependencies": { "@anthropic-ai/sdk": "^0.80.0" }
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.80.0"
+  }
 }

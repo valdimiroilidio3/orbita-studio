@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "orbita_integrations": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp-servers/orbita-integrations/index.mjs"]
+    }
+  }
+}

@@ -1,12 +1,20 @@
-# nada de dependências, builds ou segredos no repositório
+# Nada de dependências, builds ou segredos no repositório.
 node_modules/
-dist/
+
+# O build vive fora do git, excepto a página que o `npm start` serve tal e qual.
+agents-office-main/dist/*
+!agents-office-main/dist/command-centre-v2.html
+
+# Credenciais locais: só o exemplo entra.
 .env
 .env.*
 !.env.example
+
+# Dados de trabalho (leads, tarefas, rascunhos) e ficheiros locais.
 data/*.json
 .DS_Store
 *.log
 
-# o ZIP original do projeto (o código vive em agents-office-main/)
-agents-office-main.zip
+# ZIPs novos ficam fora do git; os dois já versionados (agents-office-main.zip e
+# orbita-studio-integrations.zip) continuam lá por serem o material de origem.
+*.zip

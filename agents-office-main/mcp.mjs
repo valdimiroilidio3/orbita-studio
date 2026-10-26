@@ -22,6 +22,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url)); // os servidores MCP do próprio Órbita
 
 export const DEPT_KEYS = ['emails', 'sales', 'marketing', 'ops', 'fin', 'delivery'];
 
@@ -32,7 +35,7 @@ const ALIASES = {
   pandadoc: ['pandadoc'], clarity: ['clarity', 'microsoftclarity'], beehiiv: ['beehiiv'], loops: ['loops'],
   hyperframes: ['hyperframes'], imessage: ['imessage', 'messages'], claude: ['claude'], chatgpt: ['chatgpt', 'openai'],
   googlecalendar: ['googlecalendar', 'gcal', 'calendar'], googledrive: ['googledrive', 'gdrive', 'drive'], webflow: ['webflow'], playwright: ['playwright'],
-  higgsfield: ['higgsfield', 'higgfield'], territool: ['territool'],
+  higgsfield: ['higgsfield', 'higgfield'], territool: ['territool'], orbita: ['orbitaintegrations', 'orbita', 'orbita_integrations'],
   chrome: ['claudeinchrome', 'chrome', 'claudechrome', 'browser'],
 };
 // which pods a known brand feeds (mirrors the demo's MCP_BY_DEPT)
@@ -45,6 +48,7 @@ const DEPTS_BY_KEY = {
   hubspot: ['sales', 'marketing'], salesforce: ['sales'], zapier: DEPT_KEYS, figma: ['marketing', 'delivery'],
   webflow: ['marketing', 'delivery'], higgsfield: ['marketing'], territool: ['sales'],
   chrome: DEPT_KEYS, // the owner's browser: every desk may need a web app
+  orbita: ['emails', 'sales', 'marketing', 'ops', 'delivery'], // 26 out 2026: CRM, email, conteúdo e deploy do próprio escritório
 };
 
 export const norm = s => String(s).toLowerCase().replace(/^claude\.ai\s+/, '').replace(/\s+mcp$/, '').replace(/[^a-z0-9]/g, '');
@@ -108,13 +112,81 @@ function browserServer(prev) {
 }
 const withBrowser = list => { const rest = list.filter(s => s.id !== BROWSER); return cfgBrowser ? [...rest, browserServer(list.find(s => s.id === BROWSER))] : rest; };
 export const browserOn = () => cfgBrowser;
-export function cliArgs() { return cfgBrowser ? ['--chrome'] : ['--no-chrome']; } // explicit both ways: the login's "enabled by default" must not decide for the office
+export function cliArgs() {
+  const a = cfgBrowser ? ['--chrome'] : ['--no-chrome']; // explicit both ways: the login's "enabled by default" must not decide for the office
+  if (mcpConfigPath && fs.existsSync(mcpConfigPath)) a.push('--mcp-config', mcpConfigPath); // 26 out 2026: as integrações do Órbita como ferramentas do agente
+  return a;
+}
 
-export function discover({ timeout = 45000 } = {}) {
+/* ---------- 26 out 2026: os servidores do próprio projeto (.mcp.json) ----------
+   O CLI corre num cwd temporário (sem CLAUDE.md, sem repo), por isso o `.mcp.json` do projeto
+   nunca é lido — e `claude mcp list` não o mostra. Aqui cada servidor do ficheiro é arrancado a
+   sério (initialize + tools/list) e só fica "connected" se responder. Sem resposta, fica "failed"
+   com a razão, em vez de fingir que está pronto. */
+let mcpConfigPath = ''; // o --mcp-config autónomo que o serve.mjs escreve ao arrancar
+export function useConfig(file) { mcpConfigPath = file || ''; }
+
+function projectServers() {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, '.mcp.json'), 'utf8'));
+    return Object.entries(j.mcpServers || {}).map(([name, def]) => ({ name, def }));
+  } catch { return []; }
+}
+
+function probeStdio(def, timeout = 12000) {
+  return new Promise(resolve => {
+    const out = { text: '', err: '' };
+    let p;
+    try {
+      p = spawn(def.command === 'node' ? process.execPath : def.command, def.args || [], { cwd: PROJECT_ROOT, stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (e) { return resolve({ tools: null, error: e.message }); }
+    let buf = '', tools = null, done = false;
+    const send = msg => { try { p.stdin.write(JSON.stringify(msg) + '\n'); } catch { /* morreu entretanto */ } };
+    const finish = error => {
+      if (done) return; done = true;
+      try { p.kill('SIGKILL'); } catch { /* já saiu */ }
+      resolve({ tools, error: error || (tools ? '' : (out.err.trim().slice(0, 200) || 'sem resposta ao initialize')) });
+    };
+    const timer = setTimeout(() => finish(`tempo esgotado (${Math.round(timeout / 1000)}s)`), timeout);
+    p.on('error', e => { clearTimeout(timer); finish(e.code === 'ENOENT' ? `\`${def.command}\` não encontrado` : e.message); });
+    p.on('close', () => { clearTimeout(timer); finish(tools ? '' : (out.err.trim().slice(0, 200) || 'saiu antes de responder')); });
+    p.stderr.on('data', d => { out.err += d; });
+    p.stdout.on('data', d => {
+      buf += d;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 1);
+        if (!line.trim()) continue;
+        let j; try { j = JSON.parse(line); } catch { continue; } // logs antes do JSON-RPC
+        if (j.id === 1 && j.result) { send({ jsonrpc: '2.0', method: 'notifications/initialized' }); send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }); }
+        if (j.id === 2) { tools = (j.result?.tools || []).map(t => t.name).filter(Boolean); clearTimeout(timer); finish(tools.length ? '' : 'nenhuma ferramenta'); }
+        if (j.id === 1 && j.error) { clearTimeout(timer); finish(String(j.error.message || 'initialize falhou')); }
+      }
+    });
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'orbita-office', version: '1' } } });
+  });
+}
+
+async function withProject(list) {
+  const extra = [];
+  for (const { name, def } of projectServers()) {
+    if (list.some(s => s.id === toolId(name) || norm(s.name) === norm(name))) continue; // já vem do claude mcp list
+    const probe = await probeStdio(def);
+    const s = make(name, [def.command, ...(def.args || [])].join(' '), probe.tools ? 'connected' : 'failed');
+    s.source = 'project';
+    s.tools = probe.tools || [];
+    if (s.id === 'orbita_integrations') { s.name = 'ORBITA Integrations'; s.key = 'orbita'; s.depts = deptsFor(s.name, 'orbita'); }
+    s.error = probe.error || '';
+    extra.push(s);
+  }
+  return [...extra, ...list];
+}
+
+function discoverCli({ timeout = 45000 } = {}) {
   return new Promise(resolve => {
     const env = { ...process.env }; delete env.CLAUDECODE;
     let out = '', done = false;
-    const finish = list => { if (done) return; done = true; if (list) { servers = withBrowser(list); discoveredAt = Date.now(); } resolve(servers); };
+    const finish = list => { if (done) return; done = true; resolve(list || []); };
     let p;
     try { p = spawn('claude', ['mcp', 'list'], { env, stdio: ['ignore', 'pipe', 'pipe'] }); } catch { return finish([]); }
     const timer = setTimeout(() => { try { p.kill('SIGKILL'); } catch {} finish(parseList(out)); }, timeout);
@@ -122,6 +194,13 @@ export function discover({ timeout = 45000 } = {}) {
     p.on('error', () => { clearTimeout(timer); finish([]); });
     p.on('close', () => { clearTimeout(timer); finish(parseList(out)); });
   });
+}
+
+export async function discover(opts = {}) {
+  const list = await withProject(await discoverCli(opts)); // o do Claude Code + os do próprio Órbita
+  servers = withBrowser(list);
+  discoveredAt = Date.now();
+  return servers;
 }
 // a run's `system init` event lists the servers the agent actually got, with live status + tool names
 export function fromInit(init) {
