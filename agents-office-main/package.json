@@ -1,6 +1,6 @@
 {
   "name": "orbita",
-  "version": "1.9.4",
+  "version": "1.9.5",
   "description": "Órbita — um escritório isométrico 3D onde agentes de IA fazem trabalho real no seu próprio login do Claude. Criado por Chelton Mahoze.",
   "author": "Chelton Mahoze",
   "type": "module",
@@ -10,6 +10,7 @@
     "build": "node build.mjs",
     "test:scene": "node scene.smoke.mjs",
     "test:office": "node --test office.test.mjs",
+    "test:a11y": "node --test a11y.test.mjs",
     "check": "node check.mjs",
     "check:live": "CHECK_LIVE=1 node check.mjs",
     "graph": "node graph-build.mjs",

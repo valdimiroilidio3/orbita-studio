@@ -2,6 +2,7 @@
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems } from './data.js';
+import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (teclado e leitor de ecrã)
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
 // V7: só o que este ficheiro usa. Saíram sete nomes importados e nunca chamados (TOKENS,
@@ -254,6 +255,14 @@ for (const a of AGENTS) {
   const pill = document.createElement('div');
   pill.className = 'pill';
   pill.style.setProperty('--glass', dept.glass); // V7: o nome do agente leva a cor da sala
+  // 26 out 2026: 35 pastilhas flutuantes seriam 35 paragens de Tab a atravessar o ecrã. Fica uma
+  // regra: só entra no Tab quem está na sala em foco (o resto continua focável por código).
+  pill.setAttribute('role', 'button');
+  pill.tabIndex = -1;
+  pill.setAttribute('aria-label', `${a.name} — ${dept.name}. Abrir o agente.`);
+  pill.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pill.click(); }
+  });
   pill.innerHTML = (a.lead ? '<span class="star">★</span>' : '') + a.name;
   pill.addEventListener('click', () => openAgent(a.id, R[a.id] && R[a.id].state === 'stuck' ? 'chat' : 'live'));
   hud.appendChild(pill);
@@ -357,19 +366,60 @@ function deptCount(dept, kind) {
   }
   return n;
 }
+/* ---------- o que se diz a um leitor de ecrã (26 out 2026) ----------
+   A cena não fala. Estas funções traduzem o estado real — o mesmo de que o cartão e o monitor
+   vivem — numa frase que um leitor de ecrã consiga anunciar. Sem números inventados: o que não
+   está na base de dados diz-se por palavras. */
+function agentStateOf(id) {
+  const r = R[id];
+  const d = liveUi.forAgent(id);
+  const t = d && d.task;
+  // sem ligação ao vivo não se afirma o presente: diz-se que é o último estado conhecido
+  const ligado = liveUi.status() === 'live';
+  if (!ligado && (t || (r && r.state && r.state !== 'idle'))) return { label: 'último estado conhecido — sem ligação ao vivo', kind: 'idle' };
+  if ((r && r.state === 'stuck') || (t && t.state === 'awaiting_approval')) return { label: 'à espera do teu OK', kind: 'waiting' };
+  if (t && t.state === 'running') return { label: 'a trabalhar', kind: 'live' };
+  if (t && t.state === 'queued') return { label: 'na fila', kind: 'queued' };
+  if (t && t.state === 'succeeded') return { label: 'última tarefa concluída', kind: 'done' };
+  if (t && t.state === 'failed') return { label: 'a última tarefa falhou', kind: 'risk' };
+  if (t && t.state === 'cancelled') return { label: 'última tarefa cancelada', kind: 'idle' };
+  return { label: 'sem tarefa registada', kind: 'idle' };
+}
+function badgeLabel(k) {
+  if (k === 'brain') return `O Cérebro — ${brain.state.notes} notas. Abrir o grafo (G).`;
+  const d = DEPTS[k];
+  const n = AGENTS.filter(a => a.dept === k).length;
+  const live = deptCount(k, 'live'), wait = deptCount(k, 'waiting');
+  return `Abrir a sala ${d.name} — ${n} agentes${live ? `, ${live} a trabalhar` : ''}${wait ? `, ${wait} à espera de aprovação` : ''}.`;
+}
+function syncBadgeLabels() { // o que se ouve acompanha os números que mudam
+  for (const k of Object.keys(deptRT)) {
+    const b = deptRT[k].badge;
+    if (b) b.setAttribute('aria-label', badgeLabel(k));
+  }
+}
+
 for (const k of [...DEPT_KEYS, 'brain']) {
   const dept = DEPTS[k];
   const n = AGENTS.filter(a => a.dept === k).length;
   const b = document.createElement('div');
   b.className = 'badge';
   b.style.setProperty('--glass', dept.glass); // V7: o cartão usa a cor do vidro da sala que nomeia
+  // 26 out 2026: o cartão passa a existir para quem usa teclado. Mesma acção do clique — a
+  // acessibilidade não inventa um caminho paralelo, só dá teclas ao caminho que já existia.
+  b.setAttribute('role', 'button');
+  b.tabIndex = 0;
+  b.setAttribute('aria-label', badgeLabel(k));
+  b.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); }
+  });
   b.innerHTML = `
     <div class="b-name"><span class="dot" style="background:${dept.chip}"></span>${dept.short}<span class="live"></span></div>
     <div class="b-count">${k === 'brain' ? '<span class="b-num">∞</span><span class="b-lab">CONHECIMENTO</span>' : `<span class="b-num">${n}</span><span class="b-lab">AGENTES</span>`}</div>
     <div class="b-metrics">${(BB_ROWS[k] || []).map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-m="${k}-${i}">${row[1]()}</span></div>`).join('')}
     </div>
-    <div class="b-appr" style="display:none">⚠ <span class="ap-n">1</span> À ESPERA DE APROVAÇÃO</div>`;
+    <button type="button" class="b-appr" style="display:none" aria-label="decisões à tua espera — abrir a primeira">⚠ <span class="ap-n">1</span> À ESPERA DE APROVAÇÃO</button>`;
   b.addEventListener('click', (e) => {
     if (e.target.closest('.b-appr')) { zoomToApproval(k); e.stopPropagation(); }
     else if (e.target.closest('.b-tasks') && tasks) { tasks.openFor(k); e.stopPropagation(); }
@@ -415,7 +465,7 @@ function updateBillboards() {
     });
   }
 }
-liveUi.onChange((e) => { if (e.type === 'update' || e.type === 'status') updateBillboards(); });
+liveUi.onChange((e) => { if (e.type === 'update' || e.type === 'status') { updateBillboards(); syncBadgeLabels(); } });
 
 /* ---------- controls: wheel zoom-to-cursor, drag pan, click to fly ---------- */
 const ray = new THREE.Raycaster();
@@ -492,6 +542,7 @@ addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else zoomOut(); }
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
   else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar ficou com elas own keys (← → W M T)
+  else if (e.key === 'l' || e.key === 'L') { a11y.toggle(document.activeElement); } // 26 out 2026: a lista do escritório
   else if (e.key === 'g' || e.key === 'G') brain.toggle(); // V3.6: the full-screen Brain graph
   else if (e.key === 'b' || e.key === 'B') { if (tasks) tasks.toggle(); } // V3: the company-wide board
   else if (e.key === '+' || e.key === '=') zoomStep(1.5);
@@ -731,7 +782,7 @@ function buildDeptRail(k) {
     <div class="b-metrics">${BB_ROWS[k].map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-rm="${k}-${i}">${row[1]()}</span></div>`).join('')}</div>
     ${tasks ? tasks.rowHTML(k) : ''}
-    <div class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}">⚠ <span class="ap-n">${stuckIn(k).length}</span> À ESPERA DE APROVAÇÃO</div>`;
+    <button type="button" class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}" aria-label="decisões à tua espera nesta sala — abrir a primeira">⚠ <span class="ap-n">${stuckIn(k).length}</span> À ESPERA DE APROVAÇÃO</button>`;
   const trow = rh.querySelector('.b-tasks');
   if (trow) trow.addEventListener('click', () => tasks.toggle());
   rh.querySelector('.b-appr').addEventListener('click', () => {
@@ -1167,6 +1218,8 @@ function tickLOD() {
     r.pill.style.transform = `translate(${sx}px,${sy}px) translate(-50%,-100%) scale(${pillScale})`;
     const dimmed = focused && focused !== 'brain' && r.a.dept !== focused;
     r.pill.style.opacity = dimmed ? 1 - 0.85 * focusDim : 1;
+    const alvoTab = focused === r.a.dept ? 0 : -1; // só a sala em foco põe as pastilhas no Tab
+    if (r.pill.tabIndex !== alvoTab) r.pill.tabIndex = alvoTab;
   }
 }
 
@@ -1278,7 +1331,52 @@ function floorReport() {
   }
   return out;
 }
+/* ---------- o espelho acessível (26 out 2026) ----------
+   A cena é um canvas: para um leitor de ecrã não há lá nada dentro, e as salas e as pessoas só
+   se abriam com o rato. `src/a11y.js` constrói o mesmo escritório por palavras — 6 salas, o
+   centro e os 35 agentes, cada um um botão a sério. Abre pela tecla L, pelo botão da lista (ao
+   lado do zoom) ou pela ligação «saltar para a lista», que é a primeira coisa no Tab. */
+function focusIntoRail() {
+  requestAnimationFrame(() => {
+    const rail = document.getElementById('rail');
+    if (!rail || rail.style.display === 'none') return;
+    const visivel = [...rail.querySelectorAll('input, textarea, button, [href], [tabindex]:not([tabindex="-1"])')]
+      .find((n) => n.offsetParent !== null);
+    const alvo = visivel || rail;
+    if (alvo === rail) rail.tabIndex = -1;
+    alvo.focus();
+  });
+}
+const a11y = initA11y({
+  deptKeys: [...DEPT_KEYS, 'brain'],
+  agents: AGENTS,
+  describeRoom: (k) => {
+    if (k === 'brain') {
+      return {
+        name: 'o Cérebro', short: 'O CÉREBRO', glass: DEPTS.brain.glass, action: 'Abrir',
+        meta: `${brain.state.notes} notas no vault · o grafo completo abre em ecrã inteiro`,
+        empty: 'O centro não tem secretárias: é a tua pasta de notas, desenhada.',
+      };
+    }
+    const d = DEPTS[k];
+    const n = AGENTS.filter((x) => x.dept === k).length;
+    const live = deptCount(k, 'live'), wait = deptCount(k, 'waiting');
+    return { name: d.name, short: d.short, glass: d.glass, action: 'Abrir a sala', meta: `${n} agentes · ${live} a trabalhar · ${wait} à espera` };
+  },
+  describeAgent: (id) => {
+    const a = AGENTS.find((x) => x.id === id);
+    const r = R[id];
+    const st = agentStateOf(id);
+    return { name: a.name, role: (r && r.role) || roleOf(id), deptName: DEPTS[a.dept].name, label: st.label, kind: st.kind };
+  },
+  onRoom: (k) => { if (k === 'brain') brain.open(); else zoomToDept(k); focusIntoRail(); },
+  onAgent: (id) => { openAgent(id, R[id] && R[id].state === 'stuck' ? 'chat' : 'live'); focusIntoRail(); },
+});
+document.getElementById('skipIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
+document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
+
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
+  a11y,
   office: { depts: DEPTS, floors: floorReport(), problems: officeProblems() },
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };

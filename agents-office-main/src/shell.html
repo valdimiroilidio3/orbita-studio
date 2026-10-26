@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 <head>
 <meta charset="utf-8">
 <title>Órbita — escritório de agentes</title>
@@ -1714,14 +1714,191 @@
     background: var(--glass, var(--grey)); margin-right: 5px; vertical-align: 1px;
   }
   body.dark .badge::before { opacity: 1; }
+
+  /* ===========================================================================
+     V8 · TECLADO E LEITOR DE ECRÃ (26 out 2026)
+
+     Até aqui o escritório era rato-apenas: as salas, os agentes e a barra
+     existiam para quem vê, e não para quem navega por Tab. Esta camada não
+     desenha nada de novo na cena — dá foco visível ao que já existia e veste o
+     espelho em HTML (src/a11y.js): a lista das 6 salas e do centro, com os 35
+     agentes, cada um um botão a sério.
+
+     Regra da casa: o foco é sempre visível, sempre o mesmo azul do sistema, e
+     nunca muda o tamanho nem o lugar de nada (só um contorno por fora).
+     =========================================================================== */
+
+  /* uma coisa que existe para ser lida e não para ser vista */
+  .sr-only {
+    position: absolute !important; width: 1px; height: 1px;
+    margin: -1px; padding: 0; border: 0; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+
+  /* a primeira paragem do Tab: fora do ecrã até receber foco, e aí é um botão de verdade */
+  .skip-link {
+    position: fixed; top: 8px; left: 50%; z-index: 80;
+    transform: translate(-50%, -160%);
+    font-family: var(--sf); font-size: 13px; font-weight: 560; letter-spacing: -.004em;
+    color: var(--accent-fg); background: var(--accent-bg);
+    border: 0; border-radius: 99px; padding: 10px 18px; cursor: pointer;
+    box-shadow: 0 12px 30px -10px rgba(21,20,20,.5);
+    transition: transform .22s var(--ease);
+  }
+  .skip-link:focus-visible { transform: translate(-50%, 0); outline: 2px solid var(--accent); outline-offset: 3px; }
+  body.dark .skip-link { background: #F5F5F7; color: #15161A; }
+
+  /* um só anel de foco para toda a casa — os casos especiais (barra, HOJE) ficam como estão */
+  :where(a, button, [role="button"], [tabindex="0"], input, select, textarea):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* os cartões de sala e as pastilhas dos agentes passaram a ser botões (main.js) */
+  .badge:focus-visible, .pill:focus-visible {
+    outline: 2.5px solid var(--accent); outline-offset: 3px;
+  }
+  .badge:focus-visible { z-index: 5; }
+  /* o botão de aprovação deixou de ser uma div: precisa do que a div já tinha de graça */
+  .badge .b-appr, #railHeader .b-appr {
+    font-family: var(--ui); color: var(--ink); cursor: pointer;
+    width: 100%; appearance: none; -webkit-appearance: none;
+  }
+  .badge .b-appr:hover, #railHeader .b-appr:hover { background: rgba(242,184,75,.30); }
+
+  /* o quarto botão do zoom: o ícone (as letras + − ⌂ ficam como estavam) */
+  #zoomCtl svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
+
+  /* ---------- o espelho: as salas e os agentes, por palavras ---------- */
+
+  .oi { display: none; }
+  .oi:not([hidden]) {
+    display: grid; place-items: center;
+    position: fixed; inset: 0; z-index: 70; padding: 22px;
+    background: rgba(21,20,20,.26);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(12px) saturate(140%);
+    animation: oiIn .22s var(--ease) both;
+  }
+  @keyframes oiIn { from { opacity: 0; } }
+
+  .oi-wrap {
+    width: min(1120px, 100%); max-height: min(90vh, 940px);
+    display: flex; flex-direction: column; gap: 0;
+    background-color: var(--glass-strong);
+    background-image: var(--glass-sheen);
+    border: 1px solid var(--glass-line); border-radius: 26px;
+    box-shadow: 0 1px 1px rgba(21,20,20,.06), 0 40px 90px -28px rgba(21,20,20,.5);
+    overflow: hidden;
+    font-family: var(--sf); color: var(--ink);
+    animation: oiRise .30s var(--ease) both;
+  }
+  @keyframes oiRise { from { opacity: 0; transform: translateY(10px) scale(.99); } }
+
+  .oi-top {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 20px 20px 14px 24px; border-bottom: 1px solid var(--hairline);
+  }
+  .oi-top .oi-ht { flex: 1; min-width: 0; }
+  .oi-top h1 { font-family: var(--serif); font-size: 27px; font-weight: 400; letter-spacing: -.01em; line-height: 1.1; }
+  .oi-sub { font-size: 11.5px; color: var(--grey); margin-top: 3px; }
+  .oi-close {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 13px; line-height: 1; cursor: pointer;
+    color: var(--grey); background: var(--fill-hover); border: 0;
+    transition: background-color .18s var(--ease), color .18s var(--ease);
+  }
+  .oi-close:hover { background: var(--fill-press); color: var(--ink); }
+
+  .oi-grid {
+    padding: 18px 20px 8px; overflow: auto; flex: 1;
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+  .oi-room {
+    display: flex; flex-direction: column; gap: 8px;
+    background: rgba(255,255,255,.72);
+    border: 1px solid var(--hairline); border-radius: 18px;
+    padding: 12px 13px 10px;
+  }
+  body.dark .oi-room { background: rgba(255,255,255,.05); }
+  .oi-rhead { display: flex; align-items: center; gap: 10px; }
+  .oi-rhead h2 {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
+    font-family: var(--sf); font-size: 10.5px; font-weight: 700; letter-spacing: .14em;
+    color: var(--grey);
+  }
+  .oi-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; box-shadow: inset 0 0 0 1px rgba(21,20,20,.14); }
+  .oi-open {
+    flex: none; font-family: var(--sf); font-size: 11.5px; font-weight: 560; letter-spacing: -.004em;
+    color: var(--accent-fg); background: var(--accent-bg);
+    border: 0; border-radius: 99px; padding: 5px 11px; cursor: pointer;
+    transition: transform .16s var(--ease), opacity .18s var(--ease);
+  }
+  .oi-open:hover { opacity: .88; }
+  .oi-open:active { transform: scale(.97); }
+  body.dark .oi-open { background: #F5F5F7; color: #15161A; }
+  .oi-meta { font-size: 10.5px; letter-spacing: .01em; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .oi-empty { font-size: 11.5px; color: var(--grey); padding: 6px 2px; line-height: 1.5; }
+
+  .oi-list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+  .oi-agent {
+    display: grid; width: 100%; text-align: left; cursor: pointer;
+    grid-template-columns: 1fr auto; grid-template-areas: "nome estado" "funcao funcao";
+    align-items: baseline; column-gap: 8px; row-gap: 1px;
+    padding: 6px 8px; border: 0; border-radius: 10px;
+    background: transparent; color: inherit; font: inherit;
+    transition: background-color .16s var(--ease);
+  }
+  .oi-agent:hover { background: var(--fill-hover); }
+  .oi-agent:active { background: var(--fill-press); }
+  .oi-an { grid-area: nome; font-size: 12.5px; font-weight: 560; letter-spacing: -.004em; }
+  .oi-star { color: var(--warn); font-size: 10px; vertical-align: 1px; }
+  .oi-ar { grid-area: funcao; font-size: 10.5px; color: var(--grey); letter-spacing: .01em; }
+  .oi-as {
+    grid-area: estado; font-size: 9.5px; font-weight: 600; letter-spacing: .02em;
+    padding: 2px 7px; border-radius: 99px; white-space: nowrap;
+    color: var(--grey); background: rgba(21,20,20,.06);
+  }
+  .oi-as[data-k="live"] { color: var(--ok); background: var(--ok-soft); }
+  .oi-as[data-k="waiting"] { color: var(--amber-ink); background: var(--amber-bg); }
+  .oi-as[data-k="queued"] { color: var(--grey); background: rgba(21,20,20,.06); }
+  .oi-as[data-k="done"] { color: var(--ok); background: var(--ok-soft); }
+  .oi-as[data-k="risk"] { color: var(--risk); background: var(--risk-soft); }
+  .oi-as[data-k="idle"] { color: var(--grey); background: transparent; box-shadow: inset 0 0 0 1px var(--hairline); }
+
+  .oi-foot {
+    padding: 11px 24px 14px; border-top: 1px solid var(--hairline);
+    font-size: 10.5px; color: var(--grey); letter-spacing: .01em;
+  }
+  .oi-foot b { font-weight: 650; color: var(--ink); }
+
+  @media (max-width: 640px) {
+    .oi { padding: 10px; }
+    .oi-wrap { border-radius: 20px; max-height: 94vh; }
+    .oi-grid { grid-template-columns: 1fr; padding: 12px; }
+    .oi-top { padding: 16px 14px 10px 16px; }
+    .oi-top h1 { font-size: 22px; }
+  }
+
+  /* quem pediu menos movimento não perde a lista: perde só a entrada */
+  @media (prefers-reduced-motion: reduce) {
+    .oi:not([hidden]), .oi-wrap { animation: none; }
+    .skip-link { transition: none; }
+  }
 </style>
 </head>
 <body>
+<!-- A primeira paragem do Tab: atravessa a cena e vai direita à lista. Fora do ecrã até ter foco. -->
+<button type="button" id="skipIndex" class="skip-link">Saltar para a lista do escritório (L)</button>
 
 <!-- V4 (25 out 2026): o relógio do escritório é de 24 horas. Esta lista dá as 24 horas em qualquer
      campo de hora, para nunca aparecer um seletor de AM/PM do sistema. -->
 <datalist id="hours24"><option value="00:00"></option><option value="01:00"></option><option value="02:00"></option><option value="03:00"></option><option value="04:00"></option><option value="05:00"></option><option value="06:00"></option><option value="07:00"></option><option value="08:00"></option><option value="09:00"></option><option value="10:00"></option><option value="11:00"></option><option value="12:00"></option><option value="13:00"></option><option value="14:00"></option><option value="15:00"></option><option value="16:00"></option><option value="17:00"></option><option value="18:00"></option><option value="19:00"></option><option value="20:00"></option><option value="21:00"></option><option value="22:00"></option><option value="23:00"></option></datalist>
-<canvas id="scene"></canvas>
+<!-- 26 out 2026: a cena é uma imagem para quem não a vê. O nome acessível diz o que é;
+     a descrição (#sceneHelp) diz onde está o resto — e o resto é a lista do escritório. -->
+<canvas id="scene" role="img" aria-label="Escritório isométrico com seis salas em volta de um cérebro central e trinta e cinco agentes" aria-describedby="sceneHelp"></canvas>
+<p id="sceneHelp" class="sr-only">Uma vista 3D de um escritório: seis salas à volta de um cérebro central, cada uma com o seu chão de vidro colorido e as suas secretárias com agentes. Tudo o que aqui se vê também está escrito em texto: prime a tecla L, ou a ligação «Saltar para a lista do escritório», para abrir a lista das salas e dos agentes e os percorrer com Tab e Enter.</p>
 <div id="hud"></div>
 <div id="topbar">
   <span class="brand">ÓRBITA <span class="ver">V1</span></span>
@@ -1931,6 +2108,7 @@
   <button id="zIn" title="ampliar (+)">+</button>
   <button id="zOut" title="reduzir (−)">−</button>
   <button id="zHome" title="visão geral (0)">⌂</button>
+  <button id="zIndex" title="lista do escritório (L)" aria-label="lista do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></button>
 </div>
 <!--APP-->
 </body>

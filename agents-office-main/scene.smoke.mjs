@@ -173,12 +173,48 @@ for (const k of pods) {
 }
 for (const cor of CORES) ok(familiaDaSala.has(cor), `falta a cor pedida: ${cor}`);
 
+/* ---------- o espelho acessível: a mesma cena, por palavras (V8, 26 out 2026) ---------- */
+// A cena correu; agora exige-se que o escritório exista TAMBÉM fora dela. Não se testa a cor de
+// um anel de foco (isso é o olho), testa-se o que um leitor de ecrã e um teclado precisam: nome no
+// canvas, uma lista montada com as 7 salas e os 35 agentes, a tecla L a abrir e o Esc a fechar.
+const doc = win.document;
+const canvas = doc.getElementById('scene');
+ok(canvas && canvas.getAttribute('role') === 'img', 'o canvas não tem role="img"');
+ok(!!(canvas && (canvas.getAttribute('aria-label') || '').length > 20), 'o canvas não tem nome acessível');
+const desc = canvas && canvas.getAttribute('aria-describedby');
+ok(!!(desc && doc.getElementById(desc)), 'o canvas aponta para uma descrição que não existe');
+ok(!!doc.getElementById('skipIndex'), 'falta a ligação «saltar para a lista»');
+const indice = doc.getElementById('officeIndex');
+ok(!!indice, 'a lista do escritório não foi montada em #officeIndex');
+ok(!!(win.CC && win.CC.a11y), 'window.CC.a11y não existe — o espelho não ficou ligado');
+if (indice && win.CC && win.CC.a11y) {
+  const salas = indice.querySelectorAll('.oi-room');
+  const agentes = indice.querySelectorAll('button.oi-agent');
+  ok(salas.length === 7, `a lista devia ter 7 salas (6 + centro), tem ${salas.length}`);
+  ok(agentes.length === 35, `a lista devia ter os 35 agentes, tem ${agentes.length}`);
+  ok(indice.hidden === true, 'a lista devia começar fechada');
+  ok(indice.getAttribute('role') === 'dialog', 'a lista devia ser um diálogo');
+  ok([...agentes].every(b => b.tagName === 'BUTTON'), 'há agentes na lista que não são <button>');
+  const abertos = Object.keys(R).filter(id => R[id].pill && R[id].pill.getAttribute('role') === 'button');
+  ok(abertos.length === 35, `as pastilhas dos agentes deviam ser botões: ${abertos.length}/35`);
+  // o caminho do utilizador: a tecla L
+  doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'l', bubbles: true }));
+  ok(indice.hidden === false, 'a tecla L não abriu a lista');
+  ok(doc.activeElement && indice.contains(doc.activeElement), 'ao abrir, o foco não entrou na lista');
+  indice.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  ok(indice.hidden === true, 'o Esc não fechou a lista');
+  // e o botão visível ao lado do zoom faz o mesmo (não é preciso saber atalhos)
+  doc.getElementById('zIndex').click();
+  ok(indice.hidden === false, 'o botão da lista não abriu nada');
+  win.CC.a11y.close();
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
   process.exit(1);
 }
 const mapaCores = [...familiaDaSala.entries()].map(([cor, sala]) => `${sala} ${cor}`).join(' · ');
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), espelho acessível com 7 salas + 35 agentes (tecla L), sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

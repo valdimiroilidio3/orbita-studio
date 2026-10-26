@@ -1,3 +1,52 @@
+## 1.9.5 — 26 out 2026 · O escritório, para quem não usa rato
+
+Pedido 23: *«O escritório é rato-apenas — 18 handlers de clique em `div`/sprite; o `<canvas>` não tem `role`/`aria-label`; nem os 7 cartões de sala nem as 35 pastilhas entram no Tab. Um espelho acessível (as salas e os agentes navegáveis por teclado, com `Enter`) resolve sem tocar no 3D.»*
+
+**O diagnóstico, antes de mexer.** Uma passagem de leitura pelo `main.js` e pelo `shell.html` contou o que havia: **18** `addEventListener('click')` em `div`, `canvas` e sprites; **zero** `role` e **zero** `tabIndex` criados pelo escritório (os únicos do ficheiro eram os três botões do zoom e os formulários das gavetas); um `<canvas id="scene">` **sem nome** — para um leitor de ecrã, uma caixa vazia; e a página declarada em `lang="en"` com o produto todo em português. Um utilizador de teclado podia abrir as gavetas do menu e escrever uma tarefa, mas **não conseguia entrar numa sala nem abrir um agente**.
+
+### O espelho: `src/a11y.js` (novo, puro)
+
+- **A mesma coisa, por palavras.** Uma lista em HTML com as **7 superfícies** (as 6 salas e o centro) e os **35 agentes**, cada um um **`<button type="button">` a sério** — não um `div` com `role="button"`. É a diferença entre imitar um botão e ser um: o `Enter`, o `Espaço`, o `Tab` e o anúncio do leitor de ecrã vêm da semântica do browser, não de código nosso que se pode esquecer.
+- **Um diálogo a sério.** `role="dialog"`, `aria-modal="true"`, `aria-labelledby`/`aria-describedby` a apontar para o título e para o subtítulo («7 salas · 35 agentes · a mesma informação da cena, para teclado e leitores de ecrã»), ciclo de foco próprio (`Tab` no último volta ao primeiro, `Shift+Tab` no primeiro vai ao último), `Esc` fecha, e o foco **volta a quem abriu**.
+- **As mesmas acções, uma só implementação.** `onRoom(k)` chama `zoomToDept(k)` (ou `brain.open()` no centro) e `onAgent(id)` chama o mesmo `openAgent(...)` do clique na pessoa — incluindo o desvio para a conversa quando o agente está preso numa aprovação. O espelho **não duplica lógica**: recebe as duas funções por parâmetro. É por isso que ele não sabe nada do escritório — nem importa o `three`.
+- **`close(false)`.** Quando a acção escolhida abre o rail, quem fecha a lista **não** devolve o foco: quem trata da acção manda (o rail recebe-o no sítio certo). O foco é um só, e não salta duas vezes.
+
+### O Tab na cena (sem tocar no 3D)
+
+- **Os 7 cartões de sala** (`div` que já respondiam ao clique) passam a `role="button"`, `tabIndex = 0`, com `aria-label` escrito por palavras — *«Abrir a sala Comando — 5 agentes, 2 a trabalhar, 1 à espera de aprovação»* — e `Enter`/`Espaço` a chamar o `.click()` que já existia, em vez de um segundo caminho.
+- **As 35 pastilhas dos agentes** são botões, mas **com uma regra**: só as da **sala em foco** ficam com `tabIndex = 0`. Sem essa regra, atravessar a cena eram **35 paragens de `Tab`** a passar por nomes que se sobrepõem no ecrã — a acessibilidade a atrapalhar quem a usa. A regra vive no `tickLOD`, que já sabe qual é a sala em foco; escreve `tabIndex` só quando muda.
+- **O rótulo acompanha os números.** `updateBillboards` passou a refrescar o `aria-label` dos cartões (via `syncBadgeLabels`), para não haver um cartão a dizer «2 à espera» e um leitor de ecrã a anunciar «0». O que se ouve é o que se vê.
+- **O botão de aprovação deixou de ser uma `div`.** Nos dois sítios onde existe (o cartão da sala e o cabeçalho do rail) é agora `<button type="button">` com `aria-label`: recebe foco, aceita `Enter`, e deixa de ser um clique que só existe para o rato. (Precisou de três linhas de CSS para lhe devolver o que a `div` tinha de graça: fonte herdada, largura e cursor.)
+- **O estado falado é o estado real.** `agentStateOf(id)` traduz o que já vem da base de dados — `a trabalhar`, `na fila`, `à espera do teu OK`, `última tarefa concluída`, `a última tarefa falhou`, `última tarefa cancelada`, `sem tarefa registada`. **Sem ligação ao vivo**, não se afirma o presente: diz «último estado conhecido — sem ligação ao vivo». Nada disto é inventado nem decorativo; é a mesma fonte de que vivem o monitor e o chip.
+
+### Por onde se entra
+
+- **A tecla `L`** abre e fecha a lista (a seguir à guarda do calendário: com o calendário aberto, as teclas são dele).
+- **Um botão visível ao lado do zoom** (`#zIndex`, um ícone de linhas) abre o mesmo — porque um atalho que ninguém sabe que existe não é uma porta.
+- **Uma ligação «Saltar para a lista do escritório»** (`#skipIndex`) é a **primeira paragem do `Tab`**: está fora do ecrã até receber foco e aí desce como um botão escuro. Quem navega por teclado não tem de atravessar a barra toda para chegar ao conteúdo.
+
+### O canvas fala
+
+- `role="img"`, `aria-label` («Escritório isométrico com seis salas em volta de um cérebro central e trinta e cinco agentes») e `aria-describedby` a apontar para uma descrição longa (`#sceneHelp`, `.sr-only`) que explica o que ali está **e** como chegar ao resto. Uma imagem sem nome é, para um leitor de ecrã, uma caixa vazia — e esta é a imagem principal do produto.
+- `lang="en"` → **`lang="pt"`**. Um leitor de ecrã com a voz inglesa a ler «Operação» não está a ler português.
+
+### O que **não** mudou
+
+**Nada do 3D.** Nem geometria, nem materiais, nem câmara, nem LOD, nem cores. O `a11y.js` não importa o `three`, não conhece `scene`, `camera` nem `renderer`, e o teste exige que continue assim (procura `three`/`Geometry`/`Material` no ficheiro e falha se aparecer). As alterações no `main.js` são de DOM: atributos, `tabIndex`, `aria-label` e dois `keydown`. O `test:scene` continua a provar os **35 postos** e as **quatro camadas do chão de vidro em 7 pods** — se o espelho tivesse mexido na cena, esse teste caía.
+
+### Provas
+
+- **`npm run test:a11y` — 21/21 (novo).** Executa o módulo em `jsdom`: 7 salas, 35 `<button>`, ordem de tabulação (fechar → salas → agentes, agrupados por sala), abrir/fechar/Esc, devolução do foco, `close(false)` a não roubar o foco, ciclo de `Tab` e `Shift+Tab`, teclas presas dentro do diálogo, `onRoom`/`onAgent` a receberem a chave certa, `refresh()` a reler o estado, texto em PT-PT, e um nome com `<img onerror>` a aparecer **como texto**. Um segundo bloco lê `main.js`/`shell.html` e verifica os invariantes que precisam da cena para correr.
+- **`npm run test:scene` — ✓ 35 postos** … e agora **no bundle real**: a lista está montada com **7 salas + 35 agentes**, a tecla `L` abre, o foco entra, o `Esc` fecha, o botão do zoom abre. Não é o módulo em isolamento: é a página construída.
+- **`test:office` 17/17** · **`ops.test` 71/71** · **`integrations` 18/18** · **`check.mjs` 94/95** (só `smoke: browser`) · build **1315 KB** + `mesa.html` 86 KB.
+- **O CSS novo foi lido de volta**: 1050 regras de topo, e as regras `.oi-*`, `.sr-only` e `.skip-link` presentes no fim da folha (um erro de sintaxe a meio teria cortado tudo o que vem depois).
+
+### Limitações, declaradas
+
+- **Não há Chrome nesta máquina**, logo não há captura de ecrã, e `smoke: browser` continua vermelho por falta de navegador — como antes, não é uma regressão.
+- **Não testei com um leitor de ecrã a sério** (VoiceOver, NVDA, Orca). O que está provado é a semântica (papéis, nomes, ordem), o ciclo de foco e a ausência de armadilhas — em `jsdom`, não em hardware de leitura. Se algo for anunciado de forma estranha, é uma correcção de texto em `a11y.js`, não de arquitectura.
+- **O `Tab` na cena é deliberadamente curto**: 7 cartões + as pastilhas da sala em foco. Quem quer os 35 chega lá pela lista, que é o caminho pensado para isso.
+
 ## 1.9.4 — 26 out 2026 · O chão é vidro, e o vidro tem a cor da sala
 
 Pedido 22: *«coloca uma chão da cor dos vidros (vermelho, verde, azul, roxo, amarelo e azul céu), e faça melhorias na estrutura»*.
