@@ -209,10 +209,10 @@ deptRT.brain.group.traverse(o => { if ((o.isMesh || o.isSprite) && !o.userData.d
 /* (M5.3 per AJ: the bridge cables are gone — the walkways alone carry the connection;
    the brain↔dept relationship shows through the badge sweep + meetings.) */
 
-/* AO VIVO (26 out 2026): cada monitor passa a mostrar o trabalho registado no posto dele. A fonte é
-   o servidor (`/api/ops/aovivo/stream`, SSE); sem eventos recentes o painel diz «sem tarefa» em vez
-   de rodar texto de exemplo. Em demo (window.SCREENS) os ecrãs continuam a ser as sessões gravadas e
-   o painel marca-se DEMO — nunca se chama «ao vivo» a uma gravação. */
+/* AO VIVO (26 out 2026): cada monitor mostra o trabalho registado no posto dele. A fonte é o
+   servidor (`/api/ops/aovivo/stream`, SSE); sem trabalho registado o painel diz «sem tarefa em
+   curso» em vez de rodar texto de exemplo. 1.9.1: deixou de haver cena de demonstração gravada —
+   não há dois regimes, há um. */
 const liveUi = createLive({ agents: AGENTS.map(x => x.id) });
 function agentInfo(id) {
   const a = AGENTS.find(x => x.id === id);

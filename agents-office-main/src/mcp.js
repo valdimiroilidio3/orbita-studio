@@ -124,7 +124,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   }
 
   // ── top-bar connector strip — the overview face of the connectors ──
-  // The overview is the demo's first frame: familiar brand logos ARE the header (they
+  // The overview: familiar brand logos ARE the header (they
   // replaced the agent-count tags), and data visibly beams from each logo down into its
   // department(s). The 3D docks beside the pods only exist zoomed IN (dockA fade below);
   // at overview all connector traffic originates from the top bar instead.
