@@ -192,6 +192,11 @@ para latão velho `#7A6242`, `wallCap` para `#2B2C2A`, o vidro escurece sobre a 
 `dressRug` → `#2C2C31`, `dressIvory` → `#6F6C63`, `dress` → `#26272C`, e a cova/cúpula sobem 50–60 %
 de emissão.
 
+**Retratos do processo.** `docs/salas-antes.png` e `docs/salas-depois.png` — a mesma sala (MEDIA),
+antes e depois, **rasterizados em node** (`tools/room.mjs` + `tools/raster.mjs`, câmara ortográfica
+igual à da app). Não são capturas do browser: o Chromium não corre neste ambiente. Servem para
+comparar composição, não para julgar luz, vidro ou sombras — isso só no browser.
+
 **Inspecção.** `window.CC.office.dressing` devolve, por sala, `rug`, `lamps`, `table`, `console`,
 `pendant` e `tree` — é o que o `test:scene` lê para provar que o adereço está lá e que não estorva.
 
