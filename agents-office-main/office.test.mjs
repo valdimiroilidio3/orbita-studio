@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import {
   parseHex, toHex, mix, shade, tint, hsl, familyOf, glassLayers, GLASS_FAMILIES,
 } from './src/palette.js';
-import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, assertOffice } from './src/data.js';
+import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, assertOffice, stationSpot, deskFront, SEAT_GRID } from './src/data.js';
 import * as THREE from 'three';
 import { makePlant, leafGeometry, stemGeometry, seededRandom, PLANT_KINDS, makeDesk, makeChair } from './src/builders.js';
 import {
@@ -195,6 +195,36 @@ test('duas pessoas não se sentam na mesma secretária', () => {
 test('officeProblems() está vazio e assertOffice() passa', () => {
   assert.deepEqual(officeProblems(), []);
   assert.equal(assertOffice(), true);
+});
+
+/* ---------- a grelha dos postos (1.10.4) ----------
+   O dono: «nas salas com 7 agentes a mesa no fim da sala ficou com uma apresentação feia». A causa
+   era a conta do lugar — `(fila-1)*6.4-1`, um número que não sabia o tamanho da sala: com quatro
+   filas, a última caía em cima do salão do adereço. Agora a conta mora aqui, e estas três provas
+   são as que teriam apanhado o problema antes de ele ser visto. */
+test('as secretárias encostam à parede de fundo e deixam a entrada livre', () => {
+  const traseira = (k) => Math.min(...AGENTS.filter((a) => a.dept === k).map((a) => stationSpot(k, a.grid).z));
+  for (const k of DEPT_KEYS) {
+    const L = LAYOUT[k];
+    // a fila 0 fica a `wallGap` da parede; nada pode encostar nem atravessar a parede de fundo
+    assert.ok(traseira(k) - SEAT_GRID.depth / 2 > -L.d / 2 + 0.4, `${k}: a primeira fila atravessa a parede de fundo`);
+    assert.ok(traseira(k) - SEAT_GRID.depth / 2 < -L.d / 2 + 4.5, `${k}: a primeira fila está longe da parede (${traseira(k)})`);
+    // e a faixa da frente fica para a entrada
+    assert.ok(L.d / 2 - deskFront(k) >= SEAT_GRID.entryBand, `${k}: a última fila come a entrada (${(L.d / 2 - deskFront(k)).toFixed(1)} m)`);
+  }
+});
+
+test('a grelha muda com a sala, o passo entre filas não', () => {
+  // a mesma fila está mais atrás numa sala mais funda — é o que faz a faixa da frente existir
+  const a = stationSpot('emails', [0, 2]).z;   // d 26
+  const b = stationSpot('marketing', [0, 2]).z; // d 34
+  assert.ok(a - b > 3.5 && a - b < 4.5, `a fila 2 devia recuar ~4 m entre as duas salas (recuou ${(a - b).toFixed(2)})`);
+  // o passo horizontal é o mesmo em todas as salas e as duas colunas são simétricas
+  for (const k of DEPT_KEYS) {
+    const l = stationSpot(k, [0, 1]), r = stationSpot(k, [1, 1]);
+    assert.equal(Math.round((r.x - l.x) * 100) / 100, SEAT_GRID.colStep);
+    assert.equal(Math.round((r.x + l.x) * 100) / 100, 0);
+  }
 });
 
 test('assertOffice() apanha um erro de dados e diz qual é', () => {

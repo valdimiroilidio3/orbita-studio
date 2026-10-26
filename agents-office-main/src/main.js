@@ -1,7 +1,7 @@
 // Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
-import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems } from './data.js';
+import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, stationSpot, deskFront } from './data.js';
 import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (teclado e leitor de ecrã)
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
@@ -233,11 +233,14 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   let dressing = null;
   if (key_ !== 'brain') {
     try {
-      dressing = makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink, { seed: DECK.indexOf(key_) + 3 });
+      dressing = makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink, {
+        seed: DECK.indexOf(key_) + 3,
+        front: deskFront(key_),      // onde as secretárias acabam: a entrada começa depois daqui
+      });
       dressing.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
       g.add(dressing);
       dressingRT.push({
-        dept: key_, w: L.w, d: L.d, ...dressing.userData.dressing,
+        dept: key_, w: L.w, d: L.d, deskFront: deskFront(key_), ...dressing.userData.dressing,
         lamps: dressing.userData.dressing.lamps.length,
         tree: !!dressing.userData.dressing.tree,
       });
@@ -312,14 +315,13 @@ function agentInfo(id) {
 }
 
 /* desks + people per dept */
-const COLS = { emails: 2, sales: 2, marketing: 2, ops: 2, fin: 2, delivery: 2 };
 for (const a of AGENTS) {
   const dRT = deptRT[a.dept];
   const dept = DEPTS[a.dept];
   const L = dRT.L;
-  const cols = COLS[a.dept];
-  const gx = (a.grid[0] - (cols - 1) / 2) * 8.6;
-  const gz = (a.grid[1] - 1) * 6.4 - 1;
+  // 1.10.4: a conta do lugar vive em `data.js` (fila encostada à parede de fundo, faixa da
+  // frente reservada à entrada) — a cena e o `tools/room.mjs` usam a mesma função.
+  const { x: gx, z: gz } = stationSpot(a.dept, a.grid);
   const base = new THREE.Vector3(L.pos[0] + gx, 0.12, L.pos[1] + gz);
 
   // whole station rotated 45° so monitor screens face the camera square-on

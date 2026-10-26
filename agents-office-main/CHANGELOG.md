@@ -1,3 +1,49 @@
+## 1.10.4 — 27 out 2026 · A mesa no fim da sala (as salas de sete)
+
+Pedido: *«nas salas com 7 agentes a mesa no fim da sala ficou com uma apresentação feia, melhore isso
+de forma inteligente, colocando em outra posição ou aumenta a dimensão da sala»*.
+
+A causa não era o adereço: era a **conta do lugar das secretárias**.
+
+```
+antes (main.js):  gz = (fila − 1) × 6,4 − 1        ← um número que não sabia o tamanho da sala
+agora (data.js):  gz = −d/2 + 3,9 + fila × 6,4     ← as filas encostam à parede de fundo
+```
+
+Com três filas, os dois números coincidiam por sorte. Nas salas de **quatro filas** (marketing e
+delivery têm sete agentes; sales e ops usam a linha 3) a última fila ia até `z = 11,8` — com a
+cadeira até 13,5 — e o salão do adereço, que vive na faixa da frente, ficava **debaixo das
+secretárias**: a mesa do salão entre dois postos. Vaia-se no render (`docs/salas-7agentes-antes.png`).
+
+**A correção, em três peças:**
+
+1. **A conta muda de sítio e de regra.** `stationSpot(dept, grid)` e `deskFront(dept)` passam a viver
+   em `src/data.js`, com a grelha declarada (`SEAT_GRID`: 2 colunas de 8,6, filas de 6,4, parede de
+   fundo a 3,9 da primeira fila, 2,6 de profundidade por fila, **6,0 m de faixa de entrada** que
+   nenhuma fila pode comer). A cena e o `tools/room.mjs` chamam a **mesma função** — não há duas
+   versões da planta do escritório.
+2. **As salas de quatro filas ficam mais fundas**: sales, ops, delivery e marketing passam de
+   `d = 30` para **`d = 34`**. As de três (emails, fin, d = 26) ficam como estavam. Resultado medido:
+   a faixa da frente é agora de **6,7 m** (emails, fin) e **8,3 m** (as outras quatro) — antes eram
+   0,6 m nas de sete.
+3. **O adereço ancora-se às secretárias, não a um número**: `makeRoomDressing(..., { front })`
+   recebe o `deskFront` da sala e põe o tapete 1,2 m depois da última cadeira, sempre dentro do pod.
+   O mesmo `front` passa a governar a árvore, os candeeiros e o candeeiro de braço.
+
+**Provas.** `officeProblems()` ganhou três invariantes novas (nenhuma secretária sai pela parede
+lateral, nenhuma atravessa a parede de fundo, nenhuma encosta ao bordo da frente) e a invariante da
+**faixa de entrada ≥ 6 m**. `test:office` passou de 49 para **51/51** com dois testes novos (a
+primeira fila encosta à parede de fundo; a mesma fila recua ~4 m entre a sala de 26 e a de 34 e as
+colunas continuam simétricas). `test:scene` trocou a constante `ADEREÇO_MAX = 8,4` — que era
+exactamente o que **escondia** o problema — pelo `deskFront` que a cena mede, e ganhou a prova de que
+o tapete fica depois das secretárias e de que sobra entrada em todas as salas. **Visto a falhar**
+duas vezes: a primeira com o tapete a rasar as secretárias em `emails`/`fin`, a segunda ao empurrar
+a grelha 1,1 m à frente (`wallGap` 3,9 → 5,0), que fez cair a invariante da entrada em três sítios.
+
+Renders: `docs/salas-7agentes-antes.png` → `docs/salas-7agentes-depois.png` (a mesma sala MEDIA,
+com os sete agentes). Restantes: `test:a11y` 21/21, `test:ops` 71/71, `test:google` 5/5,
+`test:integracoes` 13/13, build **1 418 kB**.
+
 ## 1.10.3 — 27 out 2026 · As salas, «chique chique»
 
 Pedido: *«quero que melhores brutalmente as salas, deixando mais bonita e elegante, chique chique»*.

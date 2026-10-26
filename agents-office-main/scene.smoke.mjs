@@ -196,14 +196,17 @@ ok(plantas.filter(p => p.dept === 'brain').length === 1, 'o centro devia ter uma
 // dois candeeiros ficam nos corredores e não sobre os postos, e que nada disto saiu do pod.
 const aderecos = (office.dressing || []);
 ok(aderecos.length === 6, `esperava adereço nas 6 salas, encontrei ${aderecos.length}`);
-const ADEREÇO_MAX = 8.4; // z mais alto que qualquer posto ocupa (secretária + cadeira)
+// 1.10.4: o limite já não é um número — é o `deskFront` que a cena mede (data.js/deskFront). Era
+// esta constante que escondia o problema das salas de quatro filas: ela dizia 8,4 e as secretárias
+// dessas salas chegavam aos 14,4, por cima do tapete.
 for (const a of aderecos) {
   const k = a.dept;
   ok(a.w > 16 && a.d > 20, `${k}: medidas de sala inesperadas (${a.w}×${a.d})`);
   ok(a.rug && a.rug.w >= 6, `${k}: o tapete é estreito (${a.rug && a.rug.w})`);
   ok(Math.abs(a.rug.w - Math.min(8.0, a.w - 3.4)) < 0.01, `${k}: o tapete não tem a medida do salão`);
   ok(a.rug.w >= 2 * 2.35 + 1.2, `${k}: o tapete não chega às duas poltronas (${a.rug.w})`);
-  ok(a.rug.z - a.rug.d / 2 > ADEREÇO_MAX, `${k}: o tapete entra por baixo das secretárias (frente em ${a.rug.z - a.rug.d / 2})`);
+  ok(a.deskFront < a.rug.z - a.rug.d / 2 - 0.6, `${k}: o tapete entra por baixo das secretárias (secretárias até ${a.deskFront}, tapete desde ${(a.rug.z - a.rug.d / 2).toFixed(1)})`);
+  ok(a.d / 2 - a.deskFront >= 6, `${k}: a última fila come a entrada (${(a.d / 2 - a.deskFront).toFixed(1)} m livres)`);
   ok(a.rug.z + a.rug.d / 2 < a.d / 2, `${k}: o tapete sai do pod pela frente`);
   ok(a.lamps === 2, `${k}: devia ter dois candeeiros de pé, tem ${a.lamps}`);
   ok(Math.abs(a.rug.x) + a.rug.w / 2 < a.w / 2 - 1, `${k}: o tapete encosta à parede lateral`);
@@ -213,7 +216,7 @@ for (const a of aderecos) {
   ok(a.pendant && a.pendant.h > 2.2, `${k}: a luz do salão tem de passar por cima das secretárias`);
 }
 // nenhum adereço pode cair em cima de um posto: a mesa do salão fica à frente da última fila
-for (const a of aderecos) ok(a.table.z - a.rug.d / 2 > 6.2, `${a.dept}: a mesa do salão encosta às secretárias`);
+for (const a of aderecos) ok(a.table.z > a.deskFront + 1, `${a.dept}: a mesa do salão encosta às secretárias`);
 
 /* ---------- as 35 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
 // O pedido foi «mesa preta com LED na cor da sala». Aqui lê-se a cena MONTADA, posto a posto:
@@ -467,7 +470,8 @@ const resumoAdereco = (() => {
   const ds = (office.dressing || []);
   if (!ds.length) return 'sem adereço';
   const taps = ds.map(d => d.rug.w);
-  return `adereço nas ${ds.length} salas (tapete do salão ${Math.min(...taps).toFixed(1)}×${ds[0].rug.d}, ${ds.filter(d => d.tree).length} árvores, 2 candeeiros por sala)`;
+  const folgas = ds.map(d => d.d / 2 - d.deskFront);
+  return `adereço nas ${ds.length} salas (tapete do salão ${Math.min(...taps).toFixed(1)}×${ds[0].rug.d}, entrada de ${Math.min(...folgas).toFixed(1)}–${Math.max(...folgas).toFixed(1)} m, ${ds.filter(d => d.tree).length} árvores, 2 candeeiros por sala)`;
 })();
 const resumoPlantas = (() => {
   const ps = (office.plants || []);

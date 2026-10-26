@@ -94,12 +94,45 @@ export const AGENTS = [
 export const LAYOUT = {
   brain:     { pos: [0, 0],     w: 16, d: 16 },
   emails:    { pos: [-30, -23], w: 20, d: 26 },
-  delivery:  { pos: [0, -48],   w: 20, d: 30 },   // 6th pod mirrors ops on the top axis
-  sales:     { pos: [30, -23],  w: 20, d: 30 },
-  marketing: { pos: [-30, 23],  w: 20, d: 30 },
+  delivery:  { pos: [0, -48],   w: 20, d: 34 },   // 6th pod mirrors ops on the top axis
+  sales:     { pos: [30, -23],  w: 20, d: 34 },   // 4 filas: fundo para a entrada (1.10.4)
+  marketing: { pos: [-30, 23],  w: 20, d: 34 },
   fin:       { pos: [30, 23],   w: 20, d: 26 },
-  ops:       { pos: [0, 48],    w: 20, d: 30 },   // the 5th pod fills the empty bottom-left gap
+  ops:       { pos: [0, 48],    w: 20, d: 34 },   // the 5th pod fills the empty bottom-left gap
 };
+
+/* ---------- onde assenta cada secretária (27 out 2026, 1.10.4) ----------
+   Antes: `gz = (row-1)*6.4 - 1` — um número que não sabia o tamanho da sala. Funcionava nas salas
+   de três filas; nas de QUATRO (marketing, delivery, e sales/ops que usam a linha 3) empurrava a
+   última fila até ao bordo da frente, e a mesa do salão do adereço ficava debaixo das secretárias.
+   O dono viu-o: «nas salas com 7 agentes a mesa no fim da sala ficou com uma apresentação feia».
+
+   Agora as filas encostam à PAREDE DE FUNDO (`wallGap` da parede ao centro da primeira fila) e a
+   FAIXA DA FRENTE fica reservada — é a área que a câmara vê e onde vive a entrada. A conta vive
+   num sítio só porque a cena (`src/main.js`) e o revelador de salas (`tools/room.mjs`) têm de
+   concordar; e `officeProblems()` passa a provar que sobra entrada em todas as salas. */
+export const SEAT_GRID = {
+  cols: 2,          // duas secretárias por fila
+  colStep: 8.6,     // afastamento entre colunas
+  rowStep: 6.4,     // afastamento entre filas (secretária 2,4 + cadeira + corredor)
+  wallGap: 3.9,     // da parede de fundo ao centro da fila 0
+  depth: 2.6,       // quanto uma fila ocupa para a frente (secretária + cadeira)
+  entryBand: 6.0,   // faixa da frente que nenhuma fila pode comer
+};
+/** posição local (dentro do pod) de uma secretária: `grid` = [coluna, fila]. */
+export function stationSpot(dept, grid) {
+  const L = LAYOUT[dept];
+  const x = (grid[0] - (SEAT_GRID.cols - 1) / 2) * SEAT_GRID.colStep;
+  const z = -L.d / 2 + SEAT_GRID.wallGap + grid[1] * SEAT_GRID.rowStep;
+  return { x, z };
+}
+/** z local mais à frente ocupado por uma secretária (com a cadeira) numa sala. */
+export function deskFront(dept) {
+  const L = LAYOUT[dept];
+  let z = -L.d / 2;
+  for (const a of AGENTS) if (a.dept === dept) z = Math.max(z, stationSpot(dept, a.grid).z + SEAT_GRID.depth);
+  return z;
+}
 
 // Department billboard metrics (v1 rule #5: live metrics float above each dept,
 // values tick green on change, "À espera de aprovação" pulses amber when > 0).
@@ -154,6 +187,18 @@ export function officeProblems() {
     const here = AGENTS.filter((a) => a.dept === k);
     if (!here.length) p.push(`${k}: sala sem agentes`);
     if (here.filter((a) => a.lead).length !== 1) p.push(`${k}: tem de haver exactamente um chefe de sala`);
+    // 1.10.4: as secretárias cabem na sala E deixam a faixa da frente para a entrada
+    const L = LAYOUT[k];
+    for (const a of here) {
+      const at = stationSpot(k, a.grid);
+      if (Math.abs(at.x) + 1.7 > L.w / 2) p.push(`${a.id}: a secretária sai pela parede lateral (${at.x})`);
+      if (at.z + SEAT_GRID.depth > L.d / 2 - 0.6) p.push(`${a.id}: a secretária encosta ao bordo da frente (${at.z})`);
+      if (at.z - SEAT_GRID.depth < -L.d / 2 + 0.4) p.push(`${a.id}: a secretária atravessa a parede de fundo (${at.z})`);
+    }
+    const front = deskFront(k);
+    if (L.d / 2 - front < SEAT_GRID.entryBand) {
+      p.push(`${k}: a última fila come a entrada (${(L.d / 2 - front).toFixed(1)} m livres, mínimo ${SEAT_GRID.entryBand})`);
+    }
   }
   return p;
 }

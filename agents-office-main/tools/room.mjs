@@ -14,7 +14,7 @@ import {
 import { makePerson, poseWork } from '../src/avatar.js';
 import { lookFor } from '../src/looks.js';
 import { contact } from '../src/deskmap.js';
-import { AGENTS, DEPTS, LAYOUT } from '../src/data.js';
+import { AGENTS, DEPTS, LAYOUT, stationSpot, deskFront } from '../src/data.js';
 
 const [deptKey = 'marketing', cam = '26,22,34', at = '0,0,0', fov = '30', out = '/tmp/room.png', W = 1100, H = 800] = process.argv.slice(2);
 const L = LAYOUT[deptKey];
@@ -28,17 +28,15 @@ const plinth = makePlinth(L.w, L.d, dept.glass);
 pod.add(plinth);
 if (deptKey !== 'brain') {
   pod.add(makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass }));
-  pod.add(makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink));
+  pod.add(makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink, { front: deskFront(deptKey) }));
 }
 
-const COLS = 2;
 const agents = AGENTS.filter((a) => a.dept === deptKey);
 const ANG = Math.PI / 4;
 const rot = (v) => v.applyAxisAngle(new THREE.Vector3(0, 1, 0), ANG);
 for (const a of agents) {
-  const gx = (a.grid[0] - (COLS - 1) / 2) * 8.6;
-  const gz = (a.grid[1] - 1) * 6.4 - 1;
-  const base = new THREE.Vector3(gx, 0.12, gz);
+  const spot = stationSpot(a.dept, a.grid);          // a mesma conta que a cena usa (data.js)
+  const base = new THREE.Vector3(spot.x, 0.12, spot.z);
   const station = new THREE.Group();
   station.position.copy(base);
   station.rotation.y = ANG;

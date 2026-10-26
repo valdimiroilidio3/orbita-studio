@@ -166,13 +166,22 @@ O **chão** são as quatro camadas de vidro de 1.9.x (0,10 / 0,115 / 0,12 + poç
 **vinco de sombra** perimetral (`#26272B`) que separa a laje do volume branco, e um **filé de latão**
 de 0,035 na aresta.
 
-O **adereço** (`makeRoomDressing(w, d, glass, chip, ink, { seed })`) assenta na faixa da frente —
+**Onde assenta cada secretária** (1.10.4). A grelha vive em `src/data.js`:
+`stationSpot(dept, [coluna, fila])` devolve a posição local e `deskFront(dept)` o z mais à frente que
+as secretárias ocupam. As filas encostam à **parede de fundo** (`SEAT_GRID.wallGap = 3,9`), e a
+**faixa da frente** (`SEAT_GRID.entryBand = 6,0`) fica reservada à entrada. Salas de quatro filas
+(sales, ops, delivery, marketing — sete agentes nas duas últimas) são mais fundas, `d = 34`; as de
+três, `d = 26`. Medido: 6,7 m de entrada nas de 26 e 8,3 m nas de 34. Antes desta regra a conta era
+`(fila − 1) × 6,4 − 1`, independente do tamanho da sala, e nas salas de sete punha a última fila
+**em cima do salão**.
+
+O **adereço** (`makeRoomDressing(w, d, glass, chip, ink, { seed, front })`) assenta na faixa da frente —
 a única área grande que a câmara vê livre, porque as secretárias ocupam `z ∈ [−7,4, +8,4]` e
 `x ∈ [−5,5, +5,5]`:
 
 | peça | medida / sítio | porquê |
 |---|---|---|
-| tapete do salão | 8,0 × 3,4, centro `x = min(w/2 − rw/2 − 1,5, 2,8)`, `z ≈ d/2 − 3` | campo escuro + moldura de marfim + filete de latão: o marfim das poltronas e o latão precisam de fundo |
+| tapete do salão | 8,0 × 3,4, centro `x = min(w/2 − rw/2 − 1,5, 2,8)`, `z = min(d/2 − rw/2 − 0,9, max(front + 1,2 + rd/2, d/2 − 3,4))` | campo escuro + moldura de marfim + filete de latão: o marfim das poltronas e o latão precisam de fundo |
 | soleira | do lado de fora do tapete | o gesto de entrada |
 | 2 poltronas | `x = rx ± 2,35`, viradas umas para as outras | assento 0,42, encosto 1,15 — altura de gente |
 | mesa redonda | centro do tapete, tampo de latão a 0,60 | |

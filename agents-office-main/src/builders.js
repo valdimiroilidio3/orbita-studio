@@ -1557,7 +1557,11 @@ export function makeRoomDressing(w, d, glass, chip, ink, opts = {}) {
   const rw = Math.min(8.0, w - 3.4), rd = 3.4;
   // a faixa da frente tem de existir em TODAS as salas: nas de 26 de fundo há menos 4 m do que
   // nas de 30, e o tapete da primeira versão ficava a rasar as secretárias (visto no render).
-  const rz = Math.min(d / 2 - 2.6, Math.max(10.4, d / 2 - 3.4));
+  /* 1.10.4: o salão encosta ao fim das secretárias, não a um número fixo. `opts.front` é o z local
+     onde a última fila acaba (vem de `deskFront()` em data.js); o tapete começa 1,2 m depois disso
+     e nunca sai do pod. Sem `front` (chamadas antigas) cai na faixa de sempre. */
+  const front = opts.front != null ? opts.front : d / 2 - 6.5;
+  const rz = Math.min(d / 2 - rd / 2 - 0.9, Math.max(front + 1.2 + rd / 2, d / 2 - 3.4));
   /* Onde o salão assenta dentro da faixa da frente. Deslocado para +x de propósito: a câmara olha
      a sala pela diagonal (+x,+z), e ao centro o salão ficava por trás da fila da esquerda. Assim
      cai no vão que a câmara vê de facto, e deixa a árvore sozinha no canto oposto. */
