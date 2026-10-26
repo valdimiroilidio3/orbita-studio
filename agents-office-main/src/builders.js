@@ -378,10 +378,10 @@ export function makeDesk(chip, live, opts = {}) {
   const body = [], edge = [], matte = [], metal = [], led = [], accent = [], glow = [], glassy = [];
 
   /* ---------- o tampo ---------- */
-  // 27 out 2026: `GEO.box` cresce a partir da base (0..h em y), não do centro — o tampo já estava
-  // certo em 2.32 = DESK_TOP_Y. O que estava errado era o RATO (ver abaixo).
+  // `GEO.box(w, d, h)` cresce a partir da base: y vai de `y` a `y + h`. (Foi por isso que uma tarde
+  // inteira de «o tampo está 11 cm abaixo do teclado» era falsa — o tampo já acabava em 2.32.)
   body.push(place(GEO.box(5.2, 2.6, 0.22, 0.18), 0, DESK_TOP_Y - 0.22, 0));
-  edge.push(place(GEO.box(5.24, 2.64, 0.035, 0.19), 0, DESK_TOP_Y - 0.235, 0)); // o filete que apanha a luz
+  edge.push(place(GEO.box(5.24, 2.64, 0.035, 0.19), 0, DESK_TOP_Y - 0.245, 0)); // o filete que apanha a luz
   /* os pés: duas lâminas finas de metal, à moderna — em vez dos armários brancos */
   for (const sx of [-2.35, 2.35]) {
     edge.push(place(GEO.box(0.26, 2.28, 2.02, 0.09), sx, 0.02, 0));       // a perna em grafite
@@ -392,8 +392,8 @@ export function makeDesk(chip, live, opts = {}) {
   matte.push(place(GEO.box(3.4, 0.40, 0.10, 0.04), 0, 1.88, -0.98));      // calha de cabos
 
   /* ---------- o LED: por baixo do tampo, à volta, na cor da sala ---------- */
-  led.push(place(GEO.box(4.86, 0.06, 0.05, 0.02), 0, DESK_TOP_Y - 0.258, 1.27));  // aresta da frente
-  for (const sx of [-2.52, 2.52]) led.push(place(GEO.box(0.06, 2.28, 0.05, 0.02), sx, DESK_TOP_Y - 0.258, 0));
+  led.push(place(GEO.box(4.86, 0.06, 0.05, 0.02), 0, DESK_TOP_Y - 0.252, 1.27));  // aresta da frente
+  for (const sx of [-2.52, 2.52]) led.push(place(GEO.box(0.06, 2.28, 0.05, 0.02), sx, DESK_TOP_Y - 0.252, 0));
 
   /* ---------- o monitor: a mesma tela (AO VIVO), com moldura preta e luz atrás ---------- */
   const screenSet = live ? { tex: live.tex, canvas: live.canvas, draw: () => {}, live } : makeDeskScreenTexture(chip);
@@ -424,7 +424,7 @@ export function makeDesk(chip, live, opts = {}) {
   glow.push(place(glowDisc(mw * 1.10, 1.75, 0.34), 0, 2.325, -0.30, { rx: -Math.PI / 2 }));
 
   /* ---------- o teclado mecânico (posição: deskmap.js) ---------- */
-  matte.push(place(GEO.box(1.80, 0.62, 0.075, 0.05), KEYBOARD.x, DESK_TOP_Y, KEYBOARD.z));
+  matte.push(place(GEO.box(1.80, 0.62, 0.075, 0.05), KEYBOARD.x, DESK_TOP_Y, KEYBOARD.z));  // 2.32→2.395
   metal.push(place(GEO.box(1.74, 0.02, 0.02, 0.01), KEYBOARD.x, DESK_TOP_Y + 0.0575, KEYBOARD.z + 0.30));
   led.push(place(GEO.box(1.72, 0.04, 0.02, 0.01), KEYBOARD.x, DESK_TOP_Y + 0.0645, KEYBOARD.z + 0.305));
   const keyTex = keyboardTexture();
@@ -474,8 +474,9 @@ export function makeDesk(chip, live, opts = {}) {
   led.push(place(GEO.box(0.30, 0.012, 0.012, 0.006), MOUSE_PAD.x, MOUSE_PAD.y + 0.004, MOUSE_PAD.z - MOUSE_PAD.d / 2 + 0.05));
   // o rato é uma malha própria e move-se: o `main.js` põe-no a deslizar no tapete, e a mão segue-o.
   // Corpo + botão numa malha só (o botão é uma aresta no mesmo preto), para o custo não subir.
-  const mouseGeo = GEO.ball(MOUSE.r, 14, 10);
-  mouseGeo.scale(1, MOUSE.sy, MOUSE.sz);
+  const mouseGeo = GEO.ball(MOUSE.r, 14, 10).clone();
+  mouseGeo.scale(1, MOUSE.sy, MOUSE.sz);     // a esfera está centrada na origem: escalar aqui é seguro
+  mouseGeo.translate(0, 0, 0);
   const btnGeo = place(GEO.box(0.09, 0.11, 0.05, 0.028), -0.045, 0.006, 0.06);
   const mouseMesh = new THREE.Mesh(mergeGeos([mouseGeo, btnGeo]), M.matte);
   mouseMesh.name = 'mouse';

@@ -384,6 +384,13 @@ const resumoPlantas = (() => {
   const up = ps.filter(p => p.kind === 'upright').length;
   return `${ps.length} plantas (${up} verticais · ${ps.length - up} de folha larga, ${Math.min(...alturas).toFixed(1)}–${Math.max(...alturas).toFixed(1)} de altura)`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, 35 secretárias pretas com LED na cor da sala, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+// 27 out 2026 (1.10.0): as pessoas — 35 aparências distintas, mulheres, chapéus, e um rato que
+// é uma malha própria em cada posto (é ele que desliza no tapete quando a mão o empurra)
+const avatares = (() => {
+  const av = office.avatars || {};
+  if (!av.stats) return 'sem avatares';
+  return `${av.stats.total} avatares (${av.stats.women} mulheres · ${av.stats.hats} chapéus · ${av.stats.beards} barbas · ${av.stats.glasses} óculos · ${av.stats.styles} estilos), 57 teclas e 1 rato por posto`;
+})();
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, 35 secretárias pretas com LED na cor da sala, ${avatares}, espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

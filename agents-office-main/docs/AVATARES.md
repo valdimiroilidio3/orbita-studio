@@ -44,8 +44,6 @@ alguém mudar o teclado de sítio, a mão vai atrás.
 
 ## O braço
 
-![Mãos no rato](maos-rato.png)
-
 Cadeia `ombro → cotovelo → punho → mão`, com IK de dois ossos (`solveArm`): dados o ombro e a ponta
 que se quer atingir, resolve-se o cotovelo com a lei dos cosenos e escolhe-se o lado com um vector
 `pole` (o lado de fora do corpo). O punho desloca-se para trás pela distância `HAND_TIP`, para que
@@ -111,8 +109,7 @@ seis cores de fato (uma por sala), as 57 teclas em cada posto e o rato como malh
 
 ## Limitações, ditas
 
-- **Não há capturas WebGL neste ambiente** (o Chromium do Playwright não está no sandbox). As imagens desta página são do **rasterizador de inspecção** (`tools/sheet35.mjs`,
-  `tools/station.mjs`) (`tools/raster.mjs`, z-buffer próprio,
+- **Não há capturas WebGL neste ambiente** (o Chromium do Playwright não está no sandbox). A imagem desta página vem do **rasterizador de inspecção** (`tools/sheet35.mjs`) (`tools/raster.mjs`, z-buffer próprio,
   `three` em node), que lê a geometria real — mas com sombreado plano e **sem** materiais, LED,
   bloom nem tone mapping. A cena no browser é mais escura e mais luminosa nas arestas.
 - **Os dedos são uma malha por mão.** O toque lê-se na tecla a afundar e no pulso a descer; não há
