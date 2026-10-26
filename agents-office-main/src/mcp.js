@@ -37,7 +37,10 @@ function smooth(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
 export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null }) {
   const LIVE = !!(connectors && connectors.live);
   const BY_DEPT = LIVE ? connectors.byDept : {};
-  const LOGOS = LIVE ? { ...MCP_LOGOS, ...connectors.logos } : {};
+  // Sem o servidor dos conectores (ou sem nenhum ligado) não há logotipos: a fila fica vazia e a
+  // barra di-lo. Foi isto que rebentou a 26 out 2026 — `LOGOS[k].img` sobre um `{}` matava o
+  // initMcp inteiro sempre que /api/mcp falhava.
+  const LOGOS = { ...MCP_LOGOS, ...(LIVE ? connectors.logos : {}) };
   const AGENT_TOOLS = (LIVE && connectors.agentTools) || {};
   const STATUS = (LIVE && connectors.status) || {};
   const NAMES = (LIVE && connectors.names) || {};
@@ -258,9 +261,11 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   if (topmodels) {
     topmodels.innerHTML = `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
     Object.keys(MODELS).forEach((k, i) => {
+      const L = LOGOS[k];
+      if (!L || !L.img) return; // sem azulejo para este motor: não se desenha um buraco
       const img = document.createElement('img');
-      img.src = LOGOS[k].img;
-      img.alt = img.title = LOGOS[k].name + ' — headless';
+      img.src = L.img;
+      img.alt = img.title = L.name + ' — headless';
       img.style.setProperty('--d', (0.9 + i * 0.12) + 's');
       img.addEventListener('animationend', (e) => { if (e.animationName === 'tcin') img.classList.add('in'); });
       img.addEventListener('click', () => modelPulse(k, true));
@@ -270,6 +275,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   }
   const mwires = {};
   Object.keys(MODELS).forEach((k, i) => {
+    if (!modelImgs[k]) return; // sem azulejo, sem conduta
     const path = document.createElementNS(svgNS, 'path');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', MODELS[k]);

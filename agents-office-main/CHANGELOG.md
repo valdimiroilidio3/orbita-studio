@@ -1,3 +1,12 @@
+## 1.9.2 — 26 out 2026 · A cena voltou
+
+- **O que se via.** O escritório aparecia **em branco**: sem salas, sem pessoas, nem a plataforma. O HTML da barra e dos painéis estava lá; o 3D é que nunca era desenhado.
+- **Causa.** A limpeza da demonstração (1.9.1) apagou funções que continuavam a ser chamadas — `spawnEmote`, `getEmoteTex`, `emotes`, `tickEmotes`, `walkStep` e `applyStandAndFacing` em `main.js`, e a chamada a `addTask` em `tasks.js`. A primeira `ReferenceError` acontecia ao montar o contexto de `initTasks`, **antes** de `resize()` e do ciclo de desenho: tudo o que vinha depois nunca corria, e o canvas ficava vazio. `node --check` e `npm run build` passam sempre nestes casos — só um teste que **executa** a página apanha isto.
+- **Correcção.** As funções voltam (mesma geometria de antes: bolha de emoji por cima do posto, passos, postura). O caminho das rotinas em modo ficheiro deixou de fabricar uma tarefa: diz que sem servidor não há trabalho. `window.CC` já não expõe um `addTask` que não existe.
+- **Segunda armadilha, também fechada.** `initMcp` rebentava com `LOGOS[k].img` quando não havia conectores (`/api/mcp` a falhar) e deixava uma promessa rejeitada sem tratamento. Agora o azulejo do motor só é desenhado se houver logotipo, e `loadConnectors()` tem `.catch` — os conectores falham em silêncio visível, a cena não.
+- **Teste novo: `npm run test:scene`.** Carrega o bundle construído num DOM (jsdom) com um contexto WebGL falso, espera 3 s e verifica: **nenhum erro no bundle**, nenhuma promessa rejeitada, `window.CC` existe (o módulo chegou ao fim) e há **35 postos** com secretária e pessoa. Contra o bundle que esteve no ar, o teste diz exactamente o que se via: *«esperava 35 postos na cena, encontrei 0»*. Custa ~4 s e não precisa de Chrome.
+- **Provas.** `test:scene` **✓ 35 postos** · `ops.test` **71/71** · `check.mjs` **94/95** (só `smoke: browser`) · build **1276 KB** + `mesa.html` 86 KB.
+
 ## 1.9.1 — 26 out 2026 · O escritório deixa de fingir trabalho
 
 Pedido 19, frente (a). Sai tudo o que inventava estado; o que não existe é dito por palavras.

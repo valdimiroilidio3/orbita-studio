@@ -267,7 +267,10 @@ const mcp = {
   isLive: () => !!(mcpImpl && mcpImpl.live),
 };
 let mcpUsage = null;
-loadConnectors().then(c => { mcpImpl = initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors: c }); if (mcpDark) mcpImpl.setDark(true); if (mcpUsage) mcpImpl.setUsage(mcpUsage); });
+loadConnectors()
+  .then(c => { mcpImpl = initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors: c }); if (mcpDark) mcpImpl.setDark(true); if (mcpUsage) mcpImpl.setUsage(mcpUsage); })
+  // 26 out 2026: uma falha nos conectores nunca pode derrubar a cena — fica sem a barra e diz porquê
+  .catch(e => console.warn('conectores indisponíveis: ' + e.message));
 
 // plants on outer corners
 for (const k of ['emails', 'sales', 'marketing', 'ops', 'delivery']) {
@@ -964,6 +967,91 @@ function syncFromLive() {
   }
 }
 
+/* ---------- emotes ----------
+   Um sprite de emoji sobe por cima do posto quando acontece algo real (tarefa atribuída, aprovação,
+   erro). 26 out 2026: o bloco foi apagado por engano na limpeza da demonstração, mas continuava a
+   ser chamado — e a ReferenceError em `spawnEmote` matava o módulo antes de arrancar o ciclo de
+   desenho, deixando a cena em branco. Fica aqui, com a mesma geometria de antes. */
+const emoteTex = {};
+function getEmoteTex(icon) {
+  if (emoteTex[icon]) return emoteTex[icon];
+  {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const x = c.getContext('2d');
+    // cream bubble disc so the icon reads at any zoom
+    x.beginPath(); x.arc(64, 60, 52, 0, 7);
+    x.fillStyle = 'rgba(253,255,248,0.97)'; x.fill();
+    x.lineWidth = 3; x.strokeStyle = 'rgba(21,20,20,0.25)'; x.stroke();
+    x.beginPath(); x.moveTo(50, 106); x.lineTo(64, 124); x.lineTo(74, 104); x.closePath();
+    x.fillStyle = 'rgba(253,255,248,0.97)'; x.fill();
+    x.font = '58px "Apple Color Emoji", serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#151414';
+    x.fillText(icon, 64, 64);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    emoteTex[icon] = t;
+  }
+  return emoteTex[icon];
+}
+const emotes = [];
+function spawnEmote(r, icon) {
+  if (!r || !r.person) return;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: getEmoteTex(icon), depthTest: false, transparent: true }));
+  const p = r.person.position;
+  s.position.set(p.x + 0.7, p.y + 5.6, p.z);
+  s.scale.set(2.9, 2.9, 1);
+  scene.add(s);
+  emotes.push({ s, born: performance.now() });
+}
+function tickEmotes(now, dt) {
+  for (let i = emotes.length - 1; i >= 0; i--) {
+    const e = emotes[i], age = (now - e.born) / 1700;
+    if (age >= 1) {
+      scene.remove(e.s); e.s.material.dispose(); emotes.splice(i, 1);
+    } else {
+      e.s.position.y += dt * 1.7;
+      e.s.material.opacity = age < 0.15 ? age / 0.15 : 1 - (age - 0.15) / 0.85;
+    }
+  }
+}
+
+/* ---------- passos e postura: quem vai a pé e quem está sentado ---------- */
+function walkStep(r, dt) {
+  const cur = r.person.position, tgt = r.path[r.pathI];
+  const d = new THREE.Vector3().subVectors(tgt, cur); d.y = 0;
+  const dist = d.length();
+  const step = r.speed * dt;
+  if (dist <= step) {
+    cur.copy(tgt);
+    r.pathI++;
+    if (r.pathI >= r.path.length) return true;
+  } else {
+    d.normalize();
+    cur.addScaledVector(d, step);
+    r.person.rotation.y = Math.atan2(d.x, d.z);
+  }
+  return false;
+}
+
+// standing modes drift the agent from the chair to a spot beside the desk, and can re-face the camera
+const FACE_CAM = Math.PI / 4;
+function applyStandAndFacing(r, mode, now, dt) {
+  const u = r.person.userData;
+  const sk = (u.cur && u.cur.standK) || 0;
+  r.person.position.x = r.seat.x + (r.stand.x - r.seat.x) * sk;
+  r.person.position.z = r.seat.z + (r.stand.z - r.seat.z) * sk;
+  if (mode === 'spin') {
+    const span = Math.max(400, (r.modeUntil - r.modeStart) || 1500);
+    r.person.rotation.y = r.seatRot + ((now - r.modeStart) / span) * Math.PI * 2;
+    return;
+  }
+  const target = (mode === 'stretch' || mode === 'cheer' || mode === 'wave') ? FACE_CAM : r.seatRot;
+  let d = target - r.person.rotation.y;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  r.person.rotation.y += d * (1 - Math.exp(-dt * 6));
+}
+
 function tickSim(now, dt) {
   if (now - lastLiveSync > 1200) { lastLiveSync = now; syncFromLive(); }
   for (const r of Object.values(R)) {
@@ -1147,7 +1235,7 @@ resize();
 }
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
-  toggleBoard: () => tasks.toggle(), addTask: (agentId, title) => tasks.addTask(agentId, title), tasks, routines: () => tasks.routines };
+  toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
 
 /* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
 liveUi.onChange(() => {

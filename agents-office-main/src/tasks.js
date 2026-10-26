@@ -519,9 +519,14 @@ export function initTasks(ctx) {
   }
   function setRoutines(list) { routines.length = 0; for (const r of list) routines.push({ ...r, live: true }); syncPills(); dirty = true; if (railAgent) railFor(railAgent); }
   function fireDemo(r, manual) {
-    const t = addTask(r.agent, r.title, 'routine');
-    if (t) { t.routine = r.id; t.when = r.desc; t.needsOk = r.needsOk; t.modelUsed = r.model || officeModel; t.modelFrom = r.model ? 'routine' : 'office'; spawnEmote(R[r.agent], '⏱'); feedPush(R[r.agent], '⏱', `Routine${manual ? ' (executar agora)' : ''}: ${r.title}`); }
-    r.lastAt = Date.now(); r.runs++; r.nextAt = nextRun(r.when);
+    // Sem servidor não há tarefa para criar: a rotina só existe na sessão, e o trabalho tem de vir
+    // da base de dados. Diz-se isso em vez de fabricar um cartão que ninguém pediu.
+    say(`Sem servidor ligado, <b>${esc(r.title)}</b> não cria trabalho — liga o Órbita para a rotina correr.`, 'err');
+    spawnEmote(R[r.agent], '⏱');
+    feedPush(R[r.agent], '⏱', `Rotina ${manual ? '(executar agora)' : ''}sem servidor: ${r.title}`);
+    if (manual) { r.lastAt = Date.now(); r.runs++; r.nextAt = nextRun(r.when); }
+    syncPills(); dirty = true; if (railAgent === r.agent) railFor(r.agent);
+    return null;
   }
   async function rtAct(rid, act) { // RUN NOW · PAUSAR · RETOMAR · DELETE — from a SCHEDULED row, a board card or the rail strip
     const r = routines.find(x => x.id === rid); if (!r) return;
@@ -987,6 +992,6 @@ export function initTasks(ctx) {
   }
   const calendar = initCalendar({ tasks, routines, agentOf, DEPTS, DEPT_KEYS, RT_DEPTS, rtRefuse, create: createScheduled, createRoutine: createRoutineAt, cancelTask: cancelScheduled, rtAct, openAgent: (id, tab) => openAgent && openAgent(id, tab), esc, isLive: () => live, officeModel: () => officeModel, MODEL_KEYS, modelName, business: () => document.title.replace(/ — Órbita$/, ''), currentDept: () => dept });
   return { tick, toggle, open, close, openFor, isOpen, boardWidth, onFocusChange, onStuck, onResolve, calendar, createScheduled, cancelScheduled,
-           handleChat, addTask, revise, rowHTML, setDept, tasks, panelWidth: () => panel.offsetWidth, isLive: () => live,
+           handleChat, revise, rowHTML, setDept, tasks, panelWidth: () => panel.offsetWidth, isLive: () => live,
            routines, addRoutine, rtAct, railFor, syncPills, refresh: poll, resolveLive, pendingReject, rejectLive, officeModel: () => officeModel, chosenModel, chosenEffort };
 }
