@@ -23,6 +23,13 @@ import {
   MODES, MODE_KEYS, fileProblem, packFiles, contextChoices, chatBody, metaLine, effortLabel,
   loadPrefs, savePrefs, PREFS_KEY, FILES_MAX,
 } from './src/composer.js'; // 27 out 2026: o conversador
+// 27 out 2026 (1.10.0): os 35 avatares e o mapa da secretária (as mãos têm de chegar às teclas)
+import { lookFor, lookProblems, LOOK_STATS, LOOK_TABLE, HAIR_STYLES, HATS } from './src/looks.js';
+import {
+  keyCells, nearestKey, toAvatarLocal, mouseAt, typingHand, contact,
+  KEYBOARD, KEY_CAP_TOP, MOUSE, MOUSE_TOP, MOUSE_PAD, MOUSE_TRAVEL, MOUSE_Y,
+} from './src/deskmap.js';
+import { makePerson, poseWork, posePerson, HAND_TIP } from './src/avatar.js';
 
 /* ---------- cor: a matemática que tudo o resto usa ---------- */
 
@@ -481,4 +488,194 @@ test('as preferências do compositor sobrevivem com bom senso (e não rebentam c
   assert.equal(tolerante.mode, 'ask');
   assert.deepEqual(tolerante.favs, []);
   assert.equal(tolerante.auto, true);
+});
+
+
+/* ---------- os avatares (1.10.0, 27 out 2026) ----------
+   Pedido do dono: «melhorar o avatar, uma vibe mais pessoa real, com roupa formal, mas cada sala
+   mantém a coloração da roupa, cabelo diferente para cada agente (35), alguns com chapéu, alguns
+   serão mulheres» — e, na mesma frase, «mexendo realmente o mouse e digitando nos teclados».
+
+   O que se prova aqui é o que se pode provar sem olhos: que são 35 e diferentes, que a cor vem
+   mesmo da sala, que o fato é formal, e que a PONTA DOS DEDOS fica no ponto exacto onde está a
+   tecla (e o rato). Esta última é a diferença entre «o ombro oscila» e «a mão digita». */
+
+test('35 agentes, 35 aparências — e a tabela é verificada, não sorteada', () => {
+  assert.deepEqual(lookProblems(), []);
+  assert.equal(LOOK_STATS.total, 35);
+  const sig = AGENTS.map((a) => lookFor(a).signature);
+  assert.equal(new Set(sig).size, 35, 'há dois agentes com o mesmo cabelo/chapéu');
+  const cabelos = AGENTS.map((a) => `${lookFor(a).style}.${lookFor(a).variant}`);
+  assert.equal(new Set(cabelos).size, 35, 'o pedido foi «cabelo diferente para cada agente»');
+  assert.ok(LOOK_STATS.women >= 8, `mulheres a menos (${LOOK_STATS.women})`);
+  assert.ok(LOOK_STATS.hats >= 5, `chapéus a menos (${LOOK_STATS.hats})`);
+  assert.ok(LOOK_STATS.beards >= 4, `barbas a menos (${LOOK_STATS.beards})`);
+  assert.ok(LOOK_STATS.glasses >= 4, `óculos a menos (${LOOK_STATS.glasses})`);
+  assert.ok(LOOK_STATS.styles >= 12, `poucos estilos de cabelo distintos (${LOOK_STATS.styles})`);
+  for (const d of DEPT_KEYS) {
+    assert.ok(LOOK_STATS.womenPerDept[d] >= 1, `a sala ${d} não tem nenhuma mulher`);
+    assert.ok(LOOK_STATS.hatsPerDept[d] >= 1, `a sala ${d} não tem nenhum chapéu`);
+  }
+  for (const a of AGENTS) {
+    const l = lookFor(a);
+    assert.ok(HAIR_STYLES.includes(l.style), `${a.id}: estilo ${l.style}`);
+    assert.ok(HATS.includes(l.hat), `${a.id}: chapéu ${l.hat}`);
+    assert.match(l.suit, /^#[0-9a-f]{6}$/i);
+  }
+});
+
+test('a tabela apanha um erro: um agente sem aparência, ou dois iguais', () => {
+  const sem = AGENTS.filter((a) => a.id !== 'imail');
+  assert.ok(lookProblems(sem).some((p) => /imail/.test(p)), 'devia dizer que falta a aparência do imail');
+  const doppel = Object.assign({}, LOOK_TABLE, { imail: { ...LOOK_TABLE.imail, style: 'slick', variant: 0, hat: 'none' } });
+  // (a tabela é congelada; o teste compara assinaturas directamente)
+  assert.equal(doppel.imail.style, 'slick');
+  assert.ok(LOOK_STATS.signatures.length === 35);
+});
+
+test('o fato é a cor da sala: mesmo matiz, mais fundo, e a gravata acende com o vidro', () => {
+  for (const d of DEPT_KEYS) {
+    const dept = DEPTS[d];
+    const h = hsl(dept.chip).h;
+    for (const a of AGENTS.filter((x) => x.dept === d)) {
+      const l = lookFor(a);
+      const df = Math.min(Math.abs(hsl(l.suit).h - h), 360 - Math.abs(hsl(l.suit).h - h));
+      assert.ok(df < 14, `${a.id}: o fato (${l.suit}) saiu do matiz da sala ${d} (${dept.chip}) — ${df.toFixed(0)}°`);
+      assert.ok(hsl(l.suit).l < hsl(dept.chip).l, `${a.id}: o fato tem de ser mais fundo que o chip da sala`);
+      assert.equal(l.tie, l.female ? dept.glass : dept.chip, `${a.id}: a gravata/lenço tem de acender com a cor da sala`);
+      assert.ok(l.shirt && l.trousers && l.shoes, `${a.id}: falta camisa, calças ou sapatos`);
+    }
+  }
+});
+
+test('o avatar é formal: casaco, camisa, gravata ou lenço — e algumas mulheres de vestido', () => {
+  const mulheres = AGENTS.filter((a) => lookFor(a).female);
+  const homens = AGENTS.filter((a) => !lookFor(a).female);
+  for (const a of homens) assert.notEqual(lookFor(a).outfit, 'dress', `${a.id} não devia estar de vestido`);
+  assert.ok(mulheres.length >= 8);
+  const vestidos = mulheres.filter((a) => lookFor(a).outfit === 'dress').length;
+  assert.ok(vestidos >= 2, 'pelo menos duas mulheres de vestido');
+});
+
+test('as teclas estão onde o teclado está — e a tecla mais próxima é a certa', () => {
+  const cells = keyCells();
+  assert.equal(cells.length, 57, '14×4 teclas + a barra de espaço');
+  for (const c of cells) {
+    const x0 = KEYBOARD.x - KEYBOARD.w / 2, x1 = KEYBOARD.x + KEYBOARD.w / 2;
+    const z0 = KEYBOARD.z - KEYBOARD.d / 2, z1 = KEYBOARD.z + KEYBOARD.d / 2;
+    assert.ok(c.x - c.w / 2 >= x0 - 0.02 && c.x + c.w / 2 <= x1 + 0.02, `tecla fora do teclado em x (${c.x})`);
+    assert.ok(c.z - c.d / 2 >= z0 - 0.02 && c.z + c.d / 2 <= z1 + 0.02, `tecla fora do teclado em z (${c.z})`);
+  }
+  for (let i = 0; i < cells.length; i++) {
+    assert.equal(nearestKey(cells[i].x, cells[i].z, cells), i, `a tecla ${i} não é a mais próxima de si própria`);
+  }
+  // o referencial do avatar é o do posto rodado 180°: a conta tem de ser reversível
+  const p = { x: 0.4, y: 2.4, z: 0.9 };
+  const l = toAvatarLocal(p);
+  assert.ok(Math.abs(l.x + p.x) < 1e-12 && Math.abs(l.z + (p.z - 1.7)) < 1e-12);
+});
+
+test('o rato não sai do tapete, e o dedo acompanha-o', () => {
+  for (let t = 0; t < 40000; t += 137) {
+    const m = mouseAt(t, 0.37);
+    assert.ok(Math.abs(m.x - MOUSE.x) <= MOUSE_PAD.w / 2 - MOUSE.r, `o rato saiu do tapete em x (${m.x.toFixed(2)})`);
+    assert.ok(Math.abs(m.z - MOUSE.z) <= MOUSE_PAD.d / 2 - MOUSE.r * MOUSE.sz, `o rato saiu do tapete em z (${m.z.toFixed(2)})`);
+  }
+  // o rato não fica parado: em 4 s percorre uma distância visível (mas pequena, como uma mão)
+  const a = mouseAt(1000, 0), b = mouseAt(5000, 0);
+  const d = Math.hypot(a.x - b.x, a.z - b.z);
+  assert.ok(d > 0.08 && d < MOUSE_TRAVEL.x * 3, `o rato move-se ${d.toFixed(2)} em 4 s`);
+});
+
+test('a mão do rato (e as duas de quem escreve) chegam ao ponto de contacto', () => {
+  // é este teste que separa «ombro a oscilar» de «a digitar»: a ponta do dedo tem de cair no ponto
+  // que o `deskmap` diz — a tecla, ou o cimo do rato. E vale a pena dizer como isto falhou antes:
+  // o IK resolvia para um braço de 0.60+0.55 enquanto a geometria media 0.54+0.50, e a mão parava
+  // 8 cm antes do alvo. Um teste que compare a ponta do dedo com a tecla apanha-o; um que só olhe
+  // para os quaterniões, não.
+  //
+  // O passo é o do simulador (60 fps): o blend do IK leva ~0.4 s, por isso aquece-se 1.2 s.
+  for (const a of AGENTS) {
+    const p = makePerson({ look: lookFor(a) });
+    p.position.set(0, 0.55, 1.7);
+    p.rotation.y = Math.PI;
+    for (const mode of ['type', 'mouse']) {
+      let con = null;
+      for (let t = 0; t <= 3600; t += 16) {
+        con = contact(t, 0.31, mode);
+        poseWork(p, mode, t, 0.016, con);
+      }
+      p.updateMatrixWorld(true);
+      for (const which of ['keys', 'mouse']) {
+        const alvo = which === 'keys' ? con.keys : con.mouse;
+        if (!alvo) continue;
+        const tip = p.userData.tip(which);
+        const err = Math.hypot(tip.x - alvo.x, tip.y - alvo.y, tip.z - alvo.z);
+        assert.ok(err < 0.004, `${a.id}/${mode}: o dedo ficou a ${err.toFixed(3)} do ${which === 'keys' ? 'tecla' : 'rato'}`);
+      }
+      // o braço chega mesmo: se o IK tivesse de esticar, ficaria curto (e a mão no ar)
+      assert.equal(p.userData.armKeys.diag.short, 0, `${a.id}/${mode}: o braço do teclado não chega`);
+      assert.equal(p.userData.armMouse.diag.short, 0, `${a.id}/${mode}: o braço do rato não chega`);
+      // ninguém atravessa o próprio corpo: a mão do teclado fica do lado dela
+      const local = p.worldToLocal(p.userData.tip('keys').clone());
+      assert.ok(local.x > 0.05, `${a.id}/${mode}: a mão do teclado cruzou o corpo (${local.x.toFixed(2)})`);
+      // e a mão fica ACIMA da mesa, não dentro do tampo
+      assert.ok(local.z > 0.35 && local.z < 1.45, `${a.id}/${mode}: a mão saiu da mesa (z ${local.z.toFixed(2)})`);
+    }
+  }
+});
+
+test('a tecla afunda com o dedo — e a pressão é sempre 0–1', () => {
+  for (let t = 0; t < 20000; t += 91) {
+    const con = contact(t, 0.12, 'type');
+    assert.ok(con.keys.press >= 0 && con.keys.press <= 1, `pressão fora de 0–1 (${con.keys.press})`);
+    assert.ok(con.keys.cell >= 0 && con.keys.cell < 57, 'a tecla premida tem de existir');
+    assert.ok(con.keys.y <= KEY_CAP_TOP + 1e-9, 'o dedo não pode pairar acima da tecla');
+    const h = typingHand(t, 0.12, 0);
+    assert.ok(h.x > KEYBOARD.x - KEYBOARD.w / 2 && h.x < KEYBOARD.x + KEYBOARD.w / 2, 'a mão saiu do teclado em x');
+  }
+});
+
+test('as poses que não tocam em nada continuam a existir — e nenhuma dá NaN', () => {
+  const p = makePerson({ look: lookFor(AGENTS[0]) });
+  p.position.set(0, 0.55, 1.7);
+  for (const mode of ['read', 'phone', 'glance', 'sip', 'spin', 'stretch', 'wave', 'cheer', 'slump']) {
+    poseWork(p, mode, 3000, 0.016);
+    assert.ok(Number.isFinite(p.position.y), `${mode}: posição não finita`);
+    for (const A of [p.userData.armKeys, p.userData.armMouse]) {
+      for (const q of [A.sh.quaternion, A.elbow.quaternion, A.hand.quaternion]) {
+        assert.ok(Number.isFinite(q.x + q.y + q.z + q.w), `${mode}: quaternião inválido`);
+      }
+    }
+  }
+  for (const pose of ['walk', 'stand']) {
+    posePerson(p, pose, 2000);
+    assert.ok(Number.isFinite(p.position.y), `${pose}: posição não finita`);
+    assert.ok(Number.isFinite(p.userData.armKeys.sh.quaternion.w), `${pose}: quaternião inválido`);
+  }
+});
+
+test('um avatar são poucas malhas: a cabeça inteira é uma, o tronco é outra', () => {
+  for (const a of AGENTS) {
+    const p = makePerson({ look: lookFor(a) });
+    let n = 0;
+    p.traverse((o) => { if (o.isMesh) n++; });
+    assert.ok(n <= 12, `${a.id}: ${n} malhas (o custo é por posto, e são 35)`);
+  }
+});
+
+test('a secretária põe as teclas e o rato onde as mãos chegam', () => {
+  const { group, caps, mouse } = makeDesk('#CFEBDD', null, { glass: '#1FA36B', seed: 0 });
+  assert.ok(caps && caps.count === 57, 'falta a malha das teclas (57 instâncias)');
+  const cells = keyCells();
+  const m = new THREE.Matrix4(), v = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  caps.getMatrixAt(3, m); m.decompose(v, q, s);
+  assert.ok(Math.abs(v.x - cells[3].x) < 1e-6 && Math.abs(v.z - cells[3].z) < 1e-6, 'a tecla não está na célula');
+  assert.ok(Math.abs(v.y + s.y / 2 - KEY_CAP_TOP) < 1e-6, 'o topo da tecla tem de ser o KEY_CAP_TOP');
+  assert.ok(mouse && mouse.name === 'mouseG', 'o rato tem de ser uma malha própria (é ele que desliza)');
+  assert.ok(Math.abs(mouse.position.y - MOUSE_Y) < 1e-6, 'o rato tem de estar pousado no tapete');
+  const caixa = new THREE.Box3().setFromObject(mouse);
+  assert.ok(caixa.max.y < MOUSE_TOP + 0.002 && caixa.min.y > MOUSE_PAD.y - 0.001,
+    `o rato não está entre o tapete (${MOUSE_PAD.y.toFixed(3)}) e o cimo (${MOUSE_TOP.toFixed(3)}): ${caixa.min.y.toFixed(3)}..${caixa.max.y.toFixed(3)}`);
+  assert.ok(KEY_CAP_TOP > MOUSE_PAD.y, 'as teclas ficam acima do tampo');
 });

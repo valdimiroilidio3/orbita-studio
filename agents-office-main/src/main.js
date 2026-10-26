@@ -9,9 +9,65 @@ import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, de
 // PLINTH_H, mat, rbox, makeFloorTitle, makeServerRack, makeMeetingTable) — o tipo de sobra que
 // faz alguém procurar um título de chão que já não existe.
 import {
-  makePlinth, makeDesk, makeChair, makePerson, posePerson, poseWork,
+  makePlinth, makeDesk, makeChair,
   makePlant, makeWalkway, makeWarnSprite, makeRoomWalls,
 } from './builders.js';
+// 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
+// o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
+import { makePerson, posePerson, poseWork } from './avatar.js';
+import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
+import {
+  contact as deskContact, keyCells, nearestKey, mouseAt,
+  KEYBOARD, KEY_CAP_TOP, MOUSE, MOUSE_Y,
+} from './deskmap.js';
+
+/* ---------- as teclas e o rato: o que responde ao dedo ----------
+   27 out 2026. O avatar não é um manequim a oscilar o ombro: a mão vai ao ponto que `deskmap.js`
+   calcula, e o posto responde — a tecla sob o dedo afunda, o rato desliza no tapete. Este bloco é
+   a metade «mundo» dessa história; a metade «corpo» está em `avatar.js` (IK). */
+const KEY_CELLS = keyCells();
+const CAP_MID_Y = KEY_CAP_TOP - KEYBOARD.capH / 2;   // o centro da tecla, não o topo
+const _capM = new THREE.Matrix4(), _capQ = new THREE.Quaternion();
+const _capP = new THREE.Vector3(), _capS = new THREE.Vector3();
+function setCap(caps, i, press) {
+  const c = KEY_CELLS[i];
+  if (!c) return;
+  _capP.set(c.x, CAP_MID_Y - 0.013 * press, c.z);
+  _capS.set(c.w * 0.86, KEYBOARD.capH, c.d * 0.86);
+  _capM.compose(_capP, _capQ, _capS);
+  caps.setMatrixAt(i, _capM);
+  caps.instanceMatrix.needsUpdate = true;
+}
+
+/** Afunda as teclas que os dedos estão a premir e põe o rato no tapete. */
+function driveDesk(r, con, t, phase, dt) {
+  const wants = [];
+  if (con) {
+    if (con.keys && con.keys.press > 0.02) wants.push([con.keys.cell, con.keys.press]);
+    if (con.second && con.second.press > 0.02) wants.push([con.second.cell, con.second.press]);
+  }
+  const seen = new Set();
+  for (const [i, v] of wants) {
+    seen.add(i);
+    if (Math.abs(r.press[i] - v) > 0.015) setCap(r.caps, i, v);
+    r.press[i] = v;
+    r.touched.add(i);
+  }
+  for (const i of r.touched) {          // as que deixaram de ser premidas voltam ao sítio
+    if (seen.has(i)) continue;
+    setCap(r.caps, i, 0); r.press[i] = 0; r.touched.delete(i);
+  }
+  // o rato vai ONDE A MÃO ESTÁ (não ao contrário): `con.mouse` já foi suavizado em `tickSim`, por isso
+  // o ponteiro e a palma do avatar nunca se separam. É isto que se vê: uma mão a empurrar o rato.
+  if (con && con.mouse) {
+    r.mousePos.x = con.mouse.x; r.mousePos.z = con.mouse.z;
+    r.mouse.position.set(con.mouse.x, MOUSE_Y, con.mouse.z);
+  } else if (con && con.mode === 'type') {
+    const m = mouseAt(t, phase);        // sem mão no rato, ele fica quieto onde o deixaram
+    r.mousePos.x = m.x * 0.06 + r.mousePos.x * 0.94;
+    r.mousePos.z = m.z * 0.06 + r.mousePos.z * 0.94;
+  }
+}
 import { initMcp } from './mcp.js';
 import { initComposer, chatBody, metaLine } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
 import { fmtClock } from './time.js'; // 24 horas, sempre
@@ -28,7 +84,10 @@ let tasks = null; // V3 task boards — initialised after the rail constants exi
    sentido, fica dito na consola com o nome do problema; o desenho continua (nunca uma tela em
    branco por causa de uma cor mal escrita). `office.test.mjs` exige a lista vazia. */
 try {
-  const problemas = officeProblems();
+  // 27 out 2026: os 35 avatares também se validam aqui (penteados distintos, chapéus, mulheres).
+  // A validação vive em `looks.js`, que é puro, e não dentro do `data.js` para os dados não
+  // passarem a depender do desenho.
+  const problemas = officeProblems().concat(lookProblems());
   if (problemas.length) console.error('escritório inconsistente:\n  · ' + problemas.join('\n  · '));
 } catch (e) {
   console.error('não foi possível validar o escritório: ' + e.message);
@@ -254,7 +313,7 @@ for (const a of AGENTS) {
   const live = liveUi.attach(agentInfo(a.id)); // um monitor por posto, ligado ao que a base de dados diz
   // 26 out 2026: a secretária passa a ser preta, com LED na cor do vidro da sala e acessórios
   // gamers. A semente muda o acessório de posto para posto (comando, telemóvel, barra de luz).
-  const { group: desk, screenSet } = makeDesk(dept.chip, live, { glass: dept.glass, seed: AGENTS.indexOf(a) });
+  const { group: desk, screenSet, caps, mouse } = makeDesk(dept.chip, live, { glass: dept.glass, seed: AGENTS.indexOf(a) });
   station.add(desk);
   screenSets.push({ screenSet, dept: a.dept, live, agentId: a.id });
   const chair = makeChair({ glass: dept.glass, chip: dept.chip });
@@ -263,7 +322,8 @@ for (const a of AGENTS) {
   station.traverse(o => { if (o.isMesh) o.userData.dept = a.dept; }); // focus-dim tagging
   scene.add(station);
 
-  const person = makePerson({ hair: a.hair, skin: a.skin, chip: dept.chip, lead: a.lead });
+  const look = lookFor(a);   // quem é esta pessoa: cabelo, chapéu, barba, fato na cor da sala
+  const person = makePerson({ look });
   person.position.copy(base).add(rot(new THREE.Vector3(0, 0, 1.7)));
   person.rotation.y = ANG + Math.PI; // face the monitor
   person.traverse(o => { if (o.isMesh) { o.userData.agentId = a.id; o.userData.dept = a.dept; personTargets.push(o); } });
@@ -294,6 +354,11 @@ for (const a of AGENTS) {
     stand: person.position.clone().add(rot(new THREE.Vector3(1.5, 0, 0.15))),
     state: 'idle', bob: Math.random() * 10, path: null, pathI: 0, speed: 9.5, ask: null, feed: [],
     station, desk, screenSet,
+    // 27 out 2026: o posto guarda o que se mexe — as teclas que afundam e o rato que desliza
+    caps, mouse, look,
+    press: new Float32Array(KEY_CELLS.length), touched: new Set(),
+    mouseRest: { x: MOUSE.x, z: MOUSE.z }, mousePos: { x: MOUSE.x, z: MOUSE.z },
+    handOff: { x: MOUSE.x, z: MOUSE.z },
   };
 }
 
@@ -1245,9 +1310,27 @@ function tickSim(now, dt) {
     } else if (r.state === 'atBrain') {
       posePerson(r.person, 'stand', now);
     } else if (r.state === 'working') {
-      // a trabalhar de verdade: a escrever. Sem trocas de pose ao acaso.
-      poseWork(r.person, 'type', now + r.bob * 400, dt);
-      applyStandAndFacing(r, 'type', now, dt);
+      // A trabalhar de verdade: escreve e, de vez em quando, vai ao rato. As duas coisas são o mesmo
+      // gesto — a mão segue o ponto que `deskmap.js` calcula, e o posto responde (tecla a afundar,
+      // rato a deslizar). 27 out 2026.
+      const phase = (r.bob * 0.137) % 1;
+      const mode = Math.sin(now / 5200 + r.bob) > 0.66 ? 'mouse' : 'type';
+      const t = now + r.bob * 400;
+      const con = deskContact(t, phase, mode);
+      // a mão do rato desliza entre o teclado e o rato em vez de saltar (e não prime teclas a caminho)
+      const alvo = con.mouse || con.second;
+      if (alvo) {
+        const k = 1 - Math.exp(-dt * 9);
+        r.handOff.x += (alvo.x - r.handOff.x) * k;
+        r.handOff.z += (alvo.z - r.handOff.z) * k;
+        const emTransito = Math.hypot(alvo.x - r.handOff.x, alvo.z - r.handOff.z) > 0.06;
+        alvo.x = r.handOff.x; alvo.z = r.handOff.z;
+        if (emTransito && !con.mouse) { alvo.press = 0; alvo.cell = nearestKey(alvo.x, alvo.z); }
+      }
+      poseWork(r.person, mode, t, dt, con);
+      applyStandAndFacing(r, mode, now, dt);
+      driveDesk(r, con, t, phase, dt);
+      r.mode = mode;
     } else if (r.state === 'stuck') {
       poseWork(r.person, 'wave', now + r.bob * 500, dt);
       applyStandAndFacing(r, 'wave', now, dt);
@@ -1267,6 +1350,8 @@ function tickSim(now, dt) {
       poseWork(r.person, 'read', now + r.bob * 200, dt);
       applyStandAndFacing(r, 'read', now, dt);
     }
+    // quem não está a trabalhar não deixa uma tecla premida nem a mão no ar
+    if (r.state !== 'working' && r.touched.size) driveDesk(r, null, now, 0, dt);
   }
   tickEmotes(now, dt);
   brain.tick(now);
@@ -1479,7 +1564,20 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
-  office: { depts: DEPTS, floors: floorReport(), plants: plantsRT, problems: officeProblems() },
+  office: {
+    depts: DEPTS, floors: floorReport(), plants: plantsRT,
+    problems: officeProblems().concat(lookProblems()),
+    // 27 out 2026: os 35 avatares, para o teste de cena poder olhar para eles
+    avatars: {
+      stats: LOOK_STATS,
+      problems: lookProblems(),
+      looks: Object.fromEntries(Object.values(R).map((r) => [r.a.id, {
+        signature: r.look.signature, female: r.look.female, hat: r.look.hat,
+        suit: r.look.suit, tie: r.look.tie, dept: r.look.dept,
+      }])),
+      meshes: Object.values(R).reduce((n, r) => { let k = 0; r.person.traverse((o) => { if (o.isMesh) k++; }); return n + k; }, 0),
+    },
+  },
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
 

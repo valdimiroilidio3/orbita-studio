@@ -346,6 +346,31 @@ if (mIn && mSend) {
   ok(!doc.getElementById('rail').contains(doc.getElementById('mcModal')), 'o modal do motor tem de estar fora do #rail');
 }
 
+/* ---------- os avatares (27 out 2026) ----------
+   O dono pediu 35 pessoas diferentes, com fato, chapéu e mulheres, e mãos que mexem mesmo o rato e
+   o teclado. A geometria e o IK provam-se em `office.test.mjs`; aqui prova-se que a CENA é feita
+   deles: 35 looks distintos, todos com fato na cor da sala, com teclas que afundam e um rato que é
+   uma malha própria (não um enfeite fundido no tampo). */
+{
+  const av = office.avatars;
+  ok(!!av, 'a cena não publica os avatares em window.CC.office.avatars');
+  if (av) {
+    ok(av.problems.length === 0, 'avatares inconsistentes: ' + av.problems.join(' · '));
+    ok(av.stats.total === 35, `deviam ser 35 looks (são ${av.stats.total})`);
+    ok(new Set(Object.values(av.looks).map((l) => l.signature)).size === 35, 'há dois agentes com a mesma aparência');
+    ok(av.stats.women >= 8, `poucas mulheres (${av.stats.women}) — o dono pediu «alguns serão mulheres»`);
+    ok(av.stats.hats >= 5, `poucos chapéus (${av.stats.hats}) — o dono pediu «alguns com chapéu»`);
+    const SALAS = new Set(Object.values(av.looks).map((l) => l.suit));
+    ok(SALAS.size === 6, `devia haver um fato por sala (seis cores), há ${SALAS.size}`);
+    ok(av.meshes > 0 && av.meshes <= 35 * 12, `avatares com demasiadas malhas: ${av.meshes}`);
+    // cada posto tem as teclas (uma malha instanciada) e o rato (uma malha que se move)
+    const semTeclas = Object.values(R).filter((r) => !r.caps || r.caps.count !== 57);
+    ok(semTeclas.length === 0, `${semTeclas.length} postos sem as 57 teclas`);
+    const semRato = Object.values(R).filter((r) => !r.mouse || r.mouse.name !== 'mouseG');
+    ok(semRato.length === 0, `${semRato.length} postos sem rato móvel`);
+  }
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);

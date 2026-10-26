@@ -3,6 +3,11 @@ import * as THREE from 'three';
 // V7 (26 out 2026): os builders recebem CORES, nunca salas. Quem sabe que sala é qual é o
 // main.js; quem sabe derivar tons de uma cor é a palette (pura, testável sem WebGL).
 import { glassLayers, tint } from './palette.js';
+// 27 out 2026: o teclado, o tapete e o rato têm UM sítio onde estão definidos (`deskmap.js`), porque
+// agora há mãos que têm de lhes chegar. Se estes números vivessem só aqui, o avatar adivinhava.
+import {
+  DESK_TOP_Y, KEYBOARD, KEY_CAP_TOP, MOUSE_PAD, MOUSE, MOUSE_Y, keyCells,
+} from './deskmap.js';
 
 export const PLINTH_H = 2.6;
 const WHITE = '#F7F7F2';
@@ -329,13 +334,15 @@ function deskMaterials(chip, glass) {
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     }),
     glassPanel: std({ color: '#0B0D10', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.55 }),
+    // a tecla: preta, com a luz da sala por baixo (é assim que um teclado retroiluminado se lê)
+    keycap: std({ color: '#1E2127', roughness: 0.58, emissive: glass, emissiveIntensity: 0.5 }),
   };
   deskMatCache.set(key, M);
   return M;
 }
 
 /** funde uma lista de geometrias já transformadas numa malha só. */
-function meshOf(geos, material, { shadow = true } = {}) {
+export function meshOf(geos, material, { shadow = true } = {}) {
   if (!geos.length) return null;
   const m = new THREE.Mesh(mergeGeos(geos), material);
   m.castShadow = shadow; m.receiveShadow = shadow;
@@ -343,7 +350,7 @@ function meshOf(geos, material, { shadow = true } = {}) {
   return m;
 }
 
-const GEO = {
+export const GEO = {
   box: (w, d, h, r = 0.04) => rboxGeo(w, d, h, r),
   disc: (r, seg = 18) => new THREE.CylinderGeometry(r, r, 0.03, seg),
   post: (r, h, seg = 10) => new THREE.CylinderGeometry(r, r * 0.92, h, seg),
@@ -352,7 +359,7 @@ const GEO = {
   quad: (w, h) => new THREE.PlaneGeometry(w, h),
 };
 /** coloca uma geometria (nunca partilhada — clone) no sítio pedido. */
-function place(geo, x, y, z, { rx = 0, ry = 0, rz = 0 } = {}) {
+export function place(geo, x, y, z, { rx = 0, ry = 0, rz = 0 } = {}) {
   const g = geo.clone();
   if (rx) g.rotateX(rx);
   if (ry) g.rotateY(ry);
@@ -371,8 +378,10 @@ export function makeDesk(chip, live, opts = {}) {
   const body = [], edge = [], matte = [], metal = [], led = [], accent = [], glow = [], glassy = [];
 
   /* ---------- o tampo ---------- */
-  body.push(place(GEO.box(5.2, 2.6, 0.22, 0.18), 0, 2.10, 0));
-  edge.push(place(GEO.box(5.24, 2.64, 0.035, 0.19), 0, 2.085, 0)); // o filete que apanha a luz
+  // 27 out 2026: `GEO.box` cresce a partir da base (0..h em y), não do centro — o tampo já estava
+  // certo em 2.32 = DESK_TOP_Y. O que estava errado era o RATO (ver abaixo).
+  body.push(place(GEO.box(5.2, 2.6, 0.22, 0.18), 0, DESK_TOP_Y - 0.22, 0));
+  edge.push(place(GEO.box(5.24, 2.64, 0.035, 0.19), 0, DESK_TOP_Y - 0.235, 0)); // o filete que apanha a luz
   /* os pés: duas lâminas finas de metal, à moderna — em vez dos armários brancos */
   for (const sx of [-2.35, 2.35]) {
     edge.push(place(GEO.box(0.26, 2.28, 2.02, 0.09), sx, 0.02, 0));       // a perna em grafite
@@ -383,8 +392,8 @@ export function makeDesk(chip, live, opts = {}) {
   matte.push(place(GEO.box(3.4, 0.40, 0.10, 0.04), 0, 1.88, -0.98));      // calha de cabos
 
   /* ---------- o LED: por baixo do tampo, à volta, na cor da sala ---------- */
-  led.push(place(GEO.box(4.86, 0.06, 0.05, 0.02), 0, 2.062, 1.27));        // aresta da frente
-  for (const sx of [-2.52, 2.52]) led.push(place(GEO.box(0.06, 2.28, 0.05, 0.02), sx, 2.062, 0));
+  led.push(place(GEO.box(4.86, 0.06, 0.05, 0.02), 0, DESK_TOP_Y - 0.258, 1.27));  // aresta da frente
+  for (const sx of [-2.52, 2.52]) led.push(place(GEO.box(0.06, 2.28, 0.05, 0.02), sx, DESK_TOP_Y - 0.258, 0));
 
   /* ---------- o monitor: a mesma tela (AO VIVO), com moldura preta e luz atrás ---------- */
   const screenSet = live ? { tex: live.tex, canvas: live.canvas, draw: () => {}, live } : makeDeskScreenTexture(chip);
@@ -414,34 +423,69 @@ export function makeDesk(chip, live, opts = {}) {
   // o halo da barra a cair sobre o teclado e o tapete: um disco deitado, a apontar para cima
   glow.push(place(glowDisc(mw * 1.10, 1.75, 0.34), 0, 2.325, -0.30, { rx: -Math.PI / 2 }));
 
-  /* ---------- o teclado mecânico ---------- */
-  matte.push(place(GEO.box(1.80, 0.62, 0.075, 0.05), 0, 2.325, 0.42));
-  metal.push(place(GEO.box(1.74, 0.02, 0.02, 0.01), 0, 2.345, 0.72));
-  led.push(place(GEO.box(1.72, 0.04, 0.02, 0.01), 0, 2.352, 0.735));       // a linha de baixo, acesa
+  /* ---------- o teclado mecânico (posição: deskmap.js) ---------- */
+  matte.push(place(GEO.box(1.80, 0.62, 0.075, 0.05), KEYBOARD.x, DESK_TOP_Y, KEYBOARD.z));
+  metal.push(place(GEO.box(1.74, 0.02, 0.02, 0.01), KEYBOARD.x, DESK_TOP_Y + 0.0575, KEYBOARD.z + 0.30));
+  led.push(place(GEO.box(1.72, 0.04, 0.02, 0.01), KEYBOARD.x, DESK_TOP_Y + 0.0645, KEYBOARD.z + 0.305));
   const keyTex = keyboardTexture();
   if (keyTex) {   // com textura, lê-se um teclado retroiluminado; sem ela, não se inventa uma cor chapada
     const keys = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.68, 0.52),
+      new THREE.PlaneGeometry(KEYBOARD.w, KEYBOARD.d),
       new THREE.MeshBasicMaterial({ map: keyTex, color: glass, transparent: true })
     );
-    keys.rotation.x = -Math.PI / 2; keys.position.set(0, 2.404, 0.42); g.add(keys);
+    keys.rotation.x = -Math.PI / 2; keys.position.set(KEYBOARD.x, KEYBOARD.y, KEYBOARD.z); g.add(keys);
     keys.name = 'keys';
   }
 
+  /* as teclas: uma malha só, com 57 instâncias. É esta que o `main.js` afunda quando um dedo
+     pousa numa tecla — sem 57 malhas por posto (e são 35 postos). */
+  const capGeo = GEO.box(1, 1, 1, 0.22);
+  capGeo.translate(0, -0.5, 0);   // `GEO.box` cresce a partir da base: aqui quer-se centrada
+  const caps = new THREE.InstancedMesh(capGeo, M.keycap, 57);
+  caps.name = 'keysCaps';
+  caps.userData.part = 'deskMatte';
+  caps.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const capCells = keyCells();
+  const capTopY = KEY_CAP_TOP - KEYBOARD.capH / 2;   // o centro da tecla: meia altura abaixo do topo
+  const _m4 = new THREE.Matrix4(), _q4 = new THREE.Quaternion();
+  for (let i = 0; i < capCells.length; i++) {
+    const c = capCells[i];
+    _m4.compose(
+      new THREE.Vector3(c.x, capTopY, c.z),
+      _q4,
+      new THREE.Vector3(c.w * 0.86, KEYBOARD.capH, c.d * 0.86)
+    );
+    caps.setMatrixAt(i, _m4);
+  }
+  caps.instanceMatrix.needsUpdate = true;
+  caps.castShadow = false; caps.receiveShadow = false;
+  g.add(caps);
+
   /* ---------- o tapete do rato, o rato ---------- */
-  matte.push(place(GEO.box(1.06, 0.90, 0.018, 0.03), 1.36, 2.325, 0.40));
+  matte.push(place(GEO.box(MOUSE_PAD.w, MOUSE_PAD.d, 0.018, 0.03), MOUSE_PAD.x, DESK_TOP_Y, MOUSE_PAD.z));
   const padTex = mousepadTexture();
   if (padTex) {
     const pad = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.02, 0.86),
+      new THREE.PlaneGeometry(MOUSE_PAD.w - 0.04, MOUSE_PAD.d - 0.04),
       new THREE.MeshBasicMaterial({ map: padTex, color: glass, transparent: true })
     );
-    pad.rotation.x = -Math.PI / 2; pad.position.set(1.36, 2.337, 0.40); g.add(pad);
+    pad.rotation.x = -Math.PI / 2; pad.position.set(MOUSE_PAD.x, MOUSE_PAD.y, MOUSE_PAD.z); g.add(pad);
   }
-  const mouse = place(GEO.ball(0.115), 1.34, 2.372, 0.44);
-  mouse.scale(1, 0.58, 1.42);
-  body.push(mouse);
-  led.push(place(GEO.box(0.02, 0.012, 0.16, 0.006), 1.34, 2.415, 0.30));   // a tira do rato
+  led.push(place(GEO.box(0.30, 0.012, 0.012, 0.006), MOUSE_PAD.x, MOUSE_PAD.y + 0.004, MOUSE_PAD.z - MOUSE_PAD.d / 2 + 0.05));
+  // o rato é uma malha própria e move-se: o `main.js` põe-no a deslizar no tapete, e a mão segue-o.
+  // Corpo + botão numa malha só (o botão é uma aresta no mesmo preto), para o custo não subir.
+  const mouseGeo = GEO.ball(MOUSE.r, 14, 10);
+  mouseGeo.scale(1, MOUSE.sy, MOUSE.sz);
+  const btnGeo = place(GEO.box(0.09, 0.11, 0.05, 0.028), -0.045, 0.006, 0.06);
+  const mouseMesh = new THREE.Mesh(mergeGeos([mouseGeo, btnGeo]), M.matte);
+  mouseMesh.name = 'mouse';
+  mouseMesh.userData.part = 'deskMatte';
+  mouseMesh.castShadow = true;
+  const mouseG = new THREE.Group();
+  mouseG.name = 'mouseG';
+  mouseG.position.set(MOUSE.x, MOUSE_Y, MOUSE.z);
+  mouseG.add(mouseMesh);
+  g.add(mouseG);
 
   /* ---------- as colunas, com um anel de luz na base ---------- */
   for (const sx of [-1.94, 1.94]) {
@@ -534,7 +578,7 @@ export function makeDesk(chip, live, opts = {}) {
   if (haloMesh) { haloMesh.renderOrder = 2; g.add(haloMesh); }
 
   g.userData.desk = { glass, chip, variant, led: true };
-  return { group: g, screenSet };
+  return { group: g, screenSet, caps, mouse: mouseG, mouseY: MOUSE_Y, cellTop: KEY_CAP_TOP };
 }
 
 /* ---------- a cadeira: preta, com a costura na cor da sala ---------- */
@@ -565,143 +609,10 @@ export function makeChair(opts = {}) {
   return g;
 }
 
-/* ---------- stylised 3D person ---------- */
-export function makePerson({ hair, skin, chip, lead }) {
-  const g = new THREE.Group();
-  const S = lead ? 1.12 : 1;
-  const shirtCol = lead ? '#2B3245' : chip;
-  const shirt = mat(shirtCol, { rough: 0.9 });
-  const skinM = mat(skin, { rough: 0.7 });
-  const hairM = mat(hair, { rough: 0.95 });
-  const pantsM = mat('#3E4048', { rough: 0.95 });
-
-  const legs = new THREE.Group();
-  const legGeo = new THREE.CapsuleGeometry(0.16 * S, 0.75 * S, 3, 8);
-  const legL = new THREE.Mesh(legGeo, pantsM); legL.position.set(-0.2 * S, 0.6 * S, 0);
-  const legR = new THREE.Mesh(legGeo, pantsM); legR.position.set(0.2 * S, 0.6 * S, 0);
-  legL.castShadow = legR.castShadow = true;
-  legs.add(legL, legR); g.add(legs);
-
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42 * S, 0.85 * S, 4, 12), shirt);
-  torso.position.y = 1.75 * S; torso.castShadow = true; g.add(torso);
-
-  if (lead) { // dept-coloured tie + gold pin (v1 lead rule)
-    const tie = new THREE.Mesh(new THREE.ConeGeometry(0.11 * S, 0.55 * S, 4), mat(chip));
-    tie.rotation.x = Math.PI; tie.position.set(0, 1.85 * S, 0.4 * S); g.add(tie);
-    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.06 * S, 8, 8),
-      mat('#E5C158', { metal: 0.8, rough: 0.3, emissive: '#8a6d1f', ei: 0.4 }));
-    pin.position.set(0.26 * S, 2.05 * S, 0.38 * S); g.add(pin);
-  }
-
-  const armGeo = new THREE.CapsuleGeometry(0.155 * S, 0.62 * S, 3, 8);
-  const armL = new THREE.Mesh(armGeo, shirt); armL.castShadow = true;
-  const armR = new THREE.Mesh(armGeo, shirt); armR.castShadow = true;
-  const shL = new THREE.Group(); shL.position.set(-0.5 * S, 2.1 * S, 0); armL.position.y = -0.42 * S; shL.add(armL);
-  const shR = new THREE.Group(); shR.position.set(0.5 * S, 2.1 * S, 0); armR.position.y = -0.42 * S; shR.add(armR);
-  g.add(shL, shR);
-
-  // big-head cartoon proportions (Image 2) — head pivots at the neck so it can turn/nod
-  const headG = new THREE.Group();
-  headG.position.y = 2.75 * S;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.5 * S, 18, 16), skinM);
-  head.position.y = 0.25 * S; head.castShadow = true; headG.add(head);
-  const hairMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.54 * S, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), hairM);
-  hairMesh.position.y = 0.31 * S; headG.add(hairMesh);
-  g.add(headG);
-
-  g.userData = { legs, legL, legR, shL, shR, torso, headG, S };
-  return g;
-}
-
-/* seated work poses — varied desk life, smoothly blended between modes */
-export function poseWork(g, mode, t, dt) {
-  const u = g.userData;
-  u.legs.visible = false;
-  // NOTE the camera sees agents from BEHIND — poses must read as back-view silhouettes.
-  // z-rotation sign: negative shLz / positive shRz flare the arms OUTWARD past the head.
-  // standK 0 = seated at desk, 1 = standing beside it (position lerp happens in main).
-  const tg = { shLx: -1.05, shLz: 0.25, shRx: -1.05, shRz: -0.25, headRx: 0.04, headRy: 0, torsoRx: 0, posY: 0.55, standK: 0 };
-  switch (mode) {
-    case 'type':
-      tg.shLx = -1.05 + Math.sin(t / 170) * 0.12;
-      tg.shRx = -1.05 + Math.sin(t / 140 + 1.3) * 0.14;
-      tg.headRx = 0.07 + Math.sin(t / 380) * 0.05;
-      break;
-    case 'read': // leans back off the keyboard, arms drop to the sides, head tilts at the screen
-      tg.shLx = -0.3; tg.shLz = -0.35; tg.shRx = -0.3; tg.shRz = 0.35;
-      tg.torsoRx = -0.12;
-      tg.headRx = 0.18 + Math.sin(t / 650) * 0.05;
-      break;
-    case 'phone': // right arm visibly up and out to the ear, small nods
-      tg.shRx = -2.3; tg.shRz = 0.55; tg.shLx = -0.4; tg.shLz = -0.2;
-      tg.headRy = -0.18; tg.headRx = 0.05 + (Math.sin(t / 330) > 0.55 ? 0.09 : 0);
-      break;
-    case 'glance': // big head turn toward a neighbour
-      tg.shLx = -0.9; tg.shRx = -0.9;
-      tg.headRy = u.glanceDir || 0.55;
-      break;
-    case 'sip': // mug arm up and out, head tips back a touch
-      tg.shRx = -2.0; tg.shRz = 0.5; tg.shLx = -0.6; tg.headRx = -0.12;
-      break;
-    case 'spin': // slow chair spin, arms out — rotation itself driven in main
-      tg.shLx = -0.7; tg.shLz = -0.55; tg.shRx = -0.7; tg.shRz = 0.55;
-      tg.headRx = -0.05;
-      break;
-    case 'stretch': // STANDS beside the desk, arms up in a wide V
-      tg.standK = 1; tg.posY = 0.12;
-      tg.shLx = -2.6; tg.shLz = -0.75; tg.shRx = -2.6; tg.shRz = 0.75;
-      tg.headRx = -0.15; tg.torsoRx = -0.05;
-      break;
-    case 'wave': // STUCK: standing, facing the camera, waving for attention
-      tg.standK = 1; tg.posY = 0.12;
-      tg.shRx = -2.6; tg.shRz = 0.55 + Math.sin(t / 150) * 0.4;
-      tg.shLx = -0.3; tg.shLz = -0.25;
-      tg.headRx = -0.05;
-      break;
-    case 'cheer': // approval granted — standing, arms V, little hops
-      tg.standK = 1;
-      tg.posY = 0.12 + Math.abs(Math.sin(t / 150)) * 0.16;
-      tg.shLx = -2.7; tg.shLz = -0.85 + Math.sin(t / 190) * 0.12;
-      tg.shRx = -2.7; tg.shRz = 0.85 - Math.sin(t / 190) * 0.12;
-      tg.headRx = -0.2;
-      break;
-    case 'slump': // approval rejected — head drops, arms droop
-      tg.shLx = -0.2; tg.shLz = -0.3; tg.shRx = -0.2; tg.shRz = 0.3;
-      tg.headRx = 0.45; tg.posY = 0.5;
-      break;
-  }
-  if (!u.cur) u.cur = { ...tg };
-  const k = 1 - Math.exp(-(dt || 0.016) * 7);
-  for (const key in tg) u.cur[key] += (tg[key] - u.cur[key]) * k;
-  u.shL.rotation.x = u.cur.shLx; u.shL.rotation.z = u.cur.shLz;
-  u.shR.rotation.x = u.cur.shRx; u.shR.rotation.z = u.cur.shRz;
-  u.headG.rotation.x = u.cur.headRx; u.headG.rotation.y = u.cur.headRy;
-  u.torso.rotation.x = u.cur.torsoRx;
-  u.legs.visible = u.cur.standK > 0.4;
-  g.position.y = u.cur.posY + Math.sin(t / 460) * 0.02;
-}
-
-export function posePerson(g, pose, t = 0) {
-  const u = g.userData;
-  u.cur = null; // walking/standing sets rotations directly; work poses re-blend from here
-  u.headG.rotation.x = 0; u.headG.rotation.y = 0;
-  if (pose === 'walk') {
-    u.legs.visible = true;
-    const sw = Math.sin(t / 110);
-    g.position.y = Math.abs(Math.cos(t / 110)) * 0.08;
-    u.legL.rotation.x = sw * 0.55; u.legR.rotation.x = -sw * 0.55;
-    u.shL.rotation.x = -sw * 0.45; u.shR.rotation.x = sw * 0.45;
-    u.shL.rotation.z = 0.08; u.shR.rotation.z = -0.08;
-  } else { // stand (meeting)
-    u.legs.visible = true;
-    g.position.y = 0;
-    u.legL.rotation.x = u.legR.rotation.x = 0;
-    u.shL.rotation.x = -0.15 + Math.sin(t / 500) * 0.05; u.shR.rotation.x = -0.15 - Math.sin(t / 500) * 0.05;
-    u.shL.rotation.z = 0.15; u.shR.rotation.z = -0.15;
-    u.headG.rotation.y = Math.sin(t / 900) * 0.12; // looks at the other attendee now and then
-  }
-}
+/* ---------- a pessoa ----------
+   27 out 2026: o avatar (roupa, cabelo, mãos e IK) saiu daqui para `src/avatar.js` — este ficheiro
+   já ia em 900 linhas e o avatar passou a ter regras próprias (35 looks, chapéus, braços). O
+   `makePerson`/`poseWork`/`posePerson` vivem lá agora; o main.js importa-os de lá. */
 
 /* ---------- holo work-screen (Image-2 style floating glass panel) ---------- */
 export function makeHolo(agentName, chip, lines) {
@@ -807,7 +718,7 @@ export function seededRandom(seed) {
 }
 
 /** junta geometrias nossas (posição, normal, uv, cor). Evita uma malha por folha. */
-function mergeGeos(geos) {
+export function mergeGeos(geos) {
   let nVert = 0, nIdx = 0;
   for (const g of geos) {
     nVert += g.attributes.position.count;

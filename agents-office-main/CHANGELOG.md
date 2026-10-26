@@ -1,3 +1,58 @@
+## 1.10.0 — 27 out 2026 · As pessoas
+
+Pedido 28: *«melhorar as interações do braço de avatar mexendo realmente o mouse e digitando nos
+teclados e melhore o avatar, uma vibe mais pessoa real com roupa formal, mas cada sala mantém a
+coloração da roupa ficando mais realista, cabelo diferente para cada agente (35), alguns com
+chapéu, alguns serão mulheres»*.
+
+O problema não era a animação — era a geometria. As mãos nunca tocavam em nada porque **ninguém
+sabia onde estava o teclado**: o `builders.js` desenhava-o a `z=0.42`, o avatar esticava o braço
+para o sítio nenhum e o ombro oscilava 6 cm para fingir trabalho. Resolveu-se com um contrato.
+
+### O contrato: `src/deskmap.js`
+
+Um ficheiro puro (sem `three`, sem DOM) onde vivem os números da secretária: `SEAT`, `KEYBOARD`,
+`KEY_GRID` (57 teclas), `MOUSE_PAD`, `MOUSE`, `MOUSE_TRAVEL` e, por cima, funções que respondem a
+perguntas: `mouseAt(t)`, `nearestKey(x, z)`, `typingHand(t)`, `clickBeat(t)`, `contact(t)`.
+Quem desenha (`builders.js`), quem posa (`avatar.js`) e quem anima (`main.js`) leem daqui — se
+alguém mudar o teclado de sítio, a mão vai atrás. É por isso que passou a haver um teste que
+compara **a ponta do dedo com a tecla**: antes, o IK resolvia para um braço de `0.60+0.55` enquanto
+a geometria media `0.54+0.50`, e a mão parava 8 cm antes do alvo.
+
+### O que se vê agora
+
+- **A digitar** — a mão segue uma tecla do `KEY_GRID`, a tecla **afunda** (instância própria, uma
+  malha para as 57) e volta. As duas mãos escrevem; a cada ~5 s uma delas vai ao rato.
+- **No rato** — o rato é uma malha própria (`mouseG`) e desliza no tapete; **vai onde a mão está**,
+  não ao contrário. A palma segue-o com o pulso e o cotovelo resolvidos por IK de dois ossos.
+- **A transição** — a mão não salta do teclado para o rato: atravessa a mesa em ~0.3 s e não prime
+  teclas a caminho.
+
+### As 35 pessoas
+
+`src/looks.js` é uma tabela escrita à mão (não sorteada): 35 assinaturas distintas — 15 estilos de
+cabelo × 4 variantes, 14 mulheres, 8 chapéus (fedora, boné, barrete, gorro), 11 barbas, 7 óculos.
+
+- **Fato formal** — casaco com lapelas, camisa, gravata (ou lenço, ou blazer, ou vestido para
+  algumas mulheres), sapatos, cinto, punhos. O **fato é a cor da sala** (matiz do `chip`, mais
+  fundo e levemente dessaturado); a **gravata acende com o vidro**. A sala continua a ler-se pela
+  cor, mas agora veste-se em vez de pintar-se.
+- **Cara** — olhos, sobrolhos, nariz, lábios, brincos, óculos com aro e ponte, barbas por tipo.
+- **Pescoço e ombros** — pescoço próprio, cabeça a `1.86S` e ombros a `1.42S` (estavam à altura da
+  cintura, o que fazia os braços saírem do cinto). O tronco passou a afunilar (ombros > cintura) e
+  acabou na anca: o casaco ia até aos tornozelos e lia-se como uma saia.
+
+### Achado pelo caminho
+
+`geometry.scale()` escala em torno da **origem**, não do centro: o rato estava 1 m abaixo do tapete
+(desenhado, invisível). E o `GEO.box()` do `builders.js` cresce a partir da base, não do centro —
+daí o tampo ter passado a estar 11 cm abaixo do teclado durante uma tarde.
+
+### Custo
+
+35 avatares com ~10 malhas cada (a cabeça inteira é uma malha, o tronco outra, cada mão outra), e
+**uma** malha instanciada por teclado para as 57 teclas. Build: 1 403 kB.
+
 ## 1.9.9 — 27 out 2026 · O conversador
 
 Pedido 27: *«implementa este conversador de IA, substituindo o atual»*, com um componente React

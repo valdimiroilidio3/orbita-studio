@@ -13,3 +13,6 @@ brain/Órbita/
 # Local credentials; commit only the example template
 .env*
 !.env.example
+
+# inspecção local: PNGs do rasterizador caseiro (scripts em tools/, imagens não)
+.shot/
