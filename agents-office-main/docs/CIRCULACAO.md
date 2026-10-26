@@ -105,7 +105,8 @@ duas colunas ficam a ±4,3 m. O chefe nunca «passa por cima» de uma mesa.
 |---|---|
 | `src/crew.js` | a coreografia: sinais, percursos, fases, tempos, o grupo a ouvir |
 | `src/builders.js` → `makeMasterHall` | a praça, o aro de LED, as colunas e os seis púlpitos |
-| `src/builders.js` → `makeWalkway` | o corredor (piso, guardas, LED, aro de chegada) |
+| `src/builders.js` → `makeWalkway` | o corredor: **passadeira preta rolante**, guardas de latão, LED e aro de chegada |
+| `src/builders.js` → `makeRoomEntrance` | o pórtico de cada sala, na cor daquele vidro |
 | `src/builders.js` → `makeRoomWalls` | a calha de LED e a luz que corre no vidro |
 | `src/main.js` | liga os sinais reais (`syncFromLive`) ao `crew`; anima as faixas de LED |
 | `src/avatar.js` | a pose `listen` (o grupo a ouvir) |
@@ -143,3 +144,62 @@ sinal **real** de trabalho e acompanha o ciclo completo com `CC.stepSim`:
 
 E `node tools/master.mjs` desenha a sala-mestre com o rasterizador caseiro (sem browser):
 `docs/cerebro-sala.png`.
+
+## 8 · As passadeiras e as entradas (1.13.0)
+
+O dono pediu duas coisas que se vêem de longe: *«passadeiras rolantes no corredor, preta»* e
+*«entradas na sala (roxa, azul e amarela)»*.
+
+### A passadeira
+
+O corredor deixou de ter uma linha de luz por cima de uma laje. É agora uma passadeira de aeroporto
+com quatro peças:
+
+| peça | o que é |
+|---|---|
+| tapete | laje preta `#23252B` com uma **textura de ripas** (64×64, gerada uma vez e clonada por corredor) |
+| guardas | dois perfis de latão em cada lado, com folga para o pé |
+| LED | um canal aceso no centro, na cor da sala, com a luz a percorrer para o Cérebro |
+| chegada | um aro de latão fundido nas guardas, no extremo do Cérebro |
+
+**O movimento é real**: o `offset.x` da textura de ripas desloca-se a cada frame
+(`ledSpeed = −0,62`), com `repeat.x = comprimento / 1,15` para as ripas ficarem à escala de um
+corredor de 2 a 10 m. A sala com trabalho (`live` + `waiting`) anda 2,6× mais depressa — as faixas de
+LED e os tapetes partilham a lista `ledRT` do `main`.
+
+Como a passadeira é feita num grupo rodado (`−atan2(dz, dx)`), o tapete rola sempre **no sentido do
+Cérebro**, seja qual for a sala.
+
+### A entrada
+
+`makeRoomEntrance({ glass, at, dir })` desenha um pórtico de 4,6 × 2,62 m:
+
+- dois **montantes** de latão e um **lintel**, na cor derivada do vidro da sala;
+- uma **cova de luz** acesa por baixo do lintel (a mesma `emissive` do vidro, intensidade 1,25);
+- uma **soleira** escura com dois filetes acesos, que marca o degrau.
+
+O `main.js` coloca-a **1,1 m para dentro** da porta, com a direcção do corredor (`dir`), porque é o
+corredor que define para onde a sala dá — o construtor não adivinha. O pórtico fica em
+`deptRT[k].entrance` e em `entranceRT`, e é clicável (foca a sala).
+
+### Provas
+
+`node scene.smoke.mjs` verifica, sem olhos:
+
+```
+✓ 6 passadeiras rolantes pretas nos corredores (#23252b)
+✓ o offset do tapete muda entre dois passos da simulação (rola mesmo)
+✓ 6 entradas de sala na cor da sala (verde · amarelo · vermelho · roxo · azul · azul-céu)
+```
+
+A cor de cada entrada é comparada com `DEPTS[k].glass` — se alguém pintar um pórtico à mão, o teste
+falha.
+
+### Limites
+
+- **Não há textura normal-mapped**: as ripas são cor, não relevo verdadeiro. À distância lê-se; ao
+  lado, é um tapete com riscas.
+- **O tapete não move ninguém.** Os chefes andam a pé pelo corredor; a passadeira é cenário animado,
+  como num aeroporto onde alguém prefere andar.
+- O rasterizador caseiro (`tools/raster.mjs`) não tem emissão nem texturas: serve para ver a
+  geometria do pórtico, não o LED.

@@ -90,10 +90,30 @@ a resposta diz qual variável falta — `GOOGLE_MAPS_API_KEY` e/ou `GOOGLE_API_K
 mostra as 19 ferramentas.
 
 As rotas HTTP equivalentes vivem em `/api/*` e exigem `Authorization: Bearer $ORBITA_API_TOKEN`
-com 32+ caracteres. Guia completo, limites e o que **não** existe (Stripe, envio pela WhatsApp
+com 32+ caracteres — **e esse token já não é um passo teu**: se não existir, o Órbita gera-o no
+primeiro arranque e escreve-o no `.env`. Guia completo, limites e o que **não** existe (Stripe, envio pela WhatsApp
 Business API): [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). O segundo servidor local,
 `mcp-servers/view-image-mcp/`, dá olhos aos agentes — abre qualquer URL pública como imagem e
 precisa de `npm install` dentro dessa pasta.
+
+## As APIs de pé ao arrancar, e a máquina onde corre
+
+`platform.mjs` faz o preparo de que o dono falou: no arranque, o servidor **lê o `.env`, gera o token
+interno se faltar, e sonda 27 serviços reais** (IA, dados, base de dados, código, deploy, pagamentos,
+mensagens) com uma chamada barata e um prazo de 6 s. O retrato está em `GET /api/platform` — com
+CORS aberto, para qualquer app o poder ler no arranque dela:
+
+```bash
+curl -s localhost:4520/api/platform | jq '{maquina: .machine.os, prontas: .apis.summary.ready, falta: .apis.summary.missingKeys}'
+```
+
+Gravar uma chave nova no `.env` **basta**: o ficheiro é vigiado, a chave entra a quente e as sondas
+correm outra vez, sem reiniciar. Serviços que não estejam no catálogo entram por
+`data/api/providers.json`, sem tocar em código — é isso que faz «todos os tipos de app».
+
+No terminal (tecla `F`): `:api` mostra o que está pronto e que chave falta; `:maquina` mostra o
+sistema, a memória, o `node`, o `shell` e as ferramentas do PATH **com a versão que cada uma diz**.
+Guia completo, incluindo o que **não** é automático: [docs/PLATAFORMA.md](docs/PLATAFORMA.md).
 
 ## Os 35 agentes
 
@@ -424,6 +444,9 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 
 | Método | Rota | O que faz |
 |---|---|---|
+| GET | `/api/platform` | a máquina, as versões e as APIs reais (prontas, falhadas, chaves em falta) — com CORS |
+| GET | `/api/platform/apis` | só o estado dos serviços sondados |
+| POST | `/api/platform/reload` · `/probe` | reler o `.env` · forçar sondas (token) |
 | GET | `/api/health` | versão, empresa, modelo, departamentos, agentes |
 | GET | `/api/agents` | o elenco tal como está em disco |
 | GET | `/api/brain` | o grafo de notas |

@@ -586,6 +586,34 @@ if (mIn && mSend) {
   }
 }
 
+/* ---------- passadeiras rolantes e entradas de sala (28 out 2026, pedido 34) ----------
+   O dono pediu três coisas de olhos fechados e todas se provam sem os abrir: (a) as passadeiras do
+   corredor são PRETAS e ANDAM (o offset da textura de ripas muda entre dois passos da simulação);
+   (b) cada sala tem uma ENTRADA na cor daquela sala; (c) nada disto inventou um número. */
+{
+  const office = win.CC.office;
+  const belts = typeof office.belts === 'function' ? office.belts() : [];
+  ok(belts.length === 6, `deviam existir seis passadeiras (uma por corredor): ${belts.length}`);
+  ok(belts.every((b) => b.color && b.color.toLowerCase() === '#23252b'),
+    `o tapete das passadeiras devia ser preto (#23252b): ${JSON.stringify(belts.map((b) => b.color))}`);
+  ok(belts.every((b) => typeof b.offset === 'number' && typeof b.speed === 'number'),
+    'uma passadeira sem textura de ripas não pode rolar (offset/speed em falta)');
+  const antes = belts.map((b) => b.offset);
+  for (let i = 0; i < 10; i++) win.CC.stepSim(0.05);
+  const depois = (win.CC.office.belts() || []).map((b) => b.offset);
+  ok(antes.length === depois.length && antes.every((v, i) => v !== depois[i]),
+    `o tapete devia rolar entre dois frames: ${JSON.stringify(antes)} → ${JSON.stringify(depois)}`);
+  // a cor de cada entrada tem de ser a cor daquela sala (o vidro): nada de pórticos cinzentos
+  const ent = office.entrances || [];
+  ok(ent.length === 6, `deviam existir seis entradas de sala: ${ent.length}`);
+  const salas = Object.keys(office.depts).filter((k) => k !== 'brain');
+  ok(salas.every((k) => {
+    const e = ent.find((x) => x.dept === k);
+    return e && e.glass === office.depts[k].glass;
+  }), 'uma entrada não está na cor do vidro da sua sala');
+  ok(ent.every((e) => e.width >= 4 && e.height >= 2.4), 'uma entrada é estreita demais para se ler como porta');
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
@@ -620,6 +648,13 @@ const resumoCirculacao = (() => {
   const porSala = [...new Set(Object.values(c.ledByDept))].join('/');
   return `${c.led} faixas de LED (${porSala} por sala), corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
 })();
-console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+const resumoPedido34 = (() => {
+  const o = win.CC.office;
+  const b = typeof o.belts === 'function' ? o.belts() : [];
+  const e = o.entrances || [];
+  const cores = [...new Set(e.map((x) => x.glass))].join(' · ');
+  return `${b.length} passadeiras rolantes pretas nos corredores e ${e.length} entradas de sala na cor da sala (${cores})`;
+})();
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

@@ -50,6 +50,7 @@ import * as onboard from './onboard.mjs';
 import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
+import { createPlatform, ensureApiToken } from './platform.mjs'; // 28 out 2026: as APIs reais, a máquina, e o arranque sem passos manuais
 import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
@@ -689,6 +690,10 @@ async function routinesChat(a, text) {
 
 /* ---------- http ---------- */
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+// 28 out 2026: o retrato da plataforma é público e legível por qualquer app (web, móvel, outro
+// servidor). Só estas rotas abrem CORS — as privadas continuam fechadas.
+const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, authorization', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const jsonCors = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors }); res.end(JSON.stringify(body)); };
 const body = req => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; }); req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(e); } }); });
 // 26 out 2026: integrações. O corpo é limitado por rota (nada de 2 MB a entrar em memória) e tudo o
 // que escreve para fora exige ORBITA_API_TOKEN com 32+ caracteres — sem token, a rota nem existe.
@@ -706,6 +711,12 @@ const integrationResponse = async (res, fn, successCode = 200) => {
   try { return json(res, successCode, await fn()); }
   catch (e) { const mapped = integrations.getIntegrationError(e); return json(res, mapped.status, { error: mapped.error }); }
 };
+
+// 28 out 2026: o token interno deixa de ser um passo manual — nasce aqui se faltar. A plataforma lê
+// o .env, vigia-o, e sonda os serviços configurados em segundo plano (não atrasa o arranque).
+const tokenInfo = ensureApiToken({ root: ROOT });
+const platform = createPlatform({ root: ROOT, env: process.env });
+platform.start({ onChange: (r) => console.log(`  plataforma: .env mudou (${r.changed.join(', ')}) — chaves recarregadas e serviços sondados de novo`) });
 
 await rebuildGraph();
 {
@@ -827,6 +838,32 @@ const server = http.createServer(async (req, res) => {
       const type = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8' }[ext] || 'application/octet-stream';
       res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(target));
+    }
+    // 28 out 2026: a plataforma — com que máquina, com que APIs, e o que falta para as ligar
+    if (url.pathname === '/api/platform' && req.method === 'OPTIONS') return jsonCors(res, 204, {});
+    if (url.pathname === '/api/platform' && req.method === 'GET') {
+      return jsonCors(res, 200, {
+        ok: true,
+        version,
+        at: new Date().toISOString(),
+        machine: await platform.machine(),
+        apis: platform.status(),
+        endpoints: platform.endpoints(version),
+        token: { present: (process.env.ORBITA_API_TOKEN || '').length >= 32, length: (process.env.ORBITA_API_TOKEN || '').length },
+        env: { file: path.relative(ROOT, platform.envFile), reloads: platform.meta.reloads, lastReloadAt: platform.meta.lastReloadAt },
+      });
+    }
+    if (url.pathname === '/api/platform/apis' && req.method === 'GET') return jsonCors(res, 200, platform.status());
+    if (url.pathname === '/api/platform/reload' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const r = platform.reloadEnv();
+      const probed = await platform.probeAll({ force: true });
+      return json(res, 200, { ok: true, changed: r.changed, probed: probed.length, apis: platform.status() });
+    }
+    if (url.pathname === '/api/platform/probe' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      const probed = await platform.probeAll({ force: true });
+      return json(res, 200, { ok: true, probed, apis: platform.status() });
     }
     if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), context: { notes: graph.notes, docs: docsList().length }, docList: docsList().slice(0, 60), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
@@ -1672,6 +1709,13 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { console.error(e); json(res, 500, { error: e.message }); }
 });
 server.listen(cfg.port, () => {
+  if (tokenInfo.created) console.log(`  api: criei ORBITA_API_TOKEN (${tokenInfo.length} caracteres) em ${tokenInfo.source} — as rotas privadas já funcionam${tokenInfo.warning ? ' (aviso: ' + tokenInfo.warning + ')' : ''}`);
+  else console.log(`  api: ORBITA_API_TOKEN presente (${tokenInfo.length} caracteres, ${tokenInfo.source})`);
+  platform.machine().then((m) => {
+    const p = platform.status();
+    console.log(`  máquina: ${m.os} · ${m.arch} · ${m.cores} núcleos · ${m.memoryGB} GB · node ${m.node} · shell ${m.shell}`);
+    console.log(`  plataforma: ${p.summary.ready} de ${p.summary.total} API(s) prontas · ${p.summary.configured} com chave${p.summary.missingKeys.length ? ' · falta configurar: ' + p.summary.missingKeys.slice(0, 6).join(', ') + (p.summary.missingKeys.length > 6 ? ' (+' + (p.summary.missingKeys.length - 6) + ')' : '') : ''} → /api/platform`);
+  }).catch(() => {});
   const fs0 = FORGE.stats();
   console.log(`  oficina: ${fs0.tools} ferramenta(s) · ${fs0.active} activa(s) · ${fs0.runs} execuções · terminal em /api/forge/stream e na tecla F`);
   console.log(`Órbita ${version} → http://localhost:${cfg.port}`);

@@ -12,6 +12,7 @@ import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, de
 import {
   makePlinth, makeDesk, makeChair,
   makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing, makeMasterHall,
+  makeRoomEntrance,
 } from './builders.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
@@ -319,8 +320,9 @@ const crew = createCrew({
 /* 26 out 2026: o «sweep» que acendia as salas uma a uma saiu. Era teatro: dava a ideia de que a
    sala estava a fazer algo quando não estava. Agora só o trabalho real acende alguma coisa. */
 
-// corredores dept -> Cérebro (28 out 2026: passadeira -> corredor com guardas e LED a correr)
+// corredores dept -> Cérebro (28 out 2026: passadeira rolante preta, entrada na cor da sala)
 const ledRT = [];   // as faixas cujo offset se anima por frame (ver `tickLeds`)
+const entranceRT = [];   // 28 out 2026: o pórtico de cada sala (cor, sítio, direcção)
 for (const k of DEPT_KEYS) {
   const L = LAYOUT[k];
   const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
@@ -331,8 +333,24 @@ for (const k of DEPT_KEYS) {
   walk.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
   scene.add(walk);
   for (const m of (walk.userData.led && walk.userData.led.strips) || []) ledRT.push({ dept: k, mat: m });
+  // 28 out 2026: o TAPETE também rola — a passadeira preta anda de verdade, não é só preta
+  for (const m of (walk.userData.led && walk.userData.led.belts) || []) ledRT.push({ dept: k, mat: m });
   deptRT[k].gate = new THREE.Vector3(from[0], 0, from[1]);
   deptRT[k].brainGate = new THREE.Vector3(to[0], 0, to[1]);
+
+  /* A ENTRADA da sala, na cor dela, virada ao corredor. A direcção vem do corredor (é ele que
+     define para onde é a saída) e a posição é 1,1 m para dentro da porta, para o pórtico ficar
+     assente no pod e não a cavalo na aresta. */
+  try {
+    const dl = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+    const dir = { x: (to[0] - from[0]) / dl, z: (to[1] - from[1]) / dl };
+    const at = { x: from[0] - L.pos[0] - dir.x * 1.1, z: from[1] - L.pos[1] - dir.z * 1.1 };
+    const ent = makeRoomEntrance({ glass: DEPTS[k].glass, at, dir });
+    ent.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
+    deptRT[k].group.add(ent);
+    deptRT[k].entrance = ent;
+    entranceRT.push({ dept: k, glass: DEPTS[k].glass, ...ent.userData.entrance });
+  } catch (e) { console.warn('entrada: ' + k + ' — ' + e.message); }
 }
 // os LED das paredes entram no mesmo sítio (as faixas já nascem no builder)
 for (const [k, rt] of Object.entries(deptRT)) {
@@ -1680,6 +1698,7 @@ function tickLeds(now, dt) {
   for (const L of ledRT) {
     const tex = L.mat.userData.ledTex;
     if (!tex) continue;
+    // 28 out 2026: sala ocupada → a fita de luz e o tapete da passadeira andam mais depressa
     const speed = (L.mat.userData.ledSpeed || 0.06) * (ledBusy[L.dept] ? 2.6 : 1);
     tex.offset.x = (tex.offset.x - dt * speed) % 1;
   }
@@ -1691,12 +1710,22 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
     depts: DEPTS, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
     // 28 out 2026: a sala-mestre e a circulação, para se poder olhar para elas sem adivinhar
     hall: hall && { ...hall.userData.hall },
+    // 28 out 2026: os pórticos de entrada e as passadeiras (para o teste poder olhar para eles)
+    entrances: entranceRT,
+    // 28 out 2026: as passadeiras — a cor do tapete, para onde vai e quanto já rolou (o teste lê isto)
+    belts: () => ledRT.filter((l) => l.mat.userData.belt).map((l) => ({
+      dept: l.dept,
+      offset: l.mat.map ? l.mat.map.offset.x : null,
+      speed: l.mat.userData.ledSpeed,
+      color: l.mat.color ? '#' + l.mat.color.getHexString() : null,
+    })),
     crew: () => crew.state(),
     // a fase da luz (para o teste poder provar que ela ANDA, e não só que existe)
     ledPhase: () => ledRT.reduce((n, l) => n + (l.mat.userData.ledTex ? l.mat.userData.ledTex.offset.x : 0), 0),
     circulation: () => ({
       led: ledRT.length,
-      ledByDept: Object.fromEntries(DEPT_KEYS.map((k) => [k, ledRT.filter((l) => l.dept === k).length])),
+      ledByDept: Object.fromEntries(DEPT_KEYS.map((k) => [k, ledRT.filter((l) => l.dept === k && !l.mat.userData.belt).length])),
+      beltsByDept: Object.fromEntries(DEPT_KEYS.map((k) => [k, ledRT.filter((l) => l.dept === k && l.mat.userData.belt).length])),
       corridors: DEPT_KEYS.map((k) => ({ dept: k, gate: deptRT[k].gate && deptRT[k].gate.toArray(), brainGate: deptRT[k].brainGate && deptRT[k].brainGate.toArray() })),
     }),
     problems: officeProblems().concat(lookProblems()),

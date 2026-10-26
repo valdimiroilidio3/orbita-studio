@@ -1,3 +1,83 @@
+## 1.13.0 — 28 out 2026 · Passadeiras a andar, entradas à cor da sala, e a API que já está de pé
+
+Pedido: *«faça passadeiras rolantes no corredor, preta, e entradas na sala (roxa, azul e amarela); e
+implementa entrada de API real — assim que lançar o projecto, colocar a API já deve funcionar de
+forma automática; faz esse preparo agora, para todos os tipos de app, as APIs devem funcionar logo,
+instantaneamente. E o terminal deve funcionar perfeitamente, se possível de acordo com a máquina
+onde o sistema foi aberto.»*
+
+### As passadeiras andam — e são pretas
+
+- O corredor deixou de ser uma laje com uma linha de luz. É uma **passadeira de aeroporto**: tapete
+  **preto** (`#23252B`) com ripas em relevo, **guardas de latão** dos dois lados, um canal de LED na
+  cor da sala e o aro de chegada fundido no latão.
+- **O tapete rola a sério**: uma textura de ripas (64×64, gerada uma vez e clonada por corredor, com
+  `repeat = comprimento / 1,15`) desloca-se ao longo do comprimento. Nada de aspecto: o `offset` da
+  textura muda entre dois frames, e é isso que o teste verifica.
+- A direcção é a do trabalho: **para o Cérebro**, a mesma da luz da sala por cima. Sala com trabalho
+  (`live` + `waiting`) → a fita **e** o tapete andam 2,6× mais depressa.
+
+### Cada sala tem uma entrada na sua cor
+
+- `makeRoomEntrance` (novo em `src/builders.js`): **pórtico** de 4,6 × 2,62 m — dois montantes de
+  latão, lintel, **cova de luz acesa na cor do vidro da sala** e soleira escura com dois filetes
+  acesos.
+- Assenta **1,1 m para dentro** da porta, virado ao corredor (a direcção vem do `main`, que é quem
+  conhece o corredor). É clicável: clicar no pórtico foca a sala.
+- As seis cores são as do vidro de cada sala: verde (#1FA36B), amarelo (#E3B93A), vermelho
+  (#DC5348), roxo (#8B5AD6), azul (#4A6DE0) e azul-céu (#41AEE4). Nenhuma foi escolhida à mão: vêm
+  de `src/data.js`.
+
+### A API real, de pé ao arrancar (`platform.mjs`)
+
+- **Catálogo de 27 serviços** com sonda própria: IA (OpenAI, Anthropic, Gemini, OpenRouter, Groq,
+  Mistral, Hugging Face, Replicate, ElevenLabs), dados (Google Places, Programmable Search),
+  base de dados (Supabase, Airtable, Notion), código e deploy (GitHub, Vercel, Cloudflare, AWS),
+  pagamentos e loja (Stripe, Shopify) e mensagens (Resend, SendGrid, Twilio, Telegram, Slack,
+  Discord, Meta).
+- No arranque o servidor **sonda** cada serviço que tenha chave — uma chamada barata, com prazo de
+  6 s, sem efeitos secundários — e guarda o resultado 10 minutos. `GET /api/platform` devolve o
+  retrato: máquina, versões, o que está `ready`, o que falhou e **qual variável falta em cada um**.
+- **`.env` a quente**: o ficheiro é vigiado; gravar uma chave nova entra no processo e dispara novas
+  sondas **sem reiniciar**. É o «instantaneamente» do pedido, e é literal.
+- **O token interno deixa de ser um passo manual**: se `ORBITA_API_TOKEN` não existir em lado nenhum,
+  nasce no primeiro arranque (256 bits, 43 caracteres) e é escrito no `.env` com permissões 600.
+- **Qualquer app**: `data/api/providers.json` acrescenta serviços sem tocar em código (`id`, `name`,
+  `env`, `probe.url`, `probe.header`, `prefix`). Entradas inválidas são ignoradas com aviso.
+- `GET /api/platform` e `/api/platform/apis` abrem **CORS** (`*`): uma app web, um telemóvel ou outro
+  servidor pode perguntar «com que contas eu» no arranque dela. As rotas privadas continuam fechadas.
+
+### O terminal olha para a máquina
+
+- `:help` ficou **curto** (três linhas); a lista completa mudou para `:comandos`.
+- `:maquina` mostra SO, arquitectura, núcleos, CPU, memória, uptime, fuso, `node`, `shell`, `pid`,
+  directoria e **as ferramentas do PATH com a versão que elas dizem** (e as que faltam).
+- `:api` mostra quantos serviços estão prontos, os que falharam com o erro, e a chave que falta.
+- **Tab** completa o comando; **↑ ↓** percorrem o histórico e o rascunho a meio não se perde.
+- Ao abrir, o terminal escreve **uma** linha com a máquina onde está — uma vez por sessão.
+- Comando desconhecido → sugestão do mais parecido (distância de edição), em vez de silêncio.
+
+### Provas
+
+- `node scene.smoke.mjs` — passa a verificar **6 passadeiras pretas** (`#23252b`), que o `offset` do
+  tapete **muda entre dois passos** da simulação, e **6 entradas** cuja cor é a do vidro da sala.
+- `node --test platform.test.mjs` — 12 testes: `.env` (aspas, `export`, lixo), token gerado uma só
+  vez, 200 → pronta, 401 → «com chave mas falhou», **a chave nunca sai numa mensagem de erro**, AWS
+  não finge estar verificada, chave nova a quente sem reiniciar, ambiente real a mandar sobre o
+  ficheiro, serviços declarados em JSON, máquina e descoberta de rotas.
+- `node --test terminal.test.mjs` — 8 testes com jsdom sobre o `src/forge.js` que vai para o browser:
+  `:help` curto, `:comandos` completo, `:maquina`/`:api` a mostrarem **o que o servidor respondeu**,
+  Tab, histórico, sugestão, e a linha da máquina uma só vez.
+
+### Dito sem enfeitar
+
+- Uma chave de terceiros continua a ser **do dono**: a automação cobre o token interno, a leitura do
+  `.env`, as sondas, o diagnóstico e o recarregamento. Sem a chave da Gemini não há Gemini — o que
+  passa a haver é a resposta exacta de qual variável falta, em vez de um erro genérico.
+- AWS não tem sonda barata (assinatura SigV4 exige região): aparece como configurada e **não
+  verificada**, e diz isso.
+- O `node check.mjs` continua a marcar falha no `smoke: browser` nesta máquina: não há Chromium.
+
 ## 1.12.0 — 28 out 2026 · A circulação: o Cérebro é a sala, e o escritório mexe-se
 
 Pedido: *«nos vidros deve passar uma luz LED da cor, e também quero arriscar numa elegância neste

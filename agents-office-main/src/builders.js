@@ -77,6 +77,41 @@ export function ledComet(color, len, { speed = 0.06, opacity = 0.95, width = 0.0
   return { material: m, width };
 }
 
+/* ---------- o tapete da passadeira ----------
+   Uma textura de ripas em relevo, escura, que se repete ao longo do tapete e rola. O padrão é
+   cinzento sobre preto: o material multiplica, por isso o tapete continua preto e as ripas apanham
+   a luz — é assim que uma passadeira de aeroporto se lê, e não com riscas brancas. */
+let beltCanvas = null;
+function beltTexture(len = 10) {
+  if (!beltCanvas) {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2A2C31'; x.fillRect(0, 0, 64, 64);
+    // a ripa: um degrau claro em cima e uma sombra em baixo — relevo, não pintura
+    x.fillStyle = '#8A8E96'; x.fillRect(0, 6, 64, 5);
+    x.fillStyle = '#4A4D54'; x.fillRect(0, 11, 64, 3);
+    x.fillStyle = '#15171A'; x.fillRect(0, 14, 64, 18);
+    x.fillStyle = '#71757D'; x.fillRect(0, 38, 64, 5);
+    x.fillStyle = '#3A3D44'; x.fillRect(0, 43, 64, 3);
+    x.fillStyle = '#101215'; x.fillRect(0, 46, 64, 18);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(1, 1);
+    t.anisotropy = 4;
+    beltCanvas = t;
+  }
+  const t = beltCanvas.clone();
+  t.needsUpdate = true;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  // uma ripa a cada ~1,15 m ao longo do tapete; três ripas na largura
+  t.repeat.set(Math.max(2, len / 1.15), 3);
+  return t;
+}
+
 // Rounded-rectangle prism via extrusion. Origin at centre, extruded along Y.
 const geoCache = new Map();
 export function rboxGeo(w, d, h, r = 0.35) {
@@ -1427,58 +1462,98 @@ export function makeWalkway(from, to, opts = {}) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const len = Math.hypot(dx, dz);
   const room = opts.glass || opts.chip || '#AEB6AB';
-  /* 28 out 2026 — A PASSADEIRA PASSOU A SER UM CORREDOR.
-     Antes: uma laje branca por baixo do chão, que se lia como um resto de maquete. O dono pediu
-     corredores a sério, «na direcção do Cérebro», onde os projectos passam de uma equipa para a
-     outra — por isso o corredor tem agora as três coisas que fazem um corredor: um PISO ao nível
-     das salas, GUARDAS de latão dos dois lados e uma LINHA DE LED na cor da sala, a correr para o
-     Cérebro. No fim, um aro de latão marca a chegada.
-     Geometria: um grupo rodado, com tudo fundido por material (4 malhas por corredor). */
+  /* 28 out 2026 — A PASSADEIRA ROLANTE (pedido do dono: «faça passadeiras rolantes no corredor,
+     preta»). O que era uma laje branca é agora uma passadeira de aeroporto: TAPETE PRETO com ripas
+     em relevo, GUARDAS de latão dos dois lados, uma linha de LED na cor da sala e — o que faz a
+     diferença — o tapete a ANDAR. O movimento é uma textura de ripas que rola ao longo do tapete,
+     a subir para o Cérebro; a luz da sala corre por cima, na mesma direcção. Quem olha percebe para
+     onde vai o trabalho sem uma seta.
+     Geometria: tudo fundido por material — 5 malhas por corredor (tapete, latão, LED, luz, tapete
+     em movimento), sem contar o aro de chegada, que vai dentro do latão. */
   const g = new THREE.Group();
-  const deckMat = new THREE.MeshStandardMaterial({ color: '#F2F1EA', roughness: 0.9, metalness: 0.03 });
+  const beltMat = new THREE.MeshStandardMaterial({
+    color: '#23252B', map: beltTexture(Math.max(2, len - 1.4)), roughness: 0.86, metalness: 0.12,
+  });
   const kerbMat = new THREE.MeshStandardMaterial({ color: brass(room, 0.24), roughness: 0.3, metalness: 0.9 });
   const ledMat = new THREE.MeshStandardMaterial({
     color: shade(room, 0.45), roughness: 0.5, metalness: 0.1,
-    emissive: room, emissiveIntensity: 0.85,
+    emissive: room, emissiveIntensity: 1.05,
   });
   const deck = [], kerb = [], line = [];
-  // piso: duas lajes (a de baixo dá espessura ao vão, a de cima é o chão que se pisa)
+  // o corpo do corredor: uma laje preta que dá espessura ao vão e o tapete por cima
   deck.push(place(rboxGeo(len, 3.2, 0.34, 0.16), 0, -0.35, 0));
-  deck.push(place(rboxGeo(len - 0.5, 2.7, 0.10, 0.10), 0, -0.05, 0));
+  deck.push(place(rboxGeo(len - 0.4, 2.72, 0.06, 0.06), 0, -0.03, 0));
   // guardas de latão: um perfil fino e comprido de cada lado, com folga para o pé
   for (const s of [-1, 1]) {
-    kerb.push(place(rboxGeo(len - 1.0, 0.09, 0.16, 0.04), 0, 0.02, s * 1.42));
-    kerb.push(place(rboxGeo(len - 1.0, 0.05, 0.05, 0.02), 0, 0.10, s * 1.46));
+    kerb.push(place(rboxGeo(len - 1.0, 0.10, 0.16, 0.04), 0, 0.02, s * 1.42));
+    kerb.push(place(rboxGeo(len - 1.0, 0.06, 0.06, 0.02), 0, 0.11, s * 1.45));
   }
-  // a linha de LED ao centro (o canal) e o aro de chegada
-  line.push(place(rboxGeo(len - 1.6, 0.10, 0.045, 0.02), 0, 0.012, 0));
+  // a linha de LED ao centro (o canal) e o aro de chegada (dentro do latão)
+  line.push(place(rboxGeo(len - 1.6, 0.09, 0.04, 0.02), 0, 0.015, 0));
   {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.045, 8, 44), kerbMat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(len / 2 - 1.9, 0.035, 0);
-    g.add(ring);
+    const anel = new THREE.TorusGeometry(1.45, 0.045, 8, 44).rotateX(-Math.PI / 2);
+    anel.translate(len / 2 - 1.9, 0.035, 0);
+    kerb.push(anel);
   }
-  const dMesh = meshOf(deck, deckMat, { shadow: true });
-  dMesh.receiveShadow = true;
+  const dMesh = meshOf(deck, beltMat, { shadow: true });
   g.add(dMesh);
   const kMesh = meshOf(kerb, kerbMat, { shadow: true });
   g.add(kMesh);
   const lMesh = meshOf(line, ledMat, { shadow: false });
   lMesh.receiveShadow = false; lMesh.userData.part = 'walkwayLed';
   g.add(lMesh);
-  // a luz a correr — sempre para o Cérebro (o `to`), por isso o sinal do offset é fixo
-  const comet = ledComet(room, Math.max(2, len - 2), { speed: 0.16, opacity: 0.8, width: 0.34 });
+  // a luz a correr — sempre para o Cérebro (o `to`)
+  const comet = ledComet(room, Math.max(2, len - 2), { speed: 0.16, opacity: 0.75, width: 0.30 });
   const runner = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(2, len - 2), comet.width), comet.material);
   runner.rotation.x = -Math.PI / 2;
-  runner.position.set(0, 0.035, 0);
+  runner.position.set(0, 0.048, 0);
   runner.userData.part = 'walkwayLed';
   runner.castShadow = false; runner.receiveShadow = false;
   g.add(runner);
+  // o tapete em movimento: as ripas rolam na direcção do Cérebro (offset a subir)
+  beltMat.userData.belt = true;
+  beltMat.userData.ledTex = beltMat.map;
+  beltMat.userData.ledSpeed = -0.62;
 
   g.position.set((from[0] + to[0]) / 2, 0, (from[1] + to[1]) / 2);
   g.rotation.y = -Math.atan2(dz, dx);
-  g.userData.walkway = { from, to, len, room, width: 3.2 };
-  g.userData.led = { room, strips: [comet.material], count: 2 };
+  g.userData.walkway = { from, to, len, room, width: 3.2, belt: true };
+  g.userData.led = { room, strips: [comet.material], belts: [beltMat], count: 2 };
+  return g;
+}
+
+/* ---------- a ENTRADA de cada sala (28 out 2026) ----------
+   Pedido do dono: «entradas na sala (roxa, azul e amarela)». A porta era um canto vazio. Passa a ser
+   um PÓRTICO na cor da sala: dois montantes de latão, um lintel, uma cova de luz acesa por baixo do
+   lintel e uma soleira com dois filetes no chão — a mesma cor do vidro e do chão daquela sala.
+   Assenta no canto da porta, virado ao corredor (a direcção vem de fora, do `main`, porque é o
+   corredor que a define): o desenho não adivinha para onde é a saída. */
+export function makeRoomEntrance({ glass = '#AEB6AB', at = { x: 0, z: 0 }, dir = { x: 1, z: 0 } } = {}) {
+  const g = new THREE.Group();
+  const brassMat = new THREE.MeshStandardMaterial({ color: brass(glass, 0.26), roughness: 0.28, metalness: 0.92 });
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: shade(glass, 0.35), roughness: 0.4, metalness: 0.15,
+    emissive: glass, emissiveIntensity: 1.25,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({ color: '#17181C', roughness: 0.72, metalness: 0.2 });
+  const B = [], L = [], D = [];
+  const W = 4.6, H = 2.62;         // vão e altura: passa uma pessoa com folga e lê-se de longe
+  // montantes + lintel (latão)
+  for (const s of [-1, 1]) B.push(place(rboxGeo(0.17, 0.17, H, 0.05), s * (W / 2), H / 2, 0));
+  B.push(place(rboxGeo(W + 0.17, 0.20, 0.20, 0.05), 0, H, 0));
+  B.push(place(rboxGeo(W + 0.55, 0.30, 0.06, 0.03), 0, H + 0.14, 0));
+  // a cova de luz por baixo do lintel: é a cor da sala que diz de que sala é a entrada
+  L.push(place(rboxGeo(W - 0.18, 0.07, 0.05, 0.02), 0, H - 0.17, 0.02));
+  for (const s of [-1, 1]) L.push(place(rboxGeo(0.05, 0.05, H - 0.45, 0.02), s * (W / 2 - 0.11), (H - 0.45) / 2 + 0.12, 0.02));
+  // soleira: placa escura e dois filetes acesos a apontar para dentro
+  D.push(place(rboxGeo(W - 0.5, 0.95, 0.035, 0.03), 0, 0.022, -0.18));
+  for (const s of [-1, 1]) L.push(place(rboxGeo(W - 1.1, 0.05, 0.02, 0.01), 0, 0.045, -0.18 + s * 0.36));
+  const bm = meshOf(B, brassMat, { shadow: true }); if (bm) { bm.userData.part = 'entranceFrame'; g.add(bm); }
+  const lm = meshOf(L, ledMat, { shadow: false }); if (lm) { lm.userData.part = 'entranceLed'; lm.castShadow = false; lm.receiveShadow = false; g.add(lm); }
+  const dm = meshOf(D, darkMat, { shadow: true }); if (dm) { dm.userData.part = 'entranceSill'; g.add(dm); }
+  g.position.set(at.x, 0, at.z);
+  g.rotation.y = Math.atan2(dir.x, dir.z);   // o +z do pórtico olha para o corredor
+  g.userData.entrance = { glass, at: { x: at.x, z: at.z }, dir: { x: dir.x, z: dir.z }, width: W, height: H };
   return g;
 }
 

@@ -15,7 +15,14 @@
 //   :adopt <sala> <id> <destino> adoptar numa outra sala
 //   :activate <sala> <id>        aprovar uma ferramenta que escreve
 //   :eventos                     os últimos eventos
-//   :limpar   :help
+//   :maquina                     em que máquina o escritório está a correr (SO, shell, node, ferramentas)
+//   :api                         que APIs reais estão prontas, e qual a chave que falta
+//   :comandos                    a lista completa
+//   :limpar   :help              (:help é curto de propósito: os cinco que se usam)
+//
+// 28 out 2026 (pedido 34d): o terminal passou a olhar para a máquina. Ao abrir, pergunta ao servidor
+// em que sistema está (/api/platform), mostra-o numa linha, e completa comandos com Tab. Nada disto é
+// inventado: é o que o processo `node` reporta e o que o PATH responde.
 const PHASE_COLOR = {
   think: 't-think', match: 't-match', code: 't-code', save: 't-save', pass: 't-ok', fail: 't-fail',
   repair: 't-repair', active: 't-active', draft: 't-draft', broken: 't-broken', first: 't-first',
@@ -28,6 +35,17 @@ const hhmmss = (ts) => {
   const d = new Date(ts || Date.now());
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 };
+/** Distância de edição — só para sugerir o comando que o dedo queria escrever. */
+function perto(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
@@ -41,6 +59,8 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
   const input = el.querySelector('.tm-in');
 
   let open = false, es = null, filter = 'todas', backlog = [], hist = [], hi = -1, stats = null;
+  let machineShown = false, machine = null;
+  const COMMANDS = ['help', 'ls', 'forge', 'run', 'adopt', 'activate', 'eventos', 'maquina', 'api', 'comandos', 'limpar'];
 
   const roomOf = (r) => ROOM_LABEL[r] || (r ? r.toUpperCase() : '');
 
@@ -143,14 +163,46 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
     addLine({ ts: Date.now(), phase: 'run', text: `› ${text}` });
     try {
       if (cmd === 'help' || cmd === '?') {
+        // curto de propósito (pedido 34d): quem abre o terminal precisa de três linhas, não de um manual
+        for (const l of [
+          ':ls — o catálogo, por sala · :forge <sala> <o que precisas> — a oficina forja e prova',
+          ':run <sala> <id> [{"json"}] — corre e mostra o resultado real · :api — as APIs prontas',
+          ':maquina — o sistema onde isto corre · :comandos — a lista toda',
+        ]) info(l);
+      } else if (cmd === 'comandos' || cmd === 'commands') {
         for (const l of [
           ':ls — o catálogo de ferramentas, por sala',
           ':forge <sala> <o que precisas> — a oficina forja e prova uma ferramenta',
           ':run <sala> <id> [{"json"}] — corre uma ferramenta e mostra o resultado real',
           ':adopt <sala> <id> <destino> — leva a ferramenta a outra sala (nasce em rascunho)',
           ':activate <sala> <id> — aprova uma ferramenta que escreve',
-          ':eventos — os últimos acontecimentos · :limpar',
+          ':eventos — os últimos acontecimentos',
+          ':maquina — SO, arquitectura, memória, node, shell e ferramentas do PATH',
+          ':api — serviços configurados, prontos, e a chave que falta a cada um',
+          ':limpar — limpa o ecrã · Tab completa o comando · ↑ ↓ percorre o histórico',
         ]) info(l);
+      } else if (cmd === 'maquina' || cmd === 'maq' || cmd === 'machine' || cmd === 'sys') {
+        let d;
+        try { d = await api('/api/platform'); } catch (e) { info(`sem retrato da máquina: ${e.message}`); return; }
+        const m = d.machine || {};
+        machine = m; machineShown = true;
+        for (const l of [
+          `máquina: ${m.os} · ${m.arch} · ${m.cores} núcleos · ${m.cpu}`,
+          `memória: ${m.memoryGB} GB (livres ${m.freeGB} GB) · uptime ${m.uptimeH} h · fuso ${m.tz} · fuso local ${m.locale}`,
+          `node ${m.node} · shell ${m.shell} · pid ${m.pid} · cwd ${m.cwd}`,
+          `ferramentas: ${(m.tools || []).filter((t) => t.found).map((t) => t.name + (t.version ? ' (' + t.version + ')' : '')).join(' · ') || 'nenhuma no PATH'}`,
+          `em falta: ${(m.tools || []).filter((t) => !t.found).map((t) => t.name).join(' · ') || 'nada'}`,
+        ]) info(l);
+      } else if (cmd === 'api' || cmd === 'apis') {
+        let d;
+        try { d = await api('/api/platform/apis'); } catch (e) { info(`sem estado das APIs: ${e.message}`); return; }
+        const prontas = d.list.filter((p) => p.ready), comChave = d.list.filter((p) => p.configured && !p.ready);
+        info(`${prontas.length} de ${d.summary.total} prontas · ${d.summary.configured} com chave`);
+        for (const p of prontas) info(`✓ ${p.name} — ${p.verified ? 'sonda respondeu' : 'configurada (sem sonda)'}${p.latencyMs != null ? ' · ' + p.latencyMs + ' ms' : ''}${p.status ? ' · HTTP ' + p.status : ''}`);
+        for (const p of comChave) info(`… ${p.name} — com chave mas a sonda falhou: ${p.error || 'sem resposta'}`);
+        const falta = d.list.filter((p) => !p.configured);
+        info(`por configurar (${falta.length}): ${falta.map((p) => p.missing[0]).slice(0, 10).join(' · ')}${falta.length > 10 ? ' …' : ''}`);
+        info('como ligar: mete a chave no .env — o servidor vigia o ficheiro e sonda sozinho, sem reiniciar');
       } else if (cmd === 'limpar' || cmd === 'clear') {
         backlog = []; linesEl.innerHTML = '';
       } else if (cmd === 'ls' || cmd === 'tools') {
@@ -187,7 +239,12 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
         const r = await api('/api/forge/adopt', { room, id, to });
         addLine({ ts: Date.now(), room: to, phase: r.ok ? 'adopt' : 'fail', text: r.ok ? `⇄ ${id} adoptada em ${roomOf(to)}` : `✗ ${r.error}` });
       } else {
-        info(`comando desconhecido: ${cmd} — :help`);
+        const near = COMMANDS
+          .map((c) => ({ c, d: perto(cmd.toLowerCase(), c) }))
+          .filter(({ c, d }) => d <= Math.max(2, Math.floor(c.length / 3)) || c.startsWith(cmd.toLowerCase().slice(0, 3)))
+          .sort((x, y) => x.d - y.d)
+          .map(({ c }) => c);
+        info(`comando desconhecido: ${cmd}${near.length ? ' — talvez ' + near.slice(0, 3).map((c) => ':' + c).join(' · ') : ' — :help'}`);
       }
     } catch (e) {
       info(`erro: ${e.message}`);
@@ -201,9 +258,24 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
     input.value = '';
     command(v);
   });
+  let draft = '';
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp' && hist.length) { hi = Math.min(hi + 1, hist.length - 1); input.value = hist[hi]; e.preventDefault(); }
-    else if (e.key === 'ArrowDown' && hi >= 0) { hi = Math.max(hi - 1, -1); input.value = hi < 0 ? '' : hist[hi]; e.preventDefault(); }
+    if (e.key === 'ArrowUp' && hist.length) {
+      if (hi === -1) draft = input.value;               // guarda o que estava a ser escrito
+      hi = Math.min(hi + 1, hist.length - 1); input.value = hist[hi];
+      e.preventDefault();
+      setTimeout(() => input.setSelectionRange(input.value.length, input.value.length), 0);
+    } else if (e.key === 'ArrowDown' && hi >= 0) {
+      hi = Math.max(hi - 1, -1); input.value = hi < 0 ? draft : hist[hi];
+      e.preventDefault();
+    } else if (e.key === 'Tab') {
+      const v = input.value;
+      if (!v.startsWith(':')) return;
+      const cur = v.slice(1).split(/\s+/)[0].toLowerCase();
+      const hits = COMMANDS.filter((c) => c.startsWith(cur));
+      if (hits.length === 1) { input.value = ':' + hits[0] + (v.includes(' ') ? v.slice(1 + cur.length) : ' '); e.preventDefault(); }
+      else if (hits.length > 1) info(`comandos: ${hits.map((c) => ':' + c).join(' · ')}`);
+    }
   });
 
   function show(on) {
@@ -215,6 +287,14 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
       connect();
       tabs();
       if (!backlog.length) info('terminal da oficina. :help para os comandos.');
+      if (!machineShown && typeof fetch === 'function') {
+        machineShown = true;
+        fetch('/api/platform').then((r) => r.json()).then((d) => {
+          machine = d.machine || null;
+          if (!machine) return;
+          addLine({ ts: Date.now(), phase: 'sense', text: `${machine.os} · ${machine.arch} · ${machine.cores} núcleos · node ${machine.node} · shell ${machine.shell} — :maquina para o resto` });
+        }).catch(() => { machineShown = false; });
+      }
       setTimeout(() => { input.focus(); bodyEl.scrollTop = bodyEl.scrollHeight; }, 30);
       if (onOpen) onOpen();
       refreshStats();

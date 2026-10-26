@@ -269,3 +269,21 @@ caseiro, sem browser). Sem emissão nem texturas: serve para julgar volumes e co
 `makeServerRack`, `makeMeetingTable`, `makeNeuralBrain` e `makeFloorTitle` (os títulos de chão
 saíram quando os cartões passaram a nomear as salas). Ficam no catálogo, não são chamadas, e o
 teste de cena prova que nada por lá rebenta. Nada disto está importado no `main.js`.
+
+## Passadeiras, entradas e a plataforma (1.13.0)
+
+| Peça | Construtor | Partes (`userData.part`) | Notas |
+|---|---|---|---|
+| passadeira | `makeWalkway(from, to, {glass})` | `walkwayFloor`, `walkwayKerb`, `walkwayLed`, `walkwayBelt` | tapete `#23252B` com `map` de ripas; `userData.walkway = {from,to,len,room,width:3.2,belt:true}` |
+| pórtico | `makeRoomEntrance({glass, at, dir})` | `entranceFrame`, `entranceLed`, `entranceSill` | `userData.entrance = {glass,at,dir,width:4.6,height:2.62}`; `rotation.y = atan2(dir.x, dir.z)` |
+
+Regras que os testes guardam:
+
+- o tapete é **preto** (`#23252b`) em todos os corredores e o `offset` do `map` **muda** entre dois
+  frames — sem isso é um tapete às riscas, não uma passadeira;
+- há **uma** entrada por sala e a cor dela é `DEPTS[k].glass` — a mesma do vidro e do chão;
+- as faixas de LED continuam a ser **3 por sala** (`CC.office.circulation().ledByDept`), contadas à
+  parte das passadeiras (`beltsByDept`), para o número não mentir quando se acrescenta uma peça nova.
+
+A plataforma (`platform.mjs`) não desenha nada: serve `/api/platform` e é ela que responde ao
+`:maquina` e ao `:api` do terminal — a cena não fala com APIs externas, o servidor fala.
