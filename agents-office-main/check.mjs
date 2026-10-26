@@ -1112,6 +1112,7 @@ else {
       if (!/Órbita/.test(html)) throw new Error('sem marca');
       if (!/Aprovar e enviar/.test(html)) throw new Error('o script da mesa não foi incluído no build');
       if (!/#\/leads/.test(html)) throw new Error('sem navegação por rotas');
+      if (!/#\/projetos/.test(html)) throw new Error('a mesa não tem a secção de projetos');
       return `${(html.length / 1024).toFixed(0)} KB · um ficheiro · sem pedidos externos`;
     });
 
@@ -1130,6 +1131,73 @@ else {
       if (!two.body.messages.length) throw new Error('o rascunho não aparece na página do lead');
       if (two.body.messages[0].lead?.name !== 'Mesa Prova') throw new Error('a mensagem não traz o lead');
       return `1 lead · dossiê ${two.body.dossier.evidence.length} factos · ${two.body.messages.length} mensagem`;
+    });
+
+    // --- passo 6: lead → projeto → código → QA → aprovação → entrega ---
+    let projetoId = null;
+    await step('passo 6: de um lead ganho nasce um projeto, com briefing escrito a partir dos dados', async () => {
+      const made = await call('POST', '/api/ops/leads', { leads: [{ name: 'Studio Entrega', category: 'Cabeleireiro', city: 'Lisboa', phone: '+351 918 222 333', rating: 4.7, reviews: 41 }] });
+      if (!made.body.total) throw new Error('não criou o lead da prova');
+      const lead = (await call('GET', '/api/ops/leads?limit=10')).body.leads.find(l => l.name === 'Studio Entrega');
+      if (!lead) throw new Error('o lead desapareceu');
+      const q = await call('PATCH', '/api/ops/leads/' + lead.id, { status: 'qualificado', note: 'tem potencial' });
+      if (q.body.lead.status !== 'qualificado') throw new Error('não qualificou: ' + JSON.stringify(q.body).slice(0, 120));
+      const p = await call('POST', `/api/ops/leads/${lead.id}/projeto`, { kind: 'landing' });
+      if (p.status !== 201) throw new Error('HTTP ' + p.status + ' ' + JSON.stringify(p.body).slice(0, 140));
+      projetoId = p.body.projeto.id;
+      if (!/Lisboa/.test(p.body.projeto.brief)) throw new Error('o briefing não traz a cidade');
+      const dup = await call('POST', `/api/ops/leads/${lead.id}/projeto`, { kind: 'landing' });
+      if (dup.status !== 409) throw new Error('duplicou o projeto do mesmo lead');
+      return `lead qualificado · projeto ${projetoId} · duplicado recusado`;
+    });
+
+    await step('passo 6: o motor escreve ficheiros reais e o QA aprova-os', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const g = await call('POST', `/api/ops/projetos/${projetoId}/gerar`);
+      if (g.status !== 200 || !g.body.files?.length) throw new Error('geração: ' + JSON.stringify(g.body).slice(0, 160));
+      if (!g.body.files.includes('index.html')) throw new Error('sem index.html');
+      const q = await call('POST', `/api/ops/projetos/${projetoId}/qa`);
+      if (q.status !== 200 || !q.body.run.passed) throw new Error('QA não passou: ' + JSON.stringify(q.body.run?.items || q.body).slice(0, 200));
+      return `${g.body.files.length} ficheiros · ${(g.body.bytes / 1024).toFixed(0)} KB · QA ${q.body.run.total} problema(s) · passou`;
+    });
+
+    await step('passo 6: o preview é servido de verdade, não é uma captura', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const a = await call('POST', `/api/ops/projetos/${projetoId}/aprovar`, { note: 'ok na prova' });
+      if (a.body.project.status !== 'aprovado') throw new Error('não aprovou: ' + JSON.stringify(a.body).slice(0, 120));
+      const d = await call('POST', `/api/ops/projetos/${projetoId}/entregar`, { target: 'preview' });
+      if (d.status !== 200 || !d.body.url) throw new Error('entrega: ' + JSON.stringify(d.body).slice(0, 140));
+      const page = await fetch(base + d.body.url);
+      const html = await page.text();
+      if (page.status !== 200) throw new Error('preview HTTP ' + page.status);
+      if (!/<html lang="pt">/.test(html) || !/Studio Entrega/.test(html)) throw new Error('o preview não é a página gerada');
+      const css = await fetch(base + d.body.url + 'styles.css');
+      if (css.status !== 200) throw new Error('o CSS do preview não é servido');
+      return `${d.body.url} → 200 · HTML e CSS servidos`;
+    });
+
+    await step('passo 6: mexer no projeto depois do QA volta a exigir auditoria', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const g = await call('POST', `/api/ops/projetos/${projetoId}/gerar`);
+      if (g.body.project.status !== 'gerado') throw new Error('gerar outra vez devia invalidar a aprovação (está ' + g.body.project.status + ')');
+      const d = await call('POST', `/api/ops/projetos/${projetoId}/entregar`, { target: 'preview' });
+      if (d.status !== 409) throw new Error('entregou sem aprovação nova (HTTP ' + d.status + ')');
+      const q = await call('POST', `/api/ops/projetos/${projetoId}/qa`);
+      const a = await call('POST', `/api/ops/projetos/${projetoId}/aprovar`, {});
+      if (a.body.project.status !== 'aprovado') throw new Error('não voltou a aprovar');
+      return `HTTP 409 sem aprovação · QA ${q.body.run.passed ? 'passou' : 'falhou'} · aprovado outra vez`;
+    });
+
+    await step('passo 6: Vercel e GitHub recusam com o nome exacto do que falta', async () => {
+      if (!projetoId) throw new Error('sem projeto');
+      const v = await call('POST', `/api/ops/projetos/${projetoId}/entregar`, { target: 'vercel' });
+      if (v.status !== 409 || !/VERCEL_DEPLOY_HOOK/.test(JSON.stringify(v.body))) throw new Error('Vercel: ' + JSON.stringify(v.body).slice(0, 160));
+      const g = await call('POST', `/api/ops/projetos/${projetoId}/entregar`, { target: 'github' });
+      if (![409, 200].includes(g.status)) throw new Error('GitHub: HTTP ' + g.status);
+      const zip = await fetch(base + `/api/ops/projetos/${projetoId}/zip`);
+      const buf = Buffer.from(await zip.arrayBuffer());
+      if (buf.subarray(0, 4).toString('hex') !== '504b0304') throw new Error('o .zip não é um zip');
+      return `Vercel pede hook · GitHub pede token/fluxo · .zip com ${(buf.length / 1024).toFixed(0)} KB`;
     });
 
   } catch (e) { bad('operação: servidor isolado', e.message); }

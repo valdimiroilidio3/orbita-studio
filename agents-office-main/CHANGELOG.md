@@ -60,6 +60,20 @@
 - **Servidor:** nova rota `GET /api/ops/leads/:id` (lead + dossiê + mensagens numa só resposta), filtro `?leadId=` em `/api/ops/messages`, e `/app`·`/mesa` a servir a página. `dist/mesa.js` para desenvolvimento.
 - **Provas:** **69/70** verificações — duas novas, contra o servidor isolado: `/app` serve a página construída, e o lead vem com dossiê e mensagens. A do navegador continua a falhar sem Chrome. `ops.test.mjs` 36/36 e `node evals.mjs` 8/8 sem alterações.
 
+## 1.6.0 — 26 out 2026 · Do lead ao código, com provas
+
+- **Projetos a sério.** Nova tabela `projects` (esquema **v5**) com briefing, objetivos, páginas, funcionalidades, critérios de aceitação, stack, estado e pasta própria em `data/projetos/<slug>/`. Um negócio, um projeto: índice único em `lead_id`, e a recusa diz qual é o projeto que já existe.
+- **Motor de geração real** (`src/ops/generate.mjs`): quatro pontos de partida — **página de conversão**, **site institucional** (4 páginas), **loja** com catálogo e carrinho, **sistema interno** com indicadores e exportação CSV. Escreve ficheiros que abrem no browser: HTML semântico, CSS responsivo, JavaScript validado. Sem CDN, sem fontes remotas, sem dependências: abre offline.
+- **Nada inventado nos dados.** A loja lê `data/products.json` e o sistema lê `data/dataset.json`; ambos nascem vazios, com estados vazios que ensinam a preencher. Não há produtos nem números de demonstração a passar por verdade.
+- **QA com critérios objetivos** (`src/ops/qa.mjs`): ficheiros obrigatórios, doctype/lang/viewport/título, um só `h1`, links internos que existem, recursos externos (bloqueados), rótulos em formulários, `alt` em imagens, JavaScript que compila (`vm.Script`), CSS com chaves fechadas e `@media`, JSON válido, e um pente de honestidade (lorem ipsum, TODO, placeholders). Três níveis: crítico, importante, menor. Guarda o **manifesto sha256** de cada corrida em `qa_runs`.
+- **Entrega só com provas.** Aprovar exige QA aprovado **e** ficheiros iguais aos auditados; entregar exige aprovação. Se algo mudar depois da auditoria, a entrega é **bloqueada** com a lista dos ficheiros. O **preview é real**: `/preview/<id>/` serve os ficheiros gerados pelo próprio Órbita (com proteção contra `..`), e `GET …/zip` devolve o projeto em ZIP (escrito à mão, PKZIP válido, nomes UTF-8).
+- **Vercel e GitHub não fingem.** Sem `VERCEL_DEPLOY_HOOK`, a recusa nomeia a variável que falta; com o hook, o pedido é registado como **pedido** — «pedir não é estar publicado». O envio de ficheiros para o GitHub não está implementado e diz isso.
+- **Funil comercial completo**: `novo → qualificado → contactado → em negociação → proposta → ganho`, com `perdido` em qualquer ponto e o caminho curto antigo preservado. Saltos recusados com a frase do funil.
+- **Guarda da porta** (`src/ops/guard.mjs`): limitador de 300 pedidos/minuto por IP (429 com o tempo de espera) e, se `ORBITA_ADMIN_TOKEN` (16+) existir, `/api/ops` passa a exigi-lo (cabeçalho `x-orbita-admin`, `Bearer` ou cookie). Sem a variável, o arranque diz em voz alta que está em **modo local, sem palavra-passe**. O escritório e a mesa pedem o token uma vez e guardam-no no browser.
+- **Registo de execução**: cada geração e cada QA deixam linha em `jobs` (estado, início, fim, resultado) — evidência do que correu, não só do que se disse.
+- **Na mesa**: secção **Projetos**, com pipeline visual (briefing → código → qualidade → aprovação → entrega), relatório de QA legível, lista de ficheiros com marca de «alterado», entregas e histórico; no lead, «Criar projeto» quando ainda não existe.
+- **Provas:** `ops.test.mjs` **43 testes** (novos: geração dos quatro tipos, QA a apanhar links partidos/rótulos/lorem, entrega bloqueada por alteração, ZIP válido, funil comercial, guarda e ritmo) e `check.mjs` **74/75** — cinco passos novos de ponta a ponta contra um servidor isolado: lead → qualificar → projeto → gerar (4 ficheiros, 14 KB) → QA → aprovar → entregar → preview HTTP 200 com HTML e CSS reais → mexer invalida a aprovação → Vercel/GitHub recusam com o nome do que falta. A verificação do navegador continua a falhar sem Chrome.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

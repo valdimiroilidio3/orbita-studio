@@ -29,6 +29,10 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
 | Provas | `ops.test.mjs` (`npm run test:ops`) | 36 testes, tudo em memória, sem tocar em serviços |
 | **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
+| **Projetos** | `src/ops/projects.mjs` | Do lead ao projeto, com máquina de estados e um projeto por negócio |
+| **Geração** | `src/ops/generate.mjs` | Quatro pontos de partida, ficheiros reais, sem dependências |
+| **QA** | `src/ops/qa.mjs` | Estrutura, sintaxe, acessibilidade e honestidade — com manifesto sha256 |
+| **Guarda** | `src/ops/guard.mjs` + `src/ops/zip.mjs` | Ritmo por IP, token opcional, e o ZIP da entrega |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
 `ExperimentalWarning` no arranque — é do Node, não do Órbita; silencia-se com
@@ -285,6 +289,64 @@ Também aqui: **Hoje** (números reais — novos, com contacto, respostas desde 
 30 dias — mais a lista do que espera decisão), **Conversas** (`GET /api/ops/messages`) e **Saldo**
 (`GET /api/ops/saldo`). No telemóvel, barra inferior fixa e uma coluna.
 
+## Projetos: do briefing ao código, do código à entrega (passo 6)
+
+O pipeline é uma máquina de estados guardada na base de dados:
+
+```
+rascunho ──gerar──► gerado ──QA──► qa_passou ──aprovar──► aprovado ──entregar──► entregue
+                       ▲              │
+                       └── qa_falhou ◄┘        (qualquer geração volta a «gerado»)
+```
+
+Cada transição inválida é recusada com a frase do pipeline. Cada passo escreve em `events` (cadeia
+de hashes) e em `jobs` (início, fim, resultado) — a evidência fica na base, não na conversa.
+
+**Um negócio, um projeto.** `projects.lead_id` tem índice único (parcial). Criar outro para o mesmo
+lead devolve **409** com o nome do que já existe.
+
+**Geração** (`src/ops/generate.mjs`) é determinística e testável: `plan()` devolve os ficheiros em
+memória; `writeFiles()` escreve-os e devolve o manifesto. Quatro tipos:
+
+| Tipo | Ficheiros | O que faz |
+|---|---|---|
+| `landing` | `index.html`, `styles.css`, `app.js`, `README.md` | Conversão: proposta, oferta com preço/prazo, formulário validado que prepara a mensagem |
+| `institucional` | + `sobre.html`, `servicos.html`, `contacto.html` | Navegação entre páginas, um `h1` por página |
+| `loja` | + `data/products.json` (vazio) | Catálogo, carrinho em `localStorage`, totais, encomenda preparada |
+| `dashboard` | + `data/dataset.json` (vazio) | Indicadores do ficheiro, pesquisa, ordenação, CSV |
+
+Nada disto inventa dados: a loja sem produtos mostra um estado vazio que ensina, o sistema sem
+dados mostra zero e explica. As integrações que faltam (pagamentos, envio de formulário, servidor)
+estão escritas no `README.md` de cada projeto gerado.
+
+**QA** (`src/ops/qa.mjs`) devolve itens com três níveis — `critico`, `importante`, `menor` — e
+`passed = críticos + importantes === 0`. Verifica ficheiros obrigatórios, estrutura HTML, links e
+recursos, rótulos e `alt`, sintaxe do JS (`vm.Script`), CSS (`@media`, chaves), JSON, e textos de
+enchimento. Cada corrida fica em `qa_runs` com o **manifesto sha256**.
+
+**Aprovação e entrega.** `aprovar` exige `qa_passou` e um manifesto igual ao do disco;
+`entregar` exige aprovação; qualquer alteração posterior ao QA bloqueia com **409** e a lista de
+ficheiros. Destinos:
+
+| Destino | O que acontece de verdade |
+|---|---|
+| `preview` | Os ficheiros passam a ser servidos em `/preview/<id>/` (com protecção contra `..`) |
+| `vercel` | Sem `VERCEL_DEPLOY_HOOK` → 409 a nomear a variável; com ele, o pedido fica **pedido** |
+| `github` | Sem `GITHUB_TOKEN` → 409; o envio de ficheiros não está implementado e é dito |
+
+`GET /api/ops/projetos/:id/zip` devolve o projeto num ZIP (PKZIP «store», nomes UTF-8, sha256 no
+cabeçalho `x-orbita-sha256`).
+
+## A guarda da porta
+
+- **Ritmo**: 300 pedidos por minuto por IP; acima disso, **429** com o tempo de espera.
+- **Palavra-passe opcional**: `ORBITA_ADMIN_TOKEN` (16+ caracteres). Com ela, todas as rotas
+  `/api/ops` exigem `x-orbita-admin`, `Authorization: Bearer` ou o cookie `orbita_admin`; o
+  escritório e a mesa pedem o token uma vez e guardam-no no browser.
+- Sem a variável, o Órbita está em **modo local** e o arranque di-lo: «sem palavra-passe — só para
+  esta máquina». Não é uma falha escondida, é uma escolha explícita.
+- O token nunca vai para o HTML: é pedido no browser e enviado por cabeçalho.
+
 ## Caixa de entrada e envio
 
 - **Email** exige `RESEND_API_KEY` **e** consentimento registado no lead (`consent: 'dado'`).
@@ -303,6 +365,12 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | GET | `/api/ops/summary` | Leads, funil, conversão, mensagens, custos, estado da fila |
 | GET | `/api/ops/leads?limit=&status=` | A lista, ordenada por nota |
 | GET | `/api/ops/leads/:id` | Um lead com o dossiê e as mensagens dele (a página de aprovação) |
+| GET/POST | `/api/ops/projetos` | Projetos / criar |
+| POST | `/api/ops/leads/:id/projeto` | Criar o projeto de um lead |
+| GET | `/api/ops/projetos/:id` | Projeto com ficheiros, QA, entregas e histórico |
+| POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | O pipeline |
+| GET | `/api/ops/projetos/:id/zip` | Os ficheiros em ZIP |
+| GET | `/preview/:id/…` | Preview real dos ficheiros gerados |
 | POST | `/api/ops/leads` | Um lead (`{…}`) ou vários (`{ leads: [...] }`) |
 | PATCH | `/api/ops/leads/:id` | Mudar de estado no funil (`{ status, note }`) |
 | POST | `/api/ops/leads/:id/consent` | Registar consentimento (`{ consent, reference }`) |
@@ -361,13 +429,24 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 - **Instagram e avaliações lidas a sério.** O dossiê detecta o perfil e usa a nota do Google
   Places que já temos; ler o conteúdo do Instagram exige a API da Meta (conta e token) — sem
   isso seria raspar, e raspar não é base para escrever a um cliente.
+- **Postgres/Supabase.** O esquema é SQLite versionado (`SCHEMA_VERSION` 5 em `src/ops/db.mjs`).
+  `supabase/orbita_schema.sql` cobre só leads e nunca foi executado por falta de credenciais —
+  não há RLS em uso nem migração aplicada. O caminho é escrever as migrações novas antes de dizer
+  «Supabase ativo».
+- **Envio para o GitHub e deployment na Vercel.** Os adaptadores existem e recusam com o nome da
+  variável que falta; o envio de ficheiros para o GitHub não está implementado, e o hook da Vercel
+  apenas regista um pedido — o estado final tem de ser confirmado no serviço.
+- **Agente de código.** A geração é determinística, não é um agente a escrever código. Não há
+  runner de IA configurado (`GEMINI_API_KEY` vazia): o fluxo manual é abrir a pasta e editar.
+- **Testes de navegador.** O smoke com Chrome falha neste ambiente (não há browser). A verificação
+  do preview é feita por HTTP (200 + HTML/CSS esperados), não por renderização.
 - **Regras aprendidas com correções.** O `learn.mjs` já guarda lições e regras; ligá-las às
   aprovações (rejeitar uma mensagem e a razão virar regra) é o passo seguinte.
 
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 36 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 43 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

@@ -5,7 +5,9 @@
 // Sem razão, é publicidade; com razão, é uma decisão.
 import { audit, now, uid } from './db.mjs';
 
-export const STATUSES = ['novo', 'contactado', 'respondeu', 'reuniao', 'cliente', 'perdido'];
+// O funil comercial, por ordem. `cliente` é o «ganho»; `perdido` fecha em qualquer ponto.
+export const STATUSES = ['novo', 'qualificado', 'contactado', 'respondeu', 'em_negociacao', 'proposta', 'reuniao', 'cliente', 'perdido'];
+export const STAGES = ['novo', 'qualificado', 'contactado', 'em_negociacao', 'proposta', 'cliente', 'perdido'];
 export const CONSENT = ['desconhecido', 'dado', 'retirado'];
 
 const slug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -126,11 +128,17 @@ export function getLead(db, id) {
   return row ? rowToLead(row) : null;
 }
 
+// Cada passo só se dá para a frente (ou de volta um, para corrigir). O caminho curto antigo
+// continua válido — quem já trabalhava não perde nada — e o caminho comercial completo existe
+// ao lado: qualificado → contactado → em negociação → proposta → ganho.
 const TRANSITIONS = {
-  novo: ['contactado', 'perdido'],
-  contactado: ['respondeu', 'perdido'],
-  respondeu: ['reuniao', 'perdido'],
-  reuniao: ['cliente', 'perdido'],
+  novo: ['qualificado', 'contactado', 'perdido'],
+  qualificado: ['contactado', 'perdido'],
+  contactado: ['respondeu', 'em_negociacao', 'perdido'],
+  respondeu: ['reuniao', 'em_negociacao', 'perdido'],
+  reuniao: ['em_negociacao', 'cliente', 'perdido'],
+  em_negociacao: ['proposta', 'reuniao', 'perdido'],
+  proposta: ['cliente', 'em_negociacao', 'perdido'],
   cliente: [],
   perdido: ['novo'],
 };

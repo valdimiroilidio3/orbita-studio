@@ -206,6 +206,28 @@ A pesquisa da Google passa a gravar também nesta base de dados, já pontuada e 
 Detalhe completo — tabelas, rotas `/api/ops`, aquecimento do número, custos e **o que ainda não
 está** (Stripe, WhatsApp Business real, Postgres) — em **[OPS.md](OPS.md)**.
 
+## Do lead ao código, com provas
+
+Um lead qualificado transforma-se em **projeto** — um só por negócio, com briefing, objetivos,
+páginas e critérios de aceitação. O motor (`src/ops/generate.mjs`) escreve ficheiros reais em
+`data/projetos/<slug>/` para quatro pontos de partida: página de conversão, site institucional de
+quatro páginas, loja com catálogo e carrinho, e sistema interno com indicadores e CSV. Sem CDN,
+sem dependências: o que sai abre offline.
+
+O que é gerado não é dado como concluído. Corre o **QA** (`src/ops/qa.mjs`): ficheiros
+obrigatórios, `lang`/viewport/`h1`, links internos que existem, rótulos nos formulários, `alt` nas
+imagens, JavaScript que compila, CSS com `@media`, JSON válido — e um pente de honestidade
+(lorem ipsum, TODO, placeholders). Fica guardado o **manifesto sha256** dos ficheiros auditados.
+
+Só depois: **aprovar** (exige QA aprovado e ficheiros iguais aos auditados) e **entregar**. O
+preview é verdadeiro — `/preview/<id>/` serve os ficheiros gerados pelo próprio Órbita — e
+`Obter .zip` leva o projeto para qualquer alojamento. **Vercel** e **GitHub** só avançam com
+credenciais, e uma recusa nomeia a variável que falta; um pedido de deployment fica registado como
+pedido, nunca como publicado.
+
+Segurança: 300 pedidos/minuto por IP e, com `ORBITA_ADMIN_TOKEN` definido, `/api/ops` exige o
+token (cabeçalho `x-orbita-admin`). Sem essa variável o arranque diz que está em **modo local**.
+
 ## A mesa de trabalho: leads e aprovação
 
 O botão **▤ MESA** (ou `http://localhost:4520/app`) abre a superfície de trabalho: barra lateral
@@ -344,12 +366,18 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET/POST | `/api/ops/clientes` · POST `/api/ops/clientes/:id/entrar` · GET `/api/ops/agencia` | os espaços de cliente |
 | GET | `/api/ops/leads/:id` | um lead com o dossiê e as suas mensagens (a página do lead) |
 | GET | `/api/ops/messages?leadId=` | as mensagens de um lead |
+| GET/POST | `/api/ops/projetos` | a lista de projetos / criar um |
+| POST | `/api/ops/leads/:id/projeto` | criar o projeto de um lead (409 se já existe) |
+| GET | `/api/ops/projetos/:id` | projeto, ficheiros, QA, entregas e histórico |
+| POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | o pipeline, passo a passo |
+| GET | `/api/ops/projetos/:id/zip` | os ficheiros gerados em ZIP |
+| GET | `/preview/:id/…` | o preview real do projeto |
 
 ## Verificação
 
 ```bash
-npm run check         # 69 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, servidor)
-npm run test:ops      # 36 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 74 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, projetos, servidor)
+npm run test:ops      # 43 testes da operação: base de dados em memória, nenhum serviço externo
 node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude

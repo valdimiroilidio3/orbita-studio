@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch { /* Node sem SQLite */ }
 
-export const SCHEMA_VERSION = '4';
+export const SCHEMA_VERSION = '5';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -172,6 +172,62 @@ CREATE TABLE IF NOT EXISTS revenue (
 );
 CREATE INDEX IF NOT EXISTS revenue_at ON revenue(at DESC);
 
+-- Projetos: o que a Órbita produz. Um projeto nasce de uma oportunidade (lead), tem briefing,
+-- páginas, critérios de aceitação, e um estado que só avança com provas: gerado → QA → aprovado
+-- → entregue. O índice único em lead_id impede dois projetos para o mesmo negócio.
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  lead_id TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  client TEXT NOT NULL DEFAULT '',
+  niche TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'landing',
+  stack TEXT NOT NULL DEFAULT 'html',
+  brief TEXT NOT NULL DEFAULT '',
+  goals TEXT NOT NULL DEFAULT '[]',
+  pages TEXT NOT NULL DEFAULT '[]',
+  features TEXT NOT NULL DEFAULT '[]',
+  acceptance TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'rascunho',
+  dir TEXT NOT NULL,
+  preview_url TEXT NOT NULL DEFAULT '',
+  production_url TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS projects_lead ON projects(lead_id) WHERE lead_id != '';
+CREATE INDEX IF NOT EXISTS projects_status ON projects(status);
+
+-- Cada auditoria de qualidade fica guardada com o manifesto dos ficheiros que foram vistos.
+-- É por comparação com este manifesto que a entrega é bloqueada se algo mudar depois do QA.
+CREATE TABLE IF NOT EXISTS qa_runs (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  total INTEGER NOT NULL DEFAULT 0,
+  critical INTEGER NOT NULL DEFAULT 0,
+  important INTEGER NOT NULL DEFAULT 0,
+  minor INTEGER NOT NULL DEFAULT 0,
+  passed INTEGER NOT NULL DEFAULT 0,
+  manifest TEXT NOT NULL DEFAULT '{}',
+  report TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS qa_project ON qa_runs(project_id, at DESC);
+
+-- Entregas: pedir não é ter. O estado guarda o que se sabe (pedido, em curso, falhado,
+-- concluído) e o URL só aparece quando existe mesmo.
+CREATE TABLE IF NOT EXISTS deliveries (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  target TEXT NOT NULL,
+  status TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS deliveries_project ON deliveries(project_id, at DESC);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -243,6 +299,10 @@ function migrate(db) {
   const leadCols = db.prepare('PRAGMA table_info(leads)').all().map(c => c.name);
   if (!leadCols.includes('score_base')) db.exec('ALTER TABLE leads ADD COLUMN score_base INTEGER NOT NULL DEFAULT 0');
   if (!leadCols.includes('score_learned')) db.exec('ALTER TABLE leads ADD COLUMN score_learned INTEGER NOT NULL DEFAULT 0');
+
+  // v5: a tarefa guarda o que produziu (evidência), não só que correu
+  const jobCols = db.prepare('PRAGMA table_info(jobs)').all().map(c => c.name);
+  if (!jobCols.includes('result')) db.exec("ALTER TABLE jobs ADD COLUMN result TEXT NOT NULL DEFAULT ''");
 
   const cols = db.prepare('PRAGMA table_info(events)').all().map(c => c.name);
   for (const c of ['prev_hash', 'hash']) {

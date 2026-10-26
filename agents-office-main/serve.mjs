@@ -54,7 +54,9 @@ import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
-import * as ops from './src/ops/index.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
+import * as ops from './src/ops/index.mjs';
+import { createLimiter, authorized, adminMode } from './src/ops/guard.mjs';
+import { zipBuffer } from './src/ops/zip.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
@@ -588,13 +590,29 @@ if (OPS) {
 const discovering = mcp.discover().then(l => { console.log(`  conectores: ${l.filter(s => s.status === 'connected').length} ligados de ${l.length} (claude mcp list + os do projeto)`); return l; });
 const agentsOut = () => { const setup = setupMap(); return AGENTS.map(a => ({ id: a.id, name: a.name, role: a.role, does: a.does, tools: a.tools, brief: a.brief || '', model: a.model || '', effort: a.effort || '', skills: skills.names(a), lessons: learn.count(BRAIN, a.id), department: a.department, lead: a.lead,
   interviewer: leadOf(a.department).id === a.id, setUp: setup[a.department] })); };
+const limiter = createLimiter({ windowMs: 60000, max: 300 });
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
+    // 1) ritmo: nenhum separador esgota o processo com um ciclo de fetch
+    if (url.pathname.startsWith('/api/')) {
+      const hit = limiter.check(req.socket.remoteAddress || 'local');
+      if (!hit.ok) return json(res, 429, { ok: false, error: `demasiados pedidos — tenta daqui a ${hit.espera}s`, retryAfter: hit.espera });
+    }
+    // 2) autenticação: só quando há ORBITA_ADMIN_TOKEN. Em modo local (a omissão) ninguém é
+    //    barrado — e o arranque di-lo em voz alta, para não haver dúvidas sobre o que está aberto.
+    if (url.pathname.startsWith('/api/ops')) {
+      const auth = authorized(req);
+      if (!auth.ok) return json(res, 401, { ok: false, ...auth });
+    }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/command-centre-v2.html' || url.pathname === '/dark')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      const page = fs.readFileSync(HTML, 'utf8');
-      return res.end(url.pathname === '/dark' ? page.replace('<body>', '<body class="dark">') : page); // /dark: the same file, opened in dark mode
+      let page = fs.readFileSync(HTML, 'utf8');
+      if (url.pathname === '/dark') page = page.replace('<body>', '<body class="dark">'); // /dark: o mesmo ficheiro, em modo escuro
+      // Se a instalação está protegida, o escritório precisa de mandar o token em cada pedido. O
+      // token não vai aqui dentro: fica no browser (localStorage) e é pedido uma vez.
+      if (adminMode() === 'token') page = page.replace('</head>', `<script>(function(){var k='orbita.admin.token';if(!localStorage.getItem(k)){var t=prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');if(t)localStorage.setItem(k,t);}var f=window.fetch;window.fetch=function(u,o){o=o||{};var t=localStorage.getItem(k);if(t&&String(u).indexOf('/api/')===0){o.headers=Object.assign({},o.headers,{'x-orbita-admin':t});}return f(u,o);};})();</script></head>`);
+      return res.end(page);
     }
     // A mesa de trabalho (26 out 2026): a superfície limpa para decidir. O escritório 3D fica onde
     // está; esta é a página que se abre de manhã e não pede para olhar para uma cena.
@@ -606,6 +624,28 @@ const server = http.createServer(async (req, res) => {
       const file = path.join(ROOT, 'dist', url.pathname.slice(1));
       res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(file, 'utf8'));
+    }
+    // Preview real: os ficheiros gerados passam a ser servidos por nós. É isto que torna
+    // «entregue» uma afirmação verificável em vez de uma promessa.
+    const prev = url.pathname.match(/^\/preview\/([^/]+)(\/.*)?$/);
+    if (prev && req.method === 'GET') {
+      const project = OPS.projects.get(OPS.db, decodeURIComponent(prev[1]));
+      if (!project) return json(res, 404, { ok: false, error: 'projeto não encontrado' });
+      const relRaw = decodeURIComponent(prev[2] || '/');
+      const rel = relRaw.replace(/^\/+/, '').replace(/\\/g, '/');
+      const root = path.resolve(project.dir);
+      const file = path.resolve(root, rel === '' ? 'index.html' : rel);
+      if (!file.startsWith(root + path.sep) && file !== root) return json(res, 403, { ok: false, error: 'fora do projeto' });
+      let target = file;
+      try { if (fs.statSync(target).isDirectory()) target = path.join(target, 'index.html'); } catch { /* não existe */ }
+      if (!fs.existsSync(target)) {
+        res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(`<!DOCTYPE html><html lang="pt"><meta charset="utf-8"><title>404</title><body style="font-family:system-ui;padding:40px"><h1>Ficheiro não encontrado</h1><p>Este projeto não tem «${rel || 'index.html'}». Volta ao <a href="/preview/${project.id}/">início do preview</a>.</p></body></html>`);
+      }
+      const ext = path.extname(target).toLowerCase();
+      const type = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.ico': 'image/x-icon', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8' }[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(target));
     }
     if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
@@ -896,6 +936,75 @@ const server = http.createServer(async (req, res) => {
           if (out.total) OPS.audit({ actor: 'dono', action: 'ops.importou_gravados', entity: 'leads', detail: out });
           return json(res, 200, { ok: true, ...out });
         }
+        // ---------- passo 6: projetos, geração, QA e entrega ----------
+        if (url.pathname === '/api/ops/projetos' && req.method === 'GET') {
+          return json(res, 200, {
+            ok: true,
+            projetos: OPS.projects.list(OPS.db, { limit: 100, status: url.searchParams.get('estado') || null }),
+            resumo: OPS.projects.summary(OPS.db),
+            tipos: Object.entries(OPS.projects.KINDS || {}).map(([id, k]) => ({ id, label: k.label, pages: k.pages })),
+          });
+        }
+        if (url.pathname === '/api/ops/projetos' && req.method === 'POST') {
+          const b = await limitedBody(req, 20000);
+          const project = OPS.projects.create(OPS.db, DATA, {
+            leadId: b.leadId || '', name: b.name, client: b.client || '', niche: b.niche || '', city: b.city || '',
+            kind: b.kind || 'landing', stack: b.stack || 'html', brief: b.brief || '',
+            goals: b.goals || [], pages: b.pages || [], features: b.features || [], acceptance: b.acceptance || [],
+          }, 'dono');
+          return json(res, 201, { ok: true, projeto: project });
+        }
+        const projLead = url.pathname.match(/^\/api\/ops\/leads\/([^/]+)\/projeto$/);
+        if (projLead && req.method === 'POST') {
+          const b = await limitedBody(req, 20000);
+          const project = OPS.projects.fromLead(OPS.db, DATA, decodeURIComponent(projLead[1]), { kind: b.kind || 'landing', brief: b.brief || '', actor: 'dono' });
+          return json(res, 201, { ok: true, projeto: project });
+        }
+        const projMatch = url.pathname.match(/^\/api\/ops\/projetos\/([^/]+)(?:\/(gerar|qa|aprovar|entregar|zip))?$/);
+        if (projMatch) {
+          const id = decodeURIComponent(projMatch[1]);
+          const action = projMatch[2] || '';
+          if (req.method === 'GET' && !action) {
+            const d = OPS.projects.detail(OPS.db, id);
+            if (!d) return json(res, 404, { ok: false, error: 'projeto não encontrado' });
+            return json(res, 200, { ok: true, ...d });
+          }
+          if (req.method === 'POST' && action === 'gerar') {
+            const out = OPS.projects.generate(OPS.db, id, 'dono');
+            return json(res, 200, { ok: true, ...out });
+          }
+          if (req.method === 'POST' && action === 'qa') {
+            const out = OPS.projects.qa(OPS.db, id, 'dono');
+            return json(res, out.run.passed ? 200 : 422, { ok: out.run.passed, ...out });
+          }
+          if (req.method === 'POST' && action === 'aprovar') {
+            const b = await limitedBody(req, 4000);
+            return json(res, 200, { ok: true, ...OPS.projects.approve(OPS.db, id, { note: b.note || '' }) });
+          }
+          if (req.method === 'GET' && action === 'zip') {
+            const project = OPS.projects.get(OPS.db, id);
+            if (!project) return json(res, 404, { ok: false, error: 'projeto não encontrado' });
+            const entries = [];
+            for (const f of OPS.projects.filesOf(OPS.db, id)) {
+              try { entries.push({ name: f.file, data: fs.readFileSync(path.join(project.dir, f.file)) }); } catch { /* saltar */ }
+            }
+            if (!entries.length) return json(res, 409, { ok: false, error: 'o projeto ainda não tem ficheiros — gera primeiro' });
+            const { buffer, sha256 } = zipBuffer(entries);
+            res.writeHead(200, {
+              'content-type': 'application/zip',
+              'content-disposition': `attachment; filename="${project.id}.zip"`,
+              'x-orbita-sha256': sha256,
+              'cache-control': 'no-store',
+            });
+            return res.end(buffer);
+          }
+          if (req.method === 'POST' && action === 'entregar') {
+            const b = await limitedBody(req, 4000);
+            return json(res, 200, OPS.projects.deliver(OPS.db, id, { target: b.target || 'preview' }));
+          }
+          return json(res, 405, { ok: false, error: 'GET, ou POST …/gerar · /qa · /aprovar · /entregar' });
+        }
+
         const leadMatch = url.pathname.match(/^\/api\/ops\/leads\/([^/]+)(?:\/(consent|follow-up))?$/);
         if (leadMatch) {
           const id = decodeURIComponent(leadMatch[1]);
@@ -1128,6 +1237,9 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(cfg.port, () => {
   console.log(`Órbita ${version} → http://localhost:${cfg.port}`);
+  console.log(adminMode() === 'token'
+    ? '  acesso: protegido por ORBITA_ADMIN_TOKEN (as rotas /api/ops exigem o token)'
+    : '  acesso: MODO LOCAL, sem palavra-passe — só para esta máquina. Para expor na rede, define ORBITA_ADMIN_TOKEN (16+ caracteres) no .env.');
   const avail = AI.candidates.filter(c => c.available).map(c => c.label);
   console.log(`  empresa: ${cfg.name}   cérebro: ${BRAIN} (${graph.notes} notas, ${graph.links.length} ligações)`);
   console.log(`  ia: ${AI.active ? AI.active.label + ' (' + backend + (AI.active.model ? ' · ' + AI.active.model : '') + ')' : 'NENHUM MOTOR DISPONÍVEL'} · ${modelName(cfg.model)}${cfg.effort ? ' · esforço ' + cfg.effort : ''} por omissão (encaminhamento no Sonnet)`);

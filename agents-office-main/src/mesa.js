@@ -37,12 +37,14 @@ const IC = {
   tick: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',
   chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
   lupa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+  pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
   vazio: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
 };
 
 const NAV = [
   { k: 'hoje', label: 'Hoje', ic: 'hoje' },
   { k: 'leads', label: 'Leads', ic: 'leads' },
+  { k: 'projetos', label: 'Projetos', ic: 'pastas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
 ];
@@ -52,16 +54,35 @@ const S = {
   summary: null, today: null, leads: [], messages: [], saldo: null, clientes: null,
   lead: null, leadMessages: [], dossier: null,
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
+  projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
 
+const TOKEN_KEY = 'orbita.admin.token';
+function adminToken() {
+  if (S.token !== null) return S.token;
+  try { S.token = localStorage.getItem(TOKEN_KEY) || ''; } catch { S.token = ''; }
+  return S.token;
+}
 async function call(path, method = 'GET', body) {
   const opt = { method, headers: {} };
   if (body !== undefined) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const token = adminToken();
+  if (token) opt.headers['x-orbita-admin'] = token;
   const r = await fetch(API + path, opt);
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
+  if (r.status === 401) {
+    // instalação protegida: pede o token uma vez e guarda-o no browser
+    const given = S.tokenPrompted ? prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:') : prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');
+    S.tokenPrompted = true;
+    if (given) {
+      S.token = given;
+      try { localStorage.setItem(TOKEN_KEY, given); } catch { /* sem storage */ }
+      return call(path, method, body);
+    }
+  }
   if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
 }
@@ -79,7 +100,7 @@ function toast(msg, bad = false) {
 function parseHash() {
   const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead'];
+  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -118,13 +139,14 @@ function paintSideFoot() {
 
 /* ---------------- dados ---------------- */
 async function loadCommon() {
-  const [summary, today, leads, messages, saldo, clientes] = await Promise.all([
+  const [summary, today, leads, messages, saldo, clientes, projetos] = await Promise.all([
     call('/ops/summary').catch(() => null),
     call('/ops/today').catch(() => null),
     call('/ops/leads?limit=200').catch(() => ({ leads: [] })),
     call('/ops/messages?limit=100').catch(() => ({ messages: [] })),
     call('/ops/saldo').catch(() => null),
     call('/ops/clientes').catch(() => null),
+    call('/ops/projetos').catch(() => ({ projetos: [], resumo: null, tipos: [] })),
   ]);
   S.summary = summary;
   S.today = today;
@@ -132,6 +154,14 @@ async function loadCommon() {
   S.messages = messages.messages || [];
   S.saldo = saldo;
   S.clientes = clientes;
+  S.projetos = projetos.projetos || [];
+  S.projetosResumo = projetos.resumo || null;
+  S.tipos = projetos.tipos || [];
+}
+
+async function loadProjeto(id) {
+  const r = await call(`/ops/projetos/${encodeURIComponent(id)}`);
+  S.projeto = r;
 }
 
 async function loadLead(id) {
@@ -145,6 +175,7 @@ async function boot(full = true) {
   try {
     if (full) await loadCommon();
     if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
+    if (S.route.name === 'projeto' && S.route.id) await loadProjeto(S.route.id);
     S.error = '';
   } catch (e) { S.error = e.message; }
   paintNav();
@@ -155,7 +186,18 @@ async function boot(full = true) {
 /* ---------------- pedaços visuais ---------------- */
 const scoreClass = n => (n >= 75 ? '' : n >= 55 ? 'mid' : 'low');
 const scoreBadge = n => `<span class="badge ${scoreClass(n || 0)}">${n ?? 0} pontos</span>`;
-const statusLabel = { novo: 'Novo', contactado: 'Contactado', respondeu: 'Respondeu', reuniao: 'Reunião', cliente: 'Cliente', perdido: 'Perdido' };
+const statusLabel = {
+  novo: 'Novo', qualificado: 'Qualificado', contactado: 'Contactado', respondeu: 'Respondeu',
+  reuniao: 'Reunião', em_negociacao: 'Em negociação', proposta: 'Proposta enviada', cliente: 'Ganho', perdido: 'Perdido',
+};
+const NEXT_STATUS = {
+  novo: ['qualificado', 'contactado', 'perdido'], qualificado: ['contactado', 'perdido'],
+  contactado: ['respondeu', 'em_negociacao', 'perdido'], respondeu: ['reuniao', 'em_negociacao', 'perdido'],
+  reuniao: ['em_negociacao', 'cliente', 'perdido'], em_negociacao: ['proposta', 'reuniao', 'perdido'],
+  proposta: ['cliente', 'em_negociacao', 'perdido'], cliente: [], perdido: ['novo'],
+};
+const PROJ_LABEL = { rascunho: 'Rascunho', gerado: 'Código gerado', qa_passou: 'QA aprovado', qa_falhou: 'QA falhou', aprovado: 'Aprovado', entregue: 'Entregue' };
+const PROJ_TAG = { rascunho: '', gerado: 'novo', qa_passou: 'respondeu', qa_falhou: 'perdido', aprovado: 'cliente', entregue: 'cliente' };
 
 function headHTML({ title, sub, right = '' }) {
   return `<div class="head"><div><h1>${esc(title)}</h1><div class="sub">${sub}</div></div><div class="head-acts">${right}</div></div>`;
@@ -430,7 +472,8 @@ function viewLead() {
   const l = S.lead;
   if (!l) return `<div class="wrap"><div class="skeleton">a abrir o lead…</div></div>`;
   const m = currentMessage();
-  const next = { novo: ['contactado', 'perdido'], contactado: ['respondeu', 'perdido'], respondeu: ['reuniao', 'perdido'], reuniao: ['cliente', 'perdido'], cliente: [], perdido: ['novo'] }[l.status] || [];
+  const next = NEXT_STATUS[l.status] || [];
+  const projetoDoLead = S.projetos.find(p => p.lead_id === l.id);
   return `<div class="wrap">
     <div style="margin-bottom:var(--s3)"><a href="#/leads" class="btn quiet small">‹ Leads</a></div>
     <div class="head">
@@ -441,10 +484,148 @@ function viewLead() {
     ${leadMessageCard(m)}
     <div style="display:grid;gap:var(--s4);margin-top:var(--s4)">
       ${leadFacts()}
+      ${projetoDoLead
+        ? `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="tag ${PROJ_TAG[projetoDoLead.status]}">${esc(PROJ_LABEL[projetoDoLead.status] || projetoDoLead.status)}</span></div>
+            <p class="hint" style="margin-top:0">${esc(projetoDoLead.name)}</p>
+            <div class="acts" style="margin-top:var(--s3)"><a class="btn primary small" href="#/projeto/${esc(projetoDoLead.id)}">Abrir projeto</a></div></div>`
+        : `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="count">ainda não existe</span></div>
+            <p class="hint" style="margin-top:0">Um projeto nasce desta oportunidade: o briefing é escrito com o que já se sabe e o código é gerado a partir dele. Um negócio, um projeto.</p>
+            <div class="acts" style="margin-top:var(--s3)"><button class="btn primary small" data-act="criar-projeto" data-id="${esc(l.id)}">Criar projeto</button></div></div>`}
       ${leadHistory()}
       ${next.length ? `<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
         <div class="acts" style="margin-top:0">${next.map(s => `<button class="btn ghost small" data-act="estado" data-id="${esc(l.id)}" data-status="${s}">Marcar ${esc(statusLabel[s])}</button>`).join('')}</div>
         <div class="hint">O funil é novo → contactado → respondeu → reunião → cliente. Saltar passos é recusado, e a recusa diz porquê.</div></div>` : ''}
+    </div>
+  </div>`;
+}
+
+/* ---------------- Projetos ---------------- */
+function novoProjetoForm() {
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Novo projeto</h3><span class="count">a partir de um lead ou do zero</span></div>
+    <div class="form three">
+      <input class="in" id="pjNome" placeholder="Nome do projeto" aria-label="nome do projeto">
+      <input class="in" id="pjCliente" placeholder="Cliente" aria-label="cliente">
+      <select class="in" id="pjTipo" aria-label="tipo de projeto">
+        ${S.tipos.map(t => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('') || '<option value="landing">Página de conversão</option>'}
+      </select>
+    </div>
+    <div class="form two" style="margin-top:var(--s2)">
+      <input class="in" id="pjCidade" placeholder="Cidade" aria-label="cidade">
+      <input class="in" id="pjNicho" placeholder="Nicho" aria-label="nicho">
+      <button class="btn primary small" data-act="guardar-projeto" style="padding:0 var(--s5)">Criar</button>
+    </div>
+    <div class="hint">O briefing começa a partir do lead quando o projeto nasce de uma oportunidade.</div>
+  </div>`;
+}
+
+function pipeline(p) {
+  const steps = [
+    ['Briefing', ['rascunho'], 'os dados do cliente e o que se quer alcançar'],
+    ['Código', ['gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'], 'ficheiros escritos no disco'],
+    ['Qualidade', ['qa_passou', 'qa_falhou', 'aprovado', 'entregue'], 'estrutura, sintaxe, links, honestidade'],
+    ['Aprovação', ['aprovado', 'entregue'], 'a tua decisão, com a auditoria à frente'],
+    ['Entrega', ['entregue'], 'preview servido ou ficheiros prontos'],
+  ];
+  const current = { rascunho: 0, gerado: 1, qa_falhou: 2, qa_passou: 2, aprovado: 3, entregue: 4 }[p.status] ?? 0;
+  return `<ol class="steps">${steps.map(([label, done, hint], i) => {
+    const state = p.status === 'qa_falhou' && i === 2 ? 'bad' : i < current ? 'done' : i === current ? 'now' : '';
+    const isDone = done.includes(p.status) && !(p.status === 'qa_falhou' && i === 2);
+    return `<li class="${isDone ? 'done' : state}"><b>${i + 1}. ${esc(label)}</b><small>${esc(hint)}</small></li>`;
+  }).join('')}</ol>`;
+}
+
+function qaReport(qa) {
+  if (!qa) return `<div class="hint">Este projeto ainda não foi auditado. O QA corre sobre os ficheiros no disco e guarda um manifesto — se algo mudar depois, a entrega é bloqueada.</div>`;
+  const sev = { critico: 'Crítico', importante: 'Importante', menor: 'Menor' };
+  return `<div class="qa-head">
+      <span class="badge ${qa.passed ? '' : 'low'}">${qa.passed ? 'passou' : 'falhou'}</span>
+      <span class="count">${qa.total === 0 ? 'nenhum problema encontrado' : `${qa.total} problemas · ${qa.critical} críticos · ${qa.important} importantes · ${qa.minor} menores`}</span>
+    </div>
+    ${qa.report.length ? `<ul class="qa-list">${qa.report.map(i => `<li class="${i.level}"><b>${esc(sev[i.level] || i.level)}</b> <code>${esc(i.code)}</code> ${esc(i.message)}${i.file ? ` <span class="count">(${esc(i.file)})</span>` : ''}</li>`).join('')}</ul>`
+      : '<div class="hint">Nenhum problema encontrado: estrutura, sintaxe, links, rótulos e honestidade do texto.</div>'}`;
+}
+
+function viewProjetos() {
+  const list = S.projetos;
+  const r = S.projetosResumo || {};
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Projetos',
+      sub: list.length ? `${r.total} no total · ${r.emQa || 0} em QA · ${r.aprovados || 0} aprovados · ${r.entregues || 0} entregues` : 'ainda não há projetos',
+      right: `<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>${stopPill()}`,
+    })}
+    ${S.addingProject ? novoProjetoForm() : ''}
+    ${list.length ? `<div class="rows">${list.map(p => `<button class="row" data-act="ver-projeto" data-id="${esc(p.id)}" style="grid-template-columns:1fr 150px 130px">
+      <div><div class="nm">${esc(p.name)}</div><div class="mt">${esc([p.client, p.city].filter(Boolean).join(' · ') || 'sem cliente')} · ${esc((S.tipos.find(t => t.id === p.kind) || {}).label || p.kind)}</div></div>
+      <div class="cell hide-m">${esc(when(p.updated_at))}</div>
+      <div class="cell"><span class="tag ${PROJ_TAG[p.status] || ''}">${esc(PROJ_LABEL[p.status] || p.status)}</span></div>
+    </button>`).join('')}</div>`
+      : `<div class="card empty">${IC.vazio}<h3>Sem projetos</h3>
+        <p>Um projeto nasce de um lead: abre um, escolhe «Criar projeto» e o briefing é escrito com o que já se sabe. A partir daí: código gerado, auditoria de qualidade, aprovação e entrega.</p>
+        <div class="acts" style="justify-content:center"><a class="btn primary" href="#/leads" style="max-width:240px">Ver os leads</a></div></div>`}
+  </div>`;
+}
+
+function viewProjeto() {
+  const d = S.projeto;
+  if (!d) return `<div class="wrap"><div class="skeleton">a abrir o projeto…</div></div>`;
+  const p = d.project;
+  const qa = d.qa;
+  const podeGerar = ['rascunho', 'gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'].includes(p.status);
+  const podeQa = ['gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'].includes(p.status);
+  const podeAprovar = p.status === 'qa_passou' && qa?.passed;
+  const podeEntregar = ['aprovado', 'entregue'].includes(p.status) && qa?.passed;
+  return `<div class="wrap">
+    <div style="margin-bottom:var(--s3)"><a href="#/projetos" class="btn quiet small">‹ Projetos</a></div>
+    <div class="head">
+      <div><h1 style="font-size:34px">${esc(p.name)}</h1>
+        <div class="sub">${esc([p.client, p.city, p.niche].filter(Boolean).join(' · '))}${p.lead_id ? ` · <a href="#/lead/${esc(p.lead_id)}" style="text-decoration:underline">ver o lead</a>` : ''}</div></div>
+      <div class="head-acts"><span class="tag ${PROJ_TAG[p.status] || ''}">${esc(PROJ_LABEL[p.status] || p.status)}</span></div>
+    </div>
+    ${pipeline(p)}
+    <div class="card" style="margin-top:var(--s4)">
+      <div class="sec-h"><h3>Briefing</h3><span class="count">${esc(p.kind)} · ${esc(p.stack)}</span></div>
+      <p class="hint" style="margin-top:0">${esc(p.brief || 'Sem briefing escrito. Edita o projeto para acrescentar objetivos.')}</p>
+      ${p.goals.length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
+      ${p.acceptance.length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
+      <div class="acts" style="margin-top:var(--s4)">
+        ${podeGerar ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
+        ${podeQa ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
+        ${podeAprovar ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
+        ${podeEntregar && qa?.passed ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
+        ${p.preview_url ? `<a class="btn ghost" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
+        ${d.files.length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
+      </div>
+      <div class="hint" id="leadNote">${p.status === 'rascunho' ? 'O primeiro passo escreve os ficheiros no disco — nada é publicado.' : 'A entrega só passa com QA aprovado e ficheiros iguais aos auditados.'}</div>
+    </div>
+    <div class="cards2" style="margin-top:var(--s4)">
+      <div class="card">
+        <div class="sec-h"><h3>Qualidade</h3><span class="count">${qa ? esc(hhmm(qa.at)) + ' · ' + esc(when(qa.at)) : 'nunca correu'}</span></div>
+        ${qaReport(qa)}
+        ${d.changes?.length ? `<div class="hint bad">Ficheiros alterados depois do QA: ${d.changes.map(c => esc(c.file)).join(', ')}. Corre o QA outra vez.</div>` : ''}
+      </div>
+      <div class="card">
+        <div class="sec-h"><h3>Ficheiros</h3><span class="count">${d.files.length}</span></div>
+        ${d.files.length ? `<table><tbody>${d.files.map(f => `<tr><td>${esc(f.file)}${f.changed ? ' <span class="tag perdido">alterado</span>' : ''}</td><td class="n">${(f.size / 1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`
+          : '<div class="hint">Ainda não há ficheiros. Gera o código para os escrever.</div>'}
+      </div>
+    </div>
+    <div class="cards2" style="margin-top:var(--s4)">
+      <div class="card">
+        <div class="sec-h"><h3>Entregas</h3><span class="count">preview · Vercel · GitHub</span></div>
+        ${d.deliveries.length ? `<table><tbody>${d.deliveries.map(x => `<tr><td>${esc(x.target)}</td><td><span class="tag ${x.status === 'concluido' ? 'respondeu' : 'perdido'}">${esc(x.status)}</span></td><td class="n">${esc(when(x.at))}</td></tr>`).join('')}</tbody></table>`
+          : '<div class="hint">Nada entregue ainda.</div>'}
+        <div class="acts" style="margin-top:var(--s3)">
+          <button class="btn ghost small" data-act="entregar-vercel">Vercel</button>
+          <button class="btn ghost small" data-act="entregar-github">GitHub</button>
+        </div>
+        <div class="hint">Vercel e GitHub só avançam com credenciais no .env — e uma recusa diz exactamente o que falta.</div>
+      </div>
+      <div class="card">
+        <div class="sec-h"><h3>Histórico</h3><span class="count">${d.events.length}</span></div>
+        <ul class="feed">${d.events.slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
+      </div>
     </div>
   </div>`;
 }
@@ -526,8 +707,10 @@ function paint() {
   main().innerHTML = S.route.name === 'hoje' ? viewHoje()
     : S.route.name === 'leads' ? viewLeads()
       : S.route.name === 'lead' ? viewLead()
-        : S.route.name === 'conversas' ? viewConversas()
-          : viewSaldo();
+        : S.route.name === 'projetos' ? viewProjetos()
+          : S.route.name === 'projeto' ? viewProjeto()
+            : S.route.name === 'conversas' ? viewConversas()
+              : viewSaldo();
 }
 
 /* ---------------- acções ---------------- */
@@ -646,6 +829,78 @@ async function act(name, el, ev) {
     }
 
     if (name === 'novo-lead') { S.adding = !S.adding; paint(); return; }
+    if (name === 'novo-projeto') { S.addingProject = !S.addingProject; paint(); return; }
+    if (name === 'ver-projeto') { location.hash = `#/projeto/${encodeURIComponent(id)}`; return; }
+
+    if (name === 'guardar-projeto') {
+      const v = k => String($('#' + k)?.value || '').trim();
+      if (!v('pjNome')) { toast('O projeto precisa de um nome.', true); return; }
+      const r = await call('/ops/projetos', 'POST', {
+        name: v('pjNome'), client: v('pjCliente'), niche: v('pjNicho'), city: v('pjCidade'), kind: v('pjTipo') || 'landing',
+      });
+      toast('Projeto criado. O primeiro passo é gerar o código.');
+      S.addingProject = false;
+      location.hash = `#/projeto/${r.projeto.id}`;
+      return;
+    }
+
+    if (name === 'criar-projeto') {
+      const leadId = S.lead?.id || id;
+      const r = await call(`/ops/leads/${encodeURIComponent(leadId)}/projeto`, 'POST', { kind: 'landing' });
+      toast('Projeto criado a partir do lead.');
+      await boot(false);
+      location.hash = `#/projeto/${r.projeto.id}`;
+      return;
+    }
+
+    if (name === 'gerar') {
+      setNote('a escrever os ficheiros…');
+      const r = await call(`/ops/projetos/${encodeURIComponent(S.projeto.project.id)}/gerar`, 'POST', {});
+      toast(`${r.files.length} ficheiros escritos (${(r.bytes / 1024).toFixed(1)} KB). Corre o QA.`);
+      await boot(false); await loadProjeto(S.projeto.project.id); paint();
+      return;
+    }
+
+    if (name === 'qa') {
+      setNote('a auditar…');
+      const r = await call(`/ops/projetos/${encodeURIComponent(S.projeto.project.id)}/qa`, 'POST', {});
+      toast(r.run.passed ? `QA passou: ${r.run.total} verificações.` : `QA falhou: ${r.run.critical} críticas, ${r.run.important} importantes.`, !r.run.passed);
+      await boot(false); await loadProjeto(S.projeto.project.id); paint();
+      return;
+    }
+
+    if (name === 'aprovar-projeto') {
+      await call(`/ops/projetos/${encodeURIComponent(S.projeto.project.id)}/aprovar`, 'POST', { note: 'aprovado na mesa' });
+      toast('Aprovado. A entrega já pode ser feita.');
+      await boot(false); await loadProjeto(S.projeto.project.id); paint();
+      return;
+    }
+
+    if (name === 'entregar' || name === 'entregar-vercel' || name === 'entregar-github') {
+      const target = name === 'entregar' ? 'preview' : name === 'entregar-vercel' ? 'vercel' : 'github';
+      const r = await call(`/ops/projetos/${encodeURIComponent(S.projeto.project.id)}/entregar`, 'POST', { target });
+      toast(r.url ? `Entregue: ${r.url}` : (r.note || 'Pedido registado — confirma no serviço.'), !r.url);
+      await boot(false); await loadProjeto(S.projeto.project.id); paint();
+      return;
+    }
+
+    if (name === 'zip') {
+      const pid = S.projeto?.project?.id;
+      if (!pid) return;
+      const headers = {};
+      const token = adminToken();
+      if (token) headers['x-orbita-admin'] = token;
+      const res = await fetch(`/api/ops/projetos/${encodeURIComponent(pid)}/zip`, { headers });
+      if (!res.ok) throw new Error(`não consegui preparar o .zip (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${pid}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Ficheiros prontos para levar para qualquer alojamento.');
+      return;
+    }
 
     if (name === 'guardar-lead') {
       const v = id => String($('#' + id)?.value || '').trim();
@@ -704,6 +959,7 @@ function start() {
     S.route = parseHash();
     S.pick = null;
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
     paintNav();
     paint();
     main().scrollIntoView({ block: 'start' });

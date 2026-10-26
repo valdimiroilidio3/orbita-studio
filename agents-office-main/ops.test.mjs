@@ -705,3 +705,143 @@ test('agência: cada cliente tem a sua base de dados, e nada se mistura', () => 
   reg.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+/* ---------- passo 6: projetos, código, QA e entrega ---------- */
+
+import * as projects from './src/ops/projects.mjs';
+import { zipBuffer, crc32 } from './src/ops/zip.mjs';
+import { createLimiter, authorized, adminMode } from './src/ops/guard.mjs';
+
+function projetoDeTeste(db, dir, kind = 'landing') {
+  const lead = leads.upsertLead(db, { name: `Negócio ${kind} ${Math.random().toString(36).slice(2, 7)}`, category: 'barbearia', city: 'Coimbra', phone: '+351 913 ' + String(Math.floor(Math.random() * 900000) + 100000) }).lead;
+  return { lead, project: projects.fromLead(db, dir, lead.id, { kind }) };
+}
+
+test('projetos: nascem de um lead, um por negócio, com briefing escrito a partir do que se sabe', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-projetos-'));
+  const db = fresh();
+  const { lead, project } = projetoDeTeste(db, dir);
+  assert.equal(project.lead_id, lead.id);
+  assert.match(project.brief, /Coimbra/);
+  assert.equal(project.status, 'rascunho');
+  assert.ok(project.pages.length >= 1 && project.acceptance.length >= 1);
+  assert.throws(() => projects.fromLead(db, dir, lead.id), (e) => e.status === 409 && /já tem um projeto/.test(e.message));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('geração: quatro tipos escrevem ficheiros reais que passam o QA', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-geracao-'));
+  const db = fresh();
+  for (const kind of ['landing', 'institucional', 'loja', 'dashboard']) {
+    const { project } = projetoDeTeste(db, dir, kind);
+    const out = projects.generate(db, project.id);
+    assert.ok(out.files.includes('index.html'), kind + ': sem index.html');
+    assert.ok(out.files.includes('app.js') && out.files.includes('styles.css'), kind + ': faltam ficheiros base');
+    assert.ok(fs.existsSync(path.join(project.dir, 'index.html')));
+    const html = fs.readFileSync(path.join(project.dir, 'index.html'), 'utf8');
+    assert.match(html, /<html lang="pt">/);
+    assert.match(html, /name="viewport"/);
+    const qa = projects.qa(db, project.id);
+    assert.equal(qa.run.critical, 0, kind + ': ' + JSON.stringify(qa.run.items.filter(i => i.level === 'critico')));
+    assert.equal(qa.run.important, 0, kind + ': ' + JSON.stringify(qa.run.items.filter(i => i.level === 'importante')));
+    assert.equal(qa.run.passed, true, kind);
+    if (kind === 'loja') assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project.dir, 'data/products.json'), 'utf8')), [], 'loja não inventa produtos');
+    if (kind === 'dashboard') assert.deepEqual(JSON.parse(fs.readFileSync(path.join(project.dir, 'data/dataset.json'), 'utf8')), [], 'sistema não inventa dados');
+    assert.equal(projects.get(db, project.id).status, 'qa_passou');
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('QA: apanha links partidos, falta de rótulos e lorem ipsum — e bloqueia a entrega', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-qa-'));
+  const db = fresh();
+  const { project } = projetoDeTeste(db, dir);
+  projects.generate(db, project.id);
+  const indexPath = path.join(project.dir, 'index.html');
+  fs.writeFileSync(indexPath, fs.readFileSync(indexPath, 'utf8')
+    .replace('href="#contacto"', 'href="pagina-que-nao-existe.html"')
+    .replace('<label for="nome">Nome</label>', '')
+    + '\n<p>Lorem ipsum dolor sit amet.</p>');
+  const qa = projects.qa(db, project.id);
+  assert.equal(qa.run.passed, false);
+  const codes = qa.run.items.map(i => i.code);
+  assert.ok(codes.includes('link-partido'), codes.join(','));
+  assert.ok(codes.includes('label'), codes.join(','));
+  assert.ok(codes.includes('lorem'), codes.join(','));
+  assert.equal(projects.get(db, project.id).status, 'qa_falhou');
+  assert.throws(() => projects.approve(db, project.id), /depois do QA passar|QA/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('entrega: só com QA aprovado e ficheiros iguais aos auditados; alterar depois bloqueia', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-entrega-'));
+  const db = fresh();
+  const { project } = projetoDeTeste(db, dir);
+  projects.generate(db, project.id);
+  assert.throws(() => projects.approve(db, project.id), /QA/);
+  projects.qa(db, project.id);
+  assert.equal(projects.approve(db, project.id).project.status, 'aprovado');
+  const out = projects.deliver(db, project.id, { target: 'preview' });
+  assert.equal(out.url, `/preview/${project.id}/`);
+  assert.equal(out.project.status, 'entregue');
+  assert.equal(projects.deliveries(db, project.id).length, 1);
+  // mexer num ficheiro depois do QA trava a entrega seguinte
+  const outro = projetoDeTeste(db, dir);
+  projects.generate(db, outro.project.id);
+  projects.qa(db, outro.project.id);
+  projects.approve(db, outro.project.id);
+  fs.appendFileSync(path.join(outro.project.dir, 'styles.css'), '\n/* mexido depois do QA */\n');
+  assert.throws(() => projects.deliver(db, outro.project.id, { target: 'preview' }), (e) => e.status === 409 && /mudaram depois do QA/.test(e.message));
+  // Vercel sem credenciais: recusa com o nome exacto do que falta
+  const semHook = { ...process.env }; delete process.env.VERCEL_DEPLOY_HOOK;
+  try { assert.throws(() => projects.deliver(db, project.id, { target: 'vercel' }), /VERCEL_DEPLOY_HOOK/); } finally { process.env = semHook; }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('zip: entradas válidas, CRC certo e nomes com acentos preservados', () => {
+  const { buffer } = zipBuffer([{ name: 'index.html', data: '<p>olá</p>' }, { name: 'data/produtos.json', data: '[]' }]);
+  assert.equal(buffer.subarray(0, 4).toString('hex'), '504b0304', 'assinatura PKZIP');
+  assert.equal(crc32(Buffer.from('123456789')), 0xCBF43926, 'CRC-32 de referência (0xCBF43926)');
+  // o directório central tem de listar as duas entradas
+  const text = buffer.toString('latin1');
+  assert.ok(text.includes('index.html') && text.includes('data/produtos.json'));
+  assert.ok(buffer.subarray(-22).readUInt32LE(0) === 0x06054b50, 'fim do directório central');
+});
+
+test('funil comercial: qualificar, negociar, proposta e ganho — sem saltos', () => {
+  const db = fresh();
+  const lead = leads.upsertLead(db, { name: 'Loja Nova', city: 'Braga', phone: '+351 913 555 666' }).lead;
+  leads.setStatus(db, lead.id, 'qualificado');
+  leads.setStatus(db, lead.id, 'contactado');
+  leads.setStatus(db, lead.id, 'em_negociacao');
+  leads.setStatus(db, lead.id, 'proposta');
+  const ganho = leads.setStatus(db, lead.id, 'cliente');
+  assert.equal(ganho.status, 'cliente');
+  assert.throws(() => leads.setStatus(db, lead.id, 'novo'), /fim/);
+  const outro = leads.upsertLead(db, { name: 'Outra', phone: '+351 913 777 888' }).lead;
+  assert.throws(() => leads.setStatus(db, outro.id, 'cliente'), /segue o funil/);
+});
+
+test('guarda: modo local sem segredo, token exigido quando configurado, ritmo limitado', () => {
+  const env = { ...process.env };
+  delete env.ORBITA_ADMIN_TOKEN;
+  assert.equal(adminMode(env), 'local');
+  assert.equal(authorized({ headers: {} }, env).ok, true, 'sem token configurado não se barra ninguém');
+  const comToken = { ...env, ORBITA_ADMIN_TOKEN: 'um-segredo-comprido-para-teste' };
+  assert.equal(adminMode(comToken), 'token');
+  assert.equal(authorized({ headers: {} }, comToken).ok, false);
+  assert.equal(authorized({ headers: { 'x-orbita-admin': 'errado' } }, comToken).ok, false);
+  assert.equal(authorized({ headers: { 'x-orbita-admin': 'um-segredo-comprido-para-teste' } }, comToken).ok, true);
+  assert.equal(authorized({ headers: { authorization: 'Bearer um-segredo-comprido-para-teste' } }, comToken).ok, true);
+  let t = 0;
+  const limiter = createLimiter({ windowMs: 1000, max: 3, now: () => t });
+  assert.equal(limiter.check('ip').ok, true);
+  assert.equal(limiter.check('ip').ok, true);
+  assert.equal(limiter.check('ip').ok, true);
+  const blocked = limiter.check('ip');
+  assert.equal(blocked.ok, false);
+  assert.ok(blocked.espera >= 1);
+  t += 1000;
+  assert.equal(limiter.check('ip').ok, true, 'a janela volta a abrir');
+  assert.equal(limiter.check('outro-ip').ok, true, 'um IP não paga pelo outro');
+});

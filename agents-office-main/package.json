@@ -1,6 +1,6 @@
 {
   "name": "orbita",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Órbita — um escritório isométrico 3D onde agentes de IA fazem trabalho real no seu próprio login do Claude. Criado por Chelton Mahoze.",
   "author": "Chelton Mahoze",
   "type": "module",

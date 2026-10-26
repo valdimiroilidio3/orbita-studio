@@ -214,6 +214,31 @@
   .tag.cliente { background: #E7F0FF; color: #1B57C7; }
   .tag.perdido { background: var(--risk-soft); color: var(--risk); }
 
+  /* ---------- projetos ---------- */
+  .steps { list-style: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s2); margin-bottom: var(--s2); }
+  .steps li { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-m); padding: var(--s3); position: relative; }
+  .steps li b { display: block; font-size: var(--t-s); font-weight: 620; }
+  .steps li small { display: block; color: var(--faint); font-size: 11px; line-height: 1.3; margin-top: 2px; }
+  .steps li.done { border-color: rgba(18,128,94,.35); background: linear-gradient(0deg, var(--ok-soft), var(--ok-soft)); }
+  .steps li.done b { color: var(--ok); }
+  .steps li.now { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .steps li.now b { color: var(--blue); }
+  .steps li.bad { border-color: rgba(179,54,31,.35); background: var(--risk-soft); }
+  .steps li.bad b { color: var(--risk); }
+  .qa-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); }
+  .qa-list { list-style: none; display: grid; gap: var(--s2); margin-top: var(--s2); }
+  .qa-list li { font-size: var(--t-s); color: var(--muted); border-left: 3px solid var(--hair); padding-left: var(--s3); line-height: 1.4; }
+  .qa-list li.critico { border-color: var(--risk); }
+  .qa-list li.importante { border-color: var(--warn); }
+  .qa-list li.menor { border-color: var(--hair-strong); }
+  .qa-list code { font-size: 11px; background: #F1F1F3; padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+  .feed { list-style: none; display: grid; gap: var(--s2); }
+  .feed li { border-top: 1px solid var(--hair); padding-top: var(--s2); font-size: var(--t-s); }
+  .feed li:first-child { border-top: 0; padding-top: 0; }
+  @media (max-width: 820px) {
+    .steps { grid-template-columns: 1fr 1fr; }
+  }
+
   /* ---------- saldo ---------- */
   .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
   .money { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-bottom: var(--s5); }
@@ -293,63 +318,63 @@
 </div>
 <nav class="tabbar" id="tabbar" aria-label="secções (telemóvel)"></nav>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script>(()=>{var R="/api",o=a=>String(a??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),h=a=>(Number(a||0)/100).toLocaleString("pt-PT",{style:"currency",currency:"EUR"}),N=new Date().toLocaleDateString("pt-PT",{weekday:"long",day:"2-digit",month:"long"}).replace("-feira",""),w=a=>{if(!a)return"";let e=Math.round((Date.now()-new Date(a))/6e4);if(e<1)return"agora";if(e<60)return`h\xE1 ${e} min`;let t=Math.round(e/60);if(t<24)return`h\xE1 ${t} h`;let i=Math.round(t/24);return i===1?"ontem":`h\xE1 ${i} dias`},E=a=>a?new Date(a).toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit",hour12:!1}):"",q=a=>String(a||"").split(" \xB7 ").map(e=>e.replace(/\s*\(\+?-?\d+\)\s*/g,"").trim()).filter(Boolean),m={hoje:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>',leads:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M16.5 5.6a3 3 0 0 1 0 5.6M18 14.6c2 .6 3.4 2.3 3.4 4.6"/></svg>',campanhas:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',conversas:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-8 8 8.4 8.4 0 0 1-3.3-.7L4 20.5l1.2-4.3A8 8 0 1 1 20 12Z"/></svg>',saldo:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',enviar:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',tick:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',chev:'<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',lupa:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',vazio:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>'},M=[{k:"hoje",label:"Hoje",ic:"hoje"},{k:"leads",label:"Leads",ic:"leads"},{k:"conversas",label:"Conversas",ic:"conversas"},{k:"saldo",label:"Saldo",ic:"saldo"}],s={route:{name:"hoje",id:null},summary:null,today:null,leads:[],messages:[],saldo:null,clientes:null,lead:null,leadMessages:[],dossier:null,pick:null,filter:"todos",q:"",busy:!1,error:"",adding:!1},g=a=>document.querySelector(a),S=()=>g("#main");async function u(a,e="GET",t){let i={method:e,headers:{}};t!==void 0&&(i.headers["content-type"]="application/json",i.body=JSON.stringify(t));let n=await fetch(R+a,i),d={};try{d=await n.json()}catch{}if(!n.ok||d.ok===!1)throw new Error(d.error||`HTTP ${n.status}`);return d}function l(a,e=!1){let t=g("#toast");t.textContent=a,t.classList.toggle("bad",!!e),t.classList.add("on"),clearTimeout(l._t),l._t=setTimeout(()=>t.classList.remove("on"),e?6e3:3800)}function P(){let a=(location.hash||"#/hoje").replace(/^#\/?/,""),[e,t]=a.split("/");return{name:["hoje","leads","conversas","saldo","lead"].includes(e)?e:"hoje",id:t?decodeURIComponent(t):null}}function L(){let a=s.route.name==="lead"?"leads":s.route.name,e=s.today?.decidir?.length||0,t=M.map(i=>`<a href="#/${i.k}" class="${a===i.k?"on":""}"${a===i.k?' aria-current="page"':""}>${m[i.ic]}<span>${i.label}</span>${i.k==="hoje"&&e?`<span class="n">${e}</span>`:""}</a>`).join("");g("#nav").innerHTML=t,g("#tabbar").innerHTML=M.map(i=>`<a href="#/${i.k}" class="${a===i.k?"on":""}">${m[i.ic]}<span>${i.label}</span></a>`).join("")}function O(){let a=s.summary,e=s.leads.filter(c=>(c.score||0)>=60).length,t=s.leads.length,i=t?Math.round(e/t*100):0,n=s.clientes?.clientes||[],d=s.clientes?.activo?.id||"";g("#sideFoot").innerHTML=`
-    ${n.length?`<div class="espaco"><label for="espaco">Espa\xE7o</label>
-      <select id="espaco" aria-label="espa\xE7o de cliente">${n.map(c=>`<option value="${o(c.id)}"${c.id===d?" selected":""}>${o(c.nome)}</option>`).join("")}</select></div>`:""}
+<script>(()=>{var B="/api",t=a=>String(a??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),g=a=>(Number(a||0)/100).toLocaleString("pt-PT",{style:"currency",currency:"EUR"}),D=new Date().toLocaleDateString("pt-PT",{weekday:"long",day:"2-digit",month:"long"}).replace("-feira",""),b=a=>{if(!a)return"";let e=Math.round((Date.now()-new Date(a))/6e4);if(e<1)return"agora";if(e<60)return`h\xE1 ${e} min`;let o=Math.round(e/60);if(o<24)return`h\xE1 ${o} h`;let n=Math.round(o/24);return n===1?"ontem":`h\xE1 ${n} dias`},x=a=>a?new Date(a).toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit",hour12:!1}):"",A=a=>String(a||"").split(" \xB7 ").map(e=>e.replace(/\s*\(\+?-?\d+\)\s*/g,"").trim()).filter(Boolean),h={hoje:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>',leads:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M16.5 5.6a3 3 0 0 1 0 5.6M18 14.6c2 .6 3.4 2.3 3.4 4.6"/></svg>',campanhas:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',conversas:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-8 8 8.4 8.4 0 0 1-3.3-.7L4 20.5l1.2-4.3A8 8 0 1 1 20 12Z"/></svg>',saldo:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',enviar:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',tick:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',chev:'<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',lupa:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',pastas:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',vazio:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>'},M=[{k:"hoje",label:"Hoje",ic:"hoje"},{k:"leads",label:"Leads",ic:"leads"},{k:"projetos",label:"Projetos",ic:"pastas"},{k:"conversas",label:"Conversas",ic:"conversas"},{k:"saldo",label:"Saldo",ic:"saldo"}],s={route:{name:"hoje",id:null},summary:null,today:null,leads:[],messages:[],saldo:null,clientes:null,lead:null,leadMessages:[],dossier:null,pick:null,filter:"todos",q:"",busy:!1,error:"",adding:!1,projetos:[],projeto:null,tipos:[],token:null,addingProject:!1},$=a=>document.querySelector(a),S=()=>$("#main"),E="orbita.admin.token";function N(){if(s.token!==null)return s.token;try{s.token=localStorage.getItem(E)||""}catch{s.token=""}return s.token}async function p(a,e="GET",o){let n={method:e,headers:{}};o!==void 0&&(n.headers["content-type"]="application/json",n.body=JSON.stringify(o));let d=N();d&&(n.headers["x-orbita-admin"]=d);let c=await fetch(B+a,n),i={};try{i=await c.json()}catch{}if(c.status===401){let r=(s.tokenPrompted,prompt("Este \xD3rbita est\xE1 protegido. Cola o ORBITA_ADMIN_TOKEN:"));if(s.tokenPrompted=!0,r){s.token=r;try{localStorage.setItem(E,r)}catch{}return p(a,e,o)}}if(!c.ok||i.ok===!1)throw new Error(i.error||`HTTP ${c.status}`);return i}function l(a,e=!1){let o=$("#toast");o.textContent=a,o.classList.toggle("bad",!!e),o.classList.add("on"),clearTimeout(l._t),l._t=setTimeout(()=>o.classList.remove("on"),e?6e3:3800)}function R(){let a=(location.hash||"#/hoje").replace(/^#\/?/,""),[e,o]=a.split("/");return{name:["hoje","leads","conversas","saldo","lead","projetos","projeto"].includes(e)?e:"hoje",id:o?decodeURIComponent(o):null}}function T(){let a=s.route.name==="lead"?"leads":s.route.name,e=s.today?.decidir?.length||0,o=M.map(n=>`<a href="#/${n.k}" class="${a===n.k?"on":""}"${a===n.k?' aria-current="page"':""}>${h[n.ic]}<span>${n.label}</span>${n.k==="hoje"&&e?`<span class="n">${e}</span>`:""}</a>`).join("");$("#nav").innerHTML=o,$("#tabbar").innerHTML=M.map(n=>`<a href="#/${n.k}" class="${a===n.k?"on":""}">${h[n.ic]}<span>${n.label}</span></a>`).join("")}function H(){let a=s.summary,e=s.leads.filter(r=>(r.score||0)>=60).length,o=s.leads.length,n=o?Math.round(e/o*100):0,d=s.clientes?.clientes||[],c=s.clientes?.activo?.id||"";$("#sideFoot").innerHTML=`
+    ${d.length?`<div class="espaco"><label for="espaco">Espa\xE7o</label>
+      <select id="espaco" aria-label="espa\xE7o de cliente">${d.map(r=>`<option value="${t(r.id)}"${r.id===c?" selected":""}>${t(r.nome)}</option>`).join("")}</select></div>`:""}
     <div class="meter">
-      <div class="mrow"><span class="lbl">Leads com nota alta</span><b>${e} / ${t||0}</b></div>
-      <div class="bar"><i style="width:${i}%"></i></div>
-      <small>Custos de API (30 d): ${a?h(a.custos?.apiCentimos):"\u2014"}</small>
-    </div>`;let r=g("#espaco");r&&r.addEventListener("change",async()=>{try{let c=await u(`/ops/clientes/${encodeURIComponent(r.value)}/entrar`,"POST",{});l(`Agora em \xAB${c.cliente.nome}\xBB.`),await v(!0)}catch(c){l(c.message,!0)}})}async function D(){let[a,e,t,i,n,d]=await Promise.all([u("/ops/summary").catch(()=>null),u("/ops/today").catch(()=>null),u("/ops/leads?limit=200").catch(()=>({leads:[]})),u("/ops/messages?limit=100").catch(()=>({messages:[]})),u("/ops/saldo").catch(()=>null),u("/ops/clientes").catch(()=>null)]);s.summary=a,s.today=e,s.leads=t.leads||[],s.messages=i.messages||[],s.saldo=n,s.clientes=d}async function y(a){let e=await u(`/ops/leads/${encodeURIComponent(a)}`);s.lead=e.lead,s.dossier=e.dossier||null,s.leadMessages=e.messages||[]}async function v(a=!0){try{a&&await D(),s.route.name==="lead"&&s.route.id&&await y(s.route.id),s.error=""}catch(e){s.error=e.message}L(),O(),b()}var I=a=>a>=75?"":a>=55?"mid":"low",f=a=>`<span class="badge ${I(a||0)}">${a??0} pontos</span>`,$={novo:"Novo",contactado:"Contactado",respondeu:"Respondeu",reuniao:"Reuni\xE3o",cliente:"Cliente",perdido:"Perdido"};function k({title:a,sub:e,right:t=""}){return`<div class="head"><div><h1>${o(a)}</h1><div class="sub">${e}</div></div><div class="head-acts">${t}</div></div>`}function j(){let a=!!s.today?.presenca?.parado;return`<button class="pill ${a?"stop":""}" data-act="toggle-stop" title="${a?"retomar todos os envios":"parar todos os envios"}">
-    ${m.enviar}<span>${a?"Envios parados":"Envios ativos"}</span></button>`}function B(){let a=s.summary;if(!a)return"";let e=Date.now()-864e5,t=s.leads.filter(d=>d.created_at&&new Date(d.created_at).getTime()>=e).length,i=s.leads.filter(d=>d.phone||d.email).length,n=s.leads.filter(d=>d.responded_at&&new Date(d.responded_at).getTime()>=e).length;return`<div class="stats">
-    <div class="stat"><b>${t}</b><span>leads novos esta noite</span></div>
-    <div class="stat"><b>${i}</b><span>com telefone ou email</span></div>
-    <div class="stat"><b class="blue">${n}</b><span>respostas desde ontem</span></div>
-    <div class="stat"><b>${h(a.custos?.apiCentimos)}</b><span>custo das APIs (30 dias)</span></div>
-  </div>`}function T(){return(s.today?.decidir||[]).filter(e=>e&&(e.kind==="mensagem"||e.kind==="autonomia"))}function x(){let a=T();return a.length?a.find(e=>e.id===s.pick)||a[0]:null}function U(){let a=x();if(!a)return`<div class="card empty">${m.vazio}
+      <div class="mrow"><span class="lbl">Leads com nota alta</span><b>${e} / ${o||0}</b></div>
+      <div class="bar"><i style="width:${n}%"></i></div>
+      <small>Custos de API (30 d): ${a?g(a.custos?.apiCentimos):"\u2014"}</small>
+    </div>`;let i=$("#espaco");i&&i.addEventListener("change",async()=>{try{let r=await p(`/ops/clientes/${encodeURIComponent(i.value)}/entrar`,"POST",{});l(`Agora em \xAB${r.cliente.nome}\xBB.`),await v(!0)}catch(r){l(r.message,!0)}})}async function F(){let[a,e,o,n,d,c,i]=await Promise.all([p("/ops/summary").catch(()=>null),p("/ops/today").catch(()=>null),p("/ops/leads?limit=200").catch(()=>({leads:[]})),p("/ops/messages?limit=100").catch(()=>({messages:[]})),p("/ops/saldo").catch(()=>null),p("/ops/clientes").catch(()=>null),p("/ops/projetos").catch(()=>({projetos:[],resumo:null,tipos:[]}))]);s.summary=a,s.today=e,s.leads=o.leads||[],s.messages=n.messages||[],s.saldo=d,s.clientes=c,s.projetos=i.projetos||[],s.projetosResumo=i.resumo||null,s.tipos=i.tipos||[]}async function j(a){let e=await p(`/ops/projetos/${encodeURIComponent(a)}`);s.projeto=e}async function P(a){let e=await p(`/ops/leads/${encodeURIComponent(a)}`);s.lead=e.lead,s.dossier=e.dossier||null,s.leadMessages=e.messages||[]}async function v(a=!0){try{a&&await F(),s.route.name==="lead"&&s.route.id&&await P(s.route.id),s.route.name==="projeto"&&s.route.id&&await j(s.route.id),s.error=""}catch(e){s.error=e.message}T(),H(),m()}var Q=a=>a>=75?"":a>=55?"mid":"low",y=a=>`<span class="badge ${Q(a||0)}">${a??0} pontos</span>`,w={novo:"Novo",qualificado:"Qualificado",contactado:"Contactado",respondeu:"Respondeu",reuniao:"Reuni\xE3o",em_negociacao:"Em negocia\xE7\xE3o",proposta:"Proposta enviada",cliente:"Ganho",perdido:"Perdido"},G={novo:["qualificado","contactado","perdido"],qualificado:["contactado","perdido"],contactado:["respondeu","em_negociacao","perdido"],respondeu:["reuniao","em_negociacao","perdido"],reuniao:["em_negociacao","cliente","perdido"],em_negociacao:["proposta","reuniao","perdido"],proposta:["cliente","em_negociacao","perdido"],cliente:[],perdido:["novo"]},L={rascunho:"Rascunho",gerado:"C\xF3digo gerado",qa_passou:"QA aprovado",qa_falhou:"QA falhou",aprovado:"Aprovado",entregue:"Entregue"},_={rascunho:"",gerado:"novo",qa_passou:"respondeu",qa_falhou:"perdido",aprovado:"cliente",entregue:"cliente"};function k({title:a,sub:e,right:o=""}){return`<div class="head"><div><h1>${t(a)}</h1><div class="sub">${e}</div></div><div class="head-acts">${o}</div></div>`}function q(){let a=!!s.today?.presenca?.parado;return`<button class="pill ${a?"stop":""}" data-act="toggle-stop" title="${a?"retomar todos os envios":"parar todos os envios"}">
+    ${h.enviar}<span>${a?"Envios parados":"Envios ativos"}</span></button>`}function V(){let a=s.summary;if(!a)return"";let e=Date.now()-864e5,o=s.leads.filter(c=>c.created_at&&new Date(c.created_at).getTime()>=e).length,n=s.leads.filter(c=>c.phone||c.email).length,d=s.leads.filter(c=>c.responded_at&&new Date(c.responded_at).getTime()>=e).length;return`<div class="stats">
+    <div class="stat"><b>${o}</b><span>leads novos esta noite</span></div>
+    <div class="stat"><b>${n}</b><span>com telefone ou email</span></div>
+    <div class="stat"><b class="blue">${d}</b><span>respostas desde ontem</span></div>
+    <div class="stat"><b>${g(a.custos?.apiCentimos)}</b><span>custo das APIs (30 dias)</span></div>
+  </div>`}function I(){return(s.today?.decidir||[]).filter(e=>e&&(e.kind==="mensagem"||e.kind==="autonomia"))}function U(){let a=I();return a.length?a.find(e=>e.id===s.pick)||a[0]:null}function W(){let a=U();if(!a)return`<div class="card empty">${h.vazio}
       <h3>Nada \xE0 espera de ti</h3>
       <p>Quando houver um rascunho para aprovar, aparece aqui \u2014 com o porqu\xEA escrito e o texto pronto. N\xE3o h\xE1 nada escondido: se a lista est\xE1 vazia, \xE9 porque n\xE3o h\xE1 trabalho teu pendente.</p>
     </div>`;if(a.kind==="autonomia")return`<div class="card">
-      <div class="detail-top"><div><h3>${o(a.lead?.name||"Autonomia")}</h3>
-        <div class="mt">${o(a.text||"")}</div></div><span class="badge blue">proposta</span></div>
-      <div class="acts"><button class="btn primary" data-act="auto-up" data-scope="${o(a.id)}">Dar autonomia a este tipo</button>
-        <button class="btn ghost" data-act="auto-down" data-scope="${o(a.id)}">Manter a pedir</button></div>
+      <div class="detail-top"><div><h3>${t(a.lead?.name||"Autonomia")}</h3>
+        <div class="mt">${t(a.text||"")}</div></div><span class="badge blue">proposta</span></div>
+      <div class="acts"><button class="btn primary" data-act="auto-up" data-scope="${t(a.id)}">Dar autonomia a este tipo</button>
+        <button class="btn ghost" data-act="auto-down" data-scope="${t(a.id)}">Manter a pedir</button></div>
       <div class="hint">A autonomia continua sujeita ao opt-out, ao PARAR TUDO e ao modo ensaio. Podes revogar com um toque.</div>
-    </div>`;let e=a.lead||{},t=[...q(a.why||""),...(a.evidence||[]).map(n=>n.label)].filter(Boolean).slice(0,6),i=a.status==="aprovada"?`<button class="btn primary" data-act="abrir" data-id="${o(a.id)}">Abrir WhatsApp</button>
-       <button class="btn ghost" data-act="confirmar" data-id="${o(a.id)}">J\xE1 enviei</button>`:`<button class="btn ghost" data-act="rejeitar" data-id="${o(a.id)}">Rejeitar</button>
-       <button class="btn primary" data-act="aprovar" data-id="${o(a.id)}">Aprovar e enviar</button>`;return`<div class="card">
+    </div>`;let e=a.lead||{},o=[...A(a.why||""),...(a.evidence||[]).map(d=>d.label)].filter(Boolean).slice(0,6),n=a.status==="aprovada"?`<button class="btn primary" data-act="abrir" data-id="${t(a.id)}">Abrir WhatsApp</button>
+       <button class="btn ghost" data-act="confirmar" data-id="${t(a.id)}">J\xE1 enviei</button>`:`<button class="btn ghost" data-act="rejeitar" data-id="${t(a.id)}">Rejeitar</button>
+       <button class="btn primary" data-act="aprovar" data-id="${t(a.id)}">Aprovar e enviar</button>`;return`<div class="card">
     <div class="detail-top">
-      <div><h3>${o(e.name||"Sem nome")}</h3>
-        <div class="mt">${o([e.category,e.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}</div></div>
-      ${f(e.score)}
+      <div><h3>${t(e.name||"Sem nome")}</h3>
+        <div class="mt">${t([e.category,e.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}</div></div>
+      ${y(e.score)}
     </div>
-    <div class="msg-label">${m.enviar}<span>Mensagem para ${a.channel==="whatsapp"?"WhatsApp":"email"} \xB7 sai s\xF3 depois de aprovares</span></div>
-    ${a.subject?`<div class="hint" style="margin:0 0 6px"><b>${o(a.subject)}</b></div>`:""}
-    <div class="bubble">${o(a.body)}</div>
+    <div class="msg-label">${h.enviar}<span>Mensagem para ${a.channel==="whatsapp"?"WhatsApp":"email"} \xB7 sai s\xF3 depois de aprovares</span></div>
+    ${a.subject?`<div class="hint" style="margin:0 0 6px"><b>${t(a.subject)}</b></div>`:""}
+    <div class="bubble">${t(a.body)}</div>
     <details class="why-box">
-      <summary><span>Porqu\xEA este lead<small>${t.length} sinais \xB7 abre para ver</small></span>${m.chev}</summary>
-      <div class="why-grid">${t.length?t.map(n=>`<div class="why"><span class="tick">${m.tick}</span><span>${o(n)}</span></div>`).join(""):'<div class="why"><span>Sem sinais guardados para este lead.</span></div>'}</div>
-      ${a.why?`<div class="hint">${o(a.why)}</div>`:""}
-      ${a.predictions?.length?`<div class="hint">Obje\xE7\xF5es previstas: ${a.predictions.map(n=>o(n.label||n)).join(" \xB7 ")}</div>`:""}
+      <summary><span>Porqu\xEA este lead<small>${o.length} sinais \xB7 abre para ver</small></span>${h.chev}</summary>
+      <div class="why-grid">${o.length?o.map(d=>`<div class="why"><span class="tick">${h.tick}</span><span>${t(d)}</span></div>`).join(""):'<div class="why"><span>Sem sinais guardados para este lead.</span></div>'}</div>
+      ${a.why?`<div class="hint">${t(a.why)}</div>`:""}
+      ${a.predictions?.length?`<div class="hint">Obje\xE7\xF5es previstas: ${a.predictions.map(d=>t(d.label||d)).join(" \xB7 ")}</div>`:""}
     </details>
-    <div class="acts">${i}</div>
+    <div class="acts">${n}</div>
     <div class="hint">Deslizar n\xE3o \xE9 preciso: cada bot\xE3o faz o mesmo. O envio de WhatsApp \xE9 um link que tu abres.</div>
-  </div>`}function z(){let a=T(),e=x(),t=a.length;return`<div class="wrap">
-    ${k({title:"Hoje",sub:`${o(N)}${t?` \xB7 <b>${t}</b> ${t===1?"lead \xE0 espera":"leads \xE0 espera"} da tua decis\xE3o`:" \xB7 nada \xE0 espera de ti"}`,right:j()})}
-    ${B()}
+  </div>`}function K(){let a=I(),e=U(),o=a.length;return`<div class="wrap">
+    ${k({title:"Hoje",sub:`${t(D)}${o?` \xB7 <b>${o}</b> ${o===1?"lead \xE0 espera":"leads \xE0 espera"} da tua decis\xE3o`:" \xB7 nada \xE0 espera de ti"}`,right:q()})}
+    ${V()}
     <div class="split">
       <div>
-        <div class="sec-h"><h2>Precisa de ti</h2><span class="count">${t?`${t} por decidir`:"em dia"}</span></div>
-        <div class="list">${a.map(i=>{let n=i.lead||{};return`<button class="item ${e&&i.id===e.id?"on":""}" data-act="pick" data-id="${o(i.id)}">
-            <div class="who"><div class="nm">${o(n.name||"Autonomia")}</div>
-              <div class="mt">${o(i.kind==="autonomia"?"proposta de autonomia":[n.category,n.city].filter(Boolean).join(" \xB7 ")||i.channel)}</div></div>
-            ${i.kind==="autonomia"?'<span class="badge blue">novo</span>':f(n.score)}
-          </button>`}).join("")||`<div class="card empty">${m.vazio}<h3>Sem decis\xF5es pendentes</h3>
+        <div class="sec-h"><h2>Precisa de ti</h2><span class="count">${o?`${o} por decidir`:"em dia"}</span></div>
+        <div class="list">${a.map(n=>{let d=n.lead||{};return`<button class="item ${e&&n.id===e.id?"on":""}" data-act="pick" data-id="${t(n.id)}">
+            <div class="who"><div class="nm">${t(d.name||"Autonomia")}</div>
+              <div class="mt">${t(n.kind==="autonomia"?"proposta de autonomia":[d.category,d.city].filter(Boolean).join(" \xB7 ")||n.channel)}</div></div>
+            ${n.kind==="autonomia"?'<span class="badge blue">novo</span>':y(d.score)}
+          </button>`}).join("")||`<div class="card empty">${h.vazio}<h3>Sem decis\xF5es pendentes</h3>
           <p>Um rascunho aparece aqui assim que houver um. Para haver rascunhos, \xE9 preciso haver leads: procura-os em \u25C8 LEADS no escrit\xF3rio, ou escreve \xE0 m\xE3o na p\xE1gina de um lead.</p></div>`}</div>
       </div>
-      <div>${U()}</div>
+      <div>${W()}</div>
     </div>
-  </div>`}function _(){let a=s.q.trim().toLowerCase();return s.leads.filter(e=>s.filter==="sem-site"&&(e.website||e.domain)||s.filter==="novo"&&e.status!=="novo"||s.filter==="responderam"&&!["respondeu","reuniao","cliente"].includes(e.status)?!1:a?[e.name,e.city,e.category,e.phone,e.email,e.website].filter(Boolean).join(" ").toLowerCase().includes(a):!0)}function H(){return`<div class="card" style="margin-bottom:var(--s4)">
+  </div>`}function J(){let a=s.q.trim().toLowerCase();return s.leads.filter(e=>s.filter==="sem-site"&&(e.website||e.domain)||s.filter==="novo"&&e.status!=="novo"||s.filter==="responderam"&&!["respondeu","reuniao","cliente"].includes(e.status)?!1:a?[e.name,e.city,e.category,e.phone,e.email,e.website].filter(Boolean).join(" ").toLowerCase().includes(a):!0)}function Z(){return`<div class="card" style="margin-bottom:var(--s4)">
     <div class="sec-h"><h3>Acrescentar um lead \xE0 m\xE3o</h3><span class="count">fica guardado e pontuado</span></div>
     <div class="form three">
       <input class="in" id="nlNome" placeholder="Nome" aria-label="nome">
@@ -362,89 +387,172 @@
       <button class="btn primary small" data-act="guardar-lead" style="padding:0 var(--s5)">Guardar</button>
     </div>
     <div class="hint">A pesquisa da Google enche isto sozinha quando houver chave. Sem chave, escreve tu \u2014 o lead \xE9 pontuado pelas mesmas regras.</div>
-  </div>`}function F(){let a=_(),e=s.leads.length,t=s.leads.filter(n=>(n.score||0)>=60).length,i=[["todos","Todos"],["novo","Por contactar"],["sem-site","Sem site"],["responderam","Responderam"]];return`<div class="wrap">
-    ${k({title:"Leads",sub:e?`${e} guardados \xB7 ${t} com nota alta \xB7 ${s.leads.filter(n=>!["novo"].includes(n.status)).length} j\xE1 contactados`:"ainda n\xE3o h\xE1 nenhum lead guardado",right:`<button class="btn small ghost" data-act="novo-lead">+ Lead</button>${j()}`})}
-    ${s.adding?H():""}
+  </div>`}function X(){let a=J(),e=s.leads.length,o=s.leads.filter(d=>(d.score||0)>=60).length,n=[["todos","Todos"],["novo","Por contactar"],["sem-site","Sem site"],["responderam","Responderam"]];return`<div class="wrap">
+    ${k({title:"Leads",sub:e?`${e} guardados \xB7 ${o} com nota alta \xB7 ${s.leads.filter(d=>!["novo"].includes(d.status)).length} j\xE1 contactados`:"ainda n\xE3o h\xE1 nenhum lead guardado",right:`<button class="btn small ghost" data-act="novo-lead">+ Lead</button>${q()}`})}
+    ${s.adding?Z():""}
     <div class="tools">
-      <div class="search">${m.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho\u2026" value="${o(s.q)}" aria-label="procurar leads"></div>
-      ${i.map(([n,d])=>`<button class="chip ${s.filter===n?"on":""}" data-act="filter" data-k="${n}">${d}</button>`).join("")}
+      <div class="search">${h.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho\u2026" value="${t(s.q)}" aria-label="procurar leads"></div>
+      ${n.map(([d,c])=>`<button class="chip ${s.filter===d?"on":""}" data-act="filter" data-k="${d}">${c}</button>`).join("")}
     </div>
-    ${a.length?`<div class="rows">${a.map(n=>`<button class="row" data-act="ver-lead" data-id="${o(n.id)}">
-      <div><div class="nm">${o(n.name)}</div><div class="mt">${o([n.category,n.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}</div></div>
-      <div class="cell hide-m">${o(n.website?n.website.replace(/^https?:\/\//,"").replace(/\/$/,""):n.phone||n.email||"sem contacto")}</div>
-      <div class="cell"><span class="tag ${o(n.status)}">${o($[n.status]||n.status)}</span></div>
-      ${f(n.score)}
-    </button>`).join("")}</div>`:`<div class="card empty">${m.vazio}<h3>${e?"Nenhum lead neste filtro":"Ainda n\xE3o h\xE1 leads guardados"}</h3>
+    ${a.length?`<div class="rows">${a.map(d=>`<button class="row" data-act="ver-lead" data-id="${t(d.id)}">
+      <div><div class="nm">${t(d.name)}</div><div class="mt">${t([d.category,d.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}</div></div>
+      <div class="cell hide-m">${t(d.website?d.website.replace(/^https?:\/\//,"").replace(/\/$/,""):d.phone||d.email||"sem contacto")}</div>
+      <div class="cell"><span class="tag ${t(d.status)}">${t(w[d.status]||d.status)}</span></div>
+      ${y(d.score)}
+    </button>`).join("")}</div>`:`<div class="card empty">${h.vazio}<h3>${e?"Nenhum lead neste filtro":"Ainda n\xE3o h\xE1 leads guardados"}</h3>
         <p>${e?"Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro \u2014 os dados que existem est\xE3o todos aqui.":"Os leads entram pela pesquisa real do escrit\xF3rio: abre \u25C8 LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Sem chaves de pesquisa, podes acrescent\xE1-los \xE0 m\xE3o."}</p></div>`}
-  </div>`}function W(){let a={revisao:0,rascunho:1,ensaio:2,aprovada:3,enviada:4,falhou:5,bloqueada:6,rejeitada:7};return[...s.leadMessages].sort((e,t)=>(a[e.status]??9)-(a[t.status]??9))[0]||null}function V(a){if(!a){let d=q(s.lead?.score_reasons||"");return`<div class="card">
+  </div>`}function Y(){let a={revisao:0,rascunho:1,ensaio:2,aprovada:3,enviada:4,falhou:5,bloqueada:6,rejeitada:7};return[...s.leadMessages].sort((e,o)=>(a[e.status]??9)-(a[o.status]??9))[0]||null}function aa(a){if(!a){let c=A(s.lead?.score_reasons||"");return`<div class="card">
       <div class="sec-h"><h3>Sem mensagem ainda</h3><span class="count">${s.leadMessages.length?s.leadMessages.length+" j\xE1 escritas":"nenhuma escrita"}</span></div>
       <p class="hint" style="margin-top:0">Primeiro l\xEA o que o neg\xF3cio diz de si; depois escreve com esses factos. A mensagem nasce rascunho e n\xE3o sai sem o teu OK.</p>
-      ${d.length?`<div class="why-grid">${d.slice(0,6).map(r=>`<div class="why"><span class="tick">${m.tick}</span><span>${o(r)}</span></div>`).join("")}</div>`:""}
+      ${c.length?`<div class="why-grid">${c.slice(0,6).map(i=>`<div class="why"><span class="tick">${h.tick}</span><span>${t(i)}</span></div>`).join("")}</div>`:""}
       <div class="acts" style="justify-content:center">
         <button class="btn ghost" data-act="pesquisar">Ler o site</button>
         <button class="btn primary" data-act="escrever">Escrever mensagem</button>
       </div>
       <div class="hint" id="leadNote"></div>
-    </div>`}let e=a.status,t=[...q(s.lead?.score_reasons||""),...(s.dossier?.evidence||[]).map(d=>d.label)].filter(Boolean).slice(0,6),i=e==="rascunho"||e==="ensaio"?`<button class="btn ghost" data-act="rejeitar" data-id="${o(a.id)}">Rejeitar</button>
-       <button class="btn primary" data-act="aprovar" data-id="${o(a.id)}">${e==="ensaio"?"Promover e aprovar":"Aprovar e enviar"}</button>`:e==="aprovada"?`<button class="btn primary" data-act="abrir" data-id="${o(a.id)}">Abrir WhatsApp</button>
-         <button class="btn ghost" data-act="confirmar" data-id="${o(a.id)}">J\xE1 enviei</button>`:e==="enviada"?`<button class="btn ghost" data-act="sinal" data-id="${o(a.id)}" data-kind="respondeu">Respondeu</button>
-           <button class="btn ghost" data-act="sinal" data-id="${o(a.id)}" data-kind="recusou">Recusou</button>`:'<button class="btn primary" data-act="escrever">Escrever outra</button>',n={rascunho:"por aprovar",ensaio:"em ensaio \u2014 n\xE3o sai",aprovada:"aprovada \u2014 falta enviar",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada (opt-out)",falhou:"falhou",revisao:"para rever"}[e]||e;return`<div class="card">
-    <div class="msg-label">${m.enviar}<span>Mensagem para ${a.channel==="whatsapp"?"WhatsApp":"email"} \xB7 ${o(n)}</span></div>
-    ${a.subject?`<div class="hint" style="margin:0 0 6px"><b>${o(a.subject)}</b></div>`:""}
-    <div class="bubble">${o(a.body)}</div>
-    <details class="why-box" ${t.length?"":"hidden"}>
-      <summary><span>Porqu\xEA este lead<small>${t.length} sinais \xB7 abre para ver</small></span>${m.chev}</summary>
-      <div class="why-grid">${t.map(d=>`<div class="why"><span class="tick">${m.tick}</span><span>${o(d)}</span></div>`).join("")}</div>
-      ${a.why?`<div class="hint">${o(a.why)}</div>`:""}
+    </div>`}let e=a.status,o=[...A(s.lead?.score_reasons||""),...(s.dossier?.evidence||[]).map(c=>c.label)].filter(Boolean).slice(0,6),n=e==="rascunho"||e==="ensaio"?`<button class="btn ghost" data-act="rejeitar" data-id="${t(a.id)}">Rejeitar</button>
+       <button class="btn primary" data-act="aprovar" data-id="${t(a.id)}">${e==="ensaio"?"Promover e aprovar":"Aprovar e enviar"}</button>`:e==="aprovada"?`<button class="btn primary" data-act="abrir" data-id="${t(a.id)}">Abrir WhatsApp</button>
+         <button class="btn ghost" data-act="confirmar" data-id="${t(a.id)}">J\xE1 enviei</button>`:e==="enviada"?`<button class="btn ghost" data-act="sinal" data-id="${t(a.id)}" data-kind="respondeu">Respondeu</button>
+           <button class="btn ghost" data-act="sinal" data-id="${t(a.id)}" data-kind="recusou">Recusou</button>`:'<button class="btn primary" data-act="escrever">Escrever outra</button>',d={rascunho:"por aprovar",ensaio:"em ensaio \u2014 n\xE3o sai",aprovada:"aprovada \u2014 falta enviar",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada (opt-out)",falhou:"falhou",revisao:"para rever"}[e]||e;return`<div class="card">
+    <div class="msg-label">${h.enviar}<span>Mensagem para ${a.channel==="whatsapp"?"WhatsApp":"email"} \xB7 ${t(d)}</span></div>
+    ${a.subject?`<div class="hint" style="margin:0 0 6px"><b>${t(a.subject)}</b></div>`:""}
+    <div class="bubble">${t(a.body)}</div>
+    <details class="why-box" ${o.length?"":"hidden"}>
+      <summary><span>Porqu\xEA este lead<small>${o.length} sinais \xB7 abre para ver</small></span>${h.chev}</summary>
+      <div class="why-grid">${o.map(c=>`<div class="why"><span class="tick">${h.tick}</span><span>${t(c)}</span></div>`).join("")}</div>
+      ${a.why?`<div class="hint">${t(a.why)}</div>`:""}
     </details>
-    <div class="acts">${i}</div>
+    <div class="acts">${n}</div>
     <div class="hint" id="leadNote">${a.status==="ensaio"?"Modo ensaio ligado: esta mensagem n\xE3o sai. Aprovar promove-a a rascunho a s\xE9rio.":"Nada sai sem este bot\xE3o. O WhatsApp abre com o texto; o email exige token e consentimento."}</div>
-  </div>`}function J(){let a=s.lead,e=s.dossier?.research||{status:"por_fazer"},t=[["Telefone",a.phone||"\u2014"],["Email",a.email||"\u2014"],["Site",a.website||"\u2014"],["Avalia\xE7\xE3o",a.rating?`${Number(a.rating).toLocaleString("pt-PT",{minimumFractionDigits:1,maximumFractionDigits:1})} \u2605 \xB7 ${a.reviews||0} opini\xF5es`:"\u2014"],["Origem",a.source||"\u2014"],["Estado",$[a.status]||a.status]],i=e.status==="ok"?`Lido ${w(e.fetchedAt)} \xB7 ${(s.dossier?.evidence||[]).length} factos`:e.status==="falhou"?`N\xE3o consegui ler: ${o(e.reason||"sem motivo guardado")}`:"ainda n\xE3o li este site";return`<div class="card">
+  </div>`}function ea(){let a=s.lead,e=s.dossier?.research||{status:"por_fazer"},o=[["Telefone",a.phone||"\u2014"],["Email",a.email||"\u2014"],["Site",a.website||"\u2014"],["Avalia\xE7\xE3o",a.rating?`${Number(a.rating).toLocaleString("pt-PT",{minimumFractionDigits:1,maximumFractionDigits:1})} \u2605 \xB7 ${a.reviews||0} opini\xF5es`:"\u2014"],["Origem",a.source||"\u2014"],["Estado",w[a.status]||a.status]],n=e.status==="ok"?`Lido ${b(e.fetchedAt)} \xB7 ${(s.dossier?.evidence||[]).length} factos`:e.status==="falhou"?`N\xE3o consegui ler: ${t(e.reason||"sem motivo guardado")}`:"ainda n\xE3o li este site";return`<div class="card">
     <div class="sec-h"><h3>O que sabemos</h3><button class="btn small ghost" data-act="pesquisar">Ler o site</button></div>
-    <table><tbody>${t.map(([n,d])=>`<tr><td style="color:var(--muted)">${o(n)}</td><td>${o(d)}</td></tr>`).join("")}</tbody></table>
-    <div class="hint">${i}</div>
-    ${(s.dossier?.evidence||[]).length?`<div class="hint">${s.dossier.evidence.map(n=>`${o(n.label)}${n.quote?` \u2014 \xAB${o(String(n.quote).slice(0,90))}\xBB`:""}`).join(" \xB7 ")}</div>`:""}
-    ${(s.dossier?.quotes||[]).length?`<div class="hint">Cita\xE7\xF5es guardadas: ${s.dossier.quotes.slice(0,2).map(n=>`\xAB${o(n)}\xBB`).join(" \xB7 ")}</div>`:""}
-  </div>`}function G(){if(!s.leadMessages.length)return"";let a={rascunho:"rascunho",ensaio:"ensaio",aprovada:"aprovada",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada",falhou:"falhou",revisao:"a rever"};return`<div class="card">
+    <table><tbody>${o.map(([d,c])=>`<tr><td style="color:var(--muted)">${t(d)}</td><td>${t(c)}</td></tr>`).join("")}</tbody></table>
+    <div class="hint">${n}</div>
+    ${(s.dossier?.evidence||[]).length?`<div class="hint">${s.dossier.evidence.map(d=>`${t(d.label)}${d.quote?` \u2014 \xAB${t(String(d.quote).slice(0,90))}\xBB`:""}`).join(" \xB7 ")}</div>`:""}
+    ${(s.dossier?.quotes||[]).length?`<div class="hint">Cita\xE7\xF5es guardadas: ${s.dossier.quotes.slice(0,2).map(d=>`\xAB${t(d)}\xBB`).join(" \xB7 ")}</div>`:""}
+  </div>`}function sa(){if(!s.leadMessages.length)return"";let a={rascunho:"rascunho",ensaio:"ensaio",aprovada:"aprovada",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada",falhou:"falhou",revisao:"a rever"};return`<div class="card">
     <div class="sec-h"><h3>Hist\xF3rico</h3><span class="count">${s.leadMessages.length} mensagem(ns)</span></div>
     <table><tbody>${s.leadMessages.map(e=>`<tr>
-      <td style="color:var(--muted);white-space:nowrap">${o(E(e.created_at))} \xB7 ${o(w(e.created_at))}</td>
-      <td>${o(String(e.body).slice(0,70))}${String(e.body).length>70?"\u2026":""}</td>
-      <td class="n"><span class="tag ${e.status==="enviada"?"respondeu":e.status==="rejeitada"?"perdido":""}">${o(a[e.status]||e.status)}</span></td>
+      <td style="color:var(--muted);white-space:nowrap">${t(x(e.created_at))} \xB7 ${t(b(e.created_at))}</td>
+      <td>${t(String(e.body).slice(0,70))}${String(e.body).length>70?"\u2026":""}</td>
+      <td class="n"><span class="tag ${e.status==="enviada"?"respondeu":e.status==="rejeitada"?"perdido":""}">${t(a[e.status]||e.status)}</span></td>
     </tr>`).join("")}</tbody></table>
-  </div>`}function Z(){let a=s.lead;if(!a)return'<div class="wrap"><div class="skeleton">a abrir o lead\u2026</div></div>';let e=W(),t={novo:["contactado","perdido"],contactado:["respondeu","perdido"],respondeu:["reuniao","perdido"],reuniao:["cliente","perdido"],cliente:[],perdido:["novo"]}[a.status]||[];return`<div class="wrap">
+  </div>`}function ta(){let a=s.lead;if(!a)return'<div class="wrap"><div class="skeleton">a abrir o lead\u2026</div></div>';let e=Y(),o=G[a.status]||[],n=s.projetos.find(d=>d.lead_id===a.id);return`<div class="wrap">
     <div style="margin-bottom:var(--s3)"><a href="#/leads" class="btn quiet small">\u2039 Leads</a></div>
     <div class="head">
-      <div><h1 style="font-size:34px">${o(a.name)}</h1>
-        <div class="sub">${o([a.category,a.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}${a.rating?` \xB7 ${Number(a.rating).toLocaleString("pt-PT",{minimumFractionDigits:1,maximumFractionDigits:1})} \u2605`:""}${a.source?` \xB7 ${o(a.source)}`:""}</div></div>
-      <div class="head-acts">${f(a.score)}<span class="tag ${o(a.status)}">${o($[a.status]||a.status)}</span></div>
+      <div><h1 style="font-size:34px">${t(a.name)}</h1>
+        <div class="sub">${t([a.category,a.city].filter(Boolean).join(" \xB7 ")||"sem nicho nem cidade")}${a.rating?` \xB7 ${Number(a.rating).toLocaleString("pt-PT",{minimumFractionDigits:1,maximumFractionDigits:1})} \u2605`:""}${a.source?` \xB7 ${t(a.source)}`:""}</div></div>
+      <div class="head-acts">${y(a.score)}<span class="tag ${t(a.status)}">${t(w[a.status]||a.status)}</span></div>
     </div>
-    ${V(e)}
+    ${aa(e)}
     <div style="display:grid;gap:var(--s4);margin-top:var(--s4)">
-      ${J()}
-      ${G()}
-      ${t.length?`<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
-        <div class="acts" style="margin-top:0">${t.map(i=>`<button class="btn ghost small" data-act="estado" data-id="${o(a.id)}" data-status="${i}">Marcar ${o($[i])}</button>`).join("")}</div>
+      ${ea()}
+      ${n?`<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="tag ${_[n.status]}">${t(L[n.status]||n.status)}</span></div>
+            <p class="hint" style="margin-top:0">${t(n.name)}</p>
+            <div class="acts" style="margin-top:var(--s3)"><a class="btn primary small" href="#/projeto/${t(n.id)}">Abrir projeto</a></div></div>`:`<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="count">ainda n\xE3o existe</span></div>
+            <p class="hint" style="margin-top:0">Um projeto nasce desta oportunidade: o briefing \xE9 escrito com o que j\xE1 se sabe e o c\xF3digo \xE9 gerado a partir dele. Um neg\xF3cio, um projeto.</p>
+            <div class="acts" style="margin-top:var(--s3)"><button class="btn primary small" data-act="criar-projeto" data-id="${t(a.id)}">Criar projeto</button></div></div>`}
+      ${sa()}
+      ${o.length?`<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
+        <div class="acts" style="margin-top:0">${o.map(d=>`<button class="btn ghost small" data-act="estado" data-id="${t(a.id)}" data-status="${d}">Marcar ${t(w[d])}</button>`).join("")}</div>
         <div class="hint">O funil \xE9 novo \u2192 contactado \u2192 respondeu \u2192 reuni\xE3o \u2192 cliente. Saltar passos \xE9 recusado, e a recusa diz porqu\xEA.</div></div>`:""}
     </div>
-  </div>`}function K(){let a=s.messages,e={rascunho:"por aprovar",ensaio:"ensaio",aprovada:"aprovada",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada",falhou:"falhou",revisao:"a rever"};return`<div class="wrap">
-    ${k({title:"Conversas",sub:a.length?`${a.length} mensagens \xB7 ${a.filter(t=>t.status==="rascunho").length} \xE0 espera do teu OK`:"ainda n\xE3o h\xE1 nenhuma mensagem escrita",right:j()})}
-    ${a.length?`<div class="rows">${a.map(t=>`<button class="row" data-act="ver-lead" data-id="${o(t.lead_id)}">
-      <div><div class="nm">${o(t.lead?.name||"sem lead")}</div><div class="mt">${o(String(t.body).slice(0,80))}${String(t.body).length>80?"\u2026":""}</div></div>
-      <div class="cell hide-m">${o(t.channel==="whatsapp"?"WhatsApp":"email")} \xB7 ${o(w(t.created_at))}</div>
-      <div class="cell"><span class="tag ${t.status==="enviada"?"respondeu":t.status==="rejeitada"||t.status==="bloqueada"?"perdido":""}">${o(e[t.status]||t.status)}</span></div>
-      <div class="cell">${t.lead?.score!=null?f(t.lead.score):""}</div>
-    </button>`).join("")}</div>`:`<div class="card empty">${m.vazio}<h3>Sem conversas</h3>
+  </div>`}function oa(){return`<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Novo projeto</h3><span class="count">a partir de um lead ou do zero</span></div>
+    <div class="form three">
+      <input class="in" id="pjNome" placeholder="Nome do projeto" aria-label="nome do projeto">
+      <input class="in" id="pjCliente" placeholder="Cliente" aria-label="cliente">
+      <select class="in" id="pjTipo" aria-label="tipo de projeto">
+        ${s.tipos.map(a=>`<option value="${t(a.id)}">${t(a.label)}</option>`).join("")||'<option value="landing">P\xE1gina de convers\xE3o</option>'}
+      </select>
+    </div>
+    <div class="form two" style="margin-top:var(--s2)">
+      <input class="in" id="pjCidade" placeholder="Cidade" aria-label="cidade">
+      <input class="in" id="pjNicho" placeholder="Nicho" aria-label="nicho">
+      <button class="btn primary small" data-act="guardar-projeto" style="padding:0 var(--s5)">Criar</button>
+    </div>
+    <div class="hint">O briefing come\xE7a a partir do lead quando o projeto nasce de uma oportunidade.</div>
+  </div>`}function ia(a){let e=[["Briefing",["rascunho"],"os dados do cliente e o que se quer alcan\xE7ar"],["C\xF3digo",["gerado","qa_falhou","qa_passou","aprovado","entregue"],"ficheiros escritos no disco"],["Qualidade",["qa_passou","qa_falhou","aprovado","entregue"],"estrutura, sintaxe, links, honestidade"],["Aprova\xE7\xE3o",["aprovado","entregue"],"a tua decis\xE3o, com a auditoria \xE0 frente"],["Entrega",["entregue"],"preview servido ou ficheiros prontos"]],o={rascunho:0,gerado:1,qa_falhou:2,qa_passou:2,aprovado:3,entregue:4}[a.status]??0;return`<ol class="steps">${e.map(([n,d,c],i)=>{let r=a.status==="qa_falhou"&&i===2?"bad":i<o?"done":i===o?"now":"";return`<li class="${d.includes(a.status)&&!(a.status==="qa_falhou"&&i===2)?"done":r}"><b>${i+1}. ${t(n)}</b><small>${t(c)}</small></li>`}).join("")}</ol>`}function na(a){if(!a)return'<div class="hint">Este projeto ainda n\xE3o foi auditado. O QA corre sobre os ficheiros no disco e guarda um manifesto \u2014 se algo mudar depois, a entrega \xE9 bloqueada.</div>';let e={critico:"Cr\xEDtico",importante:"Importante",menor:"Menor"};return`<div class="qa-head">
+      <span class="badge ${a.passed?"":"low"}">${a.passed?"passou":"falhou"}</span>
+      <span class="count">${a.total===0?"nenhum problema encontrado":`${a.total} problemas \xB7 ${a.critical} cr\xEDticos \xB7 ${a.important} importantes \xB7 ${a.minor} menores`}</span>
+    </div>
+    ${a.report.length?`<ul class="qa-list">${a.report.map(o=>`<li class="${o.level}"><b>${t(e[o.level]||o.level)}</b> <code>${t(o.code)}</code> ${t(o.message)}${o.file?` <span class="count">(${t(o.file)})</span>`:""}</li>`).join("")}</ul>`:'<div class="hint">Nenhum problema encontrado: estrutura, sintaxe, links, r\xF3tulos e honestidade do texto.</div>'}`}function ra(){let a=s.projetos,e=s.projetosResumo||{};return`<div class="wrap">
+    ${k({title:"Projetos",sub:a.length?`${e.total} no total \xB7 ${e.emQa||0} em QA \xB7 ${e.aprovados||0} aprovados \xB7 ${e.entregues||0} entregues`:"ainda n\xE3o h\xE1 projetos",right:`<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>${q()}`})}
+    ${s.addingProject?oa():""}
+    ${a.length?`<div class="rows">${a.map(o=>`<button class="row" data-act="ver-projeto" data-id="${t(o.id)}" style="grid-template-columns:1fr 150px 130px">
+      <div><div class="nm">${t(o.name)}</div><div class="mt">${t([o.client,o.city].filter(Boolean).join(" \xB7 ")||"sem cliente")} \xB7 ${t((s.tipos.find(n=>n.id===o.kind)||{}).label||o.kind)}</div></div>
+      <div class="cell hide-m">${t(b(o.updated_at))}</div>
+      <div class="cell"><span class="tag ${_[o.status]||""}">${t(L[o.status]||o.status)}</span></div>
+    </button>`).join("")}</div>`:`<div class="card empty">${h.vazio}<h3>Sem projetos</h3>
+        <p>Um projeto nasce de um lead: abre um, escolhe \xABCriar projeto\xBB e o briefing \xE9 escrito com o que j\xE1 se sabe. A partir da\xED: c\xF3digo gerado, auditoria de qualidade, aprova\xE7\xE3o e entrega.</p>
+        <div class="acts" style="justify-content:center"><a class="btn primary" href="#/leads" style="max-width:240px">Ver os leads</a></div></div>`}
+  </div>`}function da(){let a=s.projeto;if(!a)return'<div class="wrap"><div class="skeleton">a abrir o projeto\u2026</div></div>';let e=a.project,o=a.qa,n=["rascunho","gerado","qa_falhou","qa_passou","aprovado","entregue"].includes(e.status),d=["gerado","qa_falhou","qa_passou","aprovado","entregue"].includes(e.status),c=e.status==="qa_passou"&&o?.passed,i=["aprovado","entregue"].includes(e.status)&&o?.passed;return`<div class="wrap">
+    <div style="margin-bottom:var(--s3)"><a href="#/projetos" class="btn quiet small">\u2039 Projetos</a></div>
+    <div class="head">
+      <div><h1 style="font-size:34px">${t(e.name)}</h1>
+        <div class="sub">${t([e.client,e.city,e.niche].filter(Boolean).join(" \xB7 "))}${e.lead_id?` \xB7 <a href="#/lead/${t(e.lead_id)}" style="text-decoration:underline">ver o lead</a>`:""}</div></div>
+      <div class="head-acts"><span class="tag ${_[e.status]||""}">${t(L[e.status]||e.status)}</span></div>
+    </div>
+    ${ia(e)}
+    <div class="card" style="margin-top:var(--s4)">
+      <div class="sec-h"><h3>Briefing</h3><span class="count">${t(e.kind)} \xB7 ${t(e.stack)}</span></div>
+      <p class="hint" style="margin-top:0">${t(e.brief||"Sem briefing escrito. Edita o projeto para acrescentar objetivos.")}</p>
+      ${e.goals.length?`<div class="why-grid" style="margin-top:var(--s3)">${e.goals.slice(0,6).map(r=>`<div class="why"><span class="tick">${h.tick}</span><span>${t(r)}</span></div>`).join("")}</div>`:""}
+      ${e.acceptance.length?`<div class="hint">Crit\xE9rios de aceita\xE7\xE3o: ${e.acceptance.map(r=>t(r)).join(" \xB7 ")}</div>`:""}
+      <div class="acts" style="margin-top:var(--s4)">
+        ${n?`<button class="btn ${e.status==="rascunho"?"primary":"ghost"}" data-act="gerar">${e.status==="rascunho"?"Gerar o c\xF3digo":"Gerar outra vez"}</button>`:""}
+        ${d?`<button class="btn ${["gerado","qa_falhou"].includes(e.status)?"primary":"ghost"}" data-act="qa">Correr o QA</button>`:""}
+        ${c?`<button class="btn primary" data-act="aprovar-projeto"${o?.passed?"":" disabled"}>Aprovar</button>`:""}
+        ${i&&o?.passed?`<button class="btn ${e.status==="aprovado"?"primary":"ghost"}" data-act="entregar">Entregar preview</button>`:""}
+        ${e.preview_url?`<a class="btn ghost" href="${t(e.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>`:""}
+        ${a.files.length?'<button class="btn ghost" data-act="zip">Obter .zip</button>':""}
+      </div>
+      <div class="hint" id="leadNote">${e.status==="rascunho"?"O primeiro passo escreve os ficheiros no disco \u2014 nada \xE9 publicado.":"A entrega s\xF3 passa com QA aprovado e ficheiros iguais aos auditados."}</div>
+    </div>
+    <div class="cards2" style="margin-top:var(--s4)">
+      <div class="card">
+        <div class="sec-h"><h3>Qualidade</h3><span class="count">${o?t(x(o.at))+" \xB7 "+t(b(o.at)):"nunca correu"}</span></div>
+        ${na(o)}
+        ${a.changes?.length?`<div class="hint bad">Ficheiros alterados depois do QA: ${a.changes.map(r=>t(r.file)).join(", ")}. Corre o QA outra vez.</div>`:""}
+      </div>
+      <div class="card">
+        <div class="sec-h"><h3>Ficheiros</h3><span class="count">${a.files.length}</span></div>
+        ${a.files.length?`<table><tbody>${a.files.map(r=>`<tr><td>${t(r.file)}${r.changed?' <span class="tag perdido">alterado</span>':""}</td><td class="n">${(r.size/1024).toFixed(1)} KB</td></tr>`).join("")}</tbody></table>`:'<div class="hint">Ainda n\xE3o h\xE1 ficheiros. Gera o c\xF3digo para os escrever.</div>'}
+      </div>
+    </div>
+    <div class="cards2" style="margin-top:var(--s4)">
+      <div class="card">
+        <div class="sec-h"><h3>Entregas</h3><span class="count">preview \xB7 Vercel \xB7 GitHub</span></div>
+        ${a.deliveries.length?`<table><tbody>${a.deliveries.map(r=>`<tr><td>${t(r.target)}</td><td><span class="tag ${r.status==="concluido"?"respondeu":"perdido"}">${t(r.status)}</span></td><td class="n">${t(b(r.at))}</td></tr>`).join("")}</tbody></table>`:'<div class="hint">Nada entregue ainda.</div>'}
+        <div class="acts" style="margin-top:var(--s3)">
+          <button class="btn ghost small" data-act="entregar-vercel">Vercel</button>
+          <button class="btn ghost small" data-act="entregar-github">GitHub</button>
+        </div>
+        <div class="hint">Vercel e GitHub s\xF3 avan\xE7am com credenciais no .env \u2014 e uma recusa diz exactamente o que falta.</div>
+      </div>
+      <div class="card">
+        <div class="sec-h"><h3>Hist\xF3rico</h3><span class="count">${a.events.length}</span></div>
+        <ul class="feed">${a.events.slice(0,12).map(r=>`<li><b>${t(r.action.replace("projeto.",""))}</b> <span class="count">${t(b(r.at))}</span><br><span class="hint">${t(String(r.detail||"").slice(0,120))}</span></li>`).join("")||'<li class="hint">Sem eventos.</li>'}</ul>
+      </div>
+    </div>
+  </div>`}function ca(){let a=s.messages,e={rascunho:"por aprovar",ensaio:"ensaio",aprovada:"aprovada",enviada:"enviada",rejeitada:"rejeitada",bloqueada:"bloqueada",falhou:"falhou",revisao:"a rever"};return`<div class="wrap">
+    ${k({title:"Conversas",sub:a.length?`${a.length} mensagens \xB7 ${a.filter(o=>o.status==="rascunho").length} \xE0 espera do teu OK`:"ainda n\xE3o h\xE1 nenhuma mensagem escrita",right:q()})}
+    ${a.length?`<div class="rows">${a.map(o=>`<button class="row" data-act="ver-lead" data-id="${t(o.lead_id)}">
+      <div><div class="nm">${t(o.lead?.name||"sem lead")}</div><div class="mt">${t(String(o.body).slice(0,80))}${String(o.body).length>80?"\u2026":""}</div></div>
+      <div class="cell hide-m">${t(o.channel==="whatsapp"?"WhatsApp":"email")} \xB7 ${t(b(o.created_at))}</div>
+      <div class="cell"><span class="tag ${o.status==="enviada"?"respondeu":o.status==="rejeitada"||o.status==="bloqueada"?"perdido":""}">${t(e[o.status]||o.status)}</span></div>
+      <div class="cell">${o.lead?.score!=null?y(o.lead.score):""}</div>
+    </button>`).join("")}</div>`:`<div class="card empty">${h.vazio}<h3>Sem conversas</h3>
         <p>Uma conversa come\xE7a com um rascunho. Abre um lead e escreve: a mensagem fica aqui, com o estado dela, at\xE9 decidires o que fazer.</p>
         <div class="acts" style="justify-content:center"><a class="btn primary" href="#/leads" style="max-width:240px">Ver os leads</a></div></div>`}
-  </div>`}function Q(){let a=s.saldo;if(!a)return'<div class="wrap"><div class="skeleton">a ler o saldo\u2026</div></div>';let e=a.unitarios||{},t=[e.custoPorLead!=null?`custo por lead ${h(e.custoPorLead)}`:"",e.custoPorContactado!=null?`por contactado ${h(e.custoPorContactado)}`:"",e.custoPorCliente!=null?`por cliente ${h(e.custoPorCliente)}`:"",e.receitaPorCliente!=null?`receita por cliente ${h(e.receitaPorCliente)}`:""].filter(Boolean).join(" \xB7 ")||"sem dados suficientes para custos unit\xE1rios";return`<div class="wrap">
-    ${k({title:"Saldo",sub:`os \xFAltimos ${a.janela?.dias||90} dias \xB7 s\xF3 o que est\xE1 registado`,right:j()})}
+  </div>`}function la(){let a=s.saldo;if(!a)return'<div class="wrap"><div class="skeleton">a ler o saldo\u2026</div></div>';let e=a.unitarios||{},o=[e.custoPorLead!=null?`custo por lead ${g(e.custoPorLead)}`:"",e.custoPorContactado!=null?`por contactado ${g(e.custoPorContactado)}`:"",e.custoPorCliente!=null?`por cliente ${g(e.custoPorCliente)}`:"",e.receitaPorCliente!=null?`receita por cliente ${g(e.receitaPorCliente)}`:""].filter(Boolean).join(" \xB7 ")||"sem dados suficientes para custos unit\xE1rios";return`<div class="wrap">
+    ${k({title:"Saldo",sub:`os \xFAltimos ${a.janela?.dias||90} dias \xB7 s\xF3 o que est\xE1 registado`,right:q()})}
     <div class="money">
-      <div class="card"><b class="ok">${h(a.receitaCentimos)}</b><small>entrou</small></div>
-      <div class="card"><b>${h(a.custoCentimos)}</b><small>gastou em APIs</small></div>
-      <div class="card"><b class="${a.margemCentimos<0?"bad":"ok"}">${h(a.margemCentimos)}</b><small>margem</small></div>
+      <div class="card"><b class="ok">${g(a.receitaCentimos)}</b><small>entrou</small></div>
+      <div class="card"><b>${g(a.custoCentimos)}</b><small>gastou em APIs</small></div>
+      <div class="card"><b class="${a.margemCentimos<0?"bad":"ok"}">${g(a.margemCentimos)}</b><small>margem</small></div>
     </div>
-    ${a.semDados?.receita?`<div class="hint" style="margin-bottom:var(--s4)">${o(a.semDados.receita)}</div>`:""}
+    ${a.semDados?.receita?`<div class="hint" style="margin-bottom:var(--s4)">${t(a.semDados.receita)}</div>`:""}
     <div class="card" style="margin-bottom:var(--s4)">
       <div class="sec-h"><h3>Registar uma entrada</h3><span class="count">escrita por ti</span></div>
       <div class="form">
@@ -456,16 +564,16 @@
     </div>
     <div class="cards2">
       <div class="card"><div class="sec-h"><h3>Receita por campanha</h3></div>
-        <table><tbody>${(a.porCampanha||[]).length?a.porCampanha.map(i=>`<tr><td>${o(i.campanha)}</td><td class="n">${h(i.cents)}</td></tr>`).join(""):'<tr><td class="hint">Sem entradas registadas.</td></tr>'}</tbody></table></div>
+        <table><tbody>${(a.porCampanha||[]).length?a.porCampanha.map(n=>`<tr><td>${t(n.campanha)}</td><td class="n">${g(n.cents)}</td></tr>`).join(""):'<tr><td class="hint">Sem entradas registadas.</td></tr>'}</tbody></table></div>
       <div class="card"><div class="sec-h"><h3>Custos por fornecedor</h3></div>
-        <table><tbody>${(a.custosPorFornecedor||[]).length?a.custosPorFornecedor.map(i=>`<tr><td>${o(i.provider)}</td><td class="n">${h(i.cents)}</td></tr>`).join(""):'<tr><td class="hint">Sem custos de API neste per\xEDodo.</td></tr>'}</tbody></table></div>
+        <table><tbody>${(a.custosPorFornecedor||[]).length?a.custosPorFornecedor.map(n=>`<tr><td>${t(n.provider)}</td><td class="n">${g(n.cents)}</td></tr>`).join(""):'<tr><td class="hint">Sem custos de API neste per\xEDodo.</td></tr>'}</tbody></table></div>
     </div>
-    <div class="hint" style="margin-top:var(--s4)">${o(t)}</div>
+    <div class="hint" style="margin-top:var(--s4)">${t(o)}</div>
     ${(a.entradas||[]).length?`<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Entradas</h3><span class="count">${a.entradas.length}</span></div>
-      <table><tbody>${a.entradas.map(i=>`<tr><td style="white-space:nowrap;color:var(--muted)">${o(w(i.at))}</td><td>${o(i.campaign||"sem campanha")}</td><td class="n">${h(i.amount_cents)}</td>
-        <td class="n"><button class="btn quiet" data-act="apagar-receita" data-id="${o(i.id)}" title="apagar">\u2715</button></td></tr>`).join("")}</tbody></table></div>`:""}
-  </div>`}function b(){if(s.error&&!s.summary){S().innerHTML=`<div class="wrap"><div class="card empty"><h3>N\xE3o consegui falar com o \xD3rbita</h3><p>${o(s.error)}</p>
-      <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;return}S().innerHTML=s.route.name==="hoje"?z():s.route.name==="leads"?F():s.route.name==="lead"?Z():s.route.name==="conversas"?K():Q()}function A(a,e){let t=String(a||"").replace(/\D/g,"");return t?`https://wa.me/${t}?text=${encodeURIComponent(e||"")}`:null}async function X(a,e,t){let i=e?.dataset.id,n=()=>g("#leadNote"),d=(r,c)=>{let p=n();p?(p.textContent=r,p.classList.toggle("bad",!!c)):l(r,c)};try{if(a==="pick"){s.pick=i,b();return}if(a==="filter"){s.filter=e.dataset.k,b();return}if(a==="ver-lead"){location.hash=`#/lead/${encodeURIComponent(i)}`;return}if(a==="reload"){await v(!0);return}if(a==="toggle-stop"){let r=!!s.today?.presenca?.parado;await u("/ops/stop","POST",{stop:!r}),l(r?"Envios retomados.":"PARAR TUDO ligado: n\xE3o sai nada, por nenhum caminho."),await v();return}if(a==="auto-up"||a==="auto-down"){let r=e.dataset.scope;await u(`/ops/autonomia/${encodeURIComponent(r)}/${a==="auto-up"?"subir":"descer"}`,"POST",{reason:"decis\xE3o na mesa"}),l(a==="auto-up"?"Este tipo passa a enviar sozinho. Os trav\xF5es continuam.":"Volta a pedir-te autoriza\xE7\xE3o."),s.pick=null,await v();return}if(a==="aprovar"){let r=s.leadMessages.find(p=>p.id===i)||(s.today?.decidir||[]).find(p=>p.id===i);r?.status==="ensaio"&&await u(`/ops/messages/${encodeURIComponent(i)}/promover`,"POST",{}),await u(`/ops/messages/${encodeURIComponent(i)}/approve`,"POST",{});let c=r?.lead||s.lead||{};if((r?.channel||"whatsapp")==="whatsapp"){let p=A(c.phone,r?.body);p?(window.open(p,"_blank","noopener"),l("Aprovada. Abre o WhatsApp e envia \u2014 depois carrega em \xABJ\xE1 enviei\xBB.")):l("Aprovada, mas o lead n\xE3o tem telefone: n\xE3o h\xE1 link de WhatsApp.",!0)}else try{await u(`/ops/messages/${encodeURIComponent(i)}/send`,"POST",{}),l("Email enviado.")}catch(p){l("Aprovada. O email n\xE3o saiu: "+p.message,!0)}await v();return}if(a==="rejeitar"){let r=prompt("Porque \xE9 que rejeitas? (fica no registo)")||"rejeitada na mesa";await u(`/ops/messages/${encodeURIComponent(i)}/reject`,"POST",{reason:r}),l("Rejeitada. A raz\xE3o ficou guardada."),await v();return}if(a==="abrir"){let r=s.leadMessages.find(C=>C.id===i)||(s.today?.decidir||[]).find(C=>C.id===i),c=r?.lead||s.lead||{},p=A(c.phone,r?.body);if(!p){l("Este lead n\xE3o tem telefone \u2014 n\xE3o h\xE1 link de WhatsApp.",!0);return}window.open(p,"_blank","noopener"),l("Link aberto. Depois de enviares, carrega em \xABJ\xE1 enviei\xBB.");return}if(a==="confirmar"){await u(`/ops/messages/${encodeURIComponent(i)}/confirm`,"POST",{}),l("Confirmado: contas como enviada."),await v();return}if(a==="sinal"){await u(`/ops/messages/${encodeURIComponent(i)}/sinal`,"POST",{kind:e.dataset.kind}),l("Sinal registado \u2014 a nota aprende com ele."),await v();return}if(a==="estado"){let r=e.dataset.status;await u(`/ops/leads/${encodeURIComponent(i)}`,"PATCH",{status:r}),l(`Marcado como ${$[r]||r}.`),await v();return}if(a==="pesquisar"||a==="escrever"){let r=s.lead?.id||i;if(!r)return;if(a==="pesquisar"){d("a ler o site\u2026");let c=await u(`/ops/leads/${encodeURIComponent(r)}/pesquisar`,"POST",{});l(c.dossier?.research?.status==="ok"?`Li o site: ${(c.dossier.evidence||[]).length} factos.`:`N\xE3o consegui ler: ${c.dossier?.research?.reason||"sem motivo"}`,c.dossier?.research?.status!=="ok"),await v(!1),await y(r),b()}else{d("a escrever\u2026");let c=await u(`/ops/leads/${encodeURIComponent(r)}/rascunho`,"POST",{channel:"whatsapp"});l(`Rascunho escrito (${c.message?.generated_by==="modelo"?"modelo local":c.message?.generated_by||"sem motor"}).`),await v(!1),await y(r),b()}return}if(a==="novo-lead"){s.adding=!s.adding,b();return}if(a==="guardar-lead"){let r=p=>String(g("#"+p)?.value||"").trim();if(!r("nlNome")){l("O lead precisa de um nome.",!0);return}let c=await u("/ops/leads","POST",{leads:[{name:r("nlNome"),category:r("nlNicho"),city:r("nlCidade"),phone:r("nlTelefone")||void 0,website:r("nlSite")||void 0,source:"manual"}]});l(c.created?"Lead guardado.":c.updated?"Este lead j\xE1 existia \u2014 atualizei os dados.":"N\xE3o entrou.",!c.created&&!c.updated),s.adding=!1,await v();return}if(a==="receita"){let r=Number(String(g("#valor")?.value||"").replace(",","."));if(!r){l("Diz o valor que entrou.",!0);return}await u("/ops/receita","POST",{euros:r,campaign:g("#campanha")?.value||""}),l("Entrada registada."),await v();return}a==="apagar-receita"&&(await u(`/ops/receita/${encodeURIComponent(i)}`,"DELETE"),l("Entrada apagada."),await v())}catch(r){l(r.message,!0)}}function Y(){s.route=P(),L(),document.addEventListener("click",a=>{let e=a.target.closest("[data-act]");e&&(e.tagName==="BUTTON"&&a.preventDefault(),X(e.dataset.act,e,a))}),document.addEventListener("input",a=>{if(a.target.id!=="q")return;s.q=a.target.value;let e=a.target.selectionStart;b();let t=document.querySelector("#q");if(t){t.focus();try{t.setSelectionRange(e,e)}catch{}}}),window.addEventListener("keydown",a=>{a.key==="Escape"&&document.querySelectorAll("details[open]").forEach(e=>e.removeAttribute("open"))}),window.addEventListener("hashchange",async()=>{if(s.route=P(),s.pick=null,s.route.name==="lead"&&s.route.id)try{await y(s.route.id)}catch(a){l(a.message,!0)}L(),b(),S().scrollIntoView({block:"start"})}),v(!0)}Y();})();
+      <table><tbody>${a.entradas.map(n=>`<tr><td style="white-space:nowrap;color:var(--muted)">${t(b(n.at))}</td><td>${t(n.campaign||"sem campanha")}</td><td class="n">${g(n.amount_cents)}</td>
+        <td class="n"><button class="btn quiet" data-act="apagar-receita" data-id="${t(n.id)}" title="apagar">\u2715</button></td></tr>`).join("")}</tbody></table></div>`:""}
+  </div>`}function m(){if(s.error&&!s.summary){S().innerHTML=`<div class="wrap"><div class="card empty"><h3>N\xE3o consegui falar com o \xD3rbita</h3><p>${t(s.error)}</p>
+      <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;return}S().innerHTML=s.route.name==="hoje"?K():s.route.name==="leads"?X():s.route.name==="lead"?ta():s.route.name==="projetos"?ra():s.route.name==="projeto"?da():s.route.name==="conversas"?ca():la()}function O(a,e){let o=String(a||"").replace(/\D/g,"");return o?`https://wa.me/${o}?text=${encodeURIComponent(e||"")}`:null}async function pa(a,e,o){let n=e?.dataset.id,d=()=>$("#leadNote"),c=(i,r)=>{let u=d();u?(u.textContent=i,u.classList.toggle("bad",!!r)):l(i,r)};try{if(a==="pick"){s.pick=n,m();return}if(a==="filter"){s.filter=e.dataset.k,m();return}if(a==="ver-lead"){location.hash=`#/lead/${encodeURIComponent(n)}`;return}if(a==="reload"){await v(!0);return}if(a==="toggle-stop"){let i=!!s.today?.presenca?.parado;await p("/ops/stop","POST",{stop:!i}),l(i?"Envios retomados.":"PARAR TUDO ligado: n\xE3o sai nada, por nenhum caminho."),await v();return}if(a==="auto-up"||a==="auto-down"){let i=e.dataset.scope;await p(`/ops/autonomia/${encodeURIComponent(i)}/${a==="auto-up"?"subir":"descer"}`,"POST",{reason:"decis\xE3o na mesa"}),l(a==="auto-up"?"Este tipo passa a enviar sozinho. Os trav\xF5es continuam.":"Volta a pedir-te autoriza\xE7\xE3o."),s.pick=null,await v();return}if(a==="aprovar"){let i=s.leadMessages.find(u=>u.id===n)||(s.today?.decidir||[]).find(u=>u.id===n);i?.status==="ensaio"&&await p(`/ops/messages/${encodeURIComponent(n)}/promover`,"POST",{}),await p(`/ops/messages/${encodeURIComponent(n)}/approve`,"POST",{});let r=i?.lead||s.lead||{};if((i?.channel||"whatsapp")==="whatsapp"){let u=O(r.phone,i?.body);u?(window.open(u,"_blank","noopener"),l("Aprovada. Abre o WhatsApp e envia \u2014 depois carrega em \xABJ\xE1 enviei\xBB.")):l("Aprovada, mas o lead n\xE3o tem telefone: n\xE3o h\xE1 link de WhatsApp.",!0)}else try{await p(`/ops/messages/${encodeURIComponent(n)}/send`,"POST",{}),l("Email enviado.")}catch(u){l("Aprovada. O email n\xE3o saiu: "+u.message,!0)}await v();return}if(a==="rejeitar"){let i=prompt("Porque \xE9 que rejeitas? (fica no registo)")||"rejeitada na mesa";await p(`/ops/messages/${encodeURIComponent(n)}/reject`,"POST",{reason:i}),l("Rejeitada. A raz\xE3o ficou guardada."),await v();return}if(a==="abrir"){let i=s.leadMessages.find(f=>f.id===n)||(s.today?.decidir||[]).find(f=>f.id===n),r=i?.lead||s.lead||{},u=O(r.phone,i?.body);if(!u){l("Este lead n\xE3o tem telefone \u2014 n\xE3o h\xE1 link de WhatsApp.",!0);return}window.open(u,"_blank","noopener"),l("Link aberto. Depois de enviares, carrega em \xABJ\xE1 enviei\xBB.");return}if(a==="confirmar"){await p(`/ops/messages/${encodeURIComponent(n)}/confirm`,"POST",{}),l("Confirmado: contas como enviada."),await v();return}if(a==="sinal"){await p(`/ops/messages/${encodeURIComponent(n)}/sinal`,"POST",{kind:e.dataset.kind}),l("Sinal registado \u2014 a nota aprende com ele."),await v();return}if(a==="estado"){let i=e.dataset.status;await p(`/ops/leads/${encodeURIComponent(n)}`,"PATCH",{status:i}),l(`Marcado como ${w[i]||i}.`),await v();return}if(a==="pesquisar"||a==="escrever"){let i=s.lead?.id||n;if(!i)return;if(a==="pesquisar"){c("a ler o site\u2026");let r=await p(`/ops/leads/${encodeURIComponent(i)}/pesquisar`,"POST",{});l(r.dossier?.research?.status==="ok"?`Li o site: ${(r.dossier.evidence||[]).length} factos.`:`N\xE3o consegui ler: ${r.dossier?.research?.reason||"sem motivo"}`,r.dossier?.research?.status!=="ok"),await v(!1),await P(i),m()}else{c("a escrever\u2026");let r=await p(`/ops/leads/${encodeURIComponent(i)}/rascunho`,"POST",{channel:"whatsapp"});l(`Rascunho escrito (${r.message?.generated_by==="modelo"?"modelo local":r.message?.generated_by||"sem motor"}).`),await v(!1),await P(i),m()}return}if(a==="novo-lead"){s.adding=!s.adding,m();return}if(a==="novo-projeto"){s.addingProject=!s.addingProject,m();return}if(a==="ver-projeto"){location.hash=`#/projeto/${encodeURIComponent(n)}`;return}if(a==="guardar-projeto"){let i=u=>String($("#"+u)?.value||"").trim();if(!i("pjNome")){l("O projeto precisa de um nome.",!0);return}let r=await p("/ops/projetos","POST",{name:i("pjNome"),client:i("pjCliente"),niche:i("pjNicho"),city:i("pjCidade"),kind:i("pjTipo")||"landing"});l("Projeto criado. O primeiro passo \xE9 gerar o c\xF3digo."),s.addingProject=!1,location.hash=`#/projeto/${r.projeto.id}`;return}if(a==="criar-projeto"){let i=s.lead?.id||n,r=await p(`/ops/leads/${encodeURIComponent(i)}/projeto`,"POST",{kind:"landing"});l("Projeto criado a partir do lead."),await v(!1),location.hash=`#/projeto/${r.projeto.id}`;return}if(a==="gerar"){c("a escrever os ficheiros\u2026");let i=await p(`/ops/projetos/${encodeURIComponent(s.projeto.project.id)}/gerar`,"POST",{});l(`${i.files.length} ficheiros escritos (${(i.bytes/1024).toFixed(1)} KB). Corre o QA.`),await v(!1),await j(s.projeto.project.id),m();return}if(a==="qa"){c("a auditar\u2026");let i=await p(`/ops/projetos/${encodeURIComponent(s.projeto.project.id)}/qa`,"POST",{});l(i.run.passed?`QA passou: ${i.run.total} verifica\xE7\xF5es.`:`QA falhou: ${i.run.critical} cr\xEDticas, ${i.run.important} importantes.`,!i.run.passed),await v(!1),await j(s.projeto.project.id),m();return}if(a==="aprovar-projeto"){await p(`/ops/projetos/${encodeURIComponent(s.projeto.project.id)}/aprovar`,"POST",{note:"aprovado na mesa"}),l("Aprovado. A entrega j\xE1 pode ser feita."),await v(!1),await j(s.projeto.project.id),m();return}if(a==="entregar"||a==="entregar-vercel"||a==="entregar-github"){let i=a==="entregar"?"preview":a==="entregar-vercel"?"vercel":"github",r=await p(`/ops/projetos/${encodeURIComponent(s.projeto.project.id)}/entregar`,"POST",{target:i});l(r.url?`Entregue: ${r.url}`:r.note||"Pedido registado \u2014 confirma no servi\xE7o.",!r.url),await v(!1),await j(s.projeto.project.id),m();return}if(a==="zip"){let i=s.projeto?.project?.id;if(!i)return;let r={},u=N();u&&(r["x-orbita-admin"]=u);let f=await fetch(`/api/ops/projetos/${encodeURIComponent(i)}/zip`,{headers:r});if(!f.ok)throw new Error(`n\xE3o consegui preparar o .zip (HTTP ${f.status})`);let z=await f.blob(),C=document.createElement("a");C.href=URL.createObjectURL(z),C.download=`${i}.zip`,C.click(),URL.revokeObjectURL(C.href),l("Ficheiros prontos para levar para qualquer alojamento.");return}if(a==="guardar-lead"){let i=u=>String($("#"+u)?.value||"").trim();if(!i("nlNome")){l("O lead precisa de um nome.",!0);return}let r=await p("/ops/leads","POST",{leads:[{name:i("nlNome"),category:i("nlNicho"),city:i("nlCidade"),phone:i("nlTelefone")||void 0,website:i("nlSite")||void 0,source:"manual"}]});l(r.created?"Lead guardado.":r.updated?"Este lead j\xE1 existia \u2014 atualizei os dados.":"N\xE3o entrou.",!r.created&&!r.updated),s.adding=!1,await v();return}if(a==="receita"){let i=Number(String($("#valor")?.value||"").replace(",","."));if(!i){l("Diz o valor que entrou.",!0);return}await p("/ops/receita","POST",{euros:i,campaign:$("#campanha")?.value||""}),l("Entrada registada."),await v();return}a==="apagar-receita"&&(await p(`/ops/receita/${encodeURIComponent(n)}`,"DELETE"),l("Entrada apagada."),await v())}catch(i){l(i.message,!0)}}function ua(){s.route=R(),T(),document.addEventListener("click",a=>{let e=a.target.closest("[data-act]");e&&(e.tagName==="BUTTON"&&a.preventDefault(),pa(e.dataset.act,e,a))}),document.addEventListener("input",a=>{if(a.target.id!=="q")return;s.q=a.target.value;let e=a.target.selectionStart;m();let o=document.querySelector("#q");if(o){o.focus();try{o.setSelectionRange(e,e)}catch{}}}),window.addEventListener("keydown",a=>{a.key==="Escape"&&document.querySelectorAll("details[open]").forEach(e=>e.removeAttribute("open"))}),window.addEventListener("hashchange",async()=>{if(s.route=R(),s.pick=null,s.route.name==="lead"&&s.route.id)try{await P(s.route.id)}catch(a){l(a.message,!0)}if(s.route.name==="projeto"&&s.route.id)try{await j(s.route.id)}catch(a){l(a.message,!0)}T(),m(),S().scrollIntoView({block:"start"})}),v(!0)}ua();})();
 </script>
 </body>
 </html>

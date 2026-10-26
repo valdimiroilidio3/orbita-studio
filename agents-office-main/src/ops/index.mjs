@@ -17,6 +17,7 @@ import * as autonomyModule from './autonomy.mjs';
 import * as evalsModule from './evals.mjs';
 import * as moneyModule from './money.mjs';
 import * as tenantsModule from './tenants.mjs';
+import * as projectsModule from './projects.mjs';
 
 export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500, autostart = true } = {}) {
   const file = dbFile || process.env.ORBITA_DB || path.join(dataDir, 'orbita.db');
@@ -25,7 +26,7 @@ export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500
   const leads = leadsModule, messages = messagesModule, metrics = metricsModule;
   const outbox = outboxModule, events = eventsModule, today = todayModule;
   const research = researchModule, personalize = personalizeModule;
-  const autonomy = autonomyModule, evals = evalsModule, money = moneyModule, tenants = tenantsModule;
+  const autonomy = autonomyModule, evals = evalsModule, money = moneyModule, tenants = tenantsModule, projects = projectsModule;
 
   // trabalho que a fila sabe fazer — nomes explícitos, sem `eval` nem magia
   queue.register('leads.importar', async (p) => leads.importLeads(db, p.leads || [], p.actor || 'fila', p.source || 'import'));
@@ -70,7 +71,7 @@ export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500
   setSetting(db, 'ops.iniciado_em', getSetting(db, 'ops.iniciado_em', now()));
 
   return {
-    db, queue, leads, messages, metrics, outbox, events, today, research, personalize, autonomy, evals, money, tenants,
+    db, queue, leads, messages, metrics, outbox, events, today, research, personalize, autonomy, evals, money, tenants, projects,
     drainOutbox,
     audit: (event) => audit(db, event),
     close: () => {
