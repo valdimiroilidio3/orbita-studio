@@ -5,84 +5,15 @@ export const PLINTH_H = 2.6;
 const WHITE = '#F7F7F2';
 
 const matCache = new Map();
-/** Material partilhado (com cache por cor+opções). `env` é quanto o mapa de ambiente do escritório
- *  se reflecte — é o que dá cerâmica, latão e vidro em vez de plástico chapado. `coat` é a camada
- *  de verniz (madeira e piso polido): só nesse caso se usa MeshPhysicalMaterial, mais caro. */
 export function mat(color, opts = {}) {
   const key = color + JSON.stringify(opts);
   if (!matCache.has(key)) {
-    const base = {
+    matCache.set(key, new THREE.MeshStandardMaterial({
       color, roughness: opts.rough ?? 0.85, metalness: opts.metal ?? 0.02,
-      envMapIntensity: opts.env ?? 0.55,
       ...(opts.emissive ? { emissive: opts.emissive, emissiveIntensity: opts.ei ?? 1 } : {}),
-    };
-    if (opts.transparent) { base.transparent = true; base.opacity = opts.opacity ?? 0.3; base.depthWrite = false; }
-    matCache.set(key, opts.coat
-      ? new THREE.MeshPhysicalMaterial({ ...base, clearcoat: opts.coat, clearcoatRoughness: opts.coatRough ?? 0.35 })
-      : new THREE.MeshStandardMaterial(base));
+    }));
   }
   return matCache.get(key);
-}
-
-/* ---------- madeira: uma textura só para todos os tampos (grão fino, sem custo por posto) ---------- */
-let woodTex = null;
-function woodTexture() {
-  if (woodTex) return woodTex;
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 256;
-  const x = c.getContext('2d');
-  x.fillStyle = '#E3C79C'; x.fillRect(0, 0, 512, 256);
-  for (let i = 0; i < 70; i++) {                      // veios: linhas longas e ligeiramente curvadas
-    const y0 = (i / 70) * 256 + Math.sin(i * 1.7) * 3;
-    x.strokeStyle = `rgba(${i % 3 ? '150,110,70' : '196,158,112'},${0.05 + (i % 5) * 0.014})`;
-    x.lineWidth = 0.6 + (i % 4) * 0.5;
-    x.beginPath();
-    for (let px = 0; px <= 512; px += 16) {
-      const py = y0 + Math.sin(px * 0.013 + i) * 2.4 + Math.sin(px * 0.045 + i * 2.3) * 0.9;
-      px ? x.lineTo(px, py) : x.moveTo(px, py);
-    }
-    x.stroke();
-  }
-  x.globalAlpha = 0.06;                                // duas manchas largas dão profundidade ao veio
-  for (let i = 0; i < 8; i++) {
-    const g = x.createLinearGradient(0, i * 32, 512, i * 32 + 40);
-    g.addColorStop(0, '#B98F5E'); g.addColorStop(0.5, '#EBD3AC'); g.addColorStop(1, '#B98F5E');
-    x.fillStyle = g; x.fillRect(0, i * 32, 512, 22);
-  }
-  x.globalAlpha = 1;
-  woodTex = new THREE.CanvasTexture(c);
-  woodTex.colorSpace = THREE.SRGBColorSpace;
-  woodTex.wrapS = woodTex.wrapT = THREE.RepeatWrapping;
-  woodTex.repeat.set(1.6, 1);
-  woodTex.anisotropy = 8;
-  return woodTex;
-}
-
-/** Latão escovado: uma cor só, partilhada pelos pormenores que dão lustro (puxadores, inlays). */
-export const BRASS = '#B79B6E';
-
-/** Sombra de contacto: uma elipse desfocada pintada num canvas, uma textura para os 35 postos.
- *  Sem ela a secretária parece colada ao piso; com ela assenta. Custa 2 triângulos por posto. */
-let contactTex = null, contactMat = null;
-function contactShadow(w, d) {
-  if (!contactTex) {
-    const c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const x = c.getContext('2d');
-    const g = x.createRadialGradient(64, 64, 4, 64, 64, 62);
-    g.addColorStop(0, 'rgba(26,24,20,0.30)');
-    g.addColorStop(0.55, 'rgba(26,24,20,0.12)');
-    g.addColorStop(1, 'rgba(26,24,20,0)');
-    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-    contactTex = new THREE.CanvasTexture(c);
-    contactMat = new THREE.MeshBasicMaterial({ map: contactTex, transparent: true, depthWrite: false, opacity: 0.9 });
-  }
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), contactMat);
-  m.rotation.x = -Math.PI / 2;
-  m.position.y = 0.004;
-  m.renderOrder = 1;
-  m.castShadow = false; m.receiveShadow = false;
-  return m;
 }
 
 // Rounded-rectangle prism via extrusion. Origin at centre, extruded along Y.
@@ -112,20 +43,13 @@ export function rbox(w, d, h, color, r) {
 /* ---------- plinth: floating white pod with pastel dept floor ---------- */
 export function makePlinth(w, d, floorColor) {
   const g = new THREE.Group();
-  const body = rbox(w, d, PLINTH_H, mat(WHITE, { rough: 0.72, metal: 0.03, env: 0.7 }), 0.9);
+  const body = rbox(w, d, PLINTH_H, WHITE, 0.9);
   body.position.y = -PLINTH_H;
   g.add(body);
-  // sombra de junta: uma saia discreta por baixo da laje faz a plataforma parecer assentar no ar,
-  // em vez de ser um bloco branco com um bocado de cor colado por cima
-  const gap = rbox(w - 0.44, d - 0.44, 0.09, mat('#CFCCC1', { rough: 0.95, env: 0.25 }), 0.72);
-  gap.position.y = -0.03;
-  gap.castShadow = false;
-  g.add(gap);
-  // laje de piso: pastel polido (verniz leve) — o reflexo do ambiente dá-lhe chão, não plástico
-  const floor = rbox(w - 0.7, d - 0.7, 0.12, mat(floorColor, { rough: 0.5, metal: 0.02, env: 0.75, coat: 0.35, coatRough: 0.3 }), 0.7);
+  // pastel floor slab, inset hairline reveal
+  const floor = rbox(w - 0.7, d - 0.7, 0.12, floorColor, 0.7);
   floor.position.y = 0;
   floor.castShadow = false;
-  floor.receiveShadow = true;
   g.add(floor);
   return g;
 }
@@ -185,19 +109,9 @@ export function makeDeskScreenTexture(chip) {
 
 export function makeDesk(chip, live) {
   const g = new THREE.Group();
-  const topMat = new THREE.MeshPhysicalMaterial({
-    map: woodTexture(), color: '#F0DDBB', roughness: 0.55, metalness: 0.02,
-    clearcoat: 0.22, clearcoatRoughness: 0.42, envMapIntensity: 0.6,
-  });
-  const top = new THREE.Mesh(rboxGeo(5.2, 2.6, 0.22, 0.18), topMat);
-  top.position.y = 2.1; top.castShadow = true; top.receiveShadow = true; g.add(top);
-  const ped1 = rbox(0.9, 2.2, 1.9, mat(WHITE, { rough: 0.7, env: 0.6 }), 0.12); ped1.position.set(-2.0, 0.1, 0); g.add(ped1);
-  const ped2 = rbox(0.9, 2.2, 1.9, mat(WHITE, { rough: 0.7, env: 0.6 }), 0.12); ped2.position.set(2.0, 0.1, 0); g.add(ped2);
-  // puxadores de latão nas gavetas: um traço fino que dá escala ao móvel
-  for (const px of [-2.0, 2.0]) {
-    const h = rbox(0.52, 0.05, 0.05, mat(BRASS, { rough: 0.4, metal: 0.55, env: 0.9 }), 0.02);
-    h.position.set(px, 1.72, 1.06); h.castShadow = false; g.add(h);
-  }
+  const top = rbox(5.2, 2.6, 0.22, '#DCC29A', 0.18); top.position.y = 2.1; g.add(top);
+  const ped1 = rbox(0.9, 2.2, 1.9, WHITE, 0.12); ped1.position.set(-2.0, 0.1, 0); g.add(ped1);
+  const ped2 = rbox(0.9, 2.2, 1.9, WHITE, 0.12); ped2.position.set(2.0, 0.1, 0); g.add(ped2);
   // monitor — with a live screen (screens.js) it is a wider 16:10 panel so the session reads from the pod view
   const screenSet = live ? { tex: live.tex, canvas: live.canvas, draw: () => {}, live } : makeDeskScreenTexture(chip);
   const [mw, mh] = live ? [3.4, 2.125] : [2.1, 1.3];
@@ -209,36 +123,20 @@ export function makeDesk(chip, live) {
   );
   screen.position.set(0, 2.85 + mh / 2, -0.77); screen.name = 'screen'; monBack.name = 'monBack'; g.add(screen);
   const stand = rbox(0.16, 0.16, 0.45, '#3A3A3E', 0.05); stand.position.set(0, 2.32, -0.9); g.add(stand);
-  // tapete de feltro escuro sob o teclado: o tampo claro deixa de ser uma superfície vazia
-  const pad = rbox(2.9, 1.05, 0.02, mat('#3A3D3B', { rough: 1, env: 0.15 }), 0.08);
-  pad.position.set(0, 2.21, 0.42); pad.castShadow = false; pad.receiveShadow = true; g.add(pad);
   // keyboard + mug
-  const kb = rbox(1.5, 0.5, 0.07, mat('#F2F1EA', { rough: 0.75, env: 0.5 }), 0.06); kb.position.set(0, 2.23, 0.35); g.add(kb);
-  const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.3, 12), mat(chip, { rough: 0.5, env: 0.7 }));
+  const kb = rbox(1.5, 0.5, 0.07, '#EFEFEA', 0.06); kb.position.set(0, 2.22, 0.35); g.add(kb);
+  const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 0.3, 12), mat(chip));
   mug.position.set(1.9, 2.36, 0.4); mug.castShadow = true; g.add(mug);
-  g.add(contactShadow(5.2, 3.2));
-  // bloco de notas + caneta: dois volumes pequenos, lidos de perto como trabalho a decorrer
-  const notes = rbox(0.66, 0.44, 0.035, mat('#F6F3E7', { rough: 0.95, env: 0.3 }), 0.04);
-  notes.position.set(1.85, 2.22, -0.15); notes.castShadow = false; g.add(notes);
-  // candeeiro de secretária: haste fina, quebra-luz cónico e a pastilha que faz a luz
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.15, 8), mat('#3E3F41', { rough: 0.45, metal: 0.7, env: 1 }));
-  stem.position.set(-2.15, 2.74, -0.35); stem.castShadow = true; g.add(stem);
-  const shade = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.36, 14, 1, true), mat('#E8E3D6', { rough: 0.6, env: 0.6 }));
-  shade.position.set(-2.15, 3.36, -0.35); shade.rotation.x = 0.24; shade.material.side = THREE.DoubleSide; shade.castShadow = true; g.add(shade);
-  const bulb = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), mat('#FFF3D8', { emissive: '#FFE9BE', ei: 1.5, rough: 1, env: 0 }));
-  bulb.rotation.x = Math.PI / 2 + 0.24; bulb.position.set(-2.15, 3.2, -0.31); bulb.castShadow = false; g.add(bulb);
   return { group: g, screenSet };
 }
 
 export function makeChair() {
   const g = new THREE.Group();
-  const felt = { rough: 1, env: 0.2 };
-  const seat = rbox(1.3, 1.2, 0.22, mat('#8E998B', felt), 0.35); seat.position.y = 1.25; g.add(seat);
-  const back = rbox(1.25, 0.2, 1.35, mat('#7C8779', felt), 0.3); back.position.set(0, 1.5, 0.62); g.add(back);
-  const metal = mat('#55555A', { rough: 0.35, metal: 0.8, env: 1.1 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.85, 8), metal);
+  const seat = rbox(1.3, 1.2, 0.22, '#8E998B', 0.35); seat.position.y = 1.25; g.add(seat);
+  const back = rbox(1.25, 0.2, 1.35, '#7C8779', 0.3); back.position.set(0, 1.5, 0.62); g.add(back);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.85, 8), mat('#55555A'));
   pole.position.y = 0.82; g.add(pole);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.1, 10), metal);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 0.1, 10), mat('#55555A'));
   base.position.y = 0.4; base.castShadow = true; g.add(base);
   return g;
 }
@@ -436,26 +334,15 @@ function roundRect(x, a, b, w, h, r) {
 /* ---------- props ---------- */
 export function makePlant() {
   const g = new THREE.Group();
-  // vaso em grés com rebordo e terra à vista — três volumes pequenos em vez de um cilindro
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.8, 14), mat('#B96A4B', { rough: 0.72, env: 0.55 }));
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.8, 10), mat('#B96A4B'));
   pot.position.y = 0.4; pot.castShadow = true; g.add(pot);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.59, 0.55, 0.1, 14), mat('#C6795A', { rough: 0.6, env: 0.6 }));
-  rim.position.y = 0.82; rim.castShadow = true; g.add(rim);
-  const soil = new THREE.Mesh(new THREE.CircleGeometry(0.53, 14), mat('#3D3128', { rough: 1, env: 0.1 }));
-  soil.rotation.x = -Math.PI / 2; soil.position.y = 0.855; g.add(soil);
-  // folhagem: esferas achatadas em três tons, mais altas no centro e a abrir para fora
-  const tones = ['#4F7A50', '#5F8A5C', '#6F9B68'].map(c => mat(c, { rough: 1, env: 0.25 }));
-  const leaves = [
-    [0.00, 1.15, 0.00, 0.46], [0.34, 1.42, 0.12, 0.40], [-0.30, 1.38, -0.18, 0.42],
-    [0.16, 1.72, -0.30, 0.36], [-0.22, 1.90, 0.22, 0.34], [0.05, 2.12, -0.02, 0.30],
-    [0.42, 1.02, -0.28, 0.34], [-0.44, 1.06, 0.30, 0.33], [0.02, 2.45, 0.06, 0.24],
-  ];
-  leaves.forEach(([px, py, pz, r], i) => {
-    const leaf = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), tones[i % 3]);
-    leaf.position.set(px, py, pz);
-    leaf.scale.set(1, 0.78, 1);
-    leaf.castShadow = true; g.add(leaf);
-  });
+  const foliage = mat('#5F8A5C', { rough: 1 });
+  const foliage2 = mat('#6F9B68', { rough: 1 });
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.42 + Math.sin(i * 7) * 0.12, 10, 8), i % 2 ? foliage : foliage2);
+    s.position.set(Math.sin(i * 2.4) * 0.35, 1.15 + i * 0.28, Math.cos(i * 2.4) * 0.35);
+    s.castShadow = true; g.add(s);
+  }
   return g;
 }
 
@@ -474,9 +361,9 @@ export function makeServerRack(chip) {
 
 export function makeMeetingTable() {
   const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.2, 28), mat('#EFEADF', { rough: 0.42, env: 0.8, coat: 0.3, coatRough: 0.35 }));
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.2, 28), mat('#EFEADF'));
   top.position.y = 1.9; top.castShadow = true; top.receiveShadow = true; g.add(top);
-  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.9, 12), mat('#C9C4B8', { rough: 0.4, metal: 0.35, env: 0.9 }));
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1.9, 12), mat('#C9C4B8'));
   leg.position.y = 0.95; g.add(leg);
   return g;
 }
@@ -761,7 +648,7 @@ export function makeWarnSprite() {
 export function makeWalkway(from, to) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const len = Math.hypot(dx, dz);
-  const g = rbox(len, 3.2, 0.35, mat('#EFEFE8', { rough: 0.66, metal: 0.02, env: 0.6 }), 0.16);
+  const g = rbox(len, 3.2, 0.35, '#EFEFE8', 0.16);
   g.position.set((from[0] + to[0]) / 2, -0.35, (from[1] + to[1]) / 2);
   g.rotation.y = -Math.atan2(dz, dx);
   return g;
@@ -804,23 +691,13 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   const H = base + glass;             // total wall height
   const g = new THREE.Group();
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: '#F4F3ED', roughness: 0.88, metalness: 0, envMapIntensity: 0.45 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: chip, roughness: 0.7, metalness: 0.02, envMapIntensity: 0.55 });
-  const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.5, metalness: 0.12, envMapIntensity: 0.6 });
-  // vidro: verniz e ambiente dão-lhe o brilho húmido de uma divisória de estúdio (sem transmission,
-  // que obrigaria a um segundo passo de render em toda a cena)
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: chip, roughness: 0.06, metalness: 0, envMapIntensity: 1.3,
-    transparent: true, opacity: 0.19, depthWrite: false, side: THREE.DoubleSide,
-    clearcoat: 1, clearcoatRoughness: 0.04,
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#F4F3ED', roughness: 0.94, metalness: 0 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: chip, roughness: 0.72, metalness: 0.02 });
+  const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.55, metalness: 0.1 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: chip, roughness: 0.12, metalness: 0.05,
+    transparent: true, opacity: 0.17, depthWrite: false, side: THREE.DoubleSide,
   });
-  // luz de cove: fita quente encostada ao cap por dentro — a sala ganha um halo em vez de ser uma caixa
-  const coveMat = new THREE.MeshStandardMaterial({
-    color: '#FFF4E2', roughness: 1, metalness: 0,
-    emissive: '#FFE7C4', emissiveIntensity: 0.85, envMapIntensity: 0,
-  });
-  // junta escura entre rodapé e parede: um traço de 4 cm que assenta a parede no chão
-  const seamMat = new THREE.MeshStandardMaterial({ color: '#D8D4C7', roughness: 1, envMapIntensity: 0.2 });
 
   const add = (mesh, part) => {
     mesh.userData.part = part;
@@ -845,13 +722,6 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   const sideGlass = rbox(0.08, d, glass, glassMat, 0.03); sideGlass.position.set(sideX, base, 0); add(sideGlass, 'wallGlass');
   const sideCap = rbox(t + 0.16, d + 0.08, 0.16, capMat, 0.05); sideCap.position.set(sideX, H - 0.16, 0); add(sideCap, 'wallCap');
   const sideRail = rbox(t + 0.06, d, 0.1, capMat, 0.03); sideRail.position.set(sideX, base - 0.1, 0); add(sideRail, 'wallCap');
-
-  // fita de cove encostada ao cap, virada para dentro da sala (não muda a silhueta da parede)
-  const coveB = rbox(w - 0.5, 0.06, 0.06, coveMat, 0.02); coveB.position.set(0, H - 0.26, backZ + t / 2 + 0.02); add(coveB, 'wallCove');
-  const coveS = rbox(0.06, d - 0.5, 0.06, coveMat, 0.02); coveS.position.set(sideX + t / 2 + 0.02, H - 0.26, 0); add(coveS, 'wallCove');
-  // junta de rodapé (a sombra que separa a parede do piso)
-  const seamB = rbox(w - 0.06, 0.05, 0.05, seamMat, 0.02); seamB.position.set(0, 0.46, backZ + t / 2 + 0.01); add(seamB, 'wallCap');
-  const seamS = rbox(0.05, d - 0.06, 0.05, seamMat, 0.02); seamS.position.set(sideX + t / 2 + 0.01, 0.46, 0); add(seamS, 'wallCap');
 
   // mullions in the glass band — they read as a studio partition
   for (const zz of [d / 2 - 0.8, 0]) {
