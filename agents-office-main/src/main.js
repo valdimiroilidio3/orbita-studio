@@ -1,6 +1,7 @@
 // Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { TOKENS, DEPTS, DEPT_KEYS, AGENTS, LAYOUT } from './data.js';
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
@@ -25,6 +26,11 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true 
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
+// 26 out 2026 (design 3D): os brancos de 0xF7F7F2 com 2,2 de luz estouravam para chapas lisas. O
+// tone mapping neutro mantém as cores (não puxa para o cinema) mas faz o branco rolar em vez de
+// cortar — é o que devolve relevo à cerâmica das plataformas e ao vidro das salas.
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 
@@ -98,6 +104,18 @@ function tickTween(now) {
   }
 }
 
+/* ---------- ambiente: uma sala de luz difusa (PMREM) para os materiais terem de onde reflectir ----------
+   Sem isto, vidro, latão e vernizes não têm nada para reflectir e ficam plástico. É calculado uma
+   vez no arranque; a cena não ganha nenhum passo de render extra. */
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envScene = new RoomEnvironment();
+  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+  scene.environmentIntensity = 0.42;   // discreto: o escritório é claro, o ambiente só acrescenta lustro
+  pmrem.dispose();
+  envScene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+}
+
 /* ---------- lights: one warm key top-left + soft fill ---------- */
 const hemi = new THREE.HemisphereLight(0xfdfff8, 0xd8d4c8, 0.85);
 scene.add(hemi);
@@ -111,6 +129,11 @@ key.shadow.camera.far = 400;
 key.shadow.radius = 7; key.shadow.blurSamples = 12;
 key.shadow.bias = -0.0004;
 scene.add(key);
+
+// preenchimento frio do lado oposto: separa os volumes sem apagar as sombras do key
+const fill = new THREE.DirectionalLight(0xdfe9ff, 0.45);
+fill.position.set(70, 45, -60);
+scene.add(fill);
 
 // shadow catcher — makes the pods float over the cream page
 const ground = new THREE.Mesh(
@@ -514,6 +537,8 @@ function setDark(on) {
   });
   hemi.color.set(darkOn ? 0x8e95a3 : 0xfdfff8); hemi.groundColor.set(darkOn ? 0x14151a : 0xd8d4c8); hemi.intensity = darkOn ? 0.75 : 0.85;
   key.color.set(darkOn ? 0xe4e9f2 : 0xfff1dd); key.intensity = darkOn ? 1.5 : 2.2;
+  fill.intensity = darkOn ? 0.22 : 0.45;
+  scene.environmentIntensity = darkOn ? 0.16 : 0.42; // ambiente a mais lava o modo escuro
   ground.material.opacity = darkOn ? 0.35 : 0.13;
   if (focused && focused !== 'brain') applySceneDim(focused);
   if (brain) brain.setTheme(darkOn);
