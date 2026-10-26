@@ -8,6 +8,7 @@
 // não houver dados que cheguem para justificar, o cartão não aparece — não se inventa contexto
 // para parecer inteligente.
 import { feed } from './events.mjs';
+import { proposals as autonomyProposals, trial } from './autonomy.mjs';
 import { getLead } from './leads.mjs';
 import { getMessage } from './messages.mjs';
 
@@ -68,7 +69,19 @@ export function happened(db, { since = null, limit = 40 } = {}) {
 export function screen(db, { office = {}, since = null, at = new Date() } = {}) {
   const tasks = office.tasks || [];
   const routines = office.routines || [];
+  // «Queres que envie este tipo sozinho?» — a pergunta só aparece quando os números a sustentam.
+  const propostas = autonomyProposals(db).map(p => ({
+    id: p.scope, kind: 'autonomia', status: 'proposto', channel: p.scope.split(':')[0],
+    lead: { name: 'Autonomia' },
+    subject: p.scope.split(':')[1] ? `Mensagens do tipo «${p.scope.split(':')[1]}»` : 'Um tipo de mensagem',
+    body: p.text,
+    why: `${p.decididas} casos decididos · ${p.taxaPct}% aprovados · limiar ${p.limiar.minCasos} casos e ${Math.round(p.limiar.minTaxa * 100)}%`,
+    evidence: [], predictions: [], at: new Date().toISOString(),
+    actions: ['autonomia-sim', 'autonomia-nao'],
+  }));
+
   const decidir = [
+    ...propostas,
     ...decisions(db),
     ...tasks
       .filter(t => t && t.state === 'done' && t.draft && !t.approved)
@@ -103,6 +116,7 @@ export function screen(db, { office = {}, since = null, at = new Date() } = {}) 
       envios: db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE status IN ('fila','em_voo')").get().n,
       parado: db.prepare("SELECT v FROM meta WHERE k = 'setting:envio.parado'").get()?.v === 'true',
     },
+    ensaio: trial(db),
     resumo: { leads, ultimoEnvio: lastSend, decidir: decidir.length, aSeguir: aSeguir.length },
     geradoEm: at.toISOString(),
   };

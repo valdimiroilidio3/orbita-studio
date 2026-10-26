@@ -16,8 +16,9 @@ export function initOps({ api = '/api' } = {}) {
     sum: panel.querySelector('.op-sum'), tabs: [...panel.querySelectorAll('.op-tab')],
     body: panel.querySelector('.op-body'), close: panel.querySelector('.op-close'),
     refresh: panel.querySelector('.op-refresh'), note: panel.querySelector('.op-note'),
+    client: panel.querySelector('.op-client'), newClient: panel.querySelector('[data-act="new-client"]'),
   };
-  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null, dossier: {}, learning: null };
+  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null, dossier: {}, learning: null, auto: null, saldo: null, clientes: null, novos: false };
 
   const open = () => { panel.hidden = false; btn.classList.add('on'); load(); };
   const close = () => { panel.hidden = true; btn.classList.remove('on'); };
@@ -31,15 +32,45 @@ export function initOps({ api = '/api' } = {}) {
 
   async function load() {
     try {
-      const [s, l, m, q, e, a] = await Promise.all([
-        get('/ops/summary'), get('/ops/leads?limit=40'), get('/ops/messages?limit=40'), get('/ops/queue'), get('/ops/events?limit=25'), get('/ops/aprendizagem'),
+      const [s, l, m, q, e, a, au, sa, cl, en, ev] = await Promise.all([
+        get('/ops/summary'), get('/ops/leads?limit=40'), get('/ops/messages?limit=40'), get('/ops/queue'), get('/ops/events?limit=25'),
+        get('/ops/aprendizagem'), get('/ops/autonomia'), get('/ops/saldo'), get('/ops/clientes'), get('/ops/ensaio'), get('/ops/evals'),
       ]);
       if (s.error) throw new Error(s.error);
-      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], learning: a, error: '' });
+      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], learning: a, auto: au, saldo: sa, clientes: cl, ensaio: en, evals: ev, error: '' });
+      paintClients();
     } catch (err) {
       S.error = err.message === 'Failed to fetch' ? 'o servidor não respondeu — a gaveta não inventa números' : err.message;
     }
     paint();
+  }
+
+  function paintClients() {
+    if (!P.client || !S.clientes) return;
+    const lista = S.clientes.clientes || [];
+    const activo = S.clientes.activo?.id || '';
+    P.client.innerHTML = (lista.length ? '' : '<option value="">sem cliente — espaço principal</option>')
+      + lista.map(c => `<option value="${esc(c.id)}"${c.id === activo ? ' selected' : ''}>${esc(c.nome)}${c.cidade ? ' · ' + esc(c.cidade) : ''}</option>`).join('');
+    P.client.disabled = !lista.length;
+  }
+
+  function newClientForm() {
+    return `<div class="op-form" role="group" aria-label="novo cliente">
+      <input class="op-in" data-f="nome" placeholder="Nome do cliente" aria-label="nome do cliente">
+      <div class="op-form-row">
+        <input class="op-in" data-f="nicho" placeholder="Nicho (ex.: barbearias)" aria-label="nicho">
+        <input class="op-in" data-f="cidade" placeholder="Cidade" aria-label="cidade">
+      </div>
+      <div class="op-form-row">
+        <input class="op-in" data-f="preco" placeholder="Preço (€)" aria-label="preço" value="350">
+        <input class="op-in" data-f="prazo" placeholder="Prazo (dias)" aria-label="prazo" value="7">
+      </div>
+      <div class="op-form-acts">
+        <button class="op-b good" data-act="save-client">CRIAR ESPAÇO</button>
+        <button class="op-b" data-act="cancel-client">CANCELAR</button>
+        <span class="op-hint">Cada cliente tem a sua própria base de dados. Nada se mistura.</span>
+      </div>
+    </div>`;
   }
 
   function paintSummary() {
@@ -152,6 +183,75 @@ export function initOps({ api = '/api' } = {}) {
     return (waiting.length ? `<div class="op-sec">À ESPERA DO TEU OK (${waiting.length})</div>${w}` : '<div class="op-empty">Nada à espera de aprovação.</div>') + r;
   }
 
+  const LEVEL = { pedir_sempre: 'PEDE-ME SEMPRE', proposto: 'PROPOSTO', autonomo: 'ENVIA SOZINHO' };
+
+  function paintAuto() {
+    const a = S.auto;
+    if (!a) return '<div class="op-empty">a ler…</div>';
+    const lim = a.limiar || {};
+    const tipos = a.tipos || [];
+    const rows = tipos.length ? tipos.map(t => `<div class="op-row">
+      <div class="op-main">
+        <div class="op-n">${esc(t.scope)} <span class="op-tag ${t.status === 'autonomo' ? 'ok' : ''}">${LEVEL[t.status] || t.status}</span></div>
+        <div class="op-m">${t.decididas} casos decididos · ${t.taxaPct === null ? 'sem taxa' : t.taxaPct + '% aprovados'} · ${t.rejeitadas} rejeitadas</div>
+        <div class="op-reasons">${esc(t.text)}</div>
+      </div>
+      <div class="op-side op-acts">
+        ${t.status === 'autonomo'
+          ? `<button class="op-b" data-act="auto-down" data-scope="${esc(t.scope)}">REVOGAR</button>`
+          : `<button class="op-b good" data-act="auto-up" data-scope="${esc(t.scope)}"${t.elegivel ? '' : ' disabled title="preciso de ' + esc(String(lim.minCasos)) + ' casos e ' + esc(String(Math.round((lim.minTaxa || 0.95) * 100))) + '%"'}>DAR AUTONOMIA</button>`}
+      </div></div>`).join('') : '<div class="op-empty">Ainda não há tipos de mensagem. Escreve um rascunho e decide alguns casos.</div>';
+    return `<div class="op-sec">NÍVEL POR TIPO DE MENSAGEM</div>
+      <div class="op-hint" style="margin-bottom:var(--s2)">Sobe-se com ${esc(String(lim.minCasos))} casos decididos e ${esc(String(Math.round((lim.minTaxa || 0.95) * 100)))}% de aprovações; desce-se com um toque, sempre.</div>
+      ${rows}
+      <div class="op-sec">MODO ENSAIO</div>
+      <div class="op-row"><div class="op-main"><div class="op-n">Escrever sem enviar</div>
+        <div class="op-m">${S.ensaio?.activo ? `ligado desde ${esc(String(S.ensaio.desde || '').slice(0, 16).replace('T', ' '))} · ${S.ensaio.total} mensagens em ensaio` : 'desligado'}</div>
+        <div class="op-reasons">Uma semana a ver o que teria saído, antes de dar autonomia a alguém.</div></div>
+        <div class="op-side op-acts"><button class="op-b ${S.ensaio?.activo ? 'good' : ''}" data-act="toggle-trial">${S.ensaio?.activo ? 'DESLIGAR' : 'LIGAR'}</button></div></div>
+      <div class="op-sec">AVALIAÇÕES</div>
+      <div class="op-row"><div class="op-main"><div class="op-n">Casos fixos do rascunho</div>
+        <div class="op-m">${S.evals?.ultimo ? `${S.evals.ultimo.passed}/${S.evals.ultimo.total} · ${esc(S.evals.ultimo.prompt_version)} · ${esc(String(S.evals.ultimo.at).slice(0, 16).replace('T', ' '))}` : 'nunca corriram'}</div>
+        <div class="op-reasons">Correm sempre que se mexe no prompt; o resultado fica guardado para se ver a qualidade a descer.</div></div>
+        <div class="op-side op-acts"><button class="op-b" data-act="run-evals">CORRER</button></div></div>`;
+  }
+
+  function paintSaldo() {
+    const b = S.saldo;
+    if (!b) return '<div class="op-empty">a ler…</div>';
+    const eur = c => (c / 100).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+    const campanhas = (b.porCampanha || []).length
+      ? b.porCampanha.map(c => `<tr><td>${esc(c.campanha)}</td><td class="n">${eur(c.cents)}</td></tr>`).join('')
+      : '<tr><td colspan="2" class="op-hint">Sem entradas registadas.</td></tr>';
+    const custos = (b.custosPorFornecedor || []).length
+      ? b.custosPorFornecedor.map(c => `<tr><td>${esc(c.provider)}</td><td class="n">${eur(c.cents)}</td></tr>`).join('')
+      : '<tr><td colspan="2" class="op-hint">Sem custos de API neste período.</td></tr>';
+    const u = b.unitarios || {};
+    return `<div class="op-money">
+        <div class="op-money-box good"><b>${eur(b.receitaCentimos)}</b><small>entrou</small></div>
+        <div class="op-money-box ${b.custoCentimos ? '' : 'good'}"><b>${eur(b.custoCentimos)}</b><small>gastou</small></div>
+        <div class="op-money-box ${b.margemCentimos < 0 ? 'bad' : 'good'}"><b>${eur(b.margemCentimos)}</b><small>margem</small></div>
+      </div>
+      ${b.semDados?.receita ? `<div class="op-hint" style="margin-bottom:var(--s2)">${esc(b.semDados.receita)}</div>` : ''}
+      <div class="op-form" role="group" aria-label="registar entrada">
+        <div class="op-form-row">
+          <input class="op-in" data-f="euros" placeholder="Valor (€)" aria-label="valor em euros">
+          <input class="op-in" data-f="campanha" placeholder="Campanha (ex.: Lisboa · barbearias)" aria-label="campanha">
+        </div>
+        <div class="op-form-acts"><button class="op-b good" data-act="save-revenue">REGISTAR ENTRADA</button>
+          <span class="op-hint">Só entra o que escreveres. Nada é adivinhado.</span></div>
+      </div>
+      <div class="op-sec">RECEITA POR CAMPANHA</div><table class="op-table"><tbody>${campanhas}</tbody></table>
+      <div class="op-sec">CUSTOS DE API (${b.janela?.dias || 90} dias)</div><table class="op-table"><tbody>${custos}</tbody></table>
+      <div class="op-sec">POR UNIDADE</div>
+      <div class="op-hint">${[
+        u.custoPorLead !== null ? `custo por lead: ${eur(u.custoPorLead)}` : '',
+        u.custoPorContactado !== null ? `por contactado: ${eur(u.custoPorContactado)}` : '',
+        u.custoPorCliente !== null ? `por cliente: ${eur(u.custoPorCliente)}` : '',
+        u.receitaPorCliente !== null ? `receita por cliente: ${eur(u.receitaPorCliente)}` : '',
+      ].filter(Boolean).join(' · ') || 'sem dados suficientes para custos unitários'}</div>`;
+  }
+
   function paintQueue() {
     const q = S.queue || {};
     const L = S.learning;
@@ -172,8 +272,12 @@ export function initOps({ api = '/api' } = {}) {
     paintSummary();
     P.note.textContent = S.error || '';
     P.note.classList.toggle('bad', !!S.error);
-    P.body.innerHTML = S.tab === 'leads' ? (S.error ? `<div class="op-empty bad">${esc(S.error)}</div>` : paintLeads())
-      : S.tab === 'messages' ? paintMessages() : paintQueue();
+    P.body.innerHTML = S.error ? `<div class="op-empty bad">${esc(S.error)}</div>`
+      : S.tab === 'leads' ? paintLeads() + (S.novos ? newClientForm() : '')
+        : S.tab === 'messages' ? paintMessages()
+          : S.tab === 'auto' ? paintAuto()
+            : S.tab === 'saldo' ? paintSaldo()
+              : paintQueue();
   }
 
   function tab(k) { S.tab = k; for (const t of P.tabs) t.classList.toggle('on', t.dataset.k === k); paint(); }
@@ -193,6 +297,44 @@ export function initOps({ api = '/api' } = {}) {
         else P.note.textContent = r.reason || 'não saiu.';
       }
       if (a === 'confirm') { const r = await post(`/ops/messages/${id}/confirm`); if (r.error) throw new Error(r.error); P.note.textContent = 'confirmada como enviada.'; }
+      if (a === 'auto-up' || a === 'auto-down') {
+        const scope = btnScope(b);
+        const r = await post(`/ops/autonomia/${encodeURIComponent(scope)}/${a === 'auto-up' ? 'subir' : 'descer'}`, { reason: 'decisão na gaveta' });
+        if (r.error) throw new Error(r.error);
+        P.note.textContent = a === 'auto-up' ? 'este tipo passa a enviar sozinho. Os travões continuam.' : 'revogado: volta a pedir-te autorização.';
+      }
+      if (a === 'toggle-trial') {
+        const r = await post('/ops/ensaio', { activo: !S.ensaio?.activo });
+        if (r.error) throw new Error(r.error);
+        P.note.textContent = r.activo ? 'ensaio ligado: escrevo tudo, não sai nada.' : 'ensaio desligado.';
+      }
+      if (a === 'run-evals') {
+        P.note.textContent = 'a correr os casos…';
+        const r = await post('/ops/evals/correr');
+        if (r.error) throw new Error(r.error);
+        P.note.textContent = `${r.passou}/${r.total} casos · ${r.aviso || 'sem regressão'}`;
+        P.note.classList.toggle('bad', !!r.falhou);
+      }
+      if (a === 'save-revenue') {
+        const f = P.body.querySelector('.op-form');
+        const val = k => String(f?.querySelector(`[data-f="${k}"]`)?.value || '').trim();
+        if (!val('euros')) throw new Error('diz o valor');
+        const r = await post('/ops/receita', { euros: Number(val('euros').replace(',', '.')), campaign: val('campanha') });
+        if (r.error) throw new Error(r.error);
+        P.note.textContent = 'entrada registada.';
+      }
+      if (a === 'save-client') {
+        const f = P.body.querySelector('.op-form');
+        const val = k => String(f?.querySelector(`[data-f="${k}"]`)?.value || '').trim();
+        if (!val('nome')) throw new Error('o cliente precisa de um nome');
+        const r = await post('/ops/clientes', {
+          nome: val('nome'), nicho: val('nicho'), cidade: val('cidade'),
+          oferta: { preco_eur: Number(val('preco') || 350), prazo_dias: Number(val('prazo') || 7) },
+        });
+        if (r.error) throw new Error(r.error);
+        S.novos = false;
+        P.note.textContent = `espaço «${val('nome')}» criado. Próximo passo: procurar leads.`;
+      }
       if (a === 'signal') {
         if (!extra) throw new Error('sinal sem tipo');
         const r = await post(`/ops/messages/${id}/sinal`, { kind: extra, note: '' });
@@ -243,6 +385,9 @@ export function initOps({ api = '/api' } = {}) {
     const b = e.target.closest('button[data-act]');
     if (b) {
       const a = b.dataset.act;
+      if (a === 'new-client') { S.novos = !S.novos; S.tab = 'leads'; for (const t of P.tabs) t.classList.toggle('on', t.dataset.k === 'leads'); return paint(); }
+      if (a === 'cancel-client') { S.novos = false; return paint(); }
+      if (a === 'auto-up' || a === 'auto-down' || a === 'toggle-trial' || a === 'run-evals' || a === 'save-revenue' || a === 'save-client') return act(a, null, null);
       if (a === 'new-lead') { S.adding = true; S.composing = null; return paint(); }
       if (a === 'cancel-lead') { S.adding = false; return paint(); }
       if (a === 'compose') { S.composing = S.composing === b.dataset.id ? null : b.dataset.id; S.adding = false; return paint(); }
@@ -261,6 +406,21 @@ export function initOps({ api = '/api' } = {}) {
     await load();
   });
 
+  const btnScope = (b) => b.dataset.scope || '';
+  if (P.newClient) P.newClient.addEventListener('click', () => {
+    S.novos = !S.novos; S.tab = 'leads';
+    for (const t of P.tabs) t.classList.toggle('on', t.dataset.k === 'leads');
+    paint();
+  });
+  if (P.client) P.client.addEventListener('change', async () => {
+    const id = P.client.value;
+    if (!id) return;
+    P.note.textContent = 'a abrir o espaço…';
+    const r = await post(`/ops/clientes/${encodeURIComponent(id)}/entrar`);
+    if (r.error) { P.note.textContent = r.error; P.note.classList.add('bad'); return; }
+    P.note.textContent = `agora em «${r.cliente.nome}». Cada cliente tem a sua base de dados.`;
+    await load();
+  });
   btn.addEventListener('click', toggle);
   P.close.addEventListener('click', close);
   P.refresh.addEventListener('click', load);

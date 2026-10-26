@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 let DatabaseSync = null;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch { /* Node sem SQLite */ }
 
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = '4';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -134,6 +134,44 @@ CREATE TABLE IF NOT EXISTS signals (
 CREATE INDEX IF NOT EXISTS signals_lead ON signals(lead_id);
 CREATE INDEX IF NOT EXISTS signals_kind ON signals(kind);
 
+-- Autonomia graduada: por tipo de mensagem, quem decide é o dono — e a subida de nível tem de
+-- ser ganha com casos. baseline guarda os números no momento da decisão, para não se dizer
+-- depois «sempre foi assim».
+CREATE TABLE IF NOT EXISTS autonomy (
+  id TEXT PRIMARY KEY,
+  scope TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pedir_sempre',
+  decided_at TEXT,
+  decided_by TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  baseline TEXT NOT NULL DEFAULT '{}'
+);
+
+-- O histórico das avaliações automáticas: cada corrida fica guardada, para se ver se a qualidade
+-- desceu depois de uma mudança de prompt.
+CREATE TABLE IF NOT EXISTS evals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  suite TEXT NOT NULL DEFAULT 'rascunho',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  total INTEGER NOT NULL,
+  passed INTEGER NOT NULL,
+  failed INTEGER NOT NULL,
+  detail TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Dinheiro que entrou, ligado à campanha e (quando se sabe) ao lead. É isto que faz o saldo ser
+-- real: custos de um lado, receita do outro, margem no fim.
+CREATE TABLE IF NOT EXISTS revenue (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  campaign TEXT NOT NULL DEFAULT '',
+  lead_id TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS revenue_at ON revenue(at DESC);
+
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -192,9 +230,10 @@ export function openDb(file) {
 
 /** Migrações: cada versão nova só acrescenta — nada de deitar dados fora. */
 function migrate(db) {
-  // v3: a nota passa a ter uma parte de base e uma parte aprendida (as duas visíveis)
   // v3: a mensagem passa a dizer de onde veio e o que se prevê que respondam
   const msgCols = db.prepare('PRAGMA table_info(messages)').all().map(c => c.name);
+  // v4: o tipo de mensagem (é por ele que a autonomia sobe) e o modo ensaio
+  if (!msgCols.includes('scope')) db.exec("ALTER TABLE messages ADD COLUMN scope TEXT NOT NULL DEFAULT ''");
   for (const c of ['predictions', 'evidence_used']) {
     if (!msgCols.includes(c)) db.exec(`ALTER TABLE messages ADD COLUMN ${c} TEXT NOT NULL DEFAULT '[]'`);
   }

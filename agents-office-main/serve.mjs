@@ -63,12 +63,34 @@ const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by buil
 const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
 
 // ---------- operação a sério (26 out 2026) ----------
-// SQLite em data/orbita.db: leads, mensagens, fila, eventos e consumo das APIs. Sem estado
-// escondido em memória — um reinício não perde trabalho.
-const OPS = (() => {
-  try { return ops.openOps({ dataDir: DATA, concurrency: 2, pollMs: 2000 }); }
-  catch (e) { console.warn(`  operação indisponível: ${e.message}`); return null; }
+// SQLite: leads, mensagens, fila, eventos e consumo das APIs. Sem estado escondido em memória.
+//
+// 27 out 2026 · modo agência: cada cliente tem o SEU ficheiro de base de dados, numa pasta sua.
+// O registo dos clientes vive em data/clientes.db e o espaço activo nas definições. Um dono, um
+// ecrã, um negócio de cada vez — trocar de cliente é fechar uma ligação e abrir outra.
+const REG = (() => {
+  try { return ops.tenants.openRegistry(DATA); }
+  catch (e) { console.warn(`  registo de clientes indisponível: ${e.message}`); return null; }
 })();
+let OPS = null;
+function openOpsFor(cliente) {
+  const dir = cliente ? cliente.pasta : DATA;
+  const db = cliente ? cliente.dbFile : undefined; // sem cliente, a base é a de sempre
+  try {
+    return ops.openOps({ dataDir: dir, dbFile: db, concurrency: 2, pollMs: 2000 });
+  } catch (e) { console.warn(`  operação indisponível: ${e.message}`); return null; }
+}
+OPS = openOpsFor(REG ? ops.tenants.active(REG) : null);
+function switchClient(id) {
+  if (!REG) throw new Error('não há registo de clientes nesta instalação');
+  const cliente = ops.tenants.setActive(REG, id);
+  const before = OPS;
+  OPS = openOpsFor(cliente);
+  if (!OPS) { OPS = before; throw new Error('não consegui abrir a base deste cliente'); }
+  try { before?.close(); } catch { /* já fechada */ }
+  globalThis.__orbitaDeliver = deliverOut;
+  return cliente;
+}
 // Como é que uma mensagem aprovada sai. Uma só função para os dois caminhos (o envio imediato e
 // o outbox a drenar sozinho), a receber o item do outbox: email pelo Resend, WhatsApp por link.
 const deliverOut = async (item) => {
@@ -943,6 +965,88 @@ const server = http.createServer(async (req, res) => {
         if (url.pathname === '/api/ops/events/verify' && req.method === 'GET') {
           return json(res, 200, { ok: true, ...OPS.events.verify(OPS.db) });
         }
+        // ---------- passo 4: autonomia graduada, ensaio e avaliações ----------
+        if (url.pathname === '/api/ops/autonomia' && req.method === 'GET') {
+          return json(res, 200, { ok: true, tipos: OPS.autonomy.list(OPS.db), propostas: OPS.autonomy.proposals(OPS.db), limiar: OPS.autonomy.thresholds(OPS.db) });
+        }
+        if (url.pathname === '/api/ops/autonomia/limiar' && req.method === 'POST') {
+          const b = await limitedBody(req, 2000);
+          return json(res, 200, { ok: true, limiar: OPS.autonomy.setThresholds(OPS.db, b) });
+        }
+        const autoMatch = url.pathname.match(/^\/api\/ops\/autonomia\/([^/]+)\/(subir|descer)$/);
+        if (autoMatch && req.method === 'POST') {
+          const scope = decodeURIComponent(autoMatch[1]);
+          const b = await limitedBody(req, 2000);
+          if (autoMatch[2] === 'subir') return json(res, 200, { ok: true, tipo: OPS.autonomy.grant(OPS.db, scope, { reason: b.reason || '', force: b.force === true }) });
+          return json(res, 200, { ok: true, tipo: OPS.autonomy.revoke(OPS.db, scope, { reason: b.reason || '' }) });
+        }
+        if (url.pathname === '/api/ops/ensaio' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.autonomy.trialReport(OPS.db) });
+        }
+        if (url.pathname === '/api/ops/ensaio' && req.method === 'POST') {
+          const b = await limitedBody(req, 2000);
+          return json(res, 200, { ok: true, ...OPS.autonomy.setTrial(OPS.db, b.activo !== false), relatorio: OPS.autonomy.trialReport(OPS.db) });
+        }
+        const promoteMatch = url.pathname.match(/^\/api\/ops\/messages\/([^/]+)\/promover$/);
+        if (promoteMatch && req.method === 'POST') {
+          return json(res, 200, { ok: true, message: OPS.messages.promoteFromTrial(OPS.db, decodeURIComponent(promoteMatch[1])) });
+        }
+        if (url.pathname === '/api/ops/evals' && req.method === 'GET') {
+          const historico = OPS.evals.history(OPS.db);
+          const ultimo = OPS.db.prepare('SELECT * FROM evals ORDER BY id DESC LIMIT 1').get();
+          // A comparação é com a corrida anterior da mesma versão de prompt: descer é notícia.
+          const anterior = historico[1] || null;
+          const regressao = !!(ultimo && anterior && anterior.prompt_version === ultimo.prompt_version && ultimo.passed < anterior.passed);
+          return json(res, 200, {
+            ok: true, historico,
+            ultimo: ultimo ? { ...ultimo, detail: JSON.parse(ultimo.detail || '[]') } : null,
+            regressao,
+            aviso: regressao ? `a qualidade desceu: ${anterior.passed}/${anterior.total} antes, ${ultimo.passed}/${ultimo.total} agora` : null,
+            versao: OPS.evals.PROMPT_VERSION,
+          });
+        }
+        if (url.pathname === '/api/ops/evals/correr' && req.method === 'POST') {
+          const out = await OPS.evals.runAll(OPS.db);
+          return json(res, 200, { ok: out.falhou === 0, ...out });
+        }
+
+        // ---------- passo 5: saldo e clientes ----------
+        if (url.pathname === '/api/ops/saldo' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...OPS.money.balance(OPS.db, { days: Math.max(1, +url.searchParams.get('dias') || 90) }) });
+        }
+        if (url.pathname === '/api/ops/receita' && req.method === 'POST') {
+          const b = await limitedBody(req, 4000);
+          const cents = b.amountCents !== undefined ? b.amountCents : Math.round((+b.euros || 0) * 100);
+          return json(res, 201, { ok: true, receita: OPS.money.record(OPS.db, { amountCents: cents, campaign: b.campaign || '', leadId: b.leadId || '', note: b.note || '' }) });
+        }
+        const revMatch = url.pathname.match(/^\/api\/ops\/receita\/([^/]+)$/);
+        if (revMatch && req.method === 'DELETE') {
+          return json(res, 200, OPS.money.remove(OPS.db, decodeURIComponent(revMatch[1])));
+        }
+        if (url.pathname === '/api/ops/clientes' && req.method === 'GET') {
+          const activo = REG ? ops.tenants.active(REG) : null;
+          return json(res, 200, {
+            ok: true,
+            activo: activo ? { id: activo.id, nome: activo.nome } : null,
+            clientes: REG ? ops.tenants.list(REG).map(c => ({ ...c, activo: activo?.id === c.id })) : [],
+            nota: REG ? null : 'registo de clientes indisponível',
+          });
+        }
+        if (url.pathname === '/api/ops/clientes' && req.method === 'POST') {
+          const b = await limitedBody(req, 6000);
+          const made = ops.tenants.create(REG, { nome: b.nome, nicho: b.nicho || '', cidade: b.cidade || '', oferta: b.oferta || null, dadosDir: DATA }, 'dono');
+          if (b.entrar !== false) switchClient(made.id);
+          return json(res, 201, { ok: true, cliente: { ...made, proximosPassos: made.proximosPassos }, activo: b.entrar !== false });
+        }
+        const enterMatch = url.pathname.match(/^\/api\/ops\/clientes\/([^/]+)\/entrar$/);
+        if (enterMatch && req.method === 'POST') {
+          const cliente = switchClient(decodeURIComponent(enterMatch[1]));
+          return json(res, 200, { ok: true, cliente: { id: cliente.id, nome: cliente.nome } });
+        }
+        if (url.pathname === '/api/ops/agencia' && req.method === 'GET') {
+          return json(res, 200, { ok: true, ...ops.tenants.rollup(REG) });
+        }
+
         // ---------- passo 3: ver o negócio, escrever com factos, aprender ----------
         if (url.pathname === '/api/ops/oferta' && req.method === 'GET') {
           return json(res, 200, { ok: true, oferta: OPS.personalize.offerOf(OPS.db) });

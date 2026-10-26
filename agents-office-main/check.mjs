@@ -1041,6 +1041,68 @@ else {
       if (!/ORBITA_API_TOKEN|Token/i.test(r.body.error || '')) throw new Error('recusou sem dizer o que falta: ' + JSON.stringify(r.body).slice(0, 140));
       return 'HTTP ' + r.status + ' · ' + String(r.body.error).slice(0, 60);
     });
+    // --- passo 4: autonomia graduada, ensaio e avaliações ---
+    await step('passo 4: a autonomia começa em «pede-me sempre» e recusa subir sem casos', async () => {
+      const a = await call('GET', '/api/ops/autonomia');
+      if (!a.body.limiar || a.body.limiar.minCasos !== 50) throw new Error('limiar errado: ' + JSON.stringify(a.body.limiar));
+      const r = await call('POST', '/api/ops/autonomia/whatsapp%3Asem-site/subir', {});
+      if (r.status !== 409) throw new Error('subiu sem amostra (HTTP ' + r.status + ')');
+      if (!/faltam \d+ casos/.test(r.body.error || '')) throw new Error('não disse quanto falta: ' + JSON.stringify(r.body).slice(0, 140));
+      return 'HTTP 409 · ' + String(r.body.error).slice(0, 70);
+    });
+
+    await step('passo 4: o ensaio escreve tudo e não deixa sair nada', async () => {
+      const on = await call('POST', '/api/ops/ensaio', { activo: true });
+      if (!on.body.activo) throw new Error('não ligou o ensaio');
+      const lead = (await call('GET', '/api/ops/leads?limit=5')).body.leads[0];
+      const d = await call('POST', '/api/ops/messages', { leadId: lead.id, channel: 'whatsapp', body: 'Olá, vi que não tem site.' });
+      if (d.body.message.status !== 'ensaio') throw new Error('nasceu «' + d.body.message.status + '», não em ensaio');
+      const rep = await call('GET', '/api/ops/ensaio');
+      if (!rep.body.total) throw new Error('o relatório não conta nada');
+      const p = await call('POST', `/api/ops/messages/${d.body.message.id}/promover`);
+      if (p.body.message.status !== 'rascunho') throw new Error('promover não devolveu a rascunho');
+      await call('POST', '/api/ops/ensaio', { activo: false });
+      return `${rep.body.total} em ensaio · nada saiu · promovida a rascunho`;
+    });
+
+    await step('passo 4: as avaliações do rascunho correm e ficam guardadas', async () => {
+      const r = await call('POST', '/api/ops/evals/correr');
+      if (!r.body.total) throw new Error('não correu nenhum caso');
+      if (r.body.falhou) throw new Error(JSON.stringify(r.body.resultados.filter(x => !x.ok)).slice(0, 200));
+      const h = await call('GET', '/api/ops/evals');
+      if (!h.body.ultimo || h.body.ultimo.passed !== r.body.passou) throw new Error('não ficou no histórico');
+      if (h.body.regressao === undefined) throw new Error('sem resposta sobre regressão');
+      return `${r.body.passou}/${r.body.total} · prompt ${r.body.promptVersion} · guardado`;
+    });
+
+    // --- passo 5: saldo real e modo agência ---
+    await step('passo 5: o saldo conta receita, custos e margem — e não inventa entradas', async () => {
+      const vazio = await call('GET', '/api/ops/saldo');
+      if (vazio.body.receitaCentimos !== 0 || !vazio.body.semDados?.receita) throw new Error('não disse que não há receita');
+      const add = await call('POST', '/api/ops/receita', { euros: 350, campaign: 'Coimbra · barbearias' });
+      if (add.status !== 201) throw new Error('HTTP ' + add.status + ' ' + JSON.stringify(add.body).slice(0, 120));
+      const b = await call('GET', '/api/ops/saldo');
+      if (b.body.receitaCentimos !== 35000) throw new Error('não somou a entrada: ' + b.body.receitaCentimos);
+      if (b.body.margemCentimos !== b.body.receitaCentimos - b.body.custoCentimos) throw new Error('a margem não fecha');
+      return `${(b.body.receitaCentimos / 100).toFixed(2)} € entrou · ${(b.body.custoCentimos / 100).toFixed(2)} € gastou · margem ${(b.body.margemCentimos / 100).toFixed(2)} €`;
+    });
+
+    await step('passo 5: um cliente novo ganha base própria e não vê os leads do outro', async () => {
+      const antes = (await call('GET', '/api/ops/summary')).body.leads.total;
+      const made = await call('POST', '/api/ops/clientes', { nome: 'Clínica Prova', nicho: 'clínicas dentárias', cidade: 'Coimbra', entrar: false });
+      if (made.status !== 201) throw new Error('HTTP ' + made.status + ' ' + JSON.stringify(made.body).slice(0, 140));
+      if ((made.body.cliente.proximosPassos || []).length < 3) throw new Error('o onboarding não diz o que falta');
+      const lista = await call('GET', '/api/ops/clientes');
+      if (!lista.body.clientes.some(c => c.id === made.body.cliente.id)) throw new Error('o cliente não entrou na lista');
+      const ent = await call('POST', `/api/ops/clientes/${made.body.cliente.id}/entrar`);
+      if (ent.status !== 200) throw new Error('não entrou no espaço: ' + JSON.stringify(ent.body).slice(0, 120));
+      const depois = (await call('GET', '/api/ops/summary')).body.leads.total;
+      if (depois !== 0) throw new Error('o espaço novo vê ' + depois + ' lead(s) do anterior');
+      const rol = await call('GET', '/api/ops/agencia');
+      if (!rol.body.clientes?.length) throw new Error('a agência não soma nada');
+      return `${antes} lead(s) no espaço antigo · 0 no novo · ${rol.body.clientes.length} espaço(s) na agência`;
+    });
+
   } catch (e) { bad('operação: servidor isolado', e.message); }
   finally { srv.kill(); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 }

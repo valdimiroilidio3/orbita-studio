@@ -23,7 +23,11 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Registo** | `src/ops/events.mjs` | Eventos encadeados por hash; `verify` denuncia a linha mexida |
 | **Pesquisa do negócio** | `src/ops/research.mjs` | Vai ver o site, com robots.txt e sem tocar em redes privadas |
 | **Personalização** | `src/ops/personalize.mjs` | Dossiê → mensagem → objeções previstas → aprendizagem |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 17 testes, tudo em memória, sem tocar em serviços |
+| **Autonomia** | `src/ops/autonomy.mjs` | Nível por tipo de mensagem: pede-me sempre → proposto → envia sozinho |
+| **Avaliações** | `src/ops/evals.mjs` + `evals.mjs` | Casos fixos com expectativas; resultado guardado por versão de prompt |
+| **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
+| **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 36 testes, tudo em memória, sem tocar em serviços |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
 `ExperimentalWarning` no arranque — é do Node, não do Órbita; silencia-se com
@@ -184,6 +188,71 @@ o que já se aprendeu e o que está à espera de amostra.
 Os sinais também movem o funil: «respondeu» leva o lead a `respondeu` (se estava contactado),
 «interessado»/`reuniao` a `reuniao`, «cliente» fecha, «recusou» fecha como perdido.
 
+## Autonomia graduada, ensaio e avaliações (passo 4)
+
+**A pergunta certa não é «queres autonomia?».** É «já provaste que este tipo de mensagem merece
+confiança?». A unidade de autonomia é o **tipo de mensagem**: `scope = <canal>:<gancho>`, por
+exemplo `whatsapp:sem-site` ou `email:com-marcacao`. O que se aprende numa clínica não autoriza
+nada numa barbearia.
+
+| Nível | O que faz |
+|---|---|
+| `pedir_sempre` | O estado de todos os tipos no primeiro dia. Nada sai sem o teu OK. |
+| `proposto` | O Órbita encontrou números que justificam autonomia e propõe-no no ecrã Hoje. |
+| `autonomo` | As mensagens desse tipo nascem aprovadas. Os travões de baixo continuam a mandar. |
+
+A regra de subida é verificável em `recommendation()`: **≥ 50 casos decididos** e **≥ 95% de
+aprovações** (configuráveis com `POST /api/ops/autonomia/limiar`). Abaixo disso o texto é
+honesto e concreto — «faltam 47 casos decididos (3/50)» — em vez de uma barra a 6% sem
+explicação. `POST /api/ops/autonomia/:scope/subir` responde **409** sem amostra; `force: true`
+existe para o dono assumir a decisão, e fica no registo com essa razão. Descer
+(`…/descer`) nunca falha e nunca pede justificação.
+
+**Ser autónomo não é ser livre de tudo.** A aprovação automática em `draftMessage` verifica, na
+mesma linha: opt-out do destinatário, interruptor de emergência (`outbox.sendBlocked`), aquecimento
+do canal e modo ensaio. Se qualquer um travar, a mensagem fica rascunho ou bloqueada — e o registo
+diz qual foi o travão.
+
+**Modo ensaio.** `POST /api/ops/ensaio {"activo": true}` põe o escritório a escrever sem deixar
+sair nada: as mensagens nascem em `ensaio`, o Hoje mostra um aviso, e o relatório
+(`GET /api/ops/ensaio`) devolve o que **teria** saído, por tipo, com uma amostra e a frase «nada
+disto saiu». Uma mensagem em ensaio promove-se a rascunho (`…/promover`) ou rejeita-se; ambas
+contam como decisão para efeitos de autonomia — mas só a aprovação conta a favor.
+
+**Avaliações.** Mudar uma palavra no prompt e descobrir o dano num cliente é o pior ciclo
+possível. `src/ops/evals.mjs` tem um conjunto fixo de casos com expectativas escritas — negócio
+sem site, site com rodapé de 2019, clínica moderna sem marcação, um motor que inventa e um motor
+honesto — e três guardas (citação inventada, promessa, texto limpo). Cada corrida grava
+`{at, suite, prompt_version, total, passed, failed, detail}` na tabela `evals`; se uma corrida da
+mesma versão passar menos casos do que a anterior, `GET /api/ops/evals` devolve `regressao: true`
+e o aviso. Corre-se com `node evals.mjs` (ou `--json`) e também da gaveta, na aba AUTONOMIA.
+
+## Agência e saldo (passo 5)
+
+**Um ficheiro por cliente, não uma coluna.** `src/ops/tenants.mjs` cria, para cada cliente, uma
+pasta `data/clientes/<slug>-<id4>/` com o seu `orbita.db` e a sua oferta (na tabela `meta` desse
+ficheiro). O registo vive em `data/clientes.db`; o cliente activo fica no setting
+`cliente.activo`. A consequência prática: apagar ou corromper o espaço de um cliente não toca nos
+outros, e uma consulta mal escrita não pode misturar leads de dois negócios. O preço é honesto —
+o resumo da agência (`GET /api/ops/agencia`) abre cada ficheiro à vez. Trocar de espaço chama
+`switchClient()`, que fecha a ligação anterior antes de abrir a seguinte.
+
+Criar um cliente (`POST /api/ops/clientes`) devolve **três próximos passos** com o que falta,
+incluindo a chave que a procura exige. O onboarding é curto de propósito: nome, nicho, cidade,
+oferta — o resto aprende-se a usar.
+
+**Saldo.** `GET /api/ops/saldo?dias=90` soma três coisas que existem mesmo:
+
+- **receita** — só a que o dono escreveu (`POST /api/ops/receita`, em cêntimos ou euros, com
+  campanha e nota). Nada é inferido de leads ou de conversas.
+- **custos** — da tabela `usage`, escrita por quem chama as APIs (Places, pesquisa, motores).
+- **margem** — a diferença, por campanha e por fornecedor, mais os custos unitários: por lead,
+  por contactado, por cliente, e receita por cliente.
+
+Sem entradas registadas a margem é **negativa** (gastaste e não entraste nada) e a resposta traz
+`semDados.receita` com essa frase, em vez de um zero que parecia equilíbrio. `spentToday()` é o
+que o travão diário de custos usa.
+
 ## Caixa de entrada e envio
 
 - **Email** exige `RESEND_API_KEY` **e** consentimento registado no lead (`consent: 'dado'`).
@@ -225,6 +294,18 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | POST | `/api/ops/messages/:id/sinal` | O que responderam (`{ "kind": "respondeu" }`) |
 | GET | `/api/ops/aprendizagem` | Pesos, sinais e o que falta para aprender |
 | GET/POST | `/api/ops/oferta` | A tua oferta: nome, preço, prazo, garantia |
+| GET | `/api/ops/autonomia` | Nível por tipo, propostas e limiares |
+| POST | `/api/ops/autonomia/limiar` | `{ minCasos, minTaxa }` |
+| POST | `/api/ops/autonomia/:scope/subir` · `/descer` | Dar autonomia (409 sem amostra) · revogar |
+| GET/POST | `/api/ops/ensaio` | O modo ensaio e o seu relatório |
+| POST | `/api/ops/messages/:id/promover` | Tirar uma mensagem do ensaio |
+| GET | `/api/ops/evals` | Histórico, última corrida, regressão |
+| POST | `/api/ops/evals/correr` | Correr os casos fixos agora |
+| GET | `/api/ops/saldo?dias=` | Receita, custos, margem, por campanha e unitários |
+| POST | `/api/ops/receita` · DELETE `/api/ops/receita/:id` | Registar / apagar uma entrada |
+| GET/POST | `/api/ops/clientes` | Os espaços de cliente / criar um |
+| POST | `/api/ops/clientes/:id/entrar` | Passar a trabalhar no espaço desse cliente |
+| GET | `/api/ops/agencia` | O resumo de todos os espaços |
 
 A pesquisa da Google (`/api/google/search`) continua a guardar na gaveta e **passa a gravar
 também na base de dados**, já pontuado e sem duplicados. A resposta traz `baseDeDados` com
@@ -236,8 +317,9 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
   Para várias máquinas o caminho é Postgres/Supabase — o esquema está versionado em
   `meta.schema_version` (`SCHEMA_VERSION` em `src/ops/db.mjs`), para a migração ser escrita,
   não adivinhada.
-- **Cobranças.** Não há Stripe nesta versão. `receita_centimos` é um número que o dono
-  escreve; a margem é receita menos custo de API, e é isso que a gaveta mostra.
+- **Cobranças.** Não há Stripe nesta versão. A tabela `revenue` guarda o que o dono escreve
+  (valor, campanha, lead, nota) e o saldo é receita menos custo de API — medido, não adivinhado.
+  Uma fatura emitida fora do Órbita não entra sozinha: alguém tem de a registar.
 - **Envio real de WhatsApp Business.** Falta a conta Meta, o número aprovado e o token.
   Enquanto não existir, o caminho é o link revisto à mão.
 - **Testes A/B de mensagem.** (por fazer) A tabela `messages` já tem o que é preciso para medir
@@ -252,7 +334,7 @@ também na base de dados**, já pontuado e sem duplicados. A resposta traz `base
 ## Verificar sem estragar nada
 
 ```bash
-npm run test:ops     # 27 testes, SQLite em memória, nenhum serviço externo
+npm run test:ops     # 36 testes, SQLite em memória, nenhum serviço externo
 npm run check        # inclui os testes da operação e um servidor isolado que prova as rotas
 ```
 

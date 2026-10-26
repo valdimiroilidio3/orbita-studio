@@ -35,6 +35,18 @@
 - **Na interface:** o cartão de Hoje mostra os factos e as objeções em «Ver porquê»; a gaveta OPERAÇÃO ganhou `PESQUISAR`, o dossiê e `ESCREVER COM OS FACTOS`, e botões de sinal nas mensagens enviadas, com o que se aprendeu na aba da fila.
 - **Provas:** 27 testes em memória (robots, SSRF, falhas, citação inventada, pesos, amostra) e **63 verificações** — a do navegador continua a falhar sem Chrome.
 
+## 1.4.0 — 26 out 2026 · Autonomia graduada, agência e saldo
+
+- **A autonomia não se dá: ganha-se.** Cada tipo de mensagem (canal + gancho, ex.: `whatsapp:sem-site`) começa em **pede-me sempre**. O Órbita só propõe enviar sozinho quando há **50 casos decididos** com **95% de aprovações** (limiares configuráveis em `POST /api/ops/autonomia/limiar`). Antes disso diz o que falta, por palavras: «faltam 47 casos decididos (3/50)». Um `409` é a resposta a quem tente subir sem amostra — a não ser com `force` explícito, que fica registado com a razão.
+- **A autonomia nunca passa por cima dos travões.** A aprovação automática continua a respeitar opt-out, o interruptor de emergência, o aquecimento do canal e o **modo ensaio**. Descer é sempre possível, com um toque, e nunca falha.
+- **Modo ensaio.** Uma semana a escrever tudo e a não enviar nada: as mensagens nascem em `ensaio`, o **Hoje** avisa, e o relatório diz o que teria saído, por tipo, com uma amostra. Uma mensagem em ensaio pode ser promovida a rascunho (`…/promover`) ou rejeitada — e as duas coisas contam como decisão.
+- **Avaliações com versão de prompt.** `src/ops/evals.mjs` traz um conjunto fixo de casos (negócio sem site, site de 2019, clínica moderna sem marcação, motor que inventa, motor honesto) e três guardas. `node evals.mjs` → **8/8** com o prompt `rascunho-v1`; o resultado fica guardado em `evals` com a versão, e uma corrida pior do que a anterior aparece como **regressão**, com o aviso escrito.
+- **Modo agência — um ficheiro por cliente.** `src/ops/tenants.mjs`: cada cliente tem a sua pasta (`data/clientes/<slug>-<id4>/orbita.db`), o seu esquema e a sua oferta. O registo vive em `data/clientes.db`; o espaço activo fica nas definições e troca-se no select **Espaço** da gaveta. Um erro de consulta não pode misturar leads de dois negócios — é isolamento, não uma coluna `cliente_id`.
+- **Onboarding em três passos**, ditos com o que falta: procurar leads (e a chave que isso exige), escrever, decidir. Criar um cliente leva segundos e acaba em algo concreto.
+- **Saldo real.** `src/ops/money.mjs`: entradas registadas à mão (`POST /api/ops/receita`), custos de API somados da tabela `usage`, **margem**, receita por campanha, custos por fornecedor e custos unitários (por lead, por contactado, por cliente). Sem entradas, a margem é **negativa** e o ecrã diz porquê — não é zero.
+- **Na gaveta:** select de cliente com `+ CLIENTE`, abas **AUTONOMIA** (nível por tipo, dar/revogar, ensaio, avaliações) e **SALDO** (entrou, gastou, margem, registar entrada, tabelas). O cartão de Hoje ganhou o tipo **autonomia**: a proposta de enviar sozinho aparece onde se decide, com `→` a dar e `←` a recusar.
+- **Provas:** `ops.test.mjs` passa a **36 testes** (autonomia com e sem amostra, opt-out a mandar sobre a autonomia, ensaio, regressão nos evals, saldo negativo, isolamento entre clientes) e o `check.mjs` a **67 verificações**, com quatro provas novas contra um servidor isolado: `409` sem amostra, ensaio que não deixa sair, avaliações guardadas, e um cliente novo que vê **0 leads** do anterior. A do navegador continua a falhar sem Chrome.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

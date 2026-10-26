@@ -8,8 +8,9 @@
 import { audit, getSetting, now, setSetting, uid } from './db.mjs';
 import { getLead, isBlocked } from './leads.mjs';
 import * as outbox from './outbox.mjs';
+import * as autonomy from './autonomy.mjs';
 
-export const STATUS = ['rascunho', 'aprovada', 'enviada', 'falhou', 'bloqueada'];
+export const STATUS = ['rascunho', 'aprovada', 'enviada', 'falhou', 'bloqueada', 'rejeitada', 'ensaio', 'revisao'];
 export const CHANNELS = ['email', 'whatsapp'];
 
 /** Quantos envios este canal permite hoje, pela idade da operação (aquecimento). */
@@ -41,10 +42,23 @@ export function draftMessage(db, { leadId, channel = 'email', subject = '', body
   const lead = getLead(db, leadId);
   if (!lead) throw Object.assign(new Error('lead não encontrado'), { status: 404 });
   const id = uid('m_');
-  db.prepare(`INSERT INTO messages (id, lead_id, channel, subject, body, status, created_at, predictions, evidence_used, generated_by, why)
-    VALUES (?,?,?,?,?,'rascunho',?,?,?,?,?)`)
-    .run(id, leadId, channel, subject, body, now(), JSON.stringify(predictions), JSON.stringify(evidenceUsed), generatedBy, why);
-  audit(db, { actor, action: 'mensagem.rascunho', entity: 'mensagem', entityId: id, detail: { leadId, channel } });
+  const scope = autonomy.scopeOf({ channel, evidenceUsed, body });
+  // Modo ensaio: escreve-se tudo, não sai nada. É a semana de prova antes de pedir autonomia.
+  const ensaio = autonomy.trial(db).activo;
+  const status = ensaio ? 'ensaio' : 'rascunho';
+  db.prepare(`INSERT INTO messages (id, lead_id, channel, subject, body, status, created_at, predictions, evidence_used, generated_by, why, scope)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, leadId, channel, subject, body, status, now(), JSON.stringify(predictions), JSON.stringify(evidenceUsed), generatedBy, why, scope);
+  audit(db, { actor, action: ensaio ? 'mensagem.ensaio' : 'mensagem.rascunho', entity: 'mensagem', entityId: id, detail: { leadId, channel, scope } });
+
+  // Autonomia ganha: este tipo de mensagem já não pede autorização. Os travões de baixo continuam
+  // a mandar (opt-out, travão geral, aquecimento) — ser autónomo não é ser livre de tudo.
+  if (!ensaio && autonomy.isAutonomous(db, scope) && !isBlocked(db, { email: lead.email, phone: lead.phone }) && !outbox.sendBlocked(db)) {
+    const rec = autonomy.recommendation(db, scope);
+    db.prepare("UPDATE messages SET status='aprovada', approved_at=?, reason=? WHERE id=?")
+      .run(now(), `autonomia: ${rec.decididas} casos, ${rec.taxaPct}% aprovados`, id);
+    audit(db, { actor: 'autonomia', action: 'mensagem.aprovada_sozinha', entity: 'mensagem', entityId: id, detail: { scope, casos: rec.decididas, taxa: rec.taxaPct } });
+  }
   return getMessage(db, id);
 }
 
@@ -85,9 +99,19 @@ export function approveMessage(db, id, actor = 'dono') {
 export function rejectMessage(db, id, reason = '', actor = 'dono') {
   const m = getMessage(db, id);
   if (!m) throw Object.assign(new Error('mensagem não encontrada'), { status: 404 });
-  if (m.status !== 'rascunho') throw Object.assign(new Error(`só se rejeita um rascunho (está «${m.status}»)`), { status: 409 });
-  db.prepare("UPDATE messages SET status='falhou', error=? WHERE id=?").run(reason || 'rejeitada pelo dono', id);
+  if (m.status !== 'rascunho' && m.status !== 'ensaio') throw Object.assign(new Error(`só se rejeita um rascunho (está «${m.status}»)`), { status: 409 });
+  db.prepare("UPDATE messages SET status='rejeitada', error=? WHERE id=?").run(reason || 'rejeitada pelo dono', id);
   audit(db, { actor, action: 'mensagem.rejeitada', entity: 'mensagem', entityId: id, detail: reason });
+  return getMessage(db, id);
+}
+
+/** Sai do ensaio: a mensagem passa a rascunho e segue o caminho normal (com o teu OK). */
+export function promoteFromTrial(db, id, actor = 'dono') {
+  const m = getMessage(db, id);
+  if (!m) throw Object.assign(new Error('mensagem não encontrada'), { status: 404 });
+  if (m.status !== 'ensaio') throw Object.assign(new Error(`só se promove uma mensagem em ensaio (está «${m.status}»)`), { status: 409 });
+  db.prepare("UPDATE messages SET status='rascunho' WHERE id=?").run(id);
+  audit(db, { actor, action: 'mensagem.promovida', entity: 'mensagem', entityId: id });
   return getMessage(db, id);
 }
 

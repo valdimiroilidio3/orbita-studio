@@ -49,7 +49,7 @@ export function hooks(lead, ev, offer) {
   if (!lead.website) {
     out.push({
       key: 'sem-site', strength: 3,
-      text: `não tem site — quem procura «${lead.name}${lead.city ? ' ' + lead.city : ''}» no Google encontra só o perfil do mapa`,
+      text: `não tem site: quem procura ${lead.name}${lead.city ? ' em ' + lead.city : ''} no Google encontra só o perfil do mapa`,
       source: 'base de dados: sem site',
     });
   }

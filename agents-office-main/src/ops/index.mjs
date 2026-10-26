@@ -13,14 +13,19 @@ import * as eventsModule from './events.mjs';
 import * as todayModule from './today.mjs';
 import * as researchModule from './research.mjs';
 import * as personalizeModule from './personalize.mjs';
+import * as autonomyModule from './autonomy.mjs';
+import * as evalsModule from './evals.mjs';
+import * as moneyModule from './money.mjs';
+import * as tenantsModule from './tenants.mjs';
 
-export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = true } = {}) {
-  const file = process.env.ORBITA_DB || path.join(dataDir, 'orbita.db');
+export function openOps({ dataDir, dbFile = null, concurrency = 2, pollMs = 1500, autostart = true } = {}) {
+  const file = dbFile || process.env.ORBITA_DB || path.join(dataDir, 'orbita.db');
   const db = openDb(file);
   const queue = createQueue(db, { concurrency, pollMs });
   const leads = leadsModule, messages = messagesModule, metrics = metricsModule;
   const outbox = outboxModule, events = eventsModule, today = todayModule;
   const research = researchModule, personalize = personalizeModule;
+  const autonomy = autonomyModule, evals = evalsModule, money = moneyModule, tenants = tenantsModule;
 
   // trabalho que a fila sabe fazer — nomes explícitos, sem `eval` nem magia
   queue.register('leads.importar', async (p) => leads.importLeads(db, p.leads || [], p.actor || 'fila', p.source || 'import'));
@@ -38,6 +43,8 @@ export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = t
     if (r.status === 'falhou') throw new Error(r.reason); // o backoff trata do resto
     return { status: r.status, evidencia: r.evidence.length };
   });
+  // Correr as avaliações é trabalho de fila: não prende o ecrã e o resultado fica guardado.
+  queue.register('evals.correr', async (p) => evalsModule.runAll(db, { ask: p.ask ? globalThis.__orbitaAsk : null }));
   queue.register('mensagem.enviar', async (p, job) => {
     if (!globalThis.__orbitaDeliver) throw new Error('não há serviço de envio configurado');
     const out = await messages.sendMessage(db, p.messageId, { deliver: globalThis.__orbitaDeliver, actor: 'fila' });
@@ -63,7 +70,7 @@ export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = t
   setSetting(db, 'ops.iniciado_em', getSetting(db, 'ops.iniciado_em', now()));
 
   return {
-    db, queue, leads, messages, metrics, outbox, events, today, research, personalize,
+    db, queue, leads, messages, metrics, outbox, events, today, research, personalize, autonomy, evals, money, tenants,
     drainOutbox,
     audit: (event) => audit(db, event),
     close: () => {
@@ -75,3 +82,5 @@ export function openOps({ dataDir, concurrency = 2, pollMs = 1500, autostart = t
 }
 
 export { openDb, audit, getSetting, setSetting } from './db.mjs';
+// O registo de clientes é do processo, não de uma base: vive aqui e não dentro de cada `openOps`.
+export * as tenants from './tenants.mjs';

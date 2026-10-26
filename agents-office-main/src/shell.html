@@ -920,6 +920,20 @@
   .op-form-acts { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
   .op-hint { font-family: var(--ui); font-size: 8.5px; color: var(--grey); line-height: 1.4; flex: 1; min-width: 140px; }
   body.dark .op-in { background: #1B1C21; color: var(--ink); border-color: var(--hairline); }
+  .op-clientes { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3) 0; }
+  .op-clientes label { font-family: var(--ui); font-size: 8px; letter-spacing: .14em; font-weight: 700; color: var(--grey); text-transform: uppercase; }
+  .op-client { flex: 1; min-width: 0; }
+  .op-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); margin-bottom: var(--s2); }
+  .op-money-box { border: 1px solid var(--hairline); border-radius: 11px; padding: var(--s2) var(--s3); }
+  .op-b:disabled { opacity: .38; cursor: not-allowed; }
+  .op-money-box b { display: block; font-family: var(--serif); font-size: 20px; font-weight: 400; color: var(--ink); }
+  .op-money-box small { font-family: var(--ui); font-size: 7.5px; letter-spacing: .12em; color: var(--grey); text-transform: uppercase; }
+  .op-money-box.bad b { color: var(--risk); }
+  .op-money-box.good b { color: var(--ok); }
+  .op-table { width: 100%; border-collapse: collapse; font-family: var(--ui); font-size: var(--t-s); }
+  .op-table th { text-align: left; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: var(--grey); padding: 4px 6px; border-bottom: 1px solid var(--hairline); }
+  .op-table td { padding: 4px 6px; border-bottom: 1px solid var(--hairline); }
+  .op-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
   .op-dossier { border: 1px solid var(--ink); border-radius: 12px; padding: var(--s3); margin-top: var(--s2); background: var(--surface-2); }
   .op-dossier-h { display: flex; gap: var(--s2); align-items: baseline; margin-bottom: var(--s2); }
   .op-facts { list-style: none; margin: 0 0 var(--s2); padding: 0; font-size: var(--t-s); line-height: 1.5; }
@@ -982,6 +996,9 @@
   .td-objections { margin: 0; font-size: var(--t-s); line-height: 1.5; }
   .td-objections dt { font-weight: 600; margin-top: var(--s2); }
   .td-objections dd { margin: 2px 0 0 var(--s3); color: var(--grey); }
+  .td-gen { margin: var(--s3) 0 0; font-size: var(--t-xs); color: var(--grey); }
+  .td-card.is-autonomy { border-color: var(--ok); background: linear-gradient(180deg, var(--ok-soft), transparent 60%), var(--surface); }
+  .td-card.is-autonomy .td-kind { border-color: var(--ok); color: var(--ok); }
   .td-gen { margin: var(--s3) 0 0; font-size: var(--t-xs); color: var(--grey); }
   .td-card.fly-r { animation: tdFlyR .3s var(--ease) forwards; }
   .td-card.fly-l { animation: tdFlyL .3s var(--ease) forwards; }
@@ -1375,7 +1392,8 @@
   <div class="op-h"><span class="lab">Operação</span><span class="op-sum">a ler…</span><span class="sp"></span>
     <button class="op-refresh" title="voltar a ler a base de dados">ATUALIZAR</button>
     <button class="op-close" title="fechar (Esc)">✕</button></div>
-  <div class="op-tabs"><button class="op-tab on" data-k="leads">LEADS</button><button class="op-tab" data-k="messages">MENSAGENS</button><button class="op-tab" data-k="queue">FILA E RASTO</button></div>
+  <div class="op-clientes"><label for="opClient">Espaço</label><select id="opClient" class="op-stage op-client" aria-label="cliente"></select><button class="op-b" data-act="new-client">+ CLIENTE</button></div>
+  <div class="op-tabs"><button class="op-tab on" data-k="leads">LEADS</button><button class="op-tab" data-k="messages">MENSAGENS</button><button class="op-tab" data-k="auto">AUTONOMIA</button><button class="op-tab" data-k="saldo">SALDO</button><button class="op-tab" data-k="queue">FILA E RASTO</button></div>
   <div class="op-body"></div>
   <div class="op-foot"><span class="op-note">Nada sai daqui sem o teu OK. O funil só avança um passo de cada vez.</span></div>
 </div>

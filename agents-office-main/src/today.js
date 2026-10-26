@@ -66,6 +66,21 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, 
     const expanded = S.expanded.has(c.id);
     const lead = c.lead?.name || '';
     const isTask = c.kind === 'tarefa';
+    if (c.kind === 'autonomia') {
+      return `<article class="td-card is-autonomy" data-id="${esc(c.id)}" data-kind="autonomia" tabindex="0"
+        aria-label="proposta de autonomia: ${esc(c.subject)}">
+        <div class="td-card-inner">
+          <header class="td-card-h"><span class="td-kind">autonomia</span><span class="td-when">agora</span></header>
+          <h3 class="td-lead">${esc(c.subject)}</h3>
+          <p class="td-body">Posso enviar este tipo de mensagem sozinho. Só subo de nível com casos: ${esc(c.why)}.</p>
+          <p class="td-why"><span>porquê</span> Enquanto disseres que não, tudo continua a passar por ti. Podes revogar a qualquer momento.</p>
+          <div class="td-actions">
+            <button class="td-btn primary" data-act="auto-yes">Sim, envia sozinho</button>
+            <button class="td-btn" data-act="auto-no">Não, pergunta-me sempre</button>
+          </div>
+        </div>
+      </article>`;
+    }
     const canSend = c.kind === 'mensagem' && c.status === 'aprovada';
     return `<article class="td-card ${isTask ? 'is-task' : ''} ${c.status === 'revisao' ? 'is-review' : ''}" data-id="${esc(c.id)}" data-kind="${esc(c.kind)}" data-status="${esc(c.status || '')}" tabindex="0"
       aria-label="${esc(KIND_PT[c.kind] || c.kind)} para ${esc(lead)} — desliza para a direita para aprovar, para a esquerda para rejeitar">
@@ -145,6 +160,11 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, 
     paintNext();
     const r = S.data?.resumo;
     P.date.textContent = `${d24(new Date().toISOString())}${r?.decidir ? ` · ${r.decidir} à tua espera` : ''}`;
+    const ensaio = S.data?.ensaio?.activo;
+    if (ensaio) {
+      P.note.textContent = 'estás em ensaio: escrevo tudo, não sai nada. Desliga em OPERAÇÃO quando quiseres enviar.';
+      P.note.classList.remove('bad');
+    }
   }
 
   /* ---------- gestos ---------- */
@@ -231,6 +251,24 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, 
     } finally { S.busy = false; }
   }
 
+  async function autoDecide(card, scope, sim) {
+    card.classList.add(sim ? 'fly-r' : 'fly-l');
+    P.note.textContent = sim ? 'a dar autonomia a este tipo…' : 'a manter tudo à tua espera…';
+    try {
+      const r = await fetch(`${api}/ops/autonomia/${encodeURIComponent(scope)}/${sim ? 'subir' : 'descer'}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: sim ? 'decidido no ecrã Hoje' : 'mantido à espera' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error || `o servidor respondeu ${r.status}`);
+      P.note.textContent = sim ? 'a partir de agora, este tipo de mensagem não te pede autorização.' : 'continua a pedir-te autorização.';
+      await load({ quiet: true });
+    } catch (e) {
+      card.classList.remove('fly-r', 'fly-l');
+      P.note.textContent = e.message;
+      P.note.classList.add('bad');
+    }
+  }
+
   async function send(card) {
     const id = card.dataset.id;
     P.note.textContent = 'a preparar o envio…';
@@ -282,6 +320,12 @@ export function initToday({ api = '/api', onOpenLeads = null, onOpenOps = null, 
       const act = b.dataset.act;
       if (act === 'leads' && onOpenLeads) return onOpenLeads();
       if (act === 'ops' && onOpenOps) return onOpenOps();
+      if (act === 'auto-yes' || act === 'auto-no') {
+        const card = b.closest('.td-card');
+        const scope = card?.dataset.id;
+        if (!scope) return;
+        return autoDecide(card, scope, act === 'auto-yes');
+      }
       if (act === 'refresh') return load();
       if (!card) return;
       if (act === 'why') return openWhy(card);

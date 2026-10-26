@@ -515,3 +515,193 @@ test('a oferta é do dono e entra nas mensagens', async () => {
   assert.match(c.body, /3 páginas/);
   assert.equal(personalize.offerOf(db).preco_eur, 500);
 });
+
+/* ---------- passo 4: autonomia graduada, ensaio e avaliações ---------- */
+
+import * as autonomy from './src/ops/autonomy.mjs';
+import * as evals from './src/ops/evals.mjs';
+
+/** Escreve e decide N mensagens do mesmo tipo, para criar amostra a sério. */
+function amostra(db, n, { canal = 'whatsapp', evidencia = 'sem-site', aprovar = true } = {}) {
+  const feitas = [];
+  for (let i = 0; i < n; i++) {
+    const lead = leads.upsertLead(db, { name: `Negócio ${canal} ${evidencia} ${i}`, phone: `+351 9${String(10000000 + i).slice(0, 8)}` }).lead;
+    const m = messages.draftMessage(db, {
+      leadId: lead.id, channel: canal, body: `olá ${i}, vi que não tem site`, evidenceUsed: [{ key: evidencia }],
+    });
+    if (aprovar) messages.approveMessage(db, m.id); else messages.rejectMessage(db, m.id, 'não');
+    feitas.push(m);
+  }
+  return feitas;
+}
+
+test('autonomia: começa a pedir sempre, e diz quanto falta em vez de fingir', () => {
+  const db = fresh();
+  amostra(db, 3);
+  const scope = autonomy.scopeOf({ channel: 'whatsapp', evidenceUsed: [{ key: 'sem-site' }] });
+  const rec = autonomy.recommendation(db, scope);
+  assert.equal(rec.status, 'pedir_sempre');
+  assert.equal(rec.elegivel, false);
+  assert.equal(rec.propose, false);
+  assert.match(rec.text, /faltam 47 casos/);
+  assert.throws(() => autonomy.grant(db, scope), /não subo sem casos/);
+  assert.equal(autonomy.isAutonomous(db, scope), false);
+});
+
+test('autonomia: 50 casos a 95%+ propõem; dado, grava a base em que foi dado', () => {
+  const db = fresh();
+  amostra(db, 50);
+  const scope = autonomy.scopeOf({ channel: 'whatsapp', evidenceUsed: [{ key: 'sem-site' }] });
+  const rec = autonomy.recommendation(db, scope);
+  assert.equal(rec.elegivel, true);
+  assert.equal(rec.taxaPct, 100);
+  assert.equal(autonomy.proposals(db).length, 1, 'a proposta aparece em «Hoje»');
+  const t = autonomy.grant(db, scope);
+  assert.equal(t.status, 'autonomo');
+  assert.equal(t.baseline.casos, 50);
+  assert.ok(events.timeline(db, { limit: 200 }).some(e => e.action === 'autonomia.autonomo'));
+});
+
+test('autonomia: com autonomia, a mensagem desse tipo aprova-se sozinha — mas o opt-out manda', () => {
+  const db = fresh();
+  amostra(db, 50);
+  const scope = autonomy.scopeOf({ channel: 'whatsapp', evidenceUsed: [{ key: 'sem-site' }] });
+  autonomy.grant(db, scope);
+  const l1 = leads.upsertLead(db, { name: 'Sem opt-out', phone: '+351 911 000 111' }).lead;
+  const m1 = messages.draftMessage(db, { leadId: l1.id, channel: 'whatsapp', body: 'olá', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(m1.status, 'aprovada', 'não pede autorização a quem já provou');
+  // outro tipo de mensagem continua a pedir
+  const l2 = leads.upsertLead(db, { name: 'Outro tipo', phone: '+351 911 000 222' }).lead;
+  const m2 = messages.draftMessage(db, { leadId: l2.id, channel: 'email', body: 'olá', evidenceUsed: [{ key: 'com-marcacao' }] });
+  assert.equal(m2.status, 'rascunho');
+  // opt-out bloqueia mesmo com autonomia
+  const l3 = leads.upsertLead(db, { name: 'Pediu para sair', email: 'sai@fora.pt', phone: '+351 911 000 333' }).lead;
+  leads.optOut(db, { email: 'sai@fora.pt', reason: 'pediu' });
+  const m3 = messages.draftMessage(db, { leadId: l3.id, channel: 'whatsapp', body: 'olá', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(m3.status, 'rascunho', 'ser autónomo não passa por cima de um pedido de saída');
+});
+
+test('autonomia: revogar nunca falha e volta a pedir autorização', () => {
+  const db = fresh();
+  amostra(db, 50);
+  const scope = autonomy.scopeOf({ channel: 'whatsapp', evidenceUsed: [{ key: 'sem-site' }] });
+  autonomy.grant(db, scope);
+  const t = autonomy.revoke(db, scope);
+  assert.equal(t.status, 'pedir_sempre');
+  assert.equal(autonomy.isAutonomous(db, scope), false);
+  assert.equal(autonomy.revoke(db, 'nunca-existiu').status, 'pedir_sempre', 'descer é sempre possível');
+});
+
+test('autonomia: os limiares são configuráveis e ficam guardados', () => {
+  const db = fresh();
+  assert.deepEqual(autonomy.thresholds(db), { minCasos: 50, minTaxa: 0.95 });
+  const t = autonomy.setThresholds(db, { minCasos: 5, minTaxa: 0.8 });
+  assert.deepEqual(t, { minCasos: 5, minTaxa: 0.8 });
+  amostra(db, 5);
+  const scope = autonomy.scopeOf({ channel: 'whatsapp', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(autonomy.recommendation(db, scope).elegivel, true);
+});
+
+test('ensaio: escreve-se tudo, não sai nada, e o relatório conta o que teria saído', () => {
+  const db = fresh();
+  autonomy.setTrial(db, true);
+  const lead = withLead(db);
+  const m = messages.draftMessage(db, { leadId: lead.id, channel: 'whatsapp', body: 'olá, sem site', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(m.status, 'ensaio');
+  const r = autonomy.trialReport(db);
+  assert.equal(r.activo, true);
+  assert.equal(r.total, 1);
+  assert.match(r.nota, /nada disto saiu/);
+  assert.equal(autonomy.trialReport(db).amostra[0].corpo, m.body);
+  // promover põe no caminho normal
+  const p = messages.promoteFromTrial(db, m.id);
+  assert.equal(p.status, 'rascunho');
+  messages.approveMessage(db, m.id);
+  // rejeitar em ensaio também conta como decisão
+  const m2 = messages.draftMessage(db, { leadId: lead.id, channel: 'whatsapp', body: 'outra', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(messages.rejectMessage(db, m2.id, 'não gostei').status, 'rejeitada');
+  autonomy.setTrial(db, false);
+  assert.equal(autonomy.trial(db).activo, false);
+  const m3 = messages.draftMessage(db, { leadId: lead.id, channel: 'whatsapp', body: 'fora do ensaio', evidenceUsed: [{ key: 'sem-site' }] });
+  assert.equal(m3.status, 'rascunho');
+});
+
+test('evals: os casos fixos correm, ficam guardados com a versão do prompt, e detetam regressão', async () => {
+  const db = fresh();
+  const out = await evals.runAll(db);
+  assert.equal(out.total, evals.CASES.length + evals.GUARD_CASES.length);
+  assert.equal(out.falhou, 0, JSON.stringify(out.resultados.filter(r => !r.ok)));
+  assert.equal(out.regressao, false);
+  const h = evals.history(db);
+  assert.equal(h.length, 1);
+  assert.equal(h[0].prompt_version, evals.PROMPT_VERSION);
+  assert.equal(h[0].passed, out.passou);
+  // uma corrida pior tem de ser vista como regressão, não como sorte
+  db.prepare("UPDATE evals SET passed = passed + 1").run();
+  const pior = await evals.runAll(db);
+  assert.equal(pior.regressao, true);
+  assert.match(pior.aviso, /qualidade desceu/);
+});
+
+/* ---------- passo 5: saldo e clientes ---------- */
+
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as money from './src/ops/money.mjs';
+import * as tenants from './src/ops/tenants.mjs';
+
+test('saldo: receita menos custos, e sem receita a margem é negativa — não é zero', () => {
+  const db = fresh();
+  withLead(db);
+  messages.recordUsage(db, { provider: 'google-places', units: 10, costCents: 320 });
+  const vazio = money.balance(db);
+  assert.equal(vazio.receitaCentimos, 0);
+  assert.equal(vazio.custoCentimos, 320);
+  assert.equal(vazio.margemCentimos, -320, 'gastar sem receita tem de aparecer como prejuízo');
+  assert.match(vazio.semDados.receita, /ainda não registaste/);
+  money.record(db, { amountCents: 35000, campaign: 'Coimbra · barbearias' });
+  const b = money.balance(db);
+  assert.equal(b.receitaCentimos, 35000);
+  assert.equal(b.margemCentimos, 34680);
+  assert.equal(b.porCampanha[0].campanha, 'Coimbra · barbearias');
+  assert.equal(b.custosPorFornecedor[0].provider, 'google-places');
+  assert.equal(b.unitarios.custoPorLead, 320, 'um lead, 3,20 € de pesquisa');
+  const r = money.listRevenue(db)[0];
+  money.remove(db, r.id);
+  assert.equal(money.listRevenue(db).length, 0);
+});
+
+test('agência: cada cliente tem a sua base de dados, e nada se mistura', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-clientes-'));
+  const reg = tenants.openRegistry(dir);
+  const a = tenants.create(reg, { nome: 'Óptica Central', nicho: 'ópticas', cidade: 'Porto', dadosDir: dir });
+  const b = tenants.create(reg, { nome: 'Barbearia Norte', nicho: 'barbearias', cidade: 'Braga', dadosDir: dir });
+  assert.notEqual(a.dbFile, b.dbFile);
+  assert.ok(fs.existsSync(a.dbFile) && fs.existsSync(b.dbFile));
+  assert.equal(tenants.list(reg).length, 2);
+  // um lead escrito na base do cliente A não aparece na do cliente B
+  const dbA = openDb(a.dbFile);
+  leads.upsertLead(dbA, { name: 'Só do A', phone: '+351 912 999 000' });
+  dbA.close();
+  const dbB = openDb(b.dbFile);
+  assert.equal(leads.listLeads(dbB, { limit: 10 }).length, 0, 'os leads de um cliente não existem no outro');
+  dbB.close();
+  // a oferta vive na base do cliente
+  const oferta = tenants.create(reg, { nome: 'Clínica Sul', oferta: { preco_eur: 500 }, dadosDir: dir });
+  const dbC = openDb(oferta.dbFile);
+  assert.equal(personalize.offerOf(dbC).preco_eur, 500, 'a oferta do cliente é a dele');
+  dbC.close();
+  assert.throws(() => tenants.create(reg, { nome: 'Óptica Central', dadosDir: dir }), /já existe um espaço/);
+  // activo é um de cada vez
+  tenants.setActive(reg, a.id);
+  assert.equal(tenants.active(reg).id, a.id);
+  tenants.setActive(reg, b.id);
+  assert.equal(tenants.active(reg).id, b.id);
+  const roll = tenants.rollup(reg);
+  assert.equal(roll.clientes.length, 3);
+  assert.ok(roll.total);
+  assert.ok(a.proximosPassos.length >= 3, 'o onboarding diz o que falta fazer');
+  reg.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});

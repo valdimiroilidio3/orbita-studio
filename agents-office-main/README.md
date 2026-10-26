@@ -206,6 +206,30 @@ A pesquisa da Google passa a gravar também nesta base de dados, já pontuada e 
 Detalhe completo — tabelas, rotas `/api/ops`, aquecimento do número, custos e **o que ainda não
 está** (Stripe, WhatsApp Business real, Postgres) — em **[OPS.md](OPS.md)**.
 
+## Autonomia que se ganha, e a agência
+
+O Órbita **não te pede para confiar**: pede-te decisões, conta-as, e só depois propõe mais. Cada
+tipo de mensagem (canal + gancho, por exemplo `whatsapp:sem-site`) começa em **pede-me sempre**.
+Aos **50 casos decididos com 95% de aprovações** — limiares que podes mudar — o Hoje faz a
+pergunta: «posso enviar este tipo sozinho?». Dizes que sim com o mesmo gesto de sempre, e podes
+voltar atrás com um toque, a qualquer momento. Antes disso, o texto é concreto: «faltam 47 casos
+decididos». A autonomia nunca passa por cima do opt-out, do PARAR TUDO, do aquecimento do número
+nem do **modo ensaio** — a semana em que o escritório escreve tudo e não envia nada, e no fim te
+mostra o que teria saído.
+
+O rascunho tem **avaliações próprias**: um conjunto fixo de casos com expectativas escritas
+(preço certo, pergunta no fim, nenhuma citação inventada, nenhuma promessa) que corre a cada
+mudança de prompt. `node evals.mjs` → 8/8 hoje; o resultado fica guardado com a versão, e uma
+corrida pior aparece como regressão em vez de se descobrir num cliente.
+
+A aba **SALDO** fecha a conta que interessa: o que entrou (escrito por ti, com campanha), o que
+gastaste em APIs, e a margem — mais custos por lead, por contactado e por cliente. Sem entradas
+registadas a margem é negativa, e o ecrã di-lo em vez de mostrar zero.
+
+No modo agência, cada cliente tem **o seu próprio ficheiro de base de dados**
+(`data/clientes/<slug>/orbita.db`): um erro num não pode misturar leads de outro. O select
+**Espaço**, no topo da gaveta, troca de negócio; `+ CLIENTE` cria um em três passos.
+
 ## Integrar outra IA (Codex, Antigravity, qualquer API)
 
 O escritório não está preso ao Claude Code. O botão **IA**, ao lado de EQUIPA no painel de tarefas,
@@ -294,12 +318,18 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | POST | `/api/ops/leads/:id/rascunho` | escreve a mensagem a partir dos factos |
 | POST | `/api/ops/messages/:id/sinal` | registar o que responderam (a nota aprende) |
 | GET/POST | `/api/ops/oferta` | a tua oferta: preço, prazo, garantia |
+| GET | `/api/ops/autonomia` · POST `…/limiar` · POST `…/:scope/subir` · `/descer` | o nível de autonomia por tipo de mensagem |
+| GET/POST | `/api/ops/ensaio` · POST `/api/ops/messages/:id/promover` | o modo ensaio e a saída dele |
+| GET | `/api/ops/evals` · POST `/api/ops/evals/correr` | as avaliações do rascunho |
+| GET | `/api/ops/saldo` · POST `/api/ops/receita` | receita, custos, margem |
+| GET/POST | `/api/ops/clientes` · POST `/api/ops/clientes/:id/entrar` · GET `/api/ops/agencia` | os espaços de cliente |
 
 ## Verificação
 
 ```bash
-npm run check         # 63 verificações locais (build, elenco, competências, rotinas, operação, Hoje, servidor)
-npm run test:ops      # 27 testes da operação: base de dados em memória, nenhum serviço externo
+npm run check         # 67 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, servidor)
+npm run test:ops      # 36 testes da operação: base de dados em memória, nenhum serviço externo
+node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google
 npm run check:live    # uma tarefa e uma conversa a sério, pelo Claude
 ```
