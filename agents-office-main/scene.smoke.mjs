@@ -7,9 +7,16 @@
 // apanha isso. Este teste apanha: carrega o ficheiro real, espera 3 s e verifica que o módulo
 // chegou ao fim (window.CC), que os 35 postos existem e que nada rebentou.
 //
+// 26 out 2026 (V7): passou também a OLHAR O CHÃO. O dono pediu «um chão da cor dos vidros —
+// vermelho, verde, azul, roxo, amarelo e azul céu». Aqui lê-se o material que ficou desenhado
+// (window.CC.office.floors), não o que os dados pedem: sete pods, quatro camadas cada, a laje
+// translúcida, e cada uma das seis famílias de cor presente exactamente uma vez. O centro
+// (Cérebro) tem de ser vidro fosco — é a única excepção, e é de propósito.
+//
 //   node scene.smoke.mjs            (usa dist/command-centre-v2.html)
 //   node scene.smoke.mjs outro.html
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { familyOf } from './src/palette.js'; // o mesmo módulo puro que a cena usa para derivar o vidro
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -135,11 +142,43 @@ ok(postos.every(id => R[id] && R[id].station && R[id].person), 'há postos sem s
 ok(!!win.document.getElementById('scene'), 'o canvas #scene desapareceu');
 ok(!!win.document.getElementById('hud'), 'o HUD desapareceu');
 
+/* ---------- o chão de vidro: sete pods, quatro camadas, seis cores ---------- */
+const office = (win.CC && win.CC.office) || {};
+const floors = office.floors || {};
+const pods = Object.keys(floors);
+ok((office.problems || []).length === 0, 'os dados do escritório não validam: ' + (office.problems || []).join(' · '));
+ok(pods.length === 7, `esperava 7 pods com chão, encontrei ${pods.length}`);
+
+const CAMADAS = ['floorBase', 'floorEdge', 'floorGlass', 'floorPool'];
+const CORES = ['vermelho', 'verde', 'azul', 'roxo', 'amarelo', 'azul céu'];
+const familiaDaSala = new Map();
+for (const k of pods) {
+  const parts = (floors[k] || {}).parts || {};
+  for (const camada of CAMADAS) ok(!!parts[camada], `${k}: falta a camada ${camada} do chão de vidro`);
+  const vidro = parts.floorGlass || {}, base = parts.floorBase || {}, poça = parts.floorPool || {};
+  ok(vidro.transparent === true, `${k}: a laje do chão não é translúcida`);
+  ok(vidro.opacity > 0.3 && vidro.opacity < 0.9, `${k}: opacidade do vidro fora do razoável (${vidro.opacity})`);
+  ok(/^#[0-9a-f]{6}$/i.test(base.color || ''), `${k}: a base do chão não tem cor`);
+  ok(poça.color === '#ffffff', `${k}: a poça de luz não é branca`);
+  // as camadas empilham-se: fundo (0.10) → aresta (0.115) → vidro (0.12, o nível do chão) → poça
+  ok(Math.abs(base.top - 0.10) < 0.001, `${k}: a base devia acabar aos 0.10, acaba aos ${base.top}`);
+  ok(Math.abs((parts.floorEdge.top) - 0.115) < 0.001, `${k}: a aresta devia acabar aos 0.115, acaba aos ${parts.floorEdge.top}`);
+  ok(Math.abs(vidro.top - 0.12) < 0.001, `${k}: o vidro tem de acabar aos 0.12 (onde as secretárias pousam), acaba aos ${vidro.top}`);
+  ok(poça.top > vidro.top, `${k}: a poça de luz tem de ficar acima do vidro (${poça.top} ≤ ${vidro.top})`);
+  const fam = familyOf(vidro.color);
+  if (k === 'brain') { ok(fam === 'neutro', `o centro devia ser vidro fosco, e é ${fam} (${vidro.color})`); continue; }
+  ok(fam && fam !== 'neutro', `${k}: o vidro (${vidro.color}) não é de nenhuma família pedida`);
+  ok(!familiaDaSala.has(fam), `${k} repete a cor de ${familiaDaSala.get(fam)} (${fam})`);
+  familiaDaSala.set(fam, k);
+}
+for (const cor of CORES) ok(familiaDaSala.has(cor), `falta a cor pedida: ${cor}`);
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
   process.exit(1);
 }
-console.log(`✓ cena: ${postos.length} postos, sem erros no bundle, ciclo de desenho a correr (${path.basename(ALVO)})`);
+const mapaCores = [...familiaDaSala.entries()].map(([cor, sala]) => `${sala} ${cor}`).join(' · ');
+console.log(`✓ cena: ${postos.length} postos, chão de vidro em 7 pods (${mapaCores}), sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

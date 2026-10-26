@@ -1696,6 +1696,24 @@
     #topbar .m-group > button, #topbar .m-group > a,
     #topbar #topconn img, #topbar #topmodels img { transition-duration: .001ms; }
   }
+
+  /* ===========================================================================
+     V7 · A COR DA SALA, EM TRÊS SÍTIOS (26 out 2026)
+     O chão é vidro colorido (src/builders.js, cor em src/data.js). O cartão que
+     nomeia a sala leva o mesmo filete no cimo, e a pastilha do agente leva o
+     mesmo ponto. Uma cor, três sítios — e uma só fonte (src/palette.js).
+     =========================================================================== */
+  .badge::before {
+    content: ''; position: absolute; left: 22px; right: 22px; top: 0; height: 2.5px;
+    border-radius: 0 0 3px 3px; background: var(--glass, transparent);
+    opacity: .9; pointer-events: none;
+  }
+  .badge.brainTag::before { left: 16px; right: 16px; }
+  .pill::before {
+    content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--glass, var(--grey)); margin-right: 5px; vertical-align: 1px;
+  }
+  body.dark .badge::before { opacity: 1; }
 </style>
 </head>
 <body>

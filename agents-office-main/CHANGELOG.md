@@ -1,3 +1,44 @@
+## 1.9.4 — 26 out 2026 · O chão é vidro, e o vidro tem a cor da sala
+
+Pedido 22: *«coloca uma chão da cor dos vidros (vermelho, verde, azul, roxo, amarelo e azul céu), e faça melhorias na estrutura»*.
+
+### O chão
+
+- **As seis cores, uma por sala.** O chão deixou de ser uma laje pastel opaca e passou a ser **vidro colorido** — e a cor é a que foi pedida, repartida uma por sala, sempre na família da cor de marca dessa sala (o `chip` continua pastel nos cartões e nas secretárias; o `glass` é a mesma cor, saturada):
+
+  | Sala | Cor pedida | Vidro |
+  |---|---|---|
+  | PROSPEÇÃO | amarelo | `#E3B93A` |
+  | COMANDO | verde | `#1FA36B` |
+  | ENGENHARIA | azul céu | `#41AEE4` |
+  | MEDIA | vermelho | `#DC5348` |
+  | VENDAS | roxo | `#8B5AD6` |
+  | DESIGN LAB | azul | `#4A6DE0` |
+
+  O **Cérebro** fica com vidro fosco (neutro, `#AEB6AB`) **de propósito**: é o centro, e o centro não compete com as seis salas que o rodeiam.
+- **Quatro camadas, como um painel de vidro laminado visto de cima.** `floorBase` (o tom fundo, opaco, 0.10 — é o que dá profundidade ao vidro, o que garante a cor num ecrã sem transparência, e o que **recebe as sombras**: as sombras das secretárias vêem-se *através* do vidro, e é isso que o faz parecer vidro); `floorEdge` (a aresta polida, mais clara, 0.115 — o vidro real apanha a luz na espessura); `floorGlass` (a laje translúcida, opacidade 0.62, verniz `clearcoat: 1`, 0.12 — o nível exacto do chão, onde as secretárias pousam); `floorPool` (a poça de luz do candeeiro, branca e suave, por cima).
+- **A cor chega mais longe do que o chão.** A banda de vidro das paredes passa a usar a **mesma família** (antes usava o pastel do cartão e dizia outra coisa); o cartão que nomeia a sala leva um **filete** com a cor do vidro no cimo; e a pastilha do nome de cada agente leva um **ponto** com a cor da sala. Uma cor, três sítios.
+- **Modo escuro a acompanhar.** O vidro escuro não é cinzento: fica mais fundo e mais rico (a base entra 62 % na tinta, a aresta 50 %, a laje 42 %) e a poça de luz fica, mais discreta. Uma tabela (`FLOOR_DARK`) diz quanto entra em cada camada — antes havia um `if` por peça.
+
+### A estrutura
+
+- **`src/palette.js` (novo, puro).** Uma só fonte de verdade para a cor: `parseHex`/`toHex`, `mix`, `shade`, `tint`, `hsl`, `familyOf` (nomeia a família de matiz) e `glassLayers` (de uma cor saem as quatro camadas). Sem `three`, sem DOM — por isso corre em `node --test` e no servidor, e é o que permite provar as cores **sem olhos**.
+- **Os builders recebem cores, nunca salas.** `makePlinth(w, d, glassColor)` não sabe o que é a PROSPEÇÃO. Quem sabe é o `main.js`; quem deriva os tons é a paleta.
+- **Fim dos índices mágicos.** O `main.js` fazia `plinth.children[0].userData.part = 'plinth'; plinth.children[1]… = 'floor'` — a primeira camada nova partia o modo escuro em silêncio. As peças passam a dizer o que são (`userData.part`, `userData.tint`) e a sair do builder com nome: `plinth.userData.parts`.
+- **O escritório valida-se no arranque.** `officeProblems()` (em `data.js`, puro) verifica salas ↔ pods ↔ agentes, cores, ids, chefes de sala e duas pessoas na mesma secretária; o `main.js` escreve o resultado na consola em vez de descobrir o erro a meio de um desenho. `assertOffice()` lança com o problema escrito, e o teste exige a lista vazia. É a lição de 1.9.2 transformada em código.
+- **Sete imports mortos saíram do `main.js`** (`TOKENS`, `PLINTH_H`, `mat`, `rbox`, `makeFloorTitle`, `makeServerRack`, `makeMeetingTable`) — o tipo de sobra que faz alguém procurar um título de chão que já não existe. O catálogo `builders.js` fica com as peças que a cena não usa, **declarado** em `docs/CENA.md`.
+- **`docs/CENA.md` (novo).** O contrato da cena: que ficheiro sabe o quê, as etiquetas `userData`, as quatro camadas e porquê, o mapa das seis cores, como mudar uma cor, e o que cada teste prova.
+- **Um bug apanhado a tempo.** A poça de luz nasceu como caixa arredondada; o `ExtrudeGeometry` mapeia as UVs das tampas em unidades de mundo, e o gradiente saía clampado (a poça desaparecia). Passou a plano com UV 0..1, e o desvanecimento esconde a aresta recta. O teste de cena passa a verificar a **altura real** de cada camada (0.10 · 0.115 · 0.12 · acima) para isto não voltar a passar despercebido.
+- O cabeçalho do `brain.js` foi corrigido: ainda descrevia o grafo gravado no chão, que já não existe (o centro é um orbe de vidro desde 25 out).
+
+### Provas
+
+- **`npm run test:office` — 17/17** (novo). Matemática de cor, famílias sem sobreposição, derivação das camadas, e as invariantes dos dados. Inclui um teste que **estraga os dados de propósito** e exige que a validação aponte a sala e o campo.
+- **`npm run test:scene` — ✓ 35 postos**, e agora: 7 pods com chão, 4 camadas cada, laje translúcida, **cada uma das seis famílias presente exactamente uma vez**, o centro em vidro fosco, e as alturas das camadas certas. Saída: `chão de vidro em 7 pods (emails verde · delivery azul céu · sales amarelo · marketing vermelho · fin azul · ops roxo)`.
+- **O teste tem dentes.** Troquei o amarelo pelo vermelho e voltei a correr: `✗ 3 falhas — os dados não validam: duas salas com a mesma cor de vidro · marketing repete a cor de sales · falta a cor pedida: amarelo`. Depois reposto: ✓.
+- `ops.test` **71/71** · `integrations.test` **13/13** · `check.mjs` **94/95** (só `smoke: browser`) · build **1299 KB** + `mesa.html` 86 KB.
+- **O que não está provado:** não há Chrome nesta máquina, logo **não há captura de ecrã**. Os números provam camadas, cores e alturas; o gosto do tom final é o olho do dono. Se o vidro parecer escuro ou lavado, afina-se uma linha em `data.js` (a cor) ou uma constante em `builders.js` (opacidade 0.62).
+
 ## 1.9.3 — 26 out 2026 · O menu, em vidro
 
 Pedido 21 — *«melhore brutalmente o menu, um design mais vibe apple design»*. É trabalho de forma, não de função: **nenhum `id`, nenhum handler e nenhum comportamento mudou**. O que mudou foi o material, a escala, a hierarquia e o movimento.

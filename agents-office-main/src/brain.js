@@ -1,10 +1,16 @@
-// Órbita — o Cérebro como folha de vidro suspensa (25 out 2026; antes era o grafo em tinta no ar).
-// The particle nebula is gone. The vault's wiki-link graph (src/braingraph.js, baked by
-// graph-build.mjs) is drawn into the floor of the centre pod as faint ink line-work: texture at
-// overview, a graph when you lean in. It moves only when an agent READS (a note glints green and a
-// dashed line runs to the desk for two seconds) or WRITES (a finished task becomes a new note off
-// its department's hub). The Task Status panel carries a small Brain strip — last read, notes
-// added today, Open the Brain — and G / clicking the pod opens the full-screen Obsidian graph.
+// Órbita — o Cérebro como um orbe de vidro suspenso sobre a relva do pod central (25 out 2026).
+// O que aqui vive: a névoa de partículas saiu, o grafo em tinta no ar saiu, o grafo gravado no
+// chão saiu. O centro é hoje uma esfera de vidro com orla de Fresnel — duas cascas, núcleo
+// luminoso, dois anéis na relva — e as notas do vault (src/braingraph.js, cozido por
+// graph-build.mjs) são pontos à volta dela, agrupados por pasta. Move-se só quando um agente LÊ
+// (a nota brilha a verde e uma linha tracejada corre até à secretária durante dois segundos) ou
+// ESCREVE (uma tarefa concluída torna-se uma nota nova junto ao hub da sala). O painel de tarefas
+// leva uma tira do Cérebro — última leitura, notas de hoje, abrir — e G / clicar no pod abre o
+// grafo Obsidian em ecrã inteiro.
+//
+// V7 (26 out 2026): o pod central passou a ter chão de vidro fosco (neutro) — o centro não
+// compete com as seis cores das salas. O orbe é a única coisa na cena que não deriva de uma cor
+// de sala, e é de propósito.
 import * as THREE from 'three';
 import { BRAIN as BRAIN0 } from './braingraph.js';
 const BRAIN = BRAIN0; // as notas reais vêm do servidor (GET /api/brain); nada de grafos de exemplo

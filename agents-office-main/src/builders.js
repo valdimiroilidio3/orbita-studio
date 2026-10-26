@@ -1,5 +1,8 @@
 // Órbita v2 — procedural mesh builders (stylised 3D, Image-1/2 blend on nominal palette)
 import * as THREE from 'three';
+// V7 (26 out 2026): os builders recebem CORES, nunca salas. Quem sabe que sala é qual é o
+// main.js; quem sabe derivar tons de uma cor é a palette (pura, testável sem WebGL).
+import { glassLayers, tint } from './palette.js';
 
 export const PLINTH_H = 2.6;
 const WHITE = '#F7F7F2';
@@ -40,17 +43,100 @@ export function rbox(w, d, h, color, r) {
   return m;
 }
 
-/* ---------- plinth: floating white pod with pastel dept floor ---------- */
-export function makePlinth(w, d, floorColor) {
+/* ---------- plinth: floating white pod with a coloured glass floor ----------
+   V7 (26 out 2026), pedido do dono: «um chão da cor dos vidros». Antes era uma laje pastel
+   opaca. Agora são quatro camadas, como um painel de vidro laminado visto de cima:
+
+     0 · body  — o volume branco do pod (não mudou; é o que faz o pod flutuar)
+     1 · base  — o tom fundo, opaco, 0.10 de altura: dá profundidade ao vidro e garante a cor
+                 num ecrã que não faça transparência. É esta camada que recebe as sombras.
+     2 · edge  — a aresta polida, mais clara, 0.115: é assim que o vidro real apanha a luz na
+                 espessura. Aparece como um filete de 4 cm por dentro da base.
+     3 · glass — a laje translúcida, 0.12 (o nível do chão, exactamente onde as secretárias
+                 pousam), com verniz: o brilho duro vem daqui.
+     4 · pool  — a poça de luz do candeeiro, branca e suave, por cima de tudo.
+
+   Cada peça leva `userData.part` e `userData.tint` — nada de índices mágicos (`children[1]`)
+   como antes, que se partiam à primeira camada nova. O modo escuro e o teste de cena leem isto.
+   ---------------------------------------------------------------- */
+let poolTex = null;
+function lightPoolTexture() {
+  if (poolTex) return poolTex;
+  const S = 256;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, S, S);
+  const g = x.createRadialGradient(S * 0.36, S * 0.32, S * 0.01, S * 0.36, S * 0.32, S * 0.66);
+  g.addColorStop(0, 'rgba(255,255,255,.46)');
+  g.addColorStop(.38, 'rgba(255,255,255,.16)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, S, S);
+  poolTex = new THREE.CanvasTexture(c);
+  poolTex.colorSpace = THREE.SRGBColorSpace;
+  return poolTex;
+}
+
+export function makePlinth(w, d, glassColor) {
+  const L = glassLayers(glassColor); // valida a cor e deriva base/edge/pool
   const g = new THREE.Group();
+  g.userData.glass = glassColor;
+
   const body = rbox(w, d, PLINTH_H, WHITE, 0.9);
   body.position.y = -PLINTH_H;
+  body.userData.part = 'plinth';
   g.add(body);
-  // pastel floor slab, inset hairline reveal
-  const floor = rbox(w - 0.7, d - 0.7, 0.12, floorColor, 0.7);
-  floor.position.y = 0;
-  floor.castShadow = false;
-  g.add(floor);
+
+  const part = (mesh, name, tone, extra = {}) => {
+    mesh.userData.part = name;
+    mesh.userData.tint = tone;
+    mesh.castShadow = false;
+    Object.assign(mesh, extra);
+    g.add(mesh);
+    mesh.userData.layer = name; // apelido legível na inspecção
+    return mesh;
+  };
+
+  // 1 · o tom fundo (opaco, recebe sombras — as sombras das secretárias vêem-se ATRAVÉS do vidro)
+  const base = rbox(w - 0.70, d - 0.70, 0.10, new THREE.MeshStandardMaterial({
+    color: L.base, roughness: 0.88, metalness: 0.0,
+  }), 0.7);
+  base.position.y = 0;
+  part(base, 'floorBase', L.base, { receiveShadow: true });
+
+  // 2 · a aresta polida
+  const edge = rbox(w - 0.79, d - 0.79, 0.115, new THREE.MeshStandardMaterial({
+    color: L.edge, roughness: 0.34, metalness: 0.06,
+  }), 0.68);
+  edge.position.y = 0;
+  part(edge, 'floorEdge', L.edge, { receiveShadow: true });
+
+  // 3 · a laje de vidro (translúcida, com verniz). depthWrite desligado: quem manda na
+  //     profundidade é a base; o vidro só pinta por cima.
+  const glass = rbox(w - 0.88, d - 0.88, 0.12, new THREE.MeshPhysicalMaterial({
+    color: L.glass, roughness: 0.06, metalness: 0.1,
+    clearcoat: 1, clearcoatRoughness: 0.06,
+    transparent: true, opacity: 0.62, depthWrite: false,
+  }), 0.66);
+  glass.position.y = 0;
+  part(glass, 'floorGlass', L.glass, { receiveShadow: false });
+
+  // 4 · a poça de luz. É um PLANO, não uma caixa: o ExtrudeGeometry mapeia as UVs das tampas em
+  //     unidades de mundo, e o gradiente saía clampado (a poça desaparecia). Um plano tem UV
+  //     0..1; e como o desvanecimento chega a zero na borda, o recorte recto não se vê — o plano
+  //     fica 0.575 por dentro da laje, portanto dentro do canto arredondado.
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(w - 1.15, d - 1.15),
+    new THREE.MeshBasicMaterial({
+      map: lightPoolTexture(), transparent: true, opacity: 0.38,
+      depthWrite: false, toneMapped: false,
+    })
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.122;
+  part(pool, 'floorPool', L.pool, { receiveShadow: false });
+
+  // as peças, por nome: quem desenha ou re-tinge não adivinha índices
+  g.userData.parts = { body, base, edge, glass, pool };
   return g;
 }
 
@@ -694,9 +780,11 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   const wallMat = new THREE.MeshStandardMaterial({ color: '#F4F3ED', roughness: 0.94, metalness: 0 });
   const trimMat = new THREE.MeshStandardMaterial({ color: chip, roughness: 0.72, metalness: 0.02 });
   const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.55, metalness: 0.1 });
+  // V7: a banda de vidro da parede é a MESMA família de cor do chão (mais clara, porque sobe
+  // contra a luz). Antes era a cor pastel do cartão; o chão e a parede diziam coisas diferentes.
   const glassMat = new THREE.MeshStandardMaterial({
-    color: chip, roughness: 0.12, metalness: 0.05,
-    transparent: true, opacity: 0.17, depthWrite: false, side: THREE.DoubleSide,
+    color: tint(opts.glass || chip, 0.30), roughness: 0.1, metalness: 0.06,
+    transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide,
   });
 
   const add = (mesh, part) => {

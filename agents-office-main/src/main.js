@@ -1,13 +1,15 @@
 // Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
-import { TOKENS, DEPTS, DEPT_KEYS, AGENTS, LAYOUT } from './data.js';
+import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems } from './data.js';
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
+// V7: só o que este ficheiro usa. Saíram sete nomes importados e nunca chamados (TOKENS,
+// PLINTH_H, mat, rbox, makeFloorTitle, makeServerRack, makeMeetingTable) — o tipo de sobra que
+// faz alguém procurar um título de chão que já não existe.
 import {
-  PLINTH_H, mat, rbox, makePlinth, makeFloorTitle, makeDesk, makeChair,
-  makePerson, posePerson, poseWork, makePlant, makeServerRack, makeMeetingTable, makeWalkway, makeWarnSprite,
-  makeRoomWalls,
+  makePlinth, makeDesk, makeChair, makePerson, posePerson, poseWork,
+  makePlant, makeWalkway, makeWarnSprite, makeRoomWalls,
 } from './builders.js';
 import { initMcp } from './mcp.js';
 import { fmtClock } from './time.js'; // 24 horas, sempre
@@ -18,6 +20,17 @@ import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
 import { initBrain } from './brain.js';
 let tasks = null; // V3 task boards — initialised after the rail constants exist
+
+/* V7 (26 out 2026): o escritório valida-se primeiro. A lição de 1.9.2 foi essa — um erro pequeno
+   num sítio apagou a cena inteira e o sintoma apareceu longe da causa. Se os dados não fizerem
+   sentido, fica dito na consola com o nome do problema; o desenho continua (nunca uma tela em
+   branco por causa de uma cor mal escrita). `office.test.mjs` exige a lista vazia. */
+try {
+  const problemas = officeProblems();
+  if (problemas.length) console.error('escritório inconsistente:\n  · ' + problemas.join('\n  · '));
+} catch (e) {
+  console.error('não foi possível validar o escritório: ' + e.message);
+}
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas = document.getElementById('scene');
@@ -134,17 +147,18 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   const dept = DEPTS[key_];
   const g = new THREE.Group();
   g.position.set(L.pos[0], 0, L.pos[1]);
-  const plinth = makePlinth(L.w, L.d, dept.floor);
+  const plinth = makePlinth(L.w, L.d, dept.glass); // V7: o chão é vidro com a cor da sala
   g.add(plinth);
   plinth.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
-  plinth.children[0].userData.part = 'plinth'; plinth.children[1].userData.part = 'floor'; plinth.children[1].userData.chip = dept.chip; // dark mode re-tints these
+  // (as peças do chão já sabem o que são — `userData.part`/`userData.tint` saem do builder.
+  //  O `children[0]/children[1]` que aqui estava partia-se à primeira camada nova.)
 
   // walls (25 out 2026): every sala gets a real room — an L of solid base + glass above,
   // on the two sides away from the camera, open at the corner the walkway arrives on.
   let walls = null;
   if (key_ !== 'brain') {
     try {
-      walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short);
+      walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass });
       walls.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
       g.add(walls);
     } catch (e) { walls = null; console.warn('paredes: ' + key_ + ' — ' + e.message); }
@@ -239,6 +253,7 @@ for (const a of AGENTS) {
   // name pill (HTML) — clickable, same as clicking the agent
   const pill = document.createElement('div');
   pill.className = 'pill';
+  pill.style.setProperty('--glass', dept.glass); // V7: o nome do agente leva a cor da sala
   pill.innerHTML = (a.lead ? '<span class="star">★</span>' : '') + a.name;
   pill.addEventListener('click', () => openAgent(a.id, R[a.id] && R[a.id].state === 'stuck' ? 'chat' : 'live'));
   hud.appendChild(pill);
@@ -347,6 +362,7 @@ for (const k of [...DEPT_KEYS, 'brain']) {
   const n = AGENTS.filter(a => a.dept === k).length;
   const b = document.createElement('div');
   b.className = 'badge';
+  b.style.setProperty('--glass', dept.glass); // V7: o cartão usa a cor do vidro da sala que nomeia
   b.innerHTML = `
     <div class="b-name"><span class="dot" style="background:${dept.chip}"></span>${dept.short}<span class="live"></span></div>
     <div class="b-count">${k === 'brain' ? '<span class="b-num">∞</span><span class="b-lab">CONHECIMENTO</span>' : `<span class="b-num">${n}</span><span class="b-lab">AGENTES</span>`}</div>
@@ -502,6 +518,10 @@ function setCam(on) { document.body.classList.toggle('cam', !!on); }
 // re-tints its shared materials (plinths, floors, walkways), relights, and the Brain/wires swap ink.
 let darkOn = false;
 const DARK = { plinth: 0x2c2d2b, walkway: 0x303230, ground: 0x1b1c1a, wall: 0x33342f };
+// V7: quanto do tom fundo entra em cada peça do chão de vidro quando a luz baixa. O vidro escuro
+// não é cinzento: fica mais fundo e mais rico, como vidro colorido numa sala sem luz.
+const FLOOR_DARK = { floorBase: 0.62, floorEdge: 0.50, floorGlass: 0.42 };
+const darken = (c, k) => new THREE.Color(c).lerp(new THREE.Color('#121316'), k);
 function mix(hex, base, k) { const a = new THREE.Color(hex), b = new THREE.Color(base); return b.lerp(a, k); }
 function setDark(on) {
   darkOn = !!on;
@@ -512,7 +532,11 @@ function setDark(on) {
     const m = o.material; if (!m.userData.base) m.userData.base = m.color.clone();
     if (o.userData.part === 'plinth') m.color.set(darkOn ? DARK.plinth : m.userData.base);
     else if (o.userData.part === 'walkway') m.color.set(darkOn ? DARK.walkway : m.userData.base);
-    else if (o.userData.part === 'floor') m.color.copy(darkOn ? mix(o.userData.chip, '#1b1c1a', o.userData.dept === 'brain' ? 0.07 : 0.22) : m.userData.base); // the Brain's pale sage needs a lighter touch
+    else if (FLOOR_DARK[o.userData.part] != null) m.color.copy(darkOn ? darken(o.userData.tint, FLOOR_DARK[o.userData.part]) : m.userData.base);
+    else if (o.userData.part === 'floorPool') { // a poça de luz fica na cena escura, mais discreta
+      if (m.userData.baseOpacity == null) m.userData.baseOpacity = m.opacity;
+      m.opacity = darkOn ? m.userData.baseOpacity * 0.7 : m.userData.baseOpacity;
+    }
     else if (o.userData.part === 'wall') m.color.set(darkOn ? DARK.wall : m.userData.base);
   });
   hemi.color.set(darkOn ? 0x8e95a3 : 0xfdfff8); hemi.groundColor.set(darkOn ? 0x14151a : 0xd8d4c8); hemi.intensity = darkOn ? 0.75 : 0.85;
@@ -1233,7 +1257,29 @@ resize();
   }
   syncOverviewBtn();
 }
+/* ---------- inspecção: o chão que ficou DESENHADO, não o que os dados pedem ----------
+   O `npm run test:scene` lê isto para provar que as seis cores pedidas estão mesmo na cena —
+   que é diferente de «o ficheiro diz vermelho». Lê o material, não a intenção. */
+function floorReport() {
+  const out = {};
+  for (const [k, rt] of Object.entries(deptRT)) {
+    const parts = {};
+    rt.group.traverse((o) => {
+      if (!o.isMesh || !String(o.userData.part || '').startsWith('floor')) return;
+      const world = new THREE.Box3().setFromObject(o); // a altura REAL da camada, em unidades de cena
+      parts[o.userData.part] = {
+        color: '#' + o.material.color.getHexString(),
+        opacity: o.material.opacity,
+        transparent: !!o.material.transparent,
+        top: Math.round(world.max.y * 1000) / 1000,
+      };
+    });
+    out[k] = { glass: DEPTS[k].glass, parts };
+  }
+  return out;
+}
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
+  office: { depts: DEPTS, floors: floorReport(), problems: officeProblems() },
   setCam, setDark, brain, connectorReveal: () => mcp.startReveal(),
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
 

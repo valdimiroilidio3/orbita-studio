@@ -1,7 +1,12 @@
-// Órbita — o elenco fixo (35 lugares, 6 salas), o chão de cada sala e os tokens de design.
+// Órbita — o elenco fixo (35 lugares, 6 salas), a cor de cada sala e os tokens de design.
 // Os textos de exemplo (WORKLINES), os pedidos de aprovação fictícios (APPROVAL_ASKS) e as linhas
 // de demonstração por indústria (profile.js) saíram em 26 out 2026: o escritório passou a mostrar
 // o trabalho que está na base de dados, por isso já não precisa de conteúdo de exemplo.
+//
+// Este ficheiro é PURO (sem three, sem DOM): o servidor também o lê (`serve.mjs`, `roster.mjs`).
+// Quem deriva tons a partir destas cores é `src/palette.js`; quem desenha é `src/builders.js`.
+// `officeProblems()`/`assertOffice()` dizem se alguma coisa aqui ficou incoerente — o escritório
+// valida-se no arranque em vez de descobrir o erro a meio de um desenho.
 
 // Nominal.so tokens (locked design language, 30 Jul 2026)
 export const TOKENS = {
@@ -18,14 +23,26 @@ export const TOKENS = {
 // a new 'ops' pod (OPERATIONS) alongside Legal Review, Compliance and Internal Reporting.
 // V3.1 (5 Sep 2026, AJ): SUPPORT → EMAILS (same mint slot), new DELIVERY pod (sky) on the top axis.
 export const DEPT_KEYS = ['emails', 'sales', 'marketing', 'ops', 'fin', 'delivery'];
+// V7 (26 out 2026): o chão de cada sala é VIDRO — e o vidro tem a cor que o dono pediu.
+// `chip` continua a ser a cor de marca (pastel: cartões, secretárias, avatares); `glass` é a
+// mesma família, saturada, e é ela que pinta o chão e a banda de vidro das paredes. As seis
+// famílias pedidas — vermelho, verde, azul, roxo, amarelo e azul céu — ficam assim repartidas
+// uma por sala (o teste `office.test.mjs` verifica-o, matiz a matiz):
+//
+//   emails    COMANDO      verde     #1FA36B        ops     VENDAS   roxo     #8B5AD6
+//   delivery  ENGENHARIA   azul céu  #41AEE4        fin     DESIGN   azul     #4A6DE0
+//   sales     PROSPEÇÃO    amarelo   #E3B93A        marketing MEDIA  vermelho #DC5348
+//
+// O Cérebro fica com vidro fosco (neutro, de propósito): é o centro, e o centro não compete
+// com as seis salas que o rodeiam.
 export const DEPTS = {
-  emails:    { name: 'COMANDO',           short: 'COMANDO',  chip: '#5ADEB7', ink: '#1E9070', floor: '#E9F6EF' },
-  delivery:  { name: 'ENGENHARIA',         short: 'ENGENHARIA', chip: '#8FD3F4', ink: '#2E86AB', floor: '#E6F4FB' },
-  sales:     { name: 'PROSPEÇÃO',            short: 'PROSPEÇÃO',   chip: '#EADC8F', ink: '#A08A1E', floor: '#F6F1DA' },
-  marketing: { name: 'MEDIA',        short: 'MEDIA', chip: '#E69393', ink: '#C46060', floor: '#FAE9E7' },
-  fin:       { name: 'DESIGN LAB',          short: 'DESIGN', chip: '#98A5EF', ink: '#5B66CE', floor: '#EAEDFA' },
-  ops:       { name: 'VENDAS',       short: 'VENDAS', chip: '#BFA2E3', ink: '#7449A9', floor: '#F2ECFA' },
-  brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', floor: '#E9EFE4' },
+  emails:    { name: 'COMANDO',           short: 'COMANDO',  chip: '#5ADEB7', ink: '#1E9070', glass: '#1FA36B', glassName: 'verde' },
+  delivery:  { name: 'ENGENHARIA',         short: 'ENGENHARIA', chip: '#8FD3F4', ink: '#2E86AB', glass: '#41AEE4', glassName: 'azul céu' },
+  sales:     { name: 'PROSPEÇÃO',            short: 'PROSPEÇÃO',   chip: '#EADC8F', ink: '#A08A1E', glass: '#E3B93A', glassName: 'amarelo' },
+  marketing: { name: 'MEDIA',        short: 'MEDIA', chip: '#E69393', ink: '#C46060', glass: '#DC5348', glassName: 'vermelho' },
+  fin:       { name: 'DESIGN LAB',          short: 'DESIGN', chip: '#98A5EF', ink: '#5B66CE', glass: '#4A6DE0', glassName: 'azul' },
+  ops:       { name: 'VENDAS',       short: 'VENDAS', chip: '#BFA2E3', ink: '#7449A9', glass: '#8B5AD6', glassName: 'roxo' },
+  brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', glass: '#AEB6AB', glassName: 'neutro' },
 };
 
 // 35 agents (V3.4, 7 Sep 2026: every department has a lead). grid = [col,row] desk slot on the department plinth.
@@ -86,3 +103,63 @@ export const LAYOUT = {
 
 // Department billboard metrics (v1 rule #5: live metrics float above each dept,
 // values tick green on change, "À espera de aprovação" pulses amber when > 0).
+
+/* ---------- o escritório valida-se ----------
+   A lição de 26 out 2026 (1.9.2): um erro num sítio pequeno apagou a cena inteira e o sintoma
+   apareceu longe da causa. Esta função não desenha nada — só responde «os dados fazem sentido?»
+   e diz o problema por palavras. O main.js chama-a no arranque e escreve o resultado na consola;
+   `office.test.mjs` exige a lista vazia. */
+const isHex = (c) => typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+
+export function officeProblems() {
+  const p = [];
+  const keys = Object.keys(DEPTS);
+  const pods = Object.keys(LAYOUT);
+
+  for (const k of keys) {
+    const d = DEPTS[k];
+    if (!d.name || !d.short) p.push(`${k}: sem nome ou sem nome curto`);
+    for (const f of ['chip', 'ink', 'glass']) if (!isHex(d[f])) p.push(`${k}: ${f} não é uma cor (#rgb/#rrggbb)`);
+  }
+  for (const k of pods) if (!DEPTS[k]) p.push(`LAYOUT tem ${k} e DEPTS não`);
+  for (const k of keys) if (!LAYOUT[k]) p.push(`DEPTS tem ${k} e LAYOUT não`);
+  if (pods.length !== keys.length) p.push(`LAYOUT tem ${pods.length} pods e DEPTS tem ${keys.length} salas`);
+
+  const keSet = [...DEPT_KEYS].sort().join(',');
+  const expect = pods.filter((k) => k !== 'brain').sort().join(',');
+  if (keSet !== expect) p.push(`DEPT_KEYS (${keSet}) não é o LAYOUT sem o brain (${expect})`);
+
+  const glasses = keys.map((k) => String(DEPTS[k].glass).toLowerCase());
+  if (new Set(glasses).size !== glasses.length) p.push('duas salas com a mesma cor de vidro');
+
+  const pos = new Set();
+  for (const [k, L] of Object.entries(LAYOUT)) {
+    if (!(L.w > 0 && L.d > 0)) p.push(`${k}: pod sem largura ou profundidade`);
+    const at = L.pos.join(',');
+    if (pos.has(at)) p.push(`${k}: dois pods no mesmo sítio (${at})`);
+    pos.add(at);
+  }
+
+  const ids = new Set(), slots = new Map();
+  for (const a of AGENTS) {
+    if (ids.has(a.id)) p.push(`agente repetido: ${a.id}`);
+    ids.add(a.id);
+    if (!DEPTS[a.dept]) p.push(`${a.id}: sala desconhecida (${a.dept})`);
+    if (a.dept === 'brain') p.push(`${a.id}: o Cérebro não tem secretárias`);
+    const slot = `${a.dept}|${a.grid && a.grid.join(',')}`;
+    if (slots.has(slot)) p.push(`${a.id}: a mesma secretária que ${slots.get(slot)} (${slot})`);
+    slots.set(slot, a.id);
+  }
+  for (const k of DEPT_KEYS) {
+    const here = AGENTS.filter((a) => a.dept === k);
+    if (!here.length) p.push(`${k}: sala sem agentes`);
+    if (here.filter((a) => a.lead).length !== 1) p.push(`${k}: tem de haver exactamente um chefe de sala`);
+  }
+  return p;
+}
+
+export function assertOffice() {
+  const p = officeProblems();
+  if (p.length) throw new Error('escritório inconsistente:\n  · ' + p.join('\n  · '));
+  return true;
+}
