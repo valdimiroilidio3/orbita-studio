@@ -646,7 +646,8 @@ const resumoCirculacao = (() => {
   const h = office.hall;
   if (!c) return 'sem circulação';
   const porSala = [...new Set(Object.values(c.ledByDept))].join('/');
-  return `${c.led} faixas de LED (${porSala} por sala), corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
+  const tapetes = Object.values(c.beltsByDept || {}).reduce((n, v) => n + v, 0);
+  return `${c.led - tapetes} faixas de LED (${porSala} por sala) + ${tapetes} tapetes a rolar, corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
 })();
 const resumoPedido34 = (() => {
   const o = win.CC.office;
