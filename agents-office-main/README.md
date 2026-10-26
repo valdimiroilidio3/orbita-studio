@@ -206,6 +206,25 @@ A pesquisa da Google passa a gravar também nesta base de dados, já pontuada e 
 Detalhe completo — tabelas, rotas `/api/ops`, aquecimento do número, custos e **o que ainda não
 está** (Stripe, WhatsApp Business real, Postgres) — em **[OPS.md](OPS.md)**.
 
+## A mesa de trabalho: leads e aprovação
+
+O botão **▤ MESA** (ou `http://localhost:4520/app`) abre a superfície de trabalho: barra lateral
+com **Hoje**, **Leads**, **Conversas** e **Saldo**, cartões brancos e um azul só para o que é
+acção. Não substitui o escritório — é a página que se abre de manhã para decidir.
+
+- **Leads** — procura por nome, cidade, nicho, telefone, email ou site; filtros «por contactar»,
+  «sem site», «responderam»; cada linha com a nota, o estado do funil e o contacto. Clicar abre o
+  lead.
+- **A aprovação de cada lead** — a mensagem pronta numa bolha, o canal e o estado por palavras, o
+  **porquê** com os sinais que existem mesmo, e dois botões: **Rejeitar** e **Aprovar e enviar**.
+  Aprovar abre o link de WhatsApp já com o texto; depois confirmas com **Já enviei**. O email
+  tenta a saída e, se faltar token ou consentimento, di-lo em vez de fingir.
+- **Hoje** — quatro números reais e a lista do que espera decisão, com a mensagem ao lado.
+- **Saldo** — entrou, gastou, margem, por campanha, por fornecedor e por unidade.
+
+A mesa é um ficheiro só (`dist/mesa.html`), sem pedidos externos, e funciona no telemóvel com
+barra inferior. O **PARAR TUDO** está em todas as páginas, com o estado verdadeiro.
+
 ## Autonomia que se ganha, e a agência
 
 O Órbita **não te pede para confiar**: pede-te decisões, conta-as, e só depois propõe mais. Cada
@@ -323,11 +342,13 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET | `/api/ops/evals` · POST `/api/ops/evals/correr` | as avaliações do rascunho |
 | GET | `/api/ops/saldo` · POST `/api/ops/receita` | receita, custos, margem |
 | GET/POST | `/api/ops/clientes` · POST `/api/ops/clientes/:id/entrar` · GET `/api/ops/agencia` | os espaços de cliente |
+| GET | `/api/ops/leads/:id` | um lead com o dossiê e as suas mensagens (a página do lead) |
+| GET | `/api/ops/messages?leadId=` | as mensagens de um lead |
 
 ## Verificação
 
 ```bash
-npm run check         # 67 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, servidor)
+npm run check         # 69 verificações locais (build, elenco, competências, rotinas, operação, Hoje, autonomia, saldo, mesa, servidor)
 npm run test:ops      # 36 testes da operação: base de dados em memória, nenhum serviço externo
 node evals.mjs        # 8 casos fixos do rascunho (preço, pergunta, citações, promessas)
 npm run test:integrations  # 18 testes das integrações e da pesquisa Google

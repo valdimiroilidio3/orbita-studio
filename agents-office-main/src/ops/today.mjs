@@ -28,7 +28,10 @@ function messageCard(db, m) {
   ].filter(Boolean).join(' · ');
   return {
     id: m.id, kind: 'mensagem', status: m.status, channel: m.channel,
-    lead: { id: lead.id, name: lead.name || '', city: lead.city || '', phone: lead.phone || '', email: lead.email || '' },
+    lead: {
+      id: lead.id, name: lead.name || '', city: lead.city || '', phone: lead.phone || '', email: lead.email || '',
+      category: lead.category || '', score: lead.score ?? null, status: lead.status || '',
+    },
     subject: m.subject || '', body: m.body || '',
     // o porquê da mensagem diz o que se viu e o que se citou; cai para a nota do lead se não houver
     why: [m.why, why].filter(Boolean).join(' · '),

@@ -1,0 +1,714 @@
+// Órbita — a mesa de trabalho.
+//
+// Uma superfície sóbria para o que se faz todos os dias: decidir o que sai, ver os leads, ler o
+// porquê de cada um, e saber quanto custou e quanto entrou. O escritório 3D fica onde está — os
+// agentes vivem lá; aqui é onde o dono decide.
+//
+// Regras que esta camada não quebra: nada sai sem aprovação; o envio de WhatsApp é um link
+// aberto à mão e confirmado depois; o email só sai com token e consentimento, e a recusa é
+// mostrada por palavras; e nenhum número aparece sem vir da base de dados.
+const API = '/api';
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const money = c => (Number(c || 0) / 100).toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' });
+const LONG_DATE = (() => {
+  const d = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: '2-digit', month: 'long' });
+  return d.replace('-feira', '');
+})();
+const when = iso => {
+  if (!iso) return '';
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return 'agora';
+  if (m < 60) return `há ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'ontem' : `há ${d} dias`;
+};
+const hhmm = iso => (iso ? new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+const reasonLines = t => String(t || '').split(' · ').map(s => s.replace(/\s*\(\+?-?\d+\)\s*/g, '').trim()).filter(Boolean);
+
+const IC = {
+  hoje: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>',
+  leads: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M16.5 5.6a3 3 0 0 1 0 5.6M18 14.6c2 .6 3.4 2.3 3.4 4.6"/></svg>',
+  campanhas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',
+  conversas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-8 8 8.4 8.4 0 0 1-3.3-.7L4 20.5l1.2-4.3A8 8 0 1 1 20 12Z"/></svg>',
+  saldo: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  enviar: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',
+  tick: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',
+  chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
+  lupa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+  vazio: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
+};
+
+const NAV = [
+  { k: 'hoje', label: 'Hoje', ic: 'hoje' },
+  { k: 'leads', label: 'Leads', ic: 'leads' },
+  { k: 'conversas', label: 'Conversas', ic: 'conversas' },
+  { k: 'saldo', label: 'Saldo', ic: 'saldo' },
+];
+
+const S = {
+  route: { name: 'hoje', id: null },
+  summary: null, today: null, leads: [], messages: [], saldo: null, clientes: null,
+  lead: null, leadMessages: [], dossier: null,
+  pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
+};
+const $ = sel => document.querySelector(sel);
+const main = () => $('#main');
+
+async function call(path, method = 'GET', body) {
+  const opt = { method, headers: {} };
+  if (body !== undefined) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(API + path, opt);
+  let j = {};
+  try { j = await r.json(); } catch { /* resposta vazia */ }
+  if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+function toast(msg, bad = false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.toggle('bad', !!bad);
+  t.classList.add('on');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('on'), bad ? 6000 : 3800);
+}
+
+/* ---------------- navegação ---------------- */
+function parseHash() {
+  const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
+  const [name, id] = h.split('/');
+  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead'];
+  return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
+}
+
+function paintNav() {
+  const cur = S.route.name === 'lead' ? 'leads' : S.route.name;
+  const pend = S.today?.decidir?.length || 0;
+  const nav = NAV.map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
+  $('#nav').innerHTML = nav;
+  $('#tabbar').innerHTML = NAV.map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}">${IC[n.ic]}<span>${n.label}</span></a>`).join('');
+}
+
+function paintSideFoot() {
+  const s = S.summary;
+  const alta = S.leads.filter(l => (l.score || 0) >= 60).length;
+  const total = S.leads.length;
+  const pct = total ? Math.round((alta / total) * 100) : 0;
+  const clientes = S.clientes?.clientes || [];
+  const activo = S.clientes?.activo?.id || '';
+  $('#sideFoot').innerHTML = `
+    ${clientes.length ? `<div class="espaco"><label for="espaco">Espaço</label>
+      <select id="espaco" aria-label="espaço de cliente">${clientes.map(c => `<option value="${esc(c.id)}"${c.id === activo ? ' selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>` : ''}
+    <div class="meter">
+      <div class="mrow"><span class="lbl">Leads com nota alta</span><b>${alta} / ${total || 0}</b></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <small>Custos de API (30 d): ${s ? money(s.custos?.apiCentimos) : '—'}</small>
+    </div>`;
+  const sel = $('#espaco');
+  if (sel) sel.addEventListener('change', async () => {
+    try {
+      const r = await call(`/ops/clientes/${encodeURIComponent(sel.value)}/entrar`, 'POST', {});
+      toast(`Agora em «${r.cliente.nome}».`);
+      await boot(true);
+    } catch (e) { toast(e.message, true); }
+  });
+}
+
+/* ---------------- dados ---------------- */
+async function loadCommon() {
+  const [summary, today, leads, messages, saldo, clientes] = await Promise.all([
+    call('/ops/summary').catch(() => null),
+    call('/ops/today').catch(() => null),
+    call('/ops/leads?limit=200').catch(() => ({ leads: [] })),
+    call('/ops/messages?limit=100').catch(() => ({ messages: [] })),
+    call('/ops/saldo').catch(() => null),
+    call('/ops/clientes').catch(() => null),
+  ]);
+  S.summary = summary;
+  S.today = today;
+  S.leads = leads.leads || [];
+  S.messages = messages.messages || [];
+  S.saldo = saldo;
+  S.clientes = clientes;
+}
+
+async function loadLead(id) {
+  const r = await call(`/ops/leads/${encodeURIComponent(id)}`);
+  S.lead = r.lead;
+  S.dossier = r.dossier || null;
+  S.leadMessages = r.messages || [];
+}
+
+async function boot(full = true) {
+  try {
+    if (full) await loadCommon();
+    if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
+    S.error = '';
+  } catch (e) { S.error = e.message; }
+  paintNav();
+  paintSideFoot();
+  paint();
+}
+
+/* ---------------- pedaços visuais ---------------- */
+const scoreClass = n => (n >= 75 ? '' : n >= 55 ? 'mid' : 'low');
+const scoreBadge = n => `<span class="badge ${scoreClass(n || 0)}">${n ?? 0} pontos</span>`;
+const statusLabel = { novo: 'Novo', contactado: 'Contactado', respondeu: 'Respondeu', reuniao: 'Reunião', cliente: 'Cliente', perdido: 'Perdido' };
+
+function headHTML({ title, sub, right = '' }) {
+  return `<div class="head"><div><h1>${esc(title)}</h1><div class="sub">${sub}</div></div><div class="head-acts">${right}</div></div>`;
+}
+
+function stopPill() {
+  const parado = !!S.today?.presenca?.parado;
+  return `<button class="pill ${parado ? 'stop' : ''}" data-act="toggle-stop" title="${parado ? 'retomar todos os envios' : 'parar todos os envios'}">
+    ${IC.enviar}<span>${parado ? 'Envios parados' : 'Envios ativos'}</span></button>`;
+}
+
+function statsHTML() {
+  const s = S.summary;
+  if (!s) return '';
+  const ontem = Date.now() - 86400000;
+  const novos = S.leads.filter(l => l.created_at && new Date(l.created_at).getTime() >= ontem).length;
+  const contacto = S.leads.filter(l => l.phone || l.email).length;
+  const respostas = S.leads.filter(l => l.responded_at && new Date(l.responded_at).getTime() >= ontem).length;
+  return `<div class="stats">
+    <div class="stat"><b>${novos}</b><span>leads novos esta noite</span></div>
+    <div class="stat"><b>${contacto}</b><span>com telefone ou email</span></div>
+    <div class="stat"><b class="blue">${respostas}</b><span>respostas desde ontem</span></div>
+    <div class="stat"><b>${money(s.custos?.apiCentimos)}</b><span>custo das APIs (30 dias)</span></div>
+  </div>`;
+}
+
+/* ---------------- Hoje ---------------- */
+function decisions() {
+  const d = S.today?.decidir || [];
+  return d.filter(c => c && (c.kind === 'mensagem' || c.kind === 'autonomia'));
+}
+
+function pickDecision() {
+  const list = decisions();
+  if (!list.length) return null;
+  return list.find(d => d.id === S.pick) || list[0];
+}
+
+function whyItems(lead, dossier) {
+  const items = [];
+  for (const r of reasonLines(lead?.score_reasons || lead?.reasons || '')) items.push(r);
+  for (const e of (dossier?.evidence || []).map(x => x.label).filter(Boolean)) if (items.length < 6) items.push(e);
+  return items.slice(0, 6);
+}
+
+function decisionCard() {
+  const d = pickDecision();
+  if (!d) {
+    return `<div class="card empty">${IC.vazio}
+      <h3>Nada à espera de ti</h3>
+      <p>Quando houver um rascunho para aprovar, aparece aqui — com o porquê escrito e o texto pronto. Não há nada escondido: se a lista está vazia, é porque não há trabalho teu pendente.</p>
+    </div>`;
+  }
+  if (d.kind === 'autonomia') {
+    return `<div class="card">
+      <div class="detail-top"><div><h3>${esc(d.lead?.name || 'Autonomia')}</h3>
+        <div class="mt">${esc(d.text || '')}</div></div><span class="badge blue">proposta</span></div>
+      <div class="acts"><button class="btn primary" data-act="auto-up" data-scope="${esc(d.id)}">Dar autonomia a este tipo</button>
+        <button class="btn ghost" data-act="auto-down" data-scope="${esc(d.id)}">Manter a pedir</button></div>
+      <div class="hint">A autonomia continua sujeita ao opt-out, ao PARAR TUDO e ao modo ensaio. Podes revogar com um toque.</div>
+    </div>`;
+  }
+  const lead = d.lead || {};
+  const items = [...reasonLines(d.why || ''), ...((d.evidence || []).map(e => e.label))].filter(Boolean).slice(0, 6);
+  const acts = d.status === 'aprovada'
+    ? `<button class="btn primary" data-act="abrir" data-id="${esc(d.id)}">Abrir WhatsApp</button>
+       <button class="btn ghost" data-act="confirmar" data-id="${esc(d.id)}">Já enviei</button>`
+    : `<button class="btn ghost" data-act="rejeitar" data-id="${esc(d.id)}">Rejeitar</button>
+       <button class="btn primary" data-act="aprovar" data-id="${esc(d.id)}">Aprovar e enviar</button>`;
+  return `<div class="card">
+    <div class="detail-top">
+      <div><h3>${esc(lead.name || 'Sem nome')}</h3>
+        <div class="mt">${esc([lead.category, lead.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}</div></div>
+      ${scoreBadge(lead.score)}
+    </div>
+    <div class="msg-label">${IC.enviar}<span>Mensagem para ${d.channel === 'whatsapp' ? 'WhatsApp' : 'email'} · sai só depois de aprovares</span></div>
+    ${d.subject ? `<div class="hint" style="margin:0 0 6px"><b>${esc(d.subject)}</b></div>` : ''}
+    <div class="bubble">${esc(d.body)}</div>
+    <details class="why-box">
+      <summary><span>Porquê este lead<small>${items.length} sinais · abre para ver</small></span>${IC.chev}</summary>
+      <div class="why-grid">${items.length
+        ? items.map(x => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(x)}</span></div>`).join('')
+        : '<div class="why"><span>Sem sinais guardados para este lead.</span></div>'}</div>
+      ${d.why ? `<div class="hint">${esc(d.why)}</div>` : ''}
+      ${d.predictions?.length ? `<div class="hint">Objeções previstas: ${d.predictions.map(p => esc(p.label || p)).join(' · ')}</div>` : ''}
+    </details>
+    <div class="acts">${acts}</div>
+    <div class="hint">Deslizar não é preciso: cada botão faz o mesmo. O envio de WhatsApp é um link que tu abres.</div>
+  </div>`;
+}
+
+function viewHoje() {
+  const list = decisions();
+  const pick = pickDecision();
+  const n = list.length;
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Hoje',
+      sub: `${esc(LONG_DATE)}${n ? ` · <b>${n}</b> ${n === 1 ? 'lead à espera' : 'leads à espera'} da tua decisão` : ' · nada à espera de ti'}`,
+      right: stopPill(),
+    })}
+    ${statsHTML()}
+    <div class="split">
+      <div>
+        <div class="sec-h"><h2>Precisa de ti</h2><span class="count">${n ? `${n} por decidir` : 'em dia'}</span></div>
+        <div class="list">${list.map(d => {
+          const l = d.lead || {};
+          const on = pick && d.id === pick.id;
+          return `<button class="item ${on ? 'on' : ''}" data-act="pick" data-id="${esc(d.id)}">
+            <div class="who"><div class="nm">${esc(l.name || 'Autonomia')}</div>
+              <div class="mt">${esc(d.kind === 'autonomia' ? 'proposta de autonomia' : [l.category, l.city].filter(Boolean).join(' · ') || d.channel)}</div></div>
+            ${d.kind === 'autonomia' ? '<span class="badge blue">novo</span>' : scoreBadge(l.score)}
+          </button>`;
+        }).join('') || `<div class="card empty">${IC.vazio}<h3>Sem decisões pendentes</h3>
+          <p>Um rascunho aparece aqui assim que houver um. Para haver rascunhos, é preciso haver leads: procura-os em ◈ LEADS no escritório, ou escreve à mão na página de um lead.</p></div>`}</div>
+      </div>
+      <div>${decisionCard()}</div>
+    </div>
+  </div>`;
+}
+
+/* ---------------- Leads ---------------- */
+function filteredLeads() {
+  const q = S.q.trim().toLowerCase();
+  return S.leads.filter(l => {
+    if (S.filter === 'sem-site' && (l.website || l.domain)) return false;
+    if (S.filter === 'novo' && l.status !== 'novo') return false;
+    if (S.filter === 'responderam' && !['respondeu', 'reuniao', 'cliente'].includes(l.status)) return false;
+    if (!q) return true;
+    return [l.name, l.city, l.category, l.phone, l.email, l.website].filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
+}
+
+function novoLeadForm() {
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Acrescentar um lead à mão</h3><span class="count">fica guardado e pontuado</span></div>
+    <div class="form three">
+      <input class="in" id="nlNome" placeholder="Nome" aria-label="nome">
+      <input class="in" id="nlNicho" placeholder="Nicho (ex.: barbearias)" aria-label="nicho">
+      <input class="in" id="nlCidade" placeholder="Cidade" aria-label="cidade">
+    </div>
+    <div class="form two" style="margin-top:var(--s2)">
+      <input class="in" id="nlTelefone" placeholder="Telefone" aria-label="telefone">
+      <input class="in" id="nlSite" placeholder="Site (se tiver)" aria-label="site">
+      <button class="btn primary small" data-act="guardar-lead" style="padding:0 var(--s5)">Guardar</button>
+    </div>
+    <div class="hint">A pesquisa da Google enche isto sozinha quando houver chave. Sem chave, escreve tu — o lead é pontuado pelas mesmas regras.</div>
+  </div>`;
+}
+
+function viewLeads() {
+  const list = filteredLeads();
+  const total = S.leads.length;
+  const alta = S.leads.filter(l => (l.score || 0) >= 60).length;
+  const chips = [['todos', 'Todos'], ['novo', 'Por contactar'], ['sem-site', 'Sem site'], ['responderam', 'Responderam']];
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Leads',
+      sub: total ? `${total} guardados · ${alta} com nota alta · ${S.leads.filter(l => !['novo'].includes(l.status)).length} já contactados` : 'ainda não há nenhum lead guardado',
+      right: `<button class="btn small ghost" data-act="novo-lead">+ Lead</button>${stopPill()}`,
+    })}
+    ${S.adding ? novoLeadForm() : ''}
+    <div class="tools">
+      <div class="search">${IC.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho…" value="${esc(S.q)}" aria-label="procurar leads"></div>
+      ${chips.map(([k, l]) => `<button class="chip ${S.filter === k ? 'on' : ''}" data-act="filter" data-k="${k}">${l}</button>`).join('')}
+    </div>
+    ${list.length ? `<div class="rows">${list.map(l => `<button class="row" data-act="ver-lead" data-id="${esc(l.id)}">
+      <div><div class="nm">${esc(l.name)}</div><div class="mt">${esc([l.category, l.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}</div></div>
+      <div class="cell hide-m">${esc(l.website ? l.website.replace(/^https?:\/\//, '').replace(/\/$/, '') : (l.phone || l.email || 'sem contacto'))}</div>
+      <div class="cell"><span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span></div>
+      ${scoreBadge(l.score)}
+    </button>`).join('')}</div>`
+      : `<div class="card empty">${IC.vazio}<h3>${total ? 'Nenhum lead neste filtro' : 'Ainda não há leads guardados'}</h3>
+        <p>${total
+          ? 'Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro — os dados que existem estão todos aqui.'
+          : 'Os leads entram pela pesquisa real do escritório: abre ◈ LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Sem chaves de pesquisa, podes acrescentá-los à mão.'}</p></div>`}
+  </div>`;
+}
+
+/* ---------------- o lead: aprovação, factos, histórico ---------------- */
+function currentMessage() {
+  const order = { revisao: 0, rascunho: 1, ensaio: 2, aprovada: 3, enviada: 4, falhou: 5, bloqueada: 6, rejeitada: 7 };
+  return [...S.leadMessages].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))[0] || null;
+}
+
+function leadMessageCard(m) {
+  if (!m) {
+    const sinais = reasonLines(S.lead?.score_reasons || '');
+    return `<div class="card">
+      <div class="sec-h"><h3>Sem mensagem ainda</h3><span class="count">${S.leadMessages.length ? S.leadMessages.length + ' já escritas' : 'nenhuma escrita'}</span></div>
+      <p class="hint" style="margin-top:0">Primeiro lê o que o negócio diz de si; depois escreve com esses factos. A mensagem nasce rascunho e não sai sem o teu OK.</p>
+      ${sinais.length ? `<div class="why-grid">${sinais.slice(0, 6).map(x => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(x)}</span></div>`).join('')}</div>` : ''}
+      <div class="acts" style="justify-content:center">
+        <button class="btn ghost" data-act="pesquisar">Ler o site</button>
+        <button class="btn primary" data-act="escrever">Escrever mensagem</button>
+      </div>
+      <div class="hint" id="leadNote"></div>
+    </div>`;
+  }
+  const st = m.status;
+  const items = [
+    ...reasonLines(S.lead?.score_reasons || ''),
+    ...((S.dossier?.evidence || []).map(e => e.label)),
+  ].filter(Boolean).slice(0, 6);
+  const acts = st === 'rascunho' || st === 'ensaio'
+    ? `<button class="btn ghost" data-act="rejeitar" data-id="${esc(m.id)}">Rejeitar</button>
+       <button class="btn primary" data-act="aprovar" data-id="${esc(m.id)}">${st === 'ensaio' ? 'Promover e aprovar' : 'Aprovar e enviar'}</button>`
+    : st === 'aprovada'
+      ? `<button class="btn primary" data-act="abrir" data-id="${esc(m.id)}">Abrir WhatsApp</button>
+         <button class="btn ghost" data-act="confirmar" data-id="${esc(m.id)}">Já enviei</button>`
+      : st === 'enviada'
+        ? `<button class="btn ghost" data-act="sinal" data-id="${esc(m.id)}" data-kind="respondeu">Respondeu</button>
+           <button class="btn ghost" data-act="sinal" data-id="${esc(m.id)}" data-kind="recusou">Recusou</button>`
+        : `<button class="btn primary" data-act="escrever">Escrever outra</button>`;
+  const estado = {
+    rascunho: 'por aprovar', ensaio: 'em ensaio — não sai', aprovada: 'aprovada — falta enviar',
+    enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada (opt-out)', falhou: 'falhou', revisao: 'para rever',
+  }[st] || st;
+  return `<div class="card">
+    <div class="msg-label">${IC.enviar}<span>Mensagem para ${m.channel === 'whatsapp' ? 'WhatsApp' : 'email'} · ${esc(estado)}</span></div>
+    ${m.subject ? `<div class="hint" style="margin:0 0 6px"><b>${esc(m.subject)}</b></div>` : ''}
+    <div class="bubble">${esc(m.body)}</div>
+    <details class="why-box" ${items.length ? '' : 'hidden'}>
+      <summary><span>Porquê este lead<small>${items.length} sinais · abre para ver</small></span>${IC.chev}</summary>
+      <div class="why-grid">${items.map(x => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(x)}</span></div>`).join('')}</div>
+      ${m.why ? `<div class="hint">${esc(m.why)}</div>` : ''}
+    </details>
+    <div class="acts">${acts}</div>
+    <div class="hint" id="leadNote">${m.status === 'ensaio' ? 'Modo ensaio ligado: esta mensagem não sai. Aprovar promove-a a rascunho a sério.' : 'Nada sai sem este botão. O WhatsApp abre com o texto; o email exige token e consentimento.'}</div>
+  </div>`;
+}
+
+function leadFacts() {
+  const l = S.lead;
+  const r = S.dossier?.research || { status: 'por_fazer' };
+  const rows = [
+    ['Telefone', l.phone || '—'],
+    ['Email', l.email || '—'],
+    ['Site', l.website || '—'],
+    ['Avaliação', l.rating ? `${Number(l.rating).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ★ · ${l.reviews || 0} opiniões` : '—'],
+    ['Origem', l.source || '—'],
+    ['Estado', statusLabel[l.status] || l.status],
+  ];
+  const research = r.status === 'ok'
+    ? `Lido ${when(r.fetchedAt)} · ${(S.dossier?.evidence || []).length} factos`
+    : r.status === 'falhou'
+      ? `Não consegui ler: ${esc(r.reason || 'sem motivo guardado')}`
+      : 'ainda não li este site';
+  return `<div class="card">
+    <div class="sec-h"><h3>O que sabemos</h3><button class="btn small ghost" data-act="pesquisar">Ler o site</button></div>
+    <table><tbody>${rows.map(([k, v]) => `<tr><td style="color:var(--muted)">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
+    <div class="hint">${research}</div>
+    ${(S.dossier?.evidence || []).length ? `<div class="hint">${S.dossier.evidence.map(e => `${esc(e.label)}${e.quote ? ` — «${esc(String(e.quote).slice(0, 90))}»` : ''}`).join(' · ')}</div>` : ''}
+    ${(S.dossier?.quotes || []).length ? `<div class="hint">Citações guardadas: ${S.dossier.quotes.slice(0, 2).map(q => `«${esc(q)}»`).join(' · ')}</div>` : ''}
+  </div>`;
+}
+
+function leadHistory() {
+  if (!S.leadMessages.length) return '';
+  const label = { rascunho: 'rascunho', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever' };
+  return `<div class="card">
+    <div class="sec-h"><h3>Histórico</h3><span class="count">${S.leadMessages.length} mensagem(ns)</span></div>
+    <table><tbody>${S.leadMessages.map(m => `<tr>
+      <td style="color:var(--muted);white-space:nowrap">${esc(hhmm(m.created_at))} · ${esc(when(m.created_at))}</td>
+      <td>${esc(String(m.body).slice(0, 70))}${String(m.body).length > 70 ? '…' : ''}</td>
+      <td class="n"><span class="tag ${m.status === 'enviada' ? 'respondeu' : m.status === 'rejeitada' ? 'perdido' : ''}">${esc(label[m.status] || m.status)}</span></td>
+    </tr>`).join('')}</tbody></table>
+  </div>`;
+}
+
+function viewLead() {
+  const l = S.lead;
+  if (!l) return `<div class="wrap"><div class="skeleton">a abrir o lead…</div></div>`;
+  const m = currentMessage();
+  const next = { novo: ['contactado', 'perdido'], contactado: ['respondeu', 'perdido'], respondeu: ['reuniao', 'perdido'], reuniao: ['cliente', 'perdido'], cliente: [], perdido: ['novo'] }[l.status] || [];
+  return `<div class="wrap">
+    <div style="margin-bottom:var(--s3)"><a href="#/leads" class="btn quiet small">‹ Leads</a></div>
+    <div class="head">
+      <div><h1 style="font-size:34px">${esc(l.name)}</h1>
+        <div class="sub">${esc([l.category, l.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}${l.rating ? ` · ${Number(l.rating).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ★` : ''}${l.source ? ` · ${esc(l.source)}` : ''}</div></div>
+      <div class="head-acts">${scoreBadge(l.score)}<span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span></div>
+    </div>
+    ${leadMessageCard(m)}
+    <div style="display:grid;gap:var(--s4);margin-top:var(--s4)">
+      ${leadFacts()}
+      ${leadHistory()}
+      ${next.length ? `<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
+        <div class="acts" style="margin-top:0">${next.map(s => `<button class="btn ghost small" data-act="estado" data-id="${esc(l.id)}" data-status="${s}">Marcar ${esc(statusLabel[s])}</button>`).join('')}</div>
+        <div class="hint">O funil é novo → contactado → respondeu → reunião → cliente. Saltar passos é recusado, e a recusa diz porquê.</div></div>` : ''}
+    </div>
+  </div>`;
+}
+
+/* ---------------- Conversas ---------------- */
+function viewConversas() {
+  const list = S.messages;
+  const label = { rascunho: 'por aprovar', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever' };
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Conversas',
+      sub: list.length ? `${list.length} mensagens · ${list.filter(m => m.status === 'rascunho').length} à espera do teu OK` : 'ainda não há nenhuma mensagem escrita',
+      right: stopPill(),
+    })}
+    ${list.length ? `<div class="rows">${list.map(m => `<button class="row" data-act="ver-lead" data-id="${esc(m.lead_id)}">
+      <div><div class="nm">${esc(m.lead?.name || 'sem lead')}</div><div class="mt">${esc(String(m.body).slice(0, 80))}${String(m.body).length > 80 ? '…' : ''}</div></div>
+      <div class="cell hide-m">${esc(m.channel === 'whatsapp' ? 'WhatsApp' : 'email')} · ${esc(when(m.created_at))}</div>
+      <div class="cell"><span class="tag ${m.status === 'enviada' ? 'respondeu' : m.status === 'rejeitada' || m.status === 'bloqueada' ? 'perdido' : ''}">${esc(label[m.status] || m.status)}</span></div>
+      <div class="cell">${m.lead?.score != null ? scoreBadge(m.lead.score) : ''}</div>
+    </button>`).join('')}</div>`
+      : `<div class="card empty">${IC.vazio}<h3>Sem conversas</h3>
+        <p>Uma conversa começa com um rascunho. Abre um lead e escreve: a mensagem fica aqui, com o estado dela, até decidires o que fazer.</p>
+        <div class="acts" style="justify-content:center"><a class="btn primary" href="#/leads" style="max-width:240px">Ver os leads</a></div></div>`}
+  </div>`;
+}
+
+/* ---------------- Saldo ---------------- */
+function viewSaldo() {
+  const b = S.saldo;
+  if (!b) return `<div class="wrap"><div class="skeleton">a ler o saldo…</div></div>`;
+  const u = b.unitarios || {};
+  const uni = [
+    u.custoPorLead != null ? `custo por lead ${money(u.custoPorLead)}` : '',
+    u.custoPorContactado != null ? `por contactado ${money(u.custoPorContactado)}` : '',
+    u.custoPorCliente != null ? `por cliente ${money(u.custoPorCliente)}` : '',
+    u.receitaPorCliente != null ? `receita por cliente ${money(u.receitaPorCliente)}` : '',
+  ].filter(Boolean).join(' · ') || 'sem dados suficientes para custos unitários';
+  return `<div class="wrap">
+    ${headHTML({ title: 'Saldo', sub: `os últimos ${b.janela?.dias || 90} dias · só o que está registado`, right: stopPill() })}
+    <div class="money">
+      <div class="card"><b class="ok">${money(b.receitaCentimos)}</b><small>entrou</small></div>
+      <div class="card"><b>${money(b.custoCentimos)}</b><small>gastou em APIs</small></div>
+      <div class="card"><b class="${b.margemCentimos < 0 ? 'bad' : 'ok'}">${money(b.margemCentimos)}</b><small>margem</small></div>
+    </div>
+    ${b.semDados?.receita ? `<div class="hint" style="margin-bottom:var(--s4)">${esc(b.semDados.receita)}</div>` : ''}
+    <div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>Registar uma entrada</h3><span class="count">escrita por ti</span></div>
+      <div class="form">
+        <input class="in" id="valor" inputmode="decimal" placeholder="Valor (€)" aria-label="valor em euros">
+        <input class="in" id="campanha" placeholder="Campanha (ex.: Coimbra · barbearias)" aria-label="campanha">
+        <button class="btn primary small" data-act="receita" style="padding:0 var(--s5)">Registar</button>
+      </div>
+      <div class="hint">Nada é adivinhado: uma fatura emitida fora do Órbita só entra se a escreveres aqui.</div>
+    </div>
+    <div class="cards2">
+      <div class="card"><div class="sec-h"><h3>Receita por campanha</h3></div>
+        <table><tbody>${(b.porCampanha || []).length
+          ? b.porCampanha.map(c => `<tr><td>${esc(c.campanha)}</td><td class="n">${money(c.cents)}</td></tr>`).join('')
+          : '<tr><td class="hint">Sem entradas registadas.</td></tr>'}</tbody></table></div>
+      <div class="card"><div class="sec-h"><h3>Custos por fornecedor</h3></div>
+        <table><tbody>${(b.custosPorFornecedor || []).length
+          ? b.custosPorFornecedor.map(c => `<tr><td>${esc(c.provider)}</td><td class="n">${money(c.cents)}</td></tr>`).join('')
+          : '<tr><td class="hint">Sem custos de API neste período.</td></tr>'}</tbody></table></div>
+    </div>
+    <div class="hint" style="margin-top:var(--s4)">${esc(uni)}</div>
+    ${(b.entradas || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Entradas</h3><span class="count">${b.entradas.length}</span></div>
+      <table><tbody>${b.entradas.map(e => `<tr><td style="white-space:nowrap;color:var(--muted)">${esc(when(e.at))}</td><td>${esc(e.campaign || 'sem campanha')}</td><td class="n">${money(e.amount_cents)}</td>
+        <td class="n"><button class="btn quiet" data-act="apagar-receita" data-id="${esc(e.id)}" title="apagar">✕</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+  </div>`;
+}
+
+/* ---------------- pintar ---------------- */
+function paint() {
+  if (S.error && !S.summary) {
+    main().innerHTML = `<div class="wrap"><div class="card empty"><h3>Não consegui falar com o Órbita</h3><p>${esc(S.error)}</p>
+      <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
+    return;
+  }
+  main().innerHTML = S.route.name === 'hoje' ? viewHoje()
+    : S.route.name === 'leads' ? viewLeads()
+      : S.route.name === 'lead' ? viewLead()
+        : S.route.name === 'conversas' ? viewConversas()
+          : viewSaldo();
+}
+
+/* ---------------- acções ---------------- */
+function waLink(phone, body) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(body || '')}`;
+}
+
+async function act(name, el, ev) {
+  const id = el?.dataset.id;
+  const note = () => $('#leadNote');
+  const setNote = (msg, bad) => { const n = note(); if (n) { n.textContent = msg; n.classList.toggle('bad', !!bad); } else toast(msg, bad); };
+  try {
+    if (name === 'pick') { S.pick = id; paint(); return; }
+    if (name === 'filter') { S.filter = el.dataset.k; paint(); return; }
+    if (name === 'ver-lead') { location.hash = `#/lead/${encodeURIComponent(id)}`; return; }
+    if (name === 'reload') { await boot(true); return; }
+
+    if (name === 'toggle-stop') {
+      const parado = !!S.today?.presenca?.parado;
+      await call('/ops/stop', 'POST', { stop: !parado });
+      toast(!parado ? 'PARAR TUDO ligado: não sai nada, por nenhum caminho.' : 'Envios retomados.');
+      await boot();
+      return;
+    }
+
+    if (name === 'auto-up' || name === 'auto-down') {
+      const scope = el.dataset.scope;
+      await call(`/ops/autonomia/${encodeURIComponent(scope)}/${name === 'auto-up' ? 'subir' : 'descer'}`, 'POST', { reason: 'decisão na mesa' });
+      toast(name === 'auto-up' ? 'Este tipo passa a enviar sozinho. Os travões continuam.' : 'Volta a pedir-te autorização.');
+      S.pick = null;
+      await boot();
+      return;
+    }
+
+    if (name === 'aprovar') {
+      const m = S.leadMessages.find(x => x.id === id) || (S.today?.decidir || []).find(x => x.id === id);
+      // uma mensagem em ensaio tem de sair do ensaio antes de ser aprovada — por essa ordem
+      if (m?.status === 'ensaio') await call(`/ops/messages/${encodeURIComponent(id)}/promover`, 'POST', {});
+      await call(`/ops/messages/${encodeURIComponent(id)}/approve`, 'POST', {});
+      const lead = m?.lead || S.lead || {};
+      if ((m?.channel || 'whatsapp') === 'whatsapp') {
+        const link = waLink(lead.phone, m?.body);
+        if (link) { window.open(link, '_blank', 'noopener'); toast('Aprovada. Abre o WhatsApp e envia — depois carrega em «Já enviei».'); }
+        else toast('Aprovada, mas o lead não tem telefone: não há link de WhatsApp.', true);
+      } else {
+        try {
+          await call(`/ops/messages/${encodeURIComponent(id)}/send`, 'POST', {});
+          toast('Email enviado.');
+        } catch (e) { toast('Aprovada. O email não saiu: ' + e.message, true); }
+      }
+      await boot();
+      return;
+    }
+
+    if (name === 'rejeitar') {
+      const why = prompt('Porque é que rejeitas? (fica no registo)') || 'rejeitada na mesa';
+      await call(`/ops/messages/${encodeURIComponent(id)}/reject`, 'POST', { reason: why });
+      toast('Rejeitada. A razão ficou guardada.');
+      await boot();
+      return;
+    }
+
+    if (name === 'abrir') {
+      const m = S.leadMessages.find(x => x.id === id) || (S.today?.decidir || []).find(x => x.id === id);
+      const lead = m?.lead || S.lead || {};
+      const link = waLink(lead.phone, m?.body);
+      if (!link) { toast('Este lead não tem telefone — não há link de WhatsApp.', true); return; }
+      window.open(link, '_blank', 'noopener');
+      toast('Link aberto. Depois de enviares, carrega em «Já enviei».');
+      return;
+    }
+
+    if (name === 'confirmar') {
+      await call(`/ops/messages/${encodeURIComponent(id)}/confirm`, 'POST', {});
+      toast('Confirmado: contas como enviada.');
+      await boot();
+      return;
+    }
+
+    if (name === 'sinal') {
+      await call(`/ops/messages/${encodeURIComponent(id)}/sinal`, 'POST', { kind: el.dataset.kind });
+      toast('Sinal registado — a nota aprende com ele.');
+      await boot();
+      return;
+    }
+
+    if (name === 'estado') {
+      const status = el.dataset.status;
+      await call(`/ops/leads/${encodeURIComponent(id)}`, 'PATCH', { status });
+      toast(`Marcado como ${statusLabel[status] || status}.`);
+      await boot();
+      return;
+    }
+
+    if (name === 'pesquisar' || name === 'escrever') {
+      const leadId = S.lead?.id || id;
+      if (!leadId) return;
+      if (name === 'pesquisar') {
+        setNote('a ler o site…');
+        const r = await call(`/ops/leads/${encodeURIComponent(leadId)}/pesquisar`, 'POST', {});
+        toast(r.dossier?.research?.status === 'ok' ? `Li o site: ${(r.dossier.evidence || []).length} factos.` : `Não consegui ler: ${r.dossier?.research?.reason || 'sem motivo'}`, r.dossier?.research?.status !== 'ok');
+        await boot(false);
+        await loadLead(leadId);
+        paint();
+      } else {
+        setNote('a escrever…');
+        const r = await call(`/ops/leads/${encodeURIComponent(leadId)}/rascunho`, 'POST', { channel: 'whatsapp' });
+        toast(`Rascunho escrito (${r.message?.generated_by === 'modelo' ? 'modelo local' : r.message?.generated_by || 'sem motor'}).`);
+        await boot(false);
+        await loadLead(leadId);
+        paint();
+      }
+      return;
+    }
+
+    if (name === 'novo-lead') { S.adding = !S.adding; paint(); return; }
+
+    if (name === 'guardar-lead') {
+      const v = id => String($('#' + id)?.value || '').trim();
+      if (!v('nlNome')) { toast('O lead precisa de um nome.', true); return; }
+      const r = await call('/ops/leads', 'POST', { leads: [{
+        name: v('nlNome'), category: v('nlNicho'), city: v('nlCidade'),
+        phone: v('nlTelefone') || undefined, website: v('nlSite') || undefined, source: 'manual',
+      }] });
+      toast(r.created ? 'Lead guardado.' : r.updated ? 'Este lead já existia — atualizei os dados.' : 'Não entrou.', !r.created && !r.updated);
+      S.adding = false;
+      await boot();
+      return;
+    }
+
+    if (name === 'receita') {
+      const valor = Number(String($('#valor')?.value || '').replace(',', '.'));
+      if (!valor) { toast('Diz o valor que entrou.', true); return; }
+      await call('/ops/receita', 'POST', { euros: valor, campaign: $('#campanha')?.value || '' });
+      toast('Entrada registada.');
+      await boot();
+      return;
+    }
+
+    if (name === 'apagar-receita') {
+      await call(`/ops/receita/${encodeURIComponent(id)}`, 'DELETE');
+      toast('Entrada apagada.');
+      await boot();
+    }
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+/* ---------------- arranque ---------------- */
+function start() {
+  S.route = parseHash();
+  paintNav();
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.tagName === 'BUTTON') e.preventDefault();
+    act(b.dataset.act, b, e);
+  });
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'q') return;
+    S.q = e.target.value;
+    const at = e.target.selectionStart;
+    paint();
+    const q = document.querySelector('#q');
+    if (q) { q.focus(); try { q.setSelectionRange(at, at); } catch { /* ok */ } }
+  });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open'));
+  });
+  window.addEventListener('hashchange', async () => {
+    S.route = parseHash();
+    S.pick = null;
+    if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
+    paintNav();
+    paint();
+    main().scrollIntoView({ block: 'start' });
+  });
+  boot(true);
+}
+
+start();

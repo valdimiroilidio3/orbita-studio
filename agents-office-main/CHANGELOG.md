@@ -47,6 +47,19 @@
 - **Na gaveta:** select de cliente com `+ CLIENTE`, abas **AUTONOMIA** (nível por tipo, dar/revogar, ensaio, avaliações) e **SALDO** (entrou, gastou, margem, registar entrada, tabelas). O cartão de Hoje ganhou o tipo **autonomia**: a proposta de enviar sozinho aparece onde se decide, com `→` a dar e `←` a recusar.
 - **Provas:** `ops.test.mjs` passa a **36 testes** (autonomia com e sem amostra, opt-out a mandar sobre a autonomia, ensaio, regressão nos evals, saldo negativo, isolamento entre clientes) e o `check.mjs` a **67 verificações**, com quatro provas novas contra um servidor isolado: `409` sem amostra, ensaio que não deixa sair, avaliações guardadas, e um cliente novo que vê **0 leads** do anterior. A do navegador continua a falhar sem Chrome.
 
+## 1.5.0 — 26 out 2026 · A mesa de trabalho: leads e aprovação
+
+- **Uma superfície para decidir, ao lado do escritório.** `/app` (botão **▤ MESA** na barra) abre uma página sóbria, de produto: barra lateral com **Hoje**, **Leads**, **Conversas** e **Saldo**, cartões brancos, um azul só para o que é acção. O escritório 3D continua onde está — é lá que os agentes trabalham; a mesa é onde tu decides. Construída como um ficheiro só (`dist/mesa.html`, 46 KB, sem pedidos externos), com entrada própria no `build.mjs` para não arrastar o three.js.
+- **A página de leads.** Procura por nome, cidade, nicho, telefone, email ou site; filtros **Todos / Por contactar / Sem site / Responderam**; cada linha traz o nicho e a cidade, a nota com cor, o estado do funil e o contacto. Sem leads, o estado vazio diz de onde eles vêm.
+- **A página de aprovação (cada lead).** O texto pronto numa bolha, o canal e o estado por palavras («por aprovar», «aprovada — falta enviar», «em ensaio — não sai»), **Porquê este lead** com os sinais que existem mesmo (as razões da nota e os factos lidos no site), e **Rejeitar** / **Aprovar e enviar**. Aprovar abre o link do WhatsApp com o texto; depois **Já enviei** confirma. Email tenta o envio e mostra a recusa por palavras se faltar token ou consentimento. Sem mensagem, a página mostra os sinais e dois botões: **Ler o site** e **Escrever mensagem**.
+- **O que sabemos e o histórico**, na mesma página: telefone, email, site, avaliação, origem, estado, o resultado da última leitura do site (com o motivo quando falha) e todas as mensagens daquele lead com o estado de cada uma.
+- **Hoje, na mesa.** Quatro números reais (leads novos, com contacto, respostas desde ontem, custo de APIs a 30 dias), a lista **Precisa de ti** e, ao lado, a mensagem com o porquê e a decisão. As propostas de autonomia aparecem aqui como cartões próprios, com dar/recusar.
+- **Saldo, na mesa.** Entrou, gastou, margem; registar uma entrada; receita por campanha, custos por fornecedor, custos unitários e as entradas com a data.
+- **O interruptor de emergência é o mesmo** — o estado real (`PARAR TUDO`) está no canto de todas as páginas e liga/desliga pelo servidor, com a frase dita.
+- **Telemóvel**: barra inferior com as quatro secções, uma coluna, acções pegadas ao fundo, alvos de toque de 44 px, `aria-current`, foco visível e `prefers-reduced-motion`.
+- **Servidor:** nova rota `GET /api/ops/leads/:id` (lead + dossiê + mensagens numa só resposta), filtro `?leadId=` em `/api/ops/messages`, e `/app`·`/mesa` a servir a página. `dist/mesa.js` para desenvolvimento.
+- **Provas:** **69/70** verificações — duas novas, contra o servidor isolado: `/app` serve a página construída, e o lead vem com dossiê e mensagens. A do navegador continua a falhar sem Chrome. `ops.test.mjs` 36/36 e `node evals.mjs` 8/8 sem alterações.
+
 # Changelog
 
 ## 1.0.0 — 25 out 2026 · Órbita

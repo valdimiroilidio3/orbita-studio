@@ -28,6 +28,7 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
 | Provas | `ops.test.mjs` (`npm run test:ops`) | 36 testes, tudo em memória, sem tocar em serviços |
+| **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
 
 Não há dependências novas: usa-se o `node:sqlite` que vem com o Node 22.4+ (aparece um
 `ExperimentalWarning` no arranque — é do Node, não do Órbita; silencia-se com
@@ -253,6 +254,37 @@ Sem entradas registadas a margem é **negativa** (gastaste e não entraste nada)
 `semDados.receita` com essa frase, em vez de um zero que parecia equilíbrio. `spentToday()` é o
 que o travão diário de custos usa.
 
+## A mesa de trabalho (leads e aprovação)
+
+O escritório 3D mostra os agentes; a **mesa** mostra o trabalho. `/app` (botão ▤ MESA na barra)
+serve `dist/mesa.html`, construído a partir de `src/mesa.html` + `src/mesa.js` com uma entrada
+própria no `build.mjs` — sem three.js, sem pedidos externos, 46 KB.
+
+**Leads** (`#/leads`) lê `GET /api/ops/leads` e filtra no browser: por texto (nome, cidade, nicho,
+telefone, email, site) e por três recortes que interessam — por contactar, sem site, responderam.
+Não inventa agregados: conta o que está na base.
+
+**A aprovação** é a página de cada lead (`#/lead/:id`), servida por `GET /api/ops/leads/:id`, que
+devolve numa só resposta o lead, o dossiê (`research.dossier`) e as suas mensagens. A página mostra
+a mensagem mais relevante (revisão → rascunho → ensaio → aprovada → enviada), o estado por
+palavras, os sinais do **porquê** (as razões da nota e os factos citáveis) e as acções:
+
+| Estado da mensagem | O que a página oferece |
+|---|---|
+| `rascunho` | **Rejeitar** · **Aprovar e enviar** |
+| `ensaio` | **Rejeitar** · **Promover e aprovar** (sai do ensaio, depois aprova) |
+| `aprovada` | **Abrir WhatsApp** (link com o texto) · **Já enviei** |
+| `enviada` | **Respondeu** · **Recusou** (sinais que movem o funil e ensinam a nota) |
+| sem mensagem | **Ler o site** · **Escrever mensagem**, com os sinais à vista |
+
+Aprovar **não** envia email sem mais: o servidor responde com a razão (token, consentimento) e a
+mesa mostra essa frase. O WhatsApp é um link revisto e enviado à mão — a mesa não finge que
+enviou. Nenhuma rota nova contorna o `PARAR TUDO` nem o opt-out.
+
+Também aqui: **Hoje** (números reais — novos, com contacto, respostas desde ontem, custo de APIs a
+30 dias — mais a lista do que espera decisão), **Conversas** (`GET /api/ops/messages`) e **Saldo**
+(`GET /api/ops/saldo`). No telemóvel, barra inferior fixa e uma coluna.
+
 ## Caixa de entrada e envio
 
 - **Email** exige `RESEND_API_KEY` **e** consentimento registado no lead (`consent: 'dado'`).
@@ -270,12 +302,13 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 |---|---|---|
 | GET | `/api/ops/summary` | Leads, funil, conversão, mensagens, custos, estado da fila |
 | GET | `/api/ops/leads?limit=&status=` | A lista, ordenada por nota |
+| GET | `/api/ops/leads/:id` | Um lead com o dossiê e as mensagens dele (a página de aprovação) |
 | POST | `/api/ops/leads` | Um lead (`{…}`) ou vários (`{ leads: [...] }`) |
 | PATCH | `/api/ops/leads/:id` | Mudar de estado no funil (`{ status, note }`) |
 | POST | `/api/ops/leads/:id/consent` | Registar consentimento (`{ consent, reference }`) |
 | POST | `/api/ops/leads/:id/follow-up` | Marcar quando voltar a falar (`{ when }`) |
 | POST | `/api/ops/leads/importar-gravados` | Trazer para a base de dados o que está em `data/leads.json` |
-| GET | `/api/ops/messages?status=` | Mensagens com o lead |
+| GET | `/api/ops/messages?status=&leadId=` | Mensagens com o lead, opcionalmente de um só lead |
 | POST | `/api/ops/messages` | Criar rascunho (`{ leadId, channel, subject, body }`) |
 | POST | `/api/ops/messages/:id/approve` · `/reject` | A decisão do dono |
 | POST | `/api/ops/messages/:id/send` · `/confirm` | Enviar (email, com token) · confirmar envio manual (WhatsApp) |

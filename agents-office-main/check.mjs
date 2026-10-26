@@ -1103,6 +1103,35 @@ else {
       return `${antes} lead(s) no espaço antigo · 0 no novo · ${rol.body.clientes.length} espaço(s) na agência`;
     });
 
+    // --- a mesa de trabalho: a página que o dono abre de manhã ---
+    await step('mesa: /app serve a página de trabalho, já construída', async () => {
+      const r = await fetch(base + '/app');
+      if (r.status !== 200) throw new Error('HTTP ' + r.status);
+      const html = await r.text();
+      if (!/id="main"/.test(html)) throw new Error('sem a área principal');
+      if (!/Órbita/.test(html)) throw new Error('sem marca');
+      if (!/Aprovar e enviar/.test(html)) throw new Error('o script da mesa não foi incluído no build');
+      if (!/#\/leads/.test(html)) throw new Error('sem navegação por rotas');
+      return `${(html.length / 1024).toFixed(0)} KB · um ficheiro · sem pedidos externos`;
+    });
+
+    await step('mesa: o lead vem com dossiê e as mensagens dele numa só resposta', async () => {
+      const made = await call('POST', '/api/ops/leads', { leads: [{ name: 'Mesa Prova', website: 'https://mesa-prova.pt', phone: '+351 219 000 111', city: 'Lisboa', category: 'barbearia' }] });
+      if (!made.body.created) throw new Error('não criou o lead da prova');
+      const lead = (await call('GET', '/api/ops/leads?limit=10')).body.leads.find(l => l.name === 'Mesa Prova');
+      if (!lead) throw new Error('o lead desapareceu');
+      const one = await call('GET', '/api/ops/leads/' + lead.id);
+      if (one.status !== 200 || !one.body.lead) throw new Error('HTTP ' + one.status + ' ' + JSON.stringify(one.body).slice(0, 120));
+      if (!one.body.dossier || !Array.isArray(one.body.dossier.evidence)) throw new Error('sem dossiê');
+      if (!Array.isArray(one.body.messages)) throw new Error('sem as mensagens do lead');
+      const d = await call('POST', `/api/ops/leads/${lead.id}/rascunho`, { channel: 'whatsapp' });
+      if (d.status !== 201) throw new Error('não escreveu o rascunho: ' + JSON.stringify(d.body).slice(0, 120));
+      const two = await call('GET', '/api/ops/leads/' + lead.id);
+      if (!two.body.messages.length) throw new Error('o rascunho não aparece na página do lead');
+      if (two.body.messages[0].lead?.name !== 'Mesa Prova') throw new Error('a mensagem não traz o lead');
+      return `1 lead · dossiê ${two.body.dossier.evidence.length} factos · ${two.body.messages.length} mensagem`;
+    });
+
   } catch (e) { bad('operação: servidor isolado', e.message); }
   finally { srv.kill(); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
 }

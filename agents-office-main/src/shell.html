@@ -857,6 +857,10 @@
   #topOps { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--grey); background: none;
     border: 1px solid var(--hairline); border-radius: 99px; padding: 5px 11px; cursor: pointer; }
   #topOps:hover, #topOps.on { border-color: var(--ink); color: var(--ink); }
+  /* 26 out 2026 MESA: a superfície limpa de decisão (Hoje, leads, aprovação, conversas, saldo) */
+  #topMesa { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--grey); background: none;
+    border: 1px solid var(--hairline); border-radius: 99px; padding: 5px 11px; text-decoration: none; }
+  #topMesa:hover { border-color: var(--ink); color: var(--ink); }
   #opsPanel { position: absolute; z-index: 71; top: 54px; right: 18px; width: 560px; max-height: 76vh; overflow: hidden;
     background: #fff; border: 1px solid var(--ink); border-radius: 16px; box-shadow: 0 26px 70px rgba(21,20,20,.18);
     display: flex; flex-direction: column; }
@@ -1366,6 +1370,7 @@
   <div id="topmodels"></div>
   <button id="topToday" class="td-open" title="o que precisa de ti, o que aconteceu, o que vem aí (H)">HOJE <span class="td-badge" hidden></span></button>
   <button id="topOps" title="a operação a sério: leads guardados com nota, mensagens à espera do teu OK, fila e auditoria">◉ OPERAÇÃO</button>
+  <a id="topMesa" href="/app" target="_blank" rel="noopener" title="a mesa de trabalho: Hoje, os leads, a aprovação de cada mensagem, o saldo">▤ MESA</a>
   <button id="topLeads" title="procura real na Google: empresas (Places) e informação (pesquisa web)">◈ LEADS</button>
   <button id="topCal" title="o calendário — tarefas e rotinas nos seus dias (P)">◷ CALENDÁRIO</button>
   <span id="topAppr" style="display:none">⚠ <span>0</span></span>

@@ -60,6 +60,7 @@ import { parseWhen, describe, valid as validWhen, untilText } from './src/when.j
 
 const cfg = loadConfig();
 const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by build.mjs; shipped so npm start works without a build
+const MESA = path.join(ROOT, 'dist', 'mesa.html'); // a mesa de trabalho: Hoje, leads, aprovação, conversas, saldo
 const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
 
 // ---------- operação a sério (26 out 2026) ----------
@@ -595,6 +596,17 @@ const server = http.createServer(async (req, res) => {
       const page = fs.readFileSync(HTML, 'utf8');
       return res.end(url.pathname === '/dark' ? page.replace('<body>', '<body class="dark">') : page); // /dark: the same file, opened in dark mode
     }
+    // A mesa de trabalho (26 out 2026): a superfície limpa para decidir. O escritório 3D fica onde
+    // está; esta é a página que se abre de manhã e não pede para olhar para uma cena.
+    if (req.method === 'GET' && (url.pathname === '/app' || url.pathname === '/mesa' || url.pathname === '/hoje')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(MESA, 'utf8'));
+    }
+    if (req.method === 'GET' && (url.pathname === '/mesa.js' || url.pathname === '/mesa-dev.html')) {
+      const file = path.join(ROOT, 'dist', url.pathname.slice(1));
+      res.writeHead(200, { 'content-type': url.pathname.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(file, 'utf8'));
+    }
     if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
@@ -887,6 +899,15 @@ const server = http.createServer(async (req, res) => {
         const leadMatch = url.pathname.match(/^\/api\/ops\/leads\/([^/]+)(?:\/(consent|follow-up))?$/);
         if (leadMatch) {
           const id = decodeURIComponent(leadMatch[1]);
+          if (req.method === 'GET' && !leadMatch[2]) {
+            const lead = OPS.leads.getLead(OPS.db, id);
+            if (!lead) return json(res, 404, { ok: false, error: 'lead não encontrado' });
+            return json(res, 200, {
+              ok: true, lead,
+              dossier: OPS.research.dossier(OPS.db, lead),
+              messages: OPS.messages.listMessages(OPS.db, { leadId: id, limit: 50 }),
+            });
+          }
           if (req.method === 'PATCH' && !leadMatch[2]) {
             const b = await limitedBody(req, 8000);
             const lead = b.status
@@ -907,7 +928,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (url.pathname === '/api/ops/messages' && req.method === 'GET') {
           const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));
-          return json(res, 200, { ok: true, messages: OPS.messages.listMessages(OPS.db, { limit, status: url.searchParams.get('status') || null }) });
+          return json(res, 200, { ok: true, messages: OPS.messages.listMessages(OPS.db, { limit, status: url.searchParams.get('status') || null, leadId: url.searchParams.get('leadId') || null }) });
         }
         if (url.pathname === '/api/ops/messages' && req.method === 'POST') {
           const b = await limitedBody(req, 30000);
