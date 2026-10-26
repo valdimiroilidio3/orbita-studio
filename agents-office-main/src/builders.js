@@ -222,11 +222,11 @@ export function makeDesk(chip, live) {
   notes.position.set(1.85, 2.22, -0.15); notes.castShadow = false; g.add(notes);
   // candeeiro de secretária: haste fina, quebra-luz cónico e a pastilha que faz a luz
   const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.15, 8), mat('#3E3F41', { rough: 0.45, metal: 0.7, env: 1 }));
-  stem.position.set(-1.85, 2.74, -0.55); stem.castShadow = true; g.add(stem);
+  stem.position.set(-2.15, 2.74, -0.35); stem.castShadow = true; g.add(stem);
   const shade = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.36, 14, 1, true), mat('#E8E3D6', { rough: 0.6, env: 0.6 }));
-  shade.position.set(-1.85, 3.36, -0.55); shade.rotation.x = 0.24; shade.material.side = THREE.DoubleSide; shade.castShadow = true; g.add(shade);
+  shade.position.set(-2.15, 3.36, -0.35); shade.rotation.x = 0.24; shade.material.side = THREE.DoubleSide; shade.castShadow = true; g.add(shade);
   const bulb = new THREE.Mesh(new THREE.CircleGeometry(0.3, 14), mat('#FFF3D8', { emissive: '#FFE9BE', ei: 1.5, rough: 1, env: 0 }));
-  bulb.rotation.x = Math.PI / 2 + 0.24; bulb.position.set(-1.85, 3.2, -0.51); bulb.castShadow = false; g.add(bulb);
+  bulb.rotation.x = Math.PI / 2 + 0.24; bulb.position.set(-2.15, 3.2, -0.31); bulb.castShadow = false; g.add(bulb);
   return { group: g, screenSet };
 }
 
