@@ -27,7 +27,7 @@ e não havia forma de responder a «quanto gastei este mês?» a não ser a olho
 | **Avaliações** | `src/ops/evals.mjs` + `evals.mjs` | Casos fixos com expectativas; resultado guardado por versão de prompt |
 | **Agência** | `src/ops/tenants.mjs` | Um ficheiro SQLite por cliente, registo em `data/clientes.db` |
 | **Saldo** | `src/ops/money.mjs` | Receita escrita, custos medidos, margem e custos unitários |
-| Provas | `ops.test.mjs` (`npm run test:ops`) | 36 testes, tudo em memória, sem tocar em serviços |
+| Provas | `ops.test.mjs` (`npm run test:ops`) | 43 testes, tudo em memória, sem tocar em serviços |
 | **Mesa** | `src/mesa.html` + `src/mesa.js` → `/app` | A página de trabalho: Hoje, leads, aprovação, conversas, saldo |
 | **Projetos** | `src/ops/projects.mjs` | Do lead ao projeto, com máquina de estados e um projeto por negócio |
 | **Geração** | `src/ops/generate.mjs` | Quatro pontos de partida, ficheiros reais, sem dependências |
