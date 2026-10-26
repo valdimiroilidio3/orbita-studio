@@ -1632,6 +1632,34 @@
   #leadsPanel .ld-h button, #opsPanel .op-h button { border-radius: 99px; transition: background-color .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease); }
   #leadsPanel .ld-h button:hover, #opsPanel .op-h button:hover { background: var(--fill-hover); border-color: transparent; }
 
+
+  /* dentro das gavetas que pendem do menu, o mesmo vocabulário: separadores com
+     leitura de «segmented control» e o cabeçalho com botões de vidro */
+  #leadsPanel .ld-seg button, #opsPanel .op-tab {
+    font-family: var(--sf); font-size: 11.5px; font-weight: 560; letter-spacing: 0;
+    color: var(--grey); background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 5px 10px; cursor: pointer;
+    transition: background-color .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease);
+  }
+  #leadsPanel .ld-seg button:hover, #opsPanel .op-tab:hover { background: var(--fill-hover); color: var(--ink); }
+  #leadsPanel .ld-seg button.on, #opsPanel .op-tab.on { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+  #leadsPanel .ld-h button, #opsPanel .op-h button {
+    font-family: var(--sf); font-size: 10px; font-weight: 620; letter-spacing: .02em;
+    color: var(--grey); border: 1px solid var(--hairline); border-radius: 99px; padding: 4px 10px;
+  }
+  #leadsPanel .ld-h button:hover, #opsPanel .op-h button:hover { background: var(--fill-hover); color: var(--ink); border-color: transparent; }
+  #leadsPanel .ld-close, #opsPanel .op-close {
+    width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; line-height: 1;
+  }
+  #leadsPanel .ld-form .go {
+    font-family: var(--sf); font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
+    background: var(--accent-bg); color: var(--accent-fg); border: 1px solid transparent;
+    border-radius: 9px; padding: 8px 14px;
+  }
+  #leadsPanel .ld-form .go:hover { filter: brightness(1.12); }
+  #leadsPanel .ld-form .go[disabled] { opacity: .45; filter: none; cursor: not-allowed; }
+
   /* a barra flutua: o que vive debaixo dela desce os 8 px do vidro */
   #rail { top: 62px; }
   #overviewBtn { top: 74px; }
@@ -1698,13 +1726,13 @@
 <!-- V4 (25 out 2026): LEADS — a pesquisa real da Google, ligada à prospeção -->
 <div id="leadsPanel" hidden>
   <div class="ld-h"><span class="lab">Leads</span><span class="cnt">—</span><span class="sp"></span>
-    <button class="ld-refresh" title="voltar a ler a lista guardada">ATUALIZAR</button>
+    <button class="ld-refresh" title="voltar a ler a lista guardada">Atualizar</button>
     <button class="ld-close" title="fechar (Esc)">✕</button></div>
-  <div class="ld-seg"><button class="ld-m places on" data-k="places">EMPRESAS</button><button class="ld-m web" data-k="web">WEB</button><span class="hint">empresas = leads · web = informação</span></div>
+  <div class="ld-seg"><button class="ld-m places on" data-k="places">Empresas</button><button class="ld-m web" data-k="web">Web</button><span class="hint">empresas = leads · web = informação</span></div>
   <div class="ld-form">
     <input class="ld-what" placeholder="clínicas dentárias" autocomplete="off" spellcheck="false" title="o que procurar — uma atividade, um setor, um tipo de negócio">
     <input class="ld-where" placeholder="Lisboa" autocomplete="off" spellcheck="false" title="onde — cidade, distrito ou país">
-    <button class="go">PROCURAR</button>
+    <button class="go">Procurar</button>
   </div>
   <div class="ld-row2"><span class="hint"></span></div>
   <div class="ld-list"></div>
@@ -1714,10 +1742,10 @@
 <!-- 26 out 2026: OPERAÇÃO — leads com nota e razões, mensagens à espera de aprovação, fila e rasto -->
 <div id="opsPanel" hidden>
   <div class="op-h"><span class="lab">Operação</span><span class="op-sum">a ler…</span><span class="sp"></span>
-    <button class="op-refresh" title="voltar a ler a base de dados">ATUALIZAR</button>
+    <button class="op-refresh" title="voltar a ler a base de dados">Atualizar</button>
     <button class="op-close" title="fechar (Esc)">✕</button></div>
   <div class="op-clientes"><label for="opClient">Espaço</label><select id="opClient" class="op-stage op-client" aria-label="cliente"></select><button class="op-b" data-act="new-client">+ CLIENTE</button></div>
-  <div class="op-tabs"><button class="op-tab on" data-k="leads">LEADS</button><button class="op-tab" data-k="messages">MENSAGENS</button><button class="op-tab" data-k="auto">AUTONOMIA</button><button class="op-tab" data-k="saldo">SALDO</button><button class="op-tab" data-k="queue">FILA E RASTO</button></div>
+  <div class="op-tabs"><button class="op-tab on" data-k="leads">Leads</button><button class="op-tab" data-k="messages">Mensagens</button><button class="op-tab" data-k="auto">Autonomia</button><button class="op-tab" data-k="saldo">Saldo</button><button class="op-tab" data-k="queue">Fila e rasto</button></div>
   <div class="op-body"></div>
   <div class="op-foot"><span class="op-note">Nada sai daqui sem o teu OK. O funil só avança um passo de cada vez.</span></div>
 </div>
