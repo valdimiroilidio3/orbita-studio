@@ -3,7 +3,7 @@
 // (department dropdown + input, the office names the agent as you type) over a live feed of
 // every task, newest change first, with status chips as filters. The flying tickets are gone:
 // new work and handoffs simply appear in the feed (and a 📋 pops over the desk). Each status
-// carries its own honest meta — backlog: how long it has waited · em curso: a real progress
+// carries its own honest meta — backlog: how long it has waited · em curso: desde quando corre
 // bar · waiting: minutes waiting for AJ's tick · done: the time it finished. Company-wide
 // Kanban still lives on B. DOING / NEXT / DONE rows stay on every pod card.
 // Session-only theatre — nothing persists (AJ's call: gauge interest first).
@@ -21,53 +21,11 @@
 // with the combined deliverable. Live: the server does it (serve.mjs runTeam, one Claude process per
 // desk); this page reads `task.team` off /api/tasks. Demo: the same theatre on a timer.
 import { DEPTS, AGENTS, DEPT_KEYS } from './data.js';
-import { P, rnd, ri } from './v1data.js';
-import { applyTasks, PROFILE, titleCase } from './profile.js';
+import { SEAT } from './agentes.js';
 import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
 import { fmtTime, fmtDate, fmtDateTime, normaliseHour } from './time.js';
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
-
-const SEGMENTS = ['construção', 'climatização', 'clínicas dentárias', 'logística', 'ginásios', 'imobiliário', 'jardinagem', 'advocacia'];
-
-// tarefas típicas por agente (negócio genérico, não TerriTool)
-const POOL = {
-  elead: ['Rever as prioridades do dia com as seis salas', 'Assinalar 3 tarefas atrasadas e reagendar', 'Fechar o relatório de estado da empresa', 'Dar OK a 4 entregas à espera do proprietário', 'Distribuir os leads novos pelas salas'],
-  imail: ['Transformar 6 pedidos em tarefas com dono e prazo', 'Atualizar a lista de tarefas paradas', 'Marcar as revisões semanais no calendário', 'Fechar 3 tarefas sem responsável'],
-  report: ['Relatório semanal: vendas, leads e projetos', 'Consolidar os números do mês no Cérebro', 'Comparar a produtividade das seis salas', 'Apontar o que piorou esta semana'],
-  dash:  ['Atualizar o painel de leads e propostas', 'Acrescentar o bloco de entregas dentro do prazo', 'Corrigir o gráfico de vendas, período errado', 'Ligar o bloco de produtividade ao Cérebro'],
-  comply:['Auditar o consentimento dos formulários', 'Confirmar a aprovação antes de 2 envios', 'Revisar a lista de contactos com consentimento', 'Sinalizar os limites de abordagem no Instagram'],
-  pros:  ['Varrer o Google Maps: 60 empresas sem site em {segment}', 'Pontuar 40 empresas face ao ICP', 'Remover duplicados da lista de {n} leads', 'Analisar a presença digital de 20 empresas', 'Entregar a lista do dia ao Sales Closer'],
-  enzo:  ['Enriquecer {n} registos com decisor e e-mail', 'Verificar os telemóveis do lote de hoje', 'Preencher a dimensão de 12 empresas', 'Reter 4 registos com correspondência baixa'],
-  ilm:   ['Qualificar {n} pedidos recebidos pelo site', 'Marcar 3 reuniões com o Sales Closer', 'Responder a {co} na primeira hora', 'Separar 5 pedidos fora do ICP'],
-  riley: ['Varrimento diário de 47 fontes', 'Extrair 3 tendências, com fonte', 'Nota de mercado para o Sales Closer', 'Ler 6 avaliações de clientes à procura de ângulos'],
-  scout: ['Comparar os preços dos 3 estúdios rivais', 'Memorando: subida de preços do concorrente', 'Atualizar os argumentos de venda com 2 factos', 'Vigiar a página de lançamento do rival'],
-  vmail: ['Diagnosticar 15 sites da lista', 'Testar HTTPS e velocidade de 10 sites', 'Registar o que está mal no site da {co}', 'Ver se os formulários de contacto funcionam, 12 sites'],
-  olead: ['Preparar a abordagem de 6 leads quentes', 'Fechar a proposta da {co}', 'Responder às objeções de 3 negócios abertos', 'Registar o motivo de 2 negócios perdidos', 'Pedir aprovação para 4 envios'],
-  piper: ['Proposta para a {co}, três opções', 'Atualizar o preçário de manutenção', 'Reescrever o âmbito da {co} após a reunião', 'Reduzir âmbito em vez de preço na {co}'],
-  folo:  ['Retomar {n} propostas sem resposta', 'Segundo contacto para 8 leads frios', 'Reativar quem testou e não avançou', 'Fechar como perdido o que já não responde'],
-  ona:   ['Arranque da {co}: acessos e expectativas', 'Lista de integração da {co}', 'Apresentar o primeiro relatório à {co}', 'Ponto de situação ao dia 7 com a {co}'],
-  legal: ['Rever o contrato da {co}, 2 cláusulas', 'Verificar os termos da proposta aceite', 'Política de privacidade, revisão anual', 'Assinalar a cláusula de renovação automática'],
-  cmail: ['Responder aos 9 e-mails de clientes da noite', 'Explicar o prazo novo à {co}', 'Enviar o resumo de arranque à {co}', 'Responder à dúvida de âmbito da {co}'],
-  gfx:   ['Briefing da {co}: problema, público e ação', 'Definir a estrutura e a navegação do site novo', 'Fechar o design system do projeto {co}', 'Escolher a direção visual entre 3 conceitos'],
-  dasst: ['Ecrãs do site da {co}, computador e telemóvel', 'Fechar os componentes do design system', 'Versões responsivas da página de preços', 'Estados de erro e vazio dos formulários'],
-  alead: ['Mockups do site da {co} para apresentação', 'Capa e peças do caso de estudo', 'Três conceitos visuais para a {co}', 'Preparar a apresentação visual da proposta'],
-  invo:  ['Mapear o percurso de contacto do site', 'Escrever os textos de interface', 'Validar o fluxo com 40 sessões gravadas', 'Testar a navegação com 5 utilizadores'],
-  dlead: ['Construir a página inicial do projeto {co}', 'Ligar o formulário ao CRM', 'Rever a arquitetura da área de clientes', 'Preparar a entrega da {co} para o QA'],
-  pco:   ['Plano da {co}: marcos e datas', 'Refazer 3 marcos após alteração de âmbito', 'Registar as horas da semana por projeto', 'Cobrar 2 aprovações de clientes em atraso'],
-  qa:    ['Testar o site da {co} em telemóvel e computador', 'Corrigir 4 erros do último deploy', 'Teste de regressão no formulário de reserva', 'Verificar velocidade e acessibilidade'],
-  crep:  ['Página de serviços fiel ao design aprovado', 'Otimizar a velocidade da página inicial', 'Componentes reutilizáveis da área de clientes', 'Corrigir o menu no telemóvel'],
-  cass:  ['Ligar os pagamentos Stripe ao projeto {co}', 'Garantir que cada formulário entra no CRM', 'Teste de integração das automações', 'Proteger os dados de clientes no backend'],
-  apay:  ['Publicar o site da {co} no domínio', 'Configurar a cópia de segurança semanal', 'Verificar certificado e monitorização', 'Confirmar que o que está no ar é a versão aprovada'],
-  kmail: ['Manual de manutenção do site da {co}', 'Documentar as decisões do projeto {co}', 'Arquivar a documentação no Cérebro', 'Escrever o que não se deve tocar no código'],
-  mlead: ['Plano editorial de outubro', 'Fechar o calendário da próxima semana', 'Rever o que funcionou no Instagram', 'Pedir aprovação para 4 publicações'],
-  newt:  ['Newsletter mensal: caso de estudo', 'Legenda para o vídeo da {co}', 'Escrever o caso de estudo com números reais', 'Reescrever a primeira linha de 6 publicações'],
-  ada:   ['Renovar o conjunto de anúncios saturado', 'Lançar 4 variantes do anúncio de {segment}', 'Relatório de CPA e do que aprendemos', 'Excluir clientes atuais do direcionamento'],
-  iggy:  ['Agendar 3 publicações no Instagram', 'Responder a 14 mensagens diretas', 'Preparar a publicação de LinkedIn da {co}', 'Registar os ganchos que funcionaram'],
-  vid:   ['Vídeo de demonstração do projeto {co}', 'Cortes de 15 s com legendas', 'Exportar em 9:16 e 1:1', 'Legendar a demo do webinar'],
-  lexi:  ['Atualizar a fila de aprovações', 'Resolver 2 conflitos de canal', 'Marcar o que está bloqueado', 'Confirmar as peças prontas para a semana'],
-  recon: ['Alcance e leads por publicação', 'Ligar 12 leads à peça que os trouxe', 'Comparar com o mês anterior', 'Recomendar o que repetir no próximo mês'],
-};
 
 // palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
@@ -108,31 +66,6 @@ const KEYS = {
   recon: ['alcance', 'analytics', 'tráfego', 'leads', 'resultados', 'métricas'],
 };
 
-// cadeias de passagem de trabalho — uma peça de trabalho a andar de mesa em mesa
-const CHAINS = [
-  [['pros', 'Lista de {segment}: 40 empresas sem site'], ['vmail', 'Diagnosticar os sites da lista de {segment}'], ['olead', 'Abordar os 6 leads com pior site']],
-  [['pros', 'Leads de {segment} encontrados'], ['enzo', 'Enriquecer os contactos da lista de {segment}'], ['olead', 'Primeiro contacto aos leads enriquecidos']],
-  [['ilm', 'Pedido de {co} recebido pelo site'], ['olead', 'Reunião de descoberta com {co}'], ['piper', 'Proposta para {co}']],
-  [['piper', 'Proposta aceite pela {co}'], ['legal', 'Rever os termos da {co}'], ['olead', 'Enviar contrato e fechar a {co}']],
-  [['olead', 'Cliente fechado: {co}'], ['ona', 'Arranque da {co}: acessos e expectativas'], ['gfx', 'Briefing da {co} para o site novo']],
-  [['gfx', 'Estrutura e design system da {co}'], ['dasst', 'Ecrãs da {co} em computador e telemóvel'], ['dlead', 'Construir o site da {co}']],
-  [['dlead', 'Site da {co} pronto para revisão'], ['qa', 'Testar o site da {co} antes do deploy'], ['apay', 'Publicar o site da {co} no domínio']],
-  [['qa', 'Site da {co} aprovado'], ['kmail', 'Documentar o projeto {co}'], ['crep', 'Fechar os últimos ajustes de frontend da {co}']],
-  [['mlead', 'Calendário editorial de outubro'], ['newt', 'Escrever o caso de estudo do projeto {co}'], ['iggy', 'Preparar a publicação no Instagram e LinkedIn']],
-  [['mlead', 'Tema do vídeo do mês definido'], ['vid', 'Vídeo de demonstração do projeto {co}'], ['iggy', 'Agendar o vídeo com legenda']],
-  [['recon', 'O que funcionou no mês passado'], ['mlead', 'Plano de conteúdo para o próximo mês'], ['newt', 'Reescrever os ganchos do próximo mês']],
-  [['pco', 'Plano de marcos da {co}'], ['crep', 'Página inicial da {co}'], ['qa', 'Testes antes da entrega da {co}']],
-  [['cass', 'Formulários da {co} ligados ao CRM'], ['apay', 'Publicar a integração da {co}'], ['pco', 'Fechar o marco de entrega da {co}']],
-  [['report', 'Números da semana consolidados'], ['dash', 'Atualizar o painel central'], ['elead', 'Decidir prioridades a partir dos números']],
-  [['scout', 'Rival subiu os preços, memorando'], ['olead', 'Ajustar os argumentos de venda'], ['piper', 'Atualizar as opções de proposta']],
-  [['folo', '3 propostas seguidas sem resposta'], ['olead', 'Tentar o fecho ou fechar como perdido']],
-  [['imail', 'A equipa pede o estado dos projetos'], ['report', 'Relatório de estado das seis salas'], ['elead', 'Revisão de prioridades com a direção']],
-  [['comply', 'Aprovação antes dos envios'], ['olead', 'Enviar depois do OK do proprietário']],
-];
-
-applyTasks({ POOL, KEYS, CHAINS, SEGMENTS, AGENTS }); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
-function fill(s, v) { return s.replace('{co}', v.co).replace('{n}', v.n).replace('{segment}', v.segment); }
-function vars() { return { co: rnd(P.co), n: ri(6, 40), segment: rnd(SEGMENTS) }; }
 function timeStr(ts) {
   return fmtTime(ts); // 24 horas, sempre (src/time.js)
 }
@@ -160,7 +93,7 @@ export function initTasks(ctx) {
   // V3.5 routines. Live: the server's list (polled). Demo: session-only, fired by this tick.
   const routines = []; let rseq = 1, polling = false, railAgent = null, railExp = false;
   const RT_DEPTS = ['emails', 'fin', 'sales'];
-  const RT_NAMES = PROFILE ? Object.fromEntries(Object.entries(PROFILE.pods).map(([k, v]) => [k, titleCase(v)])) : { emails: 'Emails', fin: 'Accounting', sales: 'Sales', marketing: 'Marketing', ops: 'Operations', delivery: 'Delivery' };
+  const RT_NAMES = { emails: 'COMANDO', fin: 'DESIGN LAB', sales: 'PROSPEÇÃO', marketing: 'MEDIA', ops: 'VENDAS', delivery: 'ENGENHARIA' };
   const rtRefuse = k => `As rotinas chegam a ${RT_NAMES[k] || k} numa versão futura. Nesta versão: E-mails, Contabilidade e Vendas.`;
   const deptRoutines = k => routines.filter(r => r.dept === k);
   const agentRoutines = id => routines.filter(r => r.agent === id);
@@ -168,7 +101,7 @@ export function initTasks(ctx) {
   const byNext = (a, b) => (a.paused ? Infinity : a.nextAt || Infinity) - (b.paused ? Infinity : b.nextAt || Infinity);
   const doneCount = Object.fromEntries(DEPT_KEYS.map(k => [k, 0]));
   const board = { open: false };
-  let dirty = false, lastBadge = 0, lastBar = 0, lastAgo = 0;
+  let dirty = false, lastBadge = 0, lastAgo = 0, lastOps = 0;
 
   /* ---------- model ---------- */
   function mk(o) {
@@ -182,24 +115,8 @@ export function initTasks(ctx) {
   const agentTasks = (id, st) => tasks.filter(t => t.agent === id && t.state === st);
   const deptTasks = (k, st) => tasks.filter(t => t.dept === k && t.state === st);
   function visibleTitles(id) { return new Set(tasks.filter(t => t.agent === id && t.state !== 'done').map(t => t.title)); }
-  function pick(id) {
-    const seen = visibleTitles(id);
-    for (let i = 0; i < 4; i++) { const t = fill(rnd(POOL[id]), vars()); if (!seen.has(t)) return t; }
-    return fill(rnd(POOL[id]), vars());
-  }
-  // a fresh piece of work for an agent: sometimes the first step of a handoff chain
-  function freshTask(id, extra = {}) {
-    const starts = CHAINS.filter(c => c[0][0] === id);
-    if (starts.length && Math.random() < 0.45) {
-      const v = vars();
-      const chain = rnd(starts).map(([aid, title]) => [aid, fill(title, v)]);
-      return mk({ agent: id, title: chain[0][1], chain, chainI: 0, ...extra });
-    }
-    return mk({ agent: id, title: pick(id), ...extra });
-  }
-  function start(t, now) {
-    t.state = 'doing'; t.startedAt = now; t.progress = 0; t.running = !!t.srv; t.ready = false; // a server-run task (routine) is never started from here
-    t.dur = t.piece ? 40000 + Math.random() * 50000 : 90000 + Math.random() * 150000; // 1.5–4 min: a few completions a minute across the office (a team piece 40–90 s)
+  function start(t, now) { // uma tarefa que o servidor mandou começar
+    t.state = 'doing'; t.startedAt = now; t.progress = 0; t.running = !!t.srv; t.ready = false;
     t.pausedAt = null;
     touch(t, 'started');
   }
@@ -214,18 +131,8 @@ export function initTasks(ctx) {
     spawnEmote(r, '✓');
     feedPush(r, '✓', 'Done: ' + t.title);
     if (chatHist[t.agent]) chatPush(t.agent, { who: 'work', i: '✓', text: 'done — ' + t.title });
-    if (t.live) deliver(t); // the real deliverable lands in the agent's chat; the server already wrote the note
-    else if (t.piece) { if (R[t.leadId]) { spawnEmote(R[t.leadId], '📋'); feedPush(R[t.leadId], '📋', `Parte recebida de ${agentOf(t.agent).name}: ${t.title}`); } } // demo: the piece walks back to the lead
-    // demo: finished work becomes a note in the Brain — always for tasks you added, a quarter of the rest
-    else if (brainWrite && (t.by === 'you' || Math.random() < 0.25)) brainWrite(t.agent, t.title);
+    if (t.live) deliver(t); // o resultado real entra na conversa; a nota no Cérebro já foi escrita pelo servidor
     touch(t, 'done');
-    if (!t.live && t.routine && t.needsOk && requestApproval) requestApproval(t.agent, `«${t.title}» está pronto — enviar?`); // demo: a routine that needs the OK asks for it
-    if (t.chain && t.chainI < t.chain.length - 1) { // hand the work to the next desk — it appears in their backlog
-      const [nid, ntitle] = t.chain[t.chainI + 1];
-      const nt = mk({ agent: nid, title: ntitle, chain: t.chain, chainI: t.chainI + 1, from: t.agent });
-      touch(nt, 'handoff');
-      spawnEmote(R[nid], '📋');
-    }
     prune(t.dept);
   }
   function deliver(t) {
@@ -244,42 +151,53 @@ export function initTasks(ctx) {
     feedPush(R[t.agent], '📄', `Delivered: ${t.title}`);
     if (brain && t.read) for (const n of t.read.slice(0, 2)) brain.readNote(t.agent, n);
   }
-  function brainSend(id) { // the Brain drops a fresh job into the agent's backlog
-    const t = freshTask(id, { via: 'brain' });
-    touch(t, 'added');
-    spawnEmote(R[id], '📋');
-    return t;
+  /* ---------- a única fonte de tarefas: a base de dados da operação ----------
+     26 out 2026. Antes: 35 agentes "a meio de uma tarefa" no arranque, filas sorteadas e 40 tarefas
+     concluídas inventadas por dia. Isso mudava o estado das tarefas sem haver trabalho nenhum. Agora
+     o painel lê `GET /api/ops/tarefas` e mostra o que existe — se não existir nada, diz «sem tarefas».
+     As tarefas do motor de IA (`/api/tasks`, o painel antigo) continuam a entrar pelo `reconcile`. */
+  let opsSig = '';
+  async function loadOps() {
+    if (!live || polling) return;
+    try {
+      const d = await fetch(API + '/ops/tarefas?limit=120').then(r => r.json());
+      const list = Array.isArray(d.tarefas) ? d.tarefas : [];
+      const sig = list.map(t => `${t.id}:${t.state}:${t.attempts || 0}`).join('|');
+      if (sig === opsSig) return;
+      opsSig = sig;
+      const seen = new Set();
+      for (const st of list) {
+        const agent = SEAT[st.kind] || st.agent || '';
+        if (!agentOf(agent)) continue;
+        seen.add(st.id);
+        const state = st.state === 'running' ? 'doing'
+          : st.state === 'awaiting_approval' ? 'waiting'
+          : st.state === 'queued' ? 'next' : 'done';
+        let t = tasks.find(x => x.ops && x.sid === st.id);
+        if (!t) {
+          t = mk({ agent, title: st.title || st.kind, ops: true, sid: st.id, state: 'next', changedAt: new Date(st.created_at).getTime() || Date.now(), addedAt: new Date(st.created_at).getTime() || Date.now() });
+          t.state = state;
+          if (state === 'doing') { t.state = 'doing'; t.startedAt = new Date(st.started_at || st.created_at).getTime(); spawnEmote(R[agent], '▸'); feedPush(R[agent], '▸', `Tarefa real em curso: ${t.title}`); }
+          if (state === 'done') { t.state = 'done'; t.doneAt = new Date(st.finished_at || Date.now()).getTime(); t.error = st.state === 'failed'; if (t.error) t.result = st.error || 'falhou sem motivo escrito'; t.changedAt = t.doneAt; if (t.error) feedPush(R[agent], '✕', `Falhou: ${t.error}`); else feedPush(R[agent], '✓', `Concluída: ${t.title}`); }
+          if (state === 'waiting') t.ask = `«${t.title}» está à espera da tua aprovação`;
+          touch(t, state);
+        } else if (t.state !== state) {
+          // mudança real de estado: o cartão move-se agora, não a cada segundo
+          const startedAt = new Date(st.started_at || st.created_at).getTime();
+          t.state = state; t.changedAt = Date.now();
+          if (state === 'doing') { t.startedAt = startedAt; spawnEmote(R[agent], '▸'); }
+          if (state === 'done') { t.doneAt = new Date(st.finished_at || Date.now()).getTime(); t.error = st.state === 'failed'; t.result = st.error ? (st.error || 'falhou sem motivo escrito') : (t.result || ''); touch(t, 'done'); }
+          if (state === 'waiting') t.ask = `«${t.title}» está à espera da tua aprovação`;
+          touch(t, state);
+        }
+      }
+      // o que saiu da base de dados sai do painel (as tarefas do motor de IA ficam com o reconcile)
+      for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].ops && !seen.has(tasks[i].sid)) tasks.splice(i, 1);
+      dirty = true;
+    } catch (e) { /* o servidor pode estar a arrancar — a próxima consulta tenta outra vez */ }
   }
-
-  /* ---------- seed a believable morning ---------- */
-  {
-    const now = performance.now(), wall = Date.now();
-    for (const a of AGENTS) {
-      const r = R[a.id];
-      { // everyone is mid-task at boot: the first frame must not be a column of "agora mesmo · 3%"
-        const t = freshTask(a.id);
-        start(t, now);
-        const k = 0.05 + Math.random() * 0.8;
-        t.startedAt = now - t.dur * k;
-        t.changedAt = wall - t.dur * k;
-      }
-      const nNext = a.lead ? ri(1, 2) : ri(0, 2);
-      for (let i = 0; i < nNext; i++) {
-        const t = mk({ agent: a.id, title: pick(a.id) });
-        t.addedAt = t.changedAt = wall - ri(8, 240) * 60000;
-        t.last = 'added';
-      }
-    }
-    for (const k of DEPT_KEYS) {
-      const ids = AGENTS.filter(a => a.dept === k).map(a => a.id);
-      const n = ri(5, 9);
-      for (let i = 0; i < n; i++) {
-        const id = rnd(ids), at = wall - ri(4, 300) * 60000;
-        mk({ agent: id, title: pick(id), state: 'done', doneAt: at, changedAt: at, addedAt: at - ri(20, 90) * 60000, last: 'done' });
-      }
-      doneCount[k] = n;
-    }
-  }
+  setInterval(loadOps, 4000);
+  loadOps();
 
   /* ---------- badge rows (far-zoom layer): DOING · NEXT · DONE per pod ---------- */
   function rowHTML(k) {
@@ -554,38 +472,14 @@ export function initTasks(ctx) {
         say(st.team ? `Added — <b>${agentOf(t.agent).name}</b> ficou com ela e está a dividi-la pela equipa` : `Added — <b>${agentOf(t.agent).name}</b> ficou com ela${st.why ? ' · ' + esc(st.why) : ''}`);
         setTimeout(() => { if (!P_.input.value) P_.hint.classList.remove('on'); }, 7000);
       } catch (e) {
-        say(`O Claude não conseguiu assumi-la (${esc(e.message)}). Ficou no quadro.`, 'err');
-        const { agent: a } = route(k, text); addTask(a.id, text, 'you');
+        // sem motor de IA a tarefa não é inventada localmente: fica dito o que falta
+        say(`Não foi criada: ${esc(e.message)}. Sem um motor de IA ligado, o escritório não finge que a tarefa existe.`, 'err');
       }
       P_.input.disabled = false; P_.add.disabled = false; P_.input.blur(); // hand the keys back to the office
       return;
     }
-    if (asTeam(title)) { // demo: the lead + two or three desks, all at once, the lead finishes when the pieces are in
-      const t = addTeamDemo(dept, title);
-      const mdl = chosenModel(); t.modelUsed = mdl || officeModel; t.modelFrom = mdl ? 'task' : 'office'; const ef = effortUsedFor(t.modelUsed); t.effortUsed = ef.effort || ''; t.effortFrom = ef.from;
-      resetModel(); resetTeam(); P_.input.value = ''; updateHint();
-      say(`Added — <b>${agentOf(t.agent).name}</b> ficou com ela, com ${esc(membersText(t))}.`); setTimeout(updateHint, 3200); P_.input.blur();
-      return;
-    }
-    const { agent: a } = route(dept, title);
-    const t = addTask(a.id, title, 'you');
-    if (t) { const mdl = chosenModel(); t.modelUsed = mdl || officeModel; t.modelFrom = mdl ? 'task' : 'office'; const ef = effortUsedFor(t.modelUsed); t.effortUsed = ef.effort || ''; t.effortFrom = ef.from; }
-    resetModel();
-    P_.input.value = ''; updateHint();
-    if (t) { say(`Added — <b>${a.name}</b> ficou com ela.`); setTimeout(updateHint, 2600); P_.input.blur(); }
-    else say(`<b>${a.name}</b> já tem cinco em fila — deixa uma terminar primeiro.`);
-  }
-  /* ---------- V3.2 (16 Sep) demo teams: the same moves on a timer ---------- */
-  function addTeamDemo(k, title) {
-    const L = leadOf(k), others = AGENTS.filter(x => x.dept === k && !x.lead).sort(() => Math.random() - 0.5);
-    const picks = others.slice(0, Math.max(2, Math.min(3, teamsCfg.max - 1, others.length)));
-    const t = mk({ agent: L.id, title, by: 'you', team: { lead: L.id, members: picks.map(p => p.id) }, teamHold: true });
-    touch(t, 'added'); spawnEmote(R[L.id], '⚑'); feedPush(R[L.id], '⚑', `Tarefa de equipa: ${title} — ${picks.map(p => agentOf(p.id).name).join(', ')}`);
-    for (const p of picks) {
-      const c = mk({ agent: p.id, title: `${title} — ${(p.role || 'their').replace(/ Agent$/i, '').toLowerCase()} part`, by: 'team', piece: true, parent: t.id, leadId: L.id, from: L.id });
-      touch(c, 'handoff'); spawnEmote(R[p.id], '📋'); feedPush(R[p.id], '📋', `Parte da equipa de ${L.name}: ${c.title}`);
-    }
-    return t;
+    // sem servidor não há tarefa: uma tarefa local seria ficção (e mudava o estado sem trabalho)
+    say('Este escritório está aberto sem servidor. As tarefas vivem na base de dados do Órbita — arranca-o com <b>npm start</b> e esta barra cria trabalho a sério.', 'err');
   }
   /* ---------- V3.5 routines: set one from the bar ---------- */
   async function submitRoutine(rt, raw) {
@@ -820,13 +714,6 @@ export function initTasks(ctx) {
     } catch (e) { console.warn('servidor do escritório inacessível — a correr offline:', e.message); }
   }
   connect();
-  function addTask(agentId, title, by = 'you') {
-    if (agentTasks(agentId, 'next').length >= 5) return null;
-    const t = mk({ agent: agentId, title, by });
-    touch(t, 'added');
-    spawnEmote(R[agentId], '📋');
-    return t;
-  }
   // chips: filters with live counts
   const CHIPS = [['all', 'All'], ['sched', 'Scheduled'], ['next', 'Backlog'], ['doing', 'em curso'], ['waiting', 'Waiting'], ['done', 'Done']];
   function chipsHTML() {
@@ -858,9 +745,10 @@ export function initTasks(ctx) {
     return who;
   }
   function rowHTMLp(t) {
-    const pct = Math.round(t.progress * 100);
-    const chip = `<span class="tp-st ${t.state}">${t.state === 'doing' ? `<span data-pct="${t.id}">${pct}%</span>` : t.state === 'scheduled' ? '◷' : STATE_LABEL[t.state]}</span>`;
-    const bar = t.state === 'doing' ? `<div class="tp-bar"><i data-bar="${t.id}" style="width:${pct}%"></i></div>` : t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCELAR</button><button data-act="calendar">CALENDÁRIO</button></div>` : '';
+    // 26 out 2026: não há percentagem. Uma tarefa está num estado e tem uma hora de início; o resto
+    // seria um número escolhido por nós, e o painel não inventa números.
+    const chip = `<span class="tp-st ${t.state}">${t.state === 'scheduled' ? '◷' : STATE_LABEL[t.state]}</span>`;
+    const bar = t.state === 'doing' ? `<div class="tp-bar run"><i></i></div>` : t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCELAR</button><button data-act="calendar">CALENDÁRIO</button></div>` : '';
     return `<div class="tp-row ${t.state}${t.last === 'handoff' ? ' handoff' : ''}${t.live ? ' live' : ''}${t.piece ? ' piece' : ''}" data-id="${t.id}" data-dept="${t.dept}" data-agent="${t.agent}">
       ${chip}<div class="tp-body"><div class="tp-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : ''}${esc(t.title)}</div><div class="tp-m">${metaFor(t)}</div>${bar}</div>
       <span class="tp-ago" data-ago="${t.id}">${span(Date.now() - t.changedAt)}</span></div>`;
@@ -910,17 +798,6 @@ export function initTasks(ctx) {
     P_.rows.querySelectorAll('.tp-row.live.done').forEach(n => n.addEventListener('click', () => openAgent && openAgent(n.dataset.agent, 'chat')));
     if (!structural) flip(before);
   }
-  function refreshBars() {
-    for (const t of tasks) {
-      if (t.state !== 'doing') continue;
-      const bar = P_.rows.querySelector(`[data-bar="${t.id}"]`);
-      if (!bar) continue;
-      const pct = Math.round(t.progress * 100);
-      bar.style.width = pct + '%';
-      const p = P_.rows.querySelector(`[data-pct="${t.id}"]`);
-      if (p) p.textContent = pct + '%';
-    }
-  }
   function refreshAgo() {
     const now = Date.now();
     for (const t of tasks) {
@@ -944,21 +821,20 @@ export function initTasks(ctx) {
   dim.addEventListener('click', close);
   function cardHTML(t) {
     const a = agentOf(t.agent), chip = DEPTS[t.dept].chip;
-    const pct = Math.round(t.progress * 100);
     const av = `<span class="tk-av" style="border-color:${chip};background:${chip}55">${a.name[0]}</span>`;
     let meta;
     if (t.state === 'done') meta = `<span class="tk-tick">✓</span><span>${a.name}</span><span class="tk-pct">${t.approved ? 'APROVADO · ' : ''}${t.modelUsed ? modelName(t.modelUsed).toUpperCase() + ' · ' : ''}${timeStr(t.doneAt)}</span>`;
     else if (t.state === 'waiting') meta = `${av}<span>${a.name}</span><span class="tk-chip">WAITING ${span(Date.now() - t.changedAt).toUpperCase()}</span>`;
-    else if (t.state === 'doing') meta = `${av}<span>${a.name}</span><span class="tk-pct" data-pct="${t.id}">${t.agent === 'vid' ? 'RENDER · ' : ''}${pct}%</span>`;
+    else if (t.state === 'doing') meta = `${av}<span>${a.name}</span><span class="tk-pct">EM CURSO · ${span(Date.now() - (t.startedAt || t.changedAt)).toUpperCase()}</span>`;
     else if (t.state === 'scheduled') meta = `${av}<span>${a.name}</span><span class="tk-pct">${esc(untilText(t.dueAt).toUpperCase())}</span>`;
     else meta = `${av}<span>${a.name}</span><span class="tk-pct">${span(Date.now() - t.addedAt).toUpperCase()} NA FILA</span>`;
     return `<div class="tk ${t.state === 'scheduled' ? 'sched scheduled' : t.state}${t.revised ? ' rev' : ''}" data-id="${t.id}" data-dept="${t.dept}">
       <div class="tk-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : t.piece ? '↳ ' : ''}${esc(t.title)}</div><div class="tk-m">${meta}</div>
-      ${t.state === 'doing' ? `<div class="tk-bar"><i data-bar="${t.id}" style="width:${pct}%"></i></div>` : ''}</div>`;
+      ${t.state === 'doing' ? `<div class="tk-bar run"><i></i></div>` : ''}</div>`;
   }
   const byState = (k, st) => {
     const l = deptTasks(k, st);
-    if (st === 'doing') l.sort((a, b) => b.progress - a.progress);
+    if (st === 'doing') l.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
     else if (st === 'done') l.sort((a, b) => b.doneAt - a.doneAt);
     else l.sort((a, b) => a.id - b.id);
     return l;
@@ -1041,18 +917,10 @@ export function initTasks(ctx) {
         return `Pronto. ${r.desc.charAt(0).toUpperCase() + r.desc.slice(1)}, ${to === agentId ? 'Já tenho' : agentOf(to).name + ' ficou com ela'}. ${r.needsOk ? 'Tudo o que sai espera pelo teu OK primeiro.' : 'Só lê, por isso não fica à tua espera.'} Próxima execução ${untilText(r.nextAt)}. Say "routines" para veres a lista.`;
       }
     }
-    const m = text.match(/^\s*(?:add\s+(?:a\s+)?(?:new\s+)?task|new\s+task|task|todo)\s*[:\-–—]?\s*(.+)$/i);
     const k = R[agentId].a.dept;
-    if (m) {
-      let title = m[1].trim().replace(/[.!]+$/, '');
-      title = title.charAt(0).toUpperCase() + title.slice(1);
-      const { agent: a, matched } = route(k, title);
-      const to = matched ? a.id : agentId;
-      const t = addTask(to, title, 'you');
-      if (!t) return `${agentOf(to).name} já tem cinco em fila — deixa uma terminar primeiro, ou dá-a a outra pessoa em ${DEPTS[k].short}.`;
-      const busy = agentTasks(to, 'doing').length > 0;
-      const who = to === agentId ? "I'já a tenho" : `${agentOf(to).name} ficou com ela`;
-      return `Adicionada à fila de ${DEPTS[k].short} — ${who}, ${busy ? 'up next after the current job' : 'starting now'}. Está no painel de tarefas à direita.`;
+    if (/^\s*(?:add\s+(?:a\s+)?(?:new\s+)?task|new\s+task|task|todo)\s*[:\-–—]/i.test(text)) {
+      // não há atalho: uma tarefa nasce na base de dados, pela barra ou pela operação
+      return 'Escreve-a na barra TAREFAS à direita: é o servidor que a cria, a atribui e a corre. Nada aqui é criado só no ecrã.';
     }
     if (/\b(board|what'?s next|next up|what are (you|we) (all )?(doing|working))\b/i.test(text)) {
       const list = st => byState(k, st).slice(0, 3).map(t => `• ${t.title} (${agentOf(t.agent).name})`).join('\n');
@@ -1063,41 +931,18 @@ export function initTasks(ctx) {
     return null;
   }
 
-  /* ---------- per-frame ---------- */
+  /* ---------- per-frame: só desenha o que a base de dados disse (nada de progresso inventado) ---------- */
   function tick(now) {
-    if (!live) { const w = Date.now(); for (const r of routines) if (!r.paused && r.nextAt && r.nextAt <= w) fireDemo(r, false); // demo: this page is the clock
-      for (const t of tasks) if (t.state === 'scheduled' && t.dueAt <= w) { t.state = 'next'; t.addedAt = w; touch(t, 'added'); spawnEmote(R[t.agent], '⏱'); feedPush(R[t.agent], '⏱', `Tarefa agendada disparou: ${t.title}`); } }
+    if (live && now - lastOps > 4000) { lastOps = now; loadOps(); }
     for (const id in R) {
       const r = R[id];
-      if (r.state === 'stuck') continue;
       const d = agentTasks(id, 'doing')[0];
-      if (d && !d.live && agentTasks(id, 'next').some(t => t.live || t.piece)) { d.progress = 1; complete(d); continue; } // real work (and a team piece) never waits behind theatre
-      if (d) {
-        if (d.live) {
-          if (!d.running) runLive(d);
-          if (d.ready) { d.progress = 1; complete(d); }
-          else d.progress = Math.min(0.92, (now - (d.startedAt || now)) / 45000);
-        } else if (d.teamHold) { // demo lead: the card fills as the pieces come in, finishes when the last one lands
-          const ps = tasks.filter(x => x.parent === d.id);
-          d.progress = ps.length ? Math.min(0.96, ps.reduce((s, p) => s + (p.state === 'done' ? 1 : p.progress || 0), 0) / ps.length) : Math.min(0.5, (now - d.startedAt) / d.dur);
-          if (ps.length && ps.every(p => p.state === 'done')) { d.progress = 1; complete(d); }
-        } else {
-          d.progress = Math.min(1, (now - d.startedAt) / d.dur);
-          if (d.progress >= 1) complete(d);
-        }
-      } else {
-        const nx = agentTasks(id, 'next').sort((a, b) => a.addedAt - b.addedAt)[0];
-        if (nx) { start(nx, now); r.nextBrainAt = null; }
-        else if (!r.nextBrainAt) r.nextBrainAt = now + 6000 + Math.random() * 16000;
-        else if (now > r.nextBrainAt) { r.nextBrainAt = null; brainSend(id); }
-      }
+      if (d && d.live && !d.running) runLive(d);           // trabalho real do motor de IA
+      if (d && d.live && d.ready) { d.progress = 1; complete(d); }
     }
     if (now - lastBadge > 400) { syncBadges(); lastBadge = now; }
     if (dirty) { render(false); renderBoard(); dirty = false; }
-    else {
-      if (now - lastBar > 250) { refreshBars(); lastBar = now; }
-      if (now - lastAgo > 15000) { refreshAgo(); lastAgo = now; }
-    }
+    else if (now - lastAgo > 15000) { refreshAgo(); lastAgo = now; }
   }
 
   /* ---------- V3.2.1 (16 Sep 2026): the CALENDAR (P) — tasks and routines on their days; click a day to schedule ---------- */

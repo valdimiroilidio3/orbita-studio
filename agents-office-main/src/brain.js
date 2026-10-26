@@ -7,8 +7,7 @@
 // added today, Open the Brain — and G / clicking the pod opens the full-screen Obsidian graph.
 import * as THREE from 'three';
 import { BRAIN as BRAIN0 } from './braingraph.js';
-import { PROFILE } from './profile.js';
-const BRAIN = (PROFILE && PROFILE.graph && PROFILE.graph.nodes && PROFILE.graph.nodes.length) ? PROFILE.graph : BRAIN0; // INDUSTRY PROFILE: the demo company's own graph
+const BRAIN = BRAIN0; // as notas reais vêm do servidor (GET /api/brain); nada de grafos de exemplo
 import { AGENTS } from './data.js';
 import { fmtTime } from './time.js';
 
@@ -519,7 +518,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     }
     requestAnimationFrame(draw);
   }
-  let owner = PROFILE && PROFILE.company ? String(PROFILE.company).toUpperCase() : 'AS TUAS NOTAS'; // V3.1: the business name when served (was hard-coded to one company); INDUSTRY PROFILE: the demo company
+  let owner = 'AS TUAS NOTAS'; // o nome da empresa vem do servidor (/api/health) quando há um
   function setOwner(name) { owner = String(name || 'AS TUAS NOTAS').toUpperCase(); if (openNow) meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`; }
   function open() {
     if (openNow) return;

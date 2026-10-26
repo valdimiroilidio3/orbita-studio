@@ -30,7 +30,6 @@ const STATUS = {
   waiting: { label: 'WAITING', pt: 'à espera', color: WARN },
   error: { label: 'ERROR', pt: 'falhou', color: BAD },
   idle: { label: 'IDLE', pt: 'sem tarefa', color: DIM },
-  demo: { label: 'DEMO', pt: 'demonstração', color: WARN },
   stale: { label: 'DESATUALIZADO', pt: 'sem ligação', color: WARN },
 };
 
@@ -86,7 +85,6 @@ const semTitulo = (lines, title) => {
   });
 };
 const stateOf = (data, status) => {
-  if (status === 'demo') return 'demo';
   if (status === 'stale' || status === 'off') return 'stale';
   return data?.state || 'idle';
 };
@@ -316,7 +314,7 @@ export function makeLiveScreen(agent) {
  * Liga ao fluxo do servidor. Devolve uma API pequena: cada monitor espera por `forAgent(id)`,
  * o painel subscreve `onChange`, e o rodapé lê `status()`.
  */
-export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo = false } = {}) {
+export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {}) {
   const state = { agents: {}, at: null, totais: {}, fonte: '', abertas: [] };
   const listeners = new Set();
   const screens = new Map();
@@ -347,10 +345,10 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
       const d = state.agents[id];
       if (!d) continue;
       scr.view.data = d;
-      scr.view.status = demo ? 'demo' : 'live';
+      scr.view.status = 'live';
       scr.view.at = state.at;
     }
-    setStatus(demo ? 'demo' : 'live');
+    setStatus('live');
     emit('update');
   }
 
@@ -375,7 +373,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
 
   /** Chamado pelo loop da cena: decide se vale a pena redesenhar, e marca o que ficou velho. */
   function tick(now = Date.now(), slow = false) {
-    if (!demo && status !== 'off' && status !== 'connecting' && lastHeard && now - lastHeard > SILENCE_MS) {
+    if (status !== 'off' && status !== 'connecting' && lastHeard && now - lastHeard > SILENCE_MS) {
       setStatus('stale', `sem eventos há ${Math.round((now - lastHeard) / 1000)} s`);
     }
     if (!screens.size) return;
@@ -384,7 +382,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
     if (!dirty && now - lastPaint < (slow ? 15000 : 2500)) return;
     dirty = false; lastPaint = now;
     for (const [id, scr] of screens) {
-      if (!demo && status !== 'live' && status !== 'demo') { scr.view.status = status === 'off' ? 'off' : 'stale'; scr.view.at = state.at; }
+      if (status !== 'live') { scr.view.status = status === 'off' ? 'off' : 'stale'; scr.view.at = state.at; }
       scr.draw();
     }
   }
@@ -394,8 +392,8 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
     const scr = makeLiveScreen(agent);
     screens.set(agent.id, scr);
     const d = state.agents[agent.id];
-    if (d) { scr.view.data = d; scr.view.status = demo ? 'demo' : 'live'; scr.view.at = state.at; }
-    scr.view.status = demo ? 'demo' : (state.at ? (status === 'live' ? 'live' : 'stale') : 'off');
+    if (d) { scr.view.data = d; scr.view.status = 'live'; scr.view.at = state.at; }
+    scr.view.status = state.at ? (status === 'live' ? 'live' : 'stale') : 'off';
     scr.draw(true);
     return scr;
   }
@@ -444,8 +442,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
     const el = sel => document.getElementById(sel);
     const d = state.agents[id] || null;
     // o estado mostrado é o da LIGAÇÃO quando ela não está de pé: nunca «ao vivo» com dados velhos
-    const st = demo ? 'demo'
-      : status === 'live' ? (d?.state || 'idle')
+    const st = status === 'live' ? (d?.state || 'idle')
       : status === 'off' ? 'off' : 'stale';
     const S = STATUS[st] || STATUS.idle;
 
@@ -456,8 +453,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
     }
     const note = el('lvNote');
     if (note) {
-      note.textContent = demo ? 'demonstração — ecrãs gravados'
-        : status !== 'live' ? (state.at ? `último dado ${hhmm(state.at)}` : 'sem ligação ao servidor')
+      note.textContent = status !== 'live' ? (state.at ? `último dado ${hhmm(state.at)}` : 'sem ligação ao servidor')
         : !d ? 'à espera do primeiro retrato'
         : (d.lastEventAt ? `${d.stateLabel} · última atividade ${ago(d.lastEventAt)}` : d.stateLabel);
     }
@@ -593,12 +589,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [], demo =
       b.type = 'button'; b.textContent = 'ATUALIZAR AGORA';
       b.addEventListener('click', async () => { b.disabled = true; b.textContent = 'A LER…'; await refresh(); renderPanel(id, agent); b.disabled = false; b.textContent = 'ATUALIZAR AGORA'; });
       foot.appendChild(b);
-      if (demo) {
-        const w = document.createElement('div');
-        w.style.marginTop = '6px';
-        w.textContent = 'DEMO: esta cena usa sessões gravadas (window.SCREENS). O painel lê a base de dados real, mas os monitores 3D não são um fluxo ao vivo.';
-        foot.appendChild(w);
-      } else if (status !== 'live') {
+      if (status !== 'live') {
         const w = document.createElement('div');
         w.style.color = '#B23B2B'; w.style.marginTop = '6px';
         w.textContent = `A ligação ao vivo não está de pé (${status}). O que está acima pode estar desatualizado.`;

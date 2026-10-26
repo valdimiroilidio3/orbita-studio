@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, loadConfig } from './config.mjs';
 import { AGENTS, DEPTS } from './src/data.js';
-import { V1 } from './src/v1data.js';
+import { IDENTITY } from './src/agentes.js';
 
 export const FILE = path.join(ROOT, 'office.agents.json');
 export const LOCAL = path.join(ROOT, 'office.agents.local.json');
@@ -20,7 +20,7 @@ const MODELS = ['sonnet', 'opus', 'fable']; // V3.6: an agent's model, by name; 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']; // V3.6.1: an agent's effort; empty = the office's, then the model's own
 
 export function defaults() {
-  return AGENTS.map(a => { const p = V1.find(x => x.id === a.id) || {}; return { id: a.id, department: a.dept, lead: !!a.lead, name: a.name, role: p.role || '', does: p.tagline || '', tools: [], brief: '', model: '', effort: '' }; });
+  return AGENTS.map(a => { const p = IDENTITY[a.id] || {}; return { id: a.id, department: a.dept, lead: !!a.lead, name: a.name, role: p.role || '', does: p.does || '', tools: [], brief: '', model: '', effort: '' }; });
 }
 // returns { agents, problems } — problems are human sentences, never thrown
 export function validate(doc, base = defaults()) {

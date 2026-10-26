@@ -1,5 +1,7 @@
-// Órbita v2 — roster + design tokens (ported from v1 command-centre.html)
-import { applyData } from './profile.js';
+// Órbita — o elenco fixo (35 lugares, 6 salas), o chão de cada sala e os tokens de design.
+// Os textos de exemplo (WORKLINES), os pedidos de aprovação fictícios (APPROVAL_ASKS) e as linhas
+// de demonstração por indústria (profile.js) saíram em 26 out 2026: o escritório passou a mostrar
+// o trabalho que está na base de dados, por isso já não precisa de conteúdo de exemplo.
 
 // Nominal.so tokens (locked design language, 30 Jul 2026)
 export const TOKENS = {
@@ -84,98 +86,3 @@ export const LAYOUT = {
 
 // Department billboard metrics (v1 rule #5: live metrics float above each dept,
 // values tick green on change, "À espera de aprovação" pulses amber when > 0).
-export const BILLBOARDS = {
-  emails:    [{ id: 'tarefas',     label: 'TAREFAS ATRIBUÍDAS',      val: 128 }],
-  sales:     [{ id: 'leads',       label: 'LEADS QUALIFICADOS',      val: 47 },
-              { id: 'sites',       label: 'SITES DIAGNOSTICADOS',    val: 31 }],
-  ops:       [{ id: 'propostas',   label: 'PROPOSTAS ENVIADAS',      val: 6 }],
-  fin:       [{ id: 'ecras',       label: 'ECRÃS DESENHADOS',        val: 23 }],
-  delivery:  [{ id: 'projetos',    label: 'PROJETOS NO AR',          val: 9 }],
-  marketing: [{ id: 'publicacoes', label: 'PUBLICAÇÕES APROVADAS',   val: 14 }],
-  brain:     [{ id: 'notes',       label: 'NOTAS INDEXADAS',         val: 1204, fmt: v => Math.round(v).toLocaleString('pt-PT') }],
-};
-
-// Approval asks (agent requests → AJ decides; v1 flavour).
-// Per-agent first so the ask matches who's asking; dept pool is the fallback.
-export const APPROVAL_ASKS = {
-  emails:    ['Enviar o resumo semanal da empresa a toda a equipa — rascunho em anexo', 'Dar OK aos 4 envios que ficaram retidos hoje'],
-  sales:     ['Enviar a lista de 40 leads ao Sales Closer — pontuação em anexo', 'Autorizar a compra de 500 créditos de enriquecimento'],
-  ops:       ['Enviar a proposta em PDF à Ridgeline Property Group', 'Aprovar o contrato revisto da Kea Logistics — 2 cláusulas assinaladas'],
-  fin:       ['Fechar o design system da Ridgeline — 4 ecrãs em revisão', 'Aprovar os mockups para a apresentação de amanhã'],
-  delivery:  ['Publicar o site da Kea Logistics no domínio do cliente', 'Aprovar a entrega — 2 notas menores por resolver'],
-  marketing: ['Publicar 4 peças no Instagram e LinkedIn esta semana', 'Lançar 4 variantes de anúncios Meta — orçamento de 120 $/dia'],
-};
-export const APPROVAL_BY_AGENT = {
-  cmail: 'Responder à Kea Logistics sobre o novo prazo — rascunho em anexo',
-  olead: 'Enviar a proposta à Ridgeline Property Group — 12 páginas, plano Growth',
-  piper: 'Enviar a proposta à Ridgeline Property Group — 3 opções, a do meio recomendada',
-  folo:  'Enviar o segundo contacto a 8 propostas sem resposta — texto único, personalizado',
-  ona:   'Dar as boas-vindas à Summit HVAC com acessos e datas — mensagem em anexo',
-  legal: 'Aceitar os termos revistos da Kea Logistics — 2 cláusulas assinaladas',
-  pros:  'Entregar a lista de 40 leads ao Sales Closer — diagnóstico de site incluído',
-  vmail: 'Enviar o diagnóstico dos 15 sites ao Sales Closer — 6 sem HTTPS',
-  ilm:   'Marcar 3 reuniões de descoberta — horários propostos em anexo',
-  enzo:  'Comprar 500 créditos de enriquecimento — o lote atual acaba amanhã',
-  qa:    'Aprovar a entrega do site — 2 notas menores anotadas',
-  dlead: 'Prolongar o projeto Ridgeline por uma semana — o cliente pediu',
-  apay:  'Publicar a versão aprovada no domínio do cliente',
-  kmail: 'Arquivar a documentação do projeto no Cérebro — 2 ficheiros',
-  cass:  'Ligar os pagamentos Stripe ao projeto da Kea Logistics',
-  gfx:   'Fechar a direção visual do site da Ridgeline — 3 conceitos em anexo',
-  iggy:  'Publicar o vídeo de demonstração no Instagram — legendas incluídas',
-  vid:   'Entregar o corte de demonstração de 45 s — legendas gravadas, v2 em anexo',
-  ada:   'Escalar o anúncio vencedor para 180 $/dia — CPA 29 $',
-  mlead: 'Aprovar o plano editorial de outubro — 12 publicações, 2 newsletters',
-  newt:  'Enviar a newsletter do mês a 3 400 subscritores — rascunho v3 em anexo',
-  scout: 'Dar luz verde à comparação pública com a CallForge — memorando em anexo',
-  recon: 'Publicar o relatório de conteúdo do mês — 12 leads atribuídos',
-  comply:'Autorizar os 4 envios retidos — consentimento verificado em 3 de 4',
-};
-
-// Fake terminal lines for the desk screens (per-dept flavour), matching v1's chat voice.
-export const WORKLINES = {
-  emails: [
-    '▸ a rever prioridades — 3 tarefas atrasadas',
-    '▸ painel central atualizado · 5 blocos ligados ao Cérebro',
-    '▸ 4 entregas à espera do OK do proprietário',
-    '▸ relatório de estado: números consolidados',
-  ],
-  sales: [
-    '▸ a varrer o Google Maps — 22 empresas sem site',
-    '▸ presença digital analisada · 6 sites sem HTTPS',
-    '▸ 40 leads pontuados face ao ICP · 12 duplicados removidos',
-    '▸ lista entregue ao Sales Closer',
-  ],
-  ops: [
-    '▸ a preparar abordagem — Ridgeline Property Group',
-    '▸ objeção respondida: prazo e âmbito',
-    '▸ 2 reuniões marcadas para quinta',
-    '▸ proposta em PDF criada — 3 opções',
-  ],
-  fin: [
-    '▸ briefing lido — problema, público e ação',
-    '▸ estrutura e navegação definidas · 5 ecrãs',
-    '▸ design system: 12 componentes fechados',
-    '▸ especificações entregues à Engenharia',
-  ],
-  delivery: [
-    '▸ a construir a página inicial — fiel ao design',
-    '▸ formulário ligado ao CRM · teste a passar',
-    '▸ QA: telemóvel e computador · 4 notas',
-    '▸ a publicar no domínio do cliente',
-  ],
-  marketing: [
-    '▸ calendário editorial da semana fechado',
-    '▸ caso de estudo escrito com números reais',
-    '▸ vídeo montado · legendas gravadas',
-    '▸ alcance e leads do mês medidos',
-  ],
-  brain: [
-    '▸ a indexar o Cérebro — 1 204 notas',
-    '▸ a responder à ANÁLISE — nota de mercado',
-    '▸ reunião registada: LEAD HUNTER × SALES CLOSER',
-  ],
-};
-
-// INDUSTRY PROFILE (12 Sep 2026): a per-industry demo file rewrites pods, seats, rows, asks and screen lines in place. No-op without window.PROFILE.
-applyData({ DEPTS, AGENTS, BILLBOARDS, APPROVAL_ASKS, APPROVAL_BY_AGENT, WORKLINES });

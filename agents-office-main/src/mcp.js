@@ -1,58 +1,14 @@
-// CONNECTORS — per-department dock of MCP brand-logo tiles (AJ's spec, 2 Aug 2026, rev 2).
-// v1 was an orbit ring; AJ: "descoordenado e difícil de notar". Now each dept has ONE fixed
-// "CONECTORES" group — a tidy camera-facing row of tiles — with constant back-and-forth
-// packet traffic between tiles and desks so the connectors visibly help the agents work.
-// Real sim events fire a strong pulse + tile→desk beam + return ack; ambient exchanges keep
-// steady energy between events. Full brand colour · LOD small-out/full-in · click = tooltip.
+// CONECTORES — cada sala tem UMA fila fixa de azulejos MCP, virada para a câmara. Um azulejo só
+// pulsa e lança um feixe quando um agente usa mesmo aquela ferramenta (`onToolsUsed`), com o
+// resultado que o motor devolveu. 26 out 2026: o vaivém de pacotes ao acaso e a lista de
+// demonstração saíram — sem servidor, a fila fica vazia e di-lo.
 //
-// V3.1 (7 Sep 2026): the list is REAL when served — `connectors` (src/connectors.js) carries the
-// MCP servers the user's Claude Code is connected to, their status, which pods they feed, and
-// the roster's tool preferences; onToolsUsed() lights the wire an agent actually pulled on.
-// Opened as a file (no server) the demo list below still plays.
+// V3.1 (7 Sep 2026): a lista é REAL — `connectors` (src/connectors.js) traz os servidores MCP que
+// o Claude Code desta máquina tem ligados, o estado de cada um, as salas que alimenta e as
+// ferramentas que o roster pediu.
 import * as THREE from 'three';
-import { MCP_LOGOS, MCP_BY_DEPT } from './mcplogos.js';
+import { MCP_LOGOS } from './mcplogos.js';
 import { fmtTime, fmtDateTime } from './time.js';
-import { applyAgentTools, profileShared } from './profile.js';
-
-// agent → tools they'd plausibly be driving (falls back to any connector in the dept's dock)
-export const AGENT_MCP = {
-  elead: ["notion", "googlecalendar", "slack"],
-  imail: ["notion", "slack", "googlecalendar"],
-  report: ["notion", "clarity"],
-  dash: ["clarity", "notion"],
-  comply: ["notion", "gmail"],
-  pros: ["territool", "apollo", "chrome"],
-  enzo: ["fullenrich", "apollo"],
-  ilm: ["gmail", "googlecalendar"],
-  riley: ["chrome", "notion"],
-  scout: ["chrome", "notion"],
-  vmail: ["playwright", "chrome"],
-  olead: ["gmail", "googlecalendar", "pandadoc"],
-  piper: ["pandadoc", "notion"],
-  folo: ["gmail", "imessage"],
-  ona: ["imessage", "gmail"],
-  legal: ["pandadoc", "notion"],
-  cmail: ["gmail", "slack"],
-  gfx: ["canva", "notion"],
-  dasst: ["canva", "webflow"],
-  alead: ["canva", "higgsfield"],
-  invo: ["notion", "clarity"],
-  dlead: ["webflow", "playwright"],
-  pco: ["notion", "googlecalendar"],
-  qa: ["playwright", "chrome"],
-  crep: ["webflow", "playwright"],
-  cass: ["stripe", "notion"],
-  apay: ["webflow", "chrome"],
-  kmail: ["notion", "googledrive"],
-  mlead: ["meta", "notion"],
-  newt: ["beehiiv", "loops"],
-  ada: ["meta"],
-  iggy: ["meta", "canva"],
-  vid: ["hyperframes"],
-  lexi: ["notion", "googlecalendar"],
-  recon: ["clarity", "meta"],
-};
-applyAgentTools(AGENT_MCP); // INDUSTRY PROFILE (12 Sep 2026): per-industry demo file; no-op otherwise
 
 // screen axes in world space (iso azimuth 45°): SR = screen-right, FRONT = toward camera
 const SR = new THREE.Vector3(1, 0, -1).normalize();
@@ -80,9 +36,9 @@ function smooth(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
 
 export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null }) {
   const LIVE = !!(connectors && connectors.live);
-  const BY_DEPT = LIVE ? connectors.byDept : MCP_BY_DEPT;
-  const LOGOS = LIVE ? { ...MCP_LOGOS, ...connectors.logos } : MCP_LOGOS;
-  const AGENT_TOOLS = (LIVE && connectors.agentTools) || AGENT_MCP;
+  const BY_DEPT = LIVE ? connectors.byDept : {};
+  const LOGOS = LIVE ? { ...MCP_LOGOS, ...connectors.logos } : {};
+  const AGENT_TOOLS = (LIVE && connectors.agentTools) || {};
   const STATUS = (LIVE && connectors.status) || {};
   const NAMES = (LIVE && connectors.names) || {};
 
@@ -164,7 +120,6 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     docks[dept] = {
       anchor, conn,
       seats: Object.values(R).filter(r => r.a.dept === dept).map(r => r.seat),
-      nextAmbient: performance.now() + 600 + Math.random() * 1400,
     };
   }
 
@@ -175,7 +130,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   // at overview all connector traffic originates from the top bar instead.
   // SHARED connectors (gmail: five depts; notion: every dept, V3.1) sit at the far RIGHT end
   // of the strip and each runs its OWN loom (below) instead of joining any dept's cluster/fan
-  const SHARED = LIVE ? connectors.shared : (profileShared() || { notion: '#151414', gmail: '#EA4335' });
+  const SHARED = LIVE ? connectors.shared : { notion: '#151414', gmail: '#EA4335' };
   const uniqKeys = [...new Set(Object.values(BY_DEPT).flat())].filter(k => !SHARED[k]);
   for (const k of ((LIVE && connectors.off) || [])) if (!uniqKeys.includes(k)) uniqKeys.push(k); // present but unusable: shown grey, never wired
   for (const k of Object.keys(SHARED)) uniqKeys.push(k);
@@ -209,9 +164,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   // cam + dockAcur are set every tick. At overview (dockAcur low) all connector traffic
   // rides the PERMANENT WIRES below — nothing free-flies (free packets from the top bar
   // read as "drones attacking the pods", AJ). Zoomed in, tile→desk beams as before.
-  // volleyAt schedules the boot/replay flourish: a pulse from every connector into its dept(s).
   let cam = null, dockAcur = 0;
-  let volleyAt = performance.now() + uniqKeys.length * 90 + 900;
 
   // ── permanent wiring loom (overview mode) ──
   // One fixed conduit per dept: leaves the top bar under that dept's logo cluster, bows out
@@ -296,10 +249,10 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     shared[key] = { ink, drop, jdot, wires: wiresOf, offset: 0, jy: 92 + si * 10 };
   });
 
-  // ── the MODEL layer (AJ, 5 Sep 2026): Claude + ChatGPT run the office headless ──
-  // Two logos on the right of the top bar, each wired straight into the Brain pod — the
-  // conduits pulse on their own so the thinking is visible even when nothing else fires.
-  const MODELS = { claude: '#D97757', chatgpt: '#151414' };
+  // ── o motor que responde ──
+  // 26 out 2026: sai o par Claude + ChatGPT com condutas a pulsar sozinhas. Fica o motor que o
+  // servidor diz estar a responder (GET /api/ai) — se não houver nenhum, a barra di-lo.
+  const MODELS = { claude: '#D97757' };
   const topmodels = document.getElementById('topmodels');
   const modelImgs = {};
   if (topmodels) {
@@ -331,13 +284,10 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     // sockets on the Brain pod's back edge, side by side
     mwires[k] = { path, dot, port: [LAYOUT.brain.w / 2 - 2 - i * 4, 1.3, -LAYOUT.brain.d / 2] };
   });
-  let nextModelPulse = performance.now() + 2600;
   // V3.6 (A3 · B1 · C1): the plan's own gauge beside the Claude logo — session and week, as Claude Code shows them.
-  // Live means Claude only: the ChatGPT tile and its wire are demo theatre and go the first time usage arrives.
   let usageEl = null;
   function setUsage(u) {
     if (!topmodels) return;
-    if (modelImgs.chatgpt) { modelImgs.chatgpt.remove(); delete modelImgs.chatgpt; const w = mwires.chatgpt; if (w) { w.path.setAttribute('d', ''); w.dot.setAttribute('opacity', 0); delete mwires.chatgpt; } }
     if (!usageEl) { usageEl = document.createElement('span'); usageEl.className = 'tm-usage'; topmodels.appendChild(usageEl); }
     const when = ts => (ts ? fmtDateTime(ts) : '—'); // 24 horas (src/time.js)
     const bar = (lab, x) => { if (!x) return ''; const cls = x.percent >= 90 ? 'c' : x.percent >= 75 ? 'w' : ''; return `<span>${lab}</span><span class="ub"><i class="${cls}" style="width:${x.percent}%"></i></span><b>${x.percent >= 100 ? 'LIMIT' : x.percent + '%'}</b>`; };
@@ -353,7 +303,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     } else { usageEl.className = 'tm-usage off'; usageEl.innerHTML = '<span>UTILIZAÇÃO INDISPONÍVEL</span>'; usageEl.title = (u && u.reason) || ''; }
   }
   function modelPulse(k, strong = false) {
-    if (!modelImgs[k]) return; // a tile that has gone (ChatGPT in a live office) has no wire to pulse
+    if (!modelImgs[k]) return;
     wirePulse('brain', { model: k, scale: strong ? 1.2 : 0.9 });
     wirePulse('brain', { model: k, reverse: true, delay: 900, scale: strong ? 1 : 0.75 });
     if (modelImgs[k] && strong) { modelImgs[k].classList.remove('tpulse'); void modelImgs[k].offsetWidth; modelImgs[k].classList.add('tpulse'); }
@@ -479,10 +429,6 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       m.dot.setAttribute('cx', ex); m.dot.setAttribute('cy', ey);
       m.dot.setAttribute('opacity', (f ? 0.85 : 0.45) * wireA);
     }
-    if (now > nextModelPulse) {
-      modelPulse(Math.random() < 0.6 ? 'claude' : 'chatgpt');
-      nextModelPulse = now + 2400 + Math.random() * 3200;
-    }
     for (let i = wirePulses.length - 1; i >= 0; i--) {
       const p = wirePulses[i];
       const k = (now - p.t0) / p.dur;
@@ -512,13 +458,13 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     }
   }
 
-  // C hotkey / CC.connectorReveal(): re-pop the top-bar logos, then the beam volley
-  function startReveal(now) {
+  // C hotkey / CC.connectorReveal(): re-pop the top-bar logos. Sem chuva de pacotes — os feixes só
+  // existem quando uma ferramenta é mesmo usada (onToolsUsed).
+  function startReveal() {
     for (const img of Object.values(topImgs)) {
       img.classList.remove('in', 'tpulse');
       img.style.animation = 'none'; void img.offsetWidth; img.style.animation = '';
     }
-    volleyAt = now + uniqKeys.length * 90 + 600;
   }
 
   function pulse(item, now, amp = 0.3) {
@@ -603,21 +549,6 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     }
   }
 
-  // an agent did real work → their connector lights up, ships a packet train to the desk,
-  // and the desk answers with a return train — visible request/response
-  function onAgentEvent(agentId, dept, seatPos, now) {
-    const prefs = (AGENT_TOOLS[agentId] || []).filter(k => byDeptKey[dept + ':' + k]);
-    const dock = BY_DEPT[dept] || [];
-    if (!dock.length) return;
-    const key = prefs.length ? prefs[Math.floor(Math.random() * prefs.length)]
-                             : dock[Math.floor(Math.random() * dock.length)];
-    const item = byDeptKey[dept + ':' + key];
-    if (!item) return;
-    pulse(item, now, 0.3);
-    spawnBeam(item, seatPos, now);                                   // tile → desk
-    spawnBeam(item, seatPos, now, { reverse: true, count: 3, delay: 850, scale: 0.85 }); // desk → tile ack
-  }
-
   // LIVE: an agent really called these tools → their logos pulse and the exchange rides the
   // wire into that agent's pod (keys as the server gives them: logo key, server id, or 'web')
   function onToolsUsed(agentId, keys) {
@@ -671,19 +602,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     const dockA = 0;
     dockAcur = dockA;
 
-    // boot/replay flourish: ONE gentle pulse per department, well spaced — a per-connector
-    // volley (17 exchanges at once) read as a barrage
-    if (volleyAt && now > volleyAt) {
-      const go = !focused;
-      volleyAt = 0;
-      if (go) Object.keys(BY_DEPT).forEach((dept, i) => setTimeout(() => {
-        const its = byDept[dept], seats = docks[dept].seats;
-        if (!its.length || !seats.length) return;
-        const item = its[Math.floor(Math.random() * its.length)];
-        pulse(item, performance.now(), 0.3);
-        spawnBeam(item, seats[Math.floor(Math.random() * seats.length)], performance.now(), { scale: 0.9 });
-      }, 350 + i * 420));
-    }
+    // 26 out 2026: o «flourish» de arranque (um pulso por departamento, sem trabalho nenhum)
+    // também saiu. A fila de conectores só reage quando um agente usa mesmo uma ferramenta.
 
     // current dock anchor per dept: overview anchor, lerped to the focus anchor (if any)
     // by focusDim while that dept is focused
@@ -741,18 +661,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       dk.conn.style.transform = `translate(${sx}px,${sy}px) translate(-50%,-100%) scale(${pillScale})`;
       dk.conn.style.opacity = (dimmed ? 1 - 0.85 * focusDim : 1) * dockA;
 
-      // steady exchange: a random connector and a random desk trade packets both ways —
-      // the constant "conectores que servem os agentes" energy AJ asked for
-      if (now > dk.nextAmbient && dk.seats.length && n) { // n = 0 when no connector is wired to this pod — nothing to pulse
-        const item = byDept[dept][Math.floor(Math.random() * n)];
-        const seat = dk.seats[Math.floor(Math.random() * dk.seats.length)];
-        const outFirst = Math.random() < 0.5;
-        pulse(item, now, 0.18);
-        spawnBeam(item, seat, now, { reverse: !outFirst, count: 3, scale: 0.8 });
-        spawnBeam(item, seat, now, { reverse: outFirst, count: 2, delay: 700, scale: 0.7 });
-        // overview wires want calm — sparse pulses; zoomed-in docks keep the busy exchange
-        dk.nextAmbient = now + (1300 + Math.random() * 1900) * (focused && focused !== 'brain' ? 1.5 : 2.8);
-      }
+      // 26 out 2026: o vaivém de pacotes ao acaso saiu. Um feixe só existe quando um agente usa
+      // mesmo uma ferramenta (onToolsUsed) — o resto era energia a fingir.
     }
     tickBeams(now);
     tickStreams(now, focused, focusDim);
@@ -772,5 +682,5 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
     }
     if (mwires.chatgpt) { mwires.chatgpt.path.setAttribute('stroke', ink); mwires.chatgpt.dot.setAttribute('fill', ink); }
   }
-  return { tick, sprites: [], onAgentEvent, onToolsUsed, showTip, startReveal, setDark, setUsage, live: LIVE, keys: uniqKeys }; // sprites: none clickable — docks retired
+  return { tick, sprites: [], onToolsUsed, showTip, startReveal, setDark, setUsage, live: LIVE, keys: uniqKeys }; // sprites: none clickable — docks retired
 }

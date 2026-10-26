@@ -62,7 +62,6 @@
     font-family: var(--ui); font-size: 9px; letter-spacing: .08em; color: #fff; mix-blend-mode: difference; opacity: .55; white-space: nowrap; }
   #licence .wm { font-size: 10.5px; text-shadow: none; }
   #licence .wm i { animation: none; }
-  body.hero #licence, body.hero #sahniMark { display: none; } /* the sahni.ai/custom hero embeds the office on its own page: no mark, no line, there */
   body.dark #licence { mix-blend-mode: normal; color: rgba(236,234,227,.62); }
   #topbar .brand .ver { font-size: 13px; letter-spacing: .16em; color: var(--grey); vertical-align: 3px; margin-left: 2px; }
   /* INDUSTRY PROFILE (12 Sep 2026): the demo company beside the brand */
@@ -632,6 +631,10 @@
   .tk-pct { margin-left: auto; font-variant-numeric: tabular-nums; flex: none; }
   .tk-bar { height: 4px; border-radius: 99px; background: rgba(21,20,20,.09); overflow: hidden; margin-top: 6px; }
   .tk-bar i { display: block; height: 100%; background: var(--ink); border-radius: 99px; transition: width .5s linear; }
+  /* 26 out 2026: sem percentagens. Uma tarefa a correr mostra uma faixa em movimento, não um número. */
+  .tk-bar.run i, .tp-bar.run i { width: 34% !important; animation: barRun 1.8s var(--ease) infinite; }
+  @keyframes barRun { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+  @media (prefers-reduced-motion: reduce) { .tk-bar.run i, .tp-bar.run i { animation: none; width: 100% !important; opacity: .45; } }
   .tk.done { opacity: .72; }
   .tk.done .tk-t { text-decoration: line-through; text-decoration-color: #1E9070; text-decoration-thickness: 1.5px; }
   .tk-tick { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; flex: none;
