@@ -1,0 +1,444 @@
+/* ===========================================================================
+   1.18.0 · provas da camada de IA (30 out 2026)
+
+   O que se prova aqui, sem rede e sem chaves verdadeiras:
+     · o cliente fala os três dialetos e classifica os erros;
+     · o router só escolhe fornecedores com chave, respeita o preferido e desliga;
+     · o fallback passa ao modelo seguinte e regista o que falhou;
+     · o orçamento trava antes de gastar sem fim;
+     · as ferramentas validam argumentos, respeitam permissões e não fazem o que
+       é destrutivo sem aprovação;
+     · o orquestrador corre um trabalho inteiro (plano → passos → ferramenta →
+       revisão) sobre uma base em memória, com um fornecedor falso;
+     · sem fornecedor, a execução falha com a razão escrita (não inventa);
+     · nenhuma rota devolve a chave.
+   =========================================================================== */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { createMemRepo } from './api/_repo.mjs';
+import { FORNECEDORES, comChave, mascarar, MODELOS } from './api/_ia/catalogo.mjs';
+import { ErroIA, falar, listarModelos } from './api/_ia/cliente.mjs';
+import { cadeia, diagnostico, falarComFallback, orcamento } from './api/_ia/router.mjs';
+import { FERRAMENTAS, INDISPONIVEIS, executar, validar } from './api/_ia/ferramentas.mjs';
+import { criarMotor } from './api/_ia/motor.mjs';
+import { correr, lerPlano, normalizarPlano } from './api/_ia/orquestrador.mjs';
+import { rotasIA } from './api/_ia/rotas.mjs';
+import { AGENTES } from './api/_ia/agentes.mjs';
+
+const CHAVE = 'sk-teste-1234567890abcdef';
+const envFalso = { OPENROUTER_API_KEY: CHAVE };
+
+const json = (corpo, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(corpo) });
+
+/* ---------- 1 · catálogo ---------- */
+test('catálogo: comChave só vê variáveis com valor, e a máscara não revela a chave', () => {
+  assert.deepEqual(comChave({}), []);
+  const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' });
+  assert.deepEqual(vistos, [{ id: 'groq', variavel: 'GROQ_API_KEY' }]);
+  const m = mascarar(CHAVE);
+  assert.ok(!m.includes('1234567890'), 'a máscara mostrou o meio da chave');
+  assert.match(m, /^sk-tes…cdef$/);
+  assert.equal(Object.keys(FORNECEDORES).length >= 8, true);
+});
+
+/* ---------- 2 · cliente, três dialetos ---------- */
+test('cliente openai: manda o modelo e as ferramentas, e lê texto + tool_calls', async () => {
+  let visto;
+  const f = async (url, opt) => {
+    visto = { url, corpo: JSON.parse(opt.body), h: opt.headers };
+    return json({
+      model: 'qwen/qwen3-coder:free',
+      choices: [{ message: { content: ' pronto ', tool_calls: [{ id: 'c1', function: { name: 'lead_criar', arguments: '{"nome":"Café Central"}' } }] } }],
+      usage: { prompt_tokens: 12, completion_tokens: 7 },
+    });
+  };
+  const r = await falar({
+    fornec: 'openrouter', prov: FORNECEDORES.openrouter, chave: CHAVE, modelo: 'qwen/qwen3-coder:free',
+    mensagens: [{ role: 'system', content: 'és um agente' }, { role: 'user', content: 'olá' }],
+    ferramentas: [{ nome: 'lead_criar', descricao: 'cria', parametros: { type: 'object' } }],
+    fetchImpl: f,
+  });
+  assert.equal(visto.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(visto.h.authorization, `Bearer ${CHAVE}`);
+  assert.equal(visto.corpo.messages[0].role, 'system');
+  assert.equal(visto.corpo.tools[0].function.name, 'lead_criar');
+  assert.equal(r.texto, 'pronto');
+  assert.equal(r.chamadas[0].nome, 'lead_criar');
+  assert.deepEqual(r.chamadas[0].argumentos, { nome: 'Café Central' });
+  assert.deepEqual(r.uso, { entrada: 12, saida: 7 });
+});
+
+test('cliente anthropic: x-api-key, system separado e blocos tool_use', async () => {
+  let visto;
+  const r = await falar({
+    fornec: 'anthropic', prov: FORNECEDORES.anthropic, chave: CHAVE, modelo: 'claude-sonnet-5',
+    mensagens: [{ role: 'system', content: 'regras' }, { role: 'user', content: 'olá' }],
+    fetchImpl: async (url, opt) => {
+      visto = { url, corpo: JSON.parse(opt.body), h: opt.headers };
+      return json({ model: 'claude-sonnet-5', content: [{ type: 'text', text: 'certo' }, { type: 'tool_use', id: 't1', name: 'mesa_resumo', input: {} }], usage: { input_tokens: 5, output_tokens: 3 } });
+    },
+  });
+  assert.equal(visto.url, 'https://api.anthropic.com/v1/messages');
+  assert.equal(visto.h['x-api-key'], CHAVE);
+  assert.equal(visto.corpo.system, 'regras');
+  assert.equal(visto.corpo.max_tokens > 0, true);
+  assert.equal(r.texto, 'certo');
+  assert.deepEqual(r.chamadas[0], { id: 't1', nome: 'mesa_resumo', argumentos: {} });
+  assert.deepEqual(r.uso, { entrada: 5, saida: 3 });
+});
+
+test('cliente google: chave em cabeçalho (nunca na URL) e functionCall desembrulhado', async () => {
+  let visto;
+  const r = await falar({
+    fornec: 'google', prov: FORNECEDORES.google, chave: CHAVE, modelo: 'gemini-2.5-flash',
+    mensagens: [{ role: 'user', content: 'olá' }],
+    fetchImpl: async (url, opt) => {
+      visto = { url, corpo: JSON.parse(opt.body), h: opt.headers };
+      return json({ candidates: [{ content: { parts: [{ text: 'viva' }, { functionCall: { name: 'leads_listar', args: { limite: 3 } } }] } }], usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 4 } });
+    },
+  });
+  assert.match(visto.url, /models\/gemini-2\.5-flash:generateContent$/);
+  assert.ok(!visto.url.includes(CHAVE), 'a chave foi para a URL');
+  assert.equal(visto.h['x-goog-api-key'], CHAVE);
+  assert.equal(r.texto, 'viva');
+  assert.equal(r.chamadas[0].nome, 'leads_listar');
+  assert.deepEqual(r.chamadas[0].argumentos, { limite: 3 });
+  assert.deepEqual(r.uso, { entrada: 8, saida: 4 });
+});
+
+test('cliente: erros classificados — 401 não se repete, 429 repete', async () => {
+  const chamar = (status, corpo) => falar({
+    fornec: 'groq', prov: FORNECEDORES.groq, chave: CHAVE, modelo: 'llama-3.1-8b-instant',
+    mensagens: [{ role: 'user', content: 'x' }],
+    fetchImpl: async () => json(corpo, status),
+  });
+  await assert.rejects(() => chamar(401, { error: { message: 'invalid api key' } }), (e) => {
+    assert.ok(e instanceof ErroIA);
+    assert.equal(e.codigo, 'chave');
+    assert.equal(e.retentavel, false);
+    return true;
+  });
+  await assert.rejects(() => chamar(429, { error: { message: 'rate limit' } }), (e) => (e.codigo === 'limite' && e.retentavel === true));
+  await assert.rejects(() => chamar(404, { error: { message: 'model not found' } }), (e) => e.codigo === 'modelo');
+});
+
+test('cliente: sem chave não vai à rede', async () => {
+  let foi = false;
+  await assert.rejects(() => falar({ fornec: 'groq', prov: FORNECEDORES.groq, chave: '', modelo: 'x', mensagens: [], fetchImpl: async () => { foi = true; return json({}); } }), (e) => e.codigo === 'semchave');
+  assert.equal(foi, false);
+});
+
+/* ---------- 3 · router ---------- */
+test('router: só fornecedores com chave, e o tipo certo para o tipo de trabalho', () => {
+  const semChave = cadeia('plano', { chaves: {} });
+  assert.deepEqual(semChave, []);
+  const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' } });
+  assert.ok(comOpenRouter.length > 0);
+  assert.ok(comOpenRouter.every((m) => m.fornec === 'openrouter'));
+  assert.ok(comOpenRouter[0].etiquetas.includes('raciocinio'));
+  const visao = cadeia('visao', { chaves: { openrouter: 'X' } });
+  assert.ok(visao.every((m) => m.etiquetas.includes('visao')));
+  assert.equal(cadeia('visao', { chaves: { groq: 'X' } }).length, 0, 'groq não tem modelos de visão no catálogo');
+});
+
+test('router: preferido do agente vai à frente, e desligado fica de fora', () => {
+  const chaves = { openrouter: 'X', google: 'Y' };
+  const lista = cadeia('plano', { chaves });
+  const preferido = { fornecedor: 'google', modelo: 'gemini-2.5-pro' };
+  const c = cadeia('plano', { chaves, preferido });
+  assert.deepEqual({ fornec: c[0].fornec, modelo: c[0].modelo }, { fornec: preferido.fornecedor, modelo: preferido.modelo });
+  assert.ok(lista.length >= c.length - 0);
+  const semGoogle = cadeia('plano', { chaves, desligados: ['google'] });
+  assert.ok(semGoogle.every((m) => m.fornec !== 'google'));
+  const diag = diagnostico({ chaves });
+  assert.equal(diag.pronto, true);
+  assert.deepEqual(diagnostico({ chaves: {} }).pronto, false);
+});
+
+test('fallback: o primeiro falha, o segundo responde, e o uso fica registado', async () => {
+  const eventos = [];
+  const orc = orcamento({ maxChamadas: 5 });
+  const r = await falarComFallback('texto', {
+    chaves: { openrouter: 'X' },
+    orc,
+    executar: async (entrada, { tentativa }) => {
+      if (tentativa === 1) throw Object.assign(new ErroIA('limite', { codigo: 'limite', retentavel: true, fornec: entrada.fornec }), {});
+      return { texto: 'segundo', uso: { entrada: 10, saida: 5 }, modelo: entrada.modelo, fornec: entrada.fornec, ms: 120 };
+    },
+    registar: (e) => eventos.push(e),
+  });
+  assert.equal(r.texto, 'segundo');
+  assert.equal(r.tentativas, 2);
+  assert.equal(eventos.filter((e) => !e.ok).length, 1);
+  assert.equal(orc.chamadas, 1);
+});
+
+test('orçamento: chega ao limite e para com erro claro', () => {
+  const orc = orcamento({ maxChamadas: 1 });
+  orc.gastar({ entrada: 1, saida: 1 }, 10, { preco: [1, 1] });
+  assert.throws(() => orc.gastar({ entrada: 1, saida: 1 }, 10, { preco: [1, 1] }), (e) => e.codigo === 'orcamento');
+});
+
+/* ---------- 4 · ferramentas ---------- */
+test('ferramentas: validação recusa o que está mal, antes de tocar na base', async () => {
+  const repo = createMemRepo();
+  const ctx = { repo, agente: 'backend', permitidas: Object.keys(FERRAMENTAS) };
+  const semNome = await executar('lead_criar', { cidade: 'Coimbra' }, ctx);
+  assert.equal(semNome.ok, false);
+  assert.match(semNome.erro, /falta «nome»/);
+  const tipoErrado = await executar('lead_criar', { nome: 'X', telefone: 912345678 }, ctx);
+  assert.equal(tipoErrado.ok, false);
+  const estadoInvalido = await executar('lead_actualizar', { id: 'a', estado: 'talvez' }, ctx);
+  assert.equal(estadoInvalido.ok, false);
+  const extra = await executar('lead_criar', { nome: 'Café', invenção: 1 }, ctx);
+  assert.equal(extra.ok, false);
+  assert.equal(repo._dados.leads.length, 0, 'escreveu apesar de os argumentos estarem mal');
+});
+
+test('ferramentas: permissões por agente e aprovação para o destrutivo', async () => {
+  const repo = createMemRepo();
+  const r1 = await executar('lead_criar', { nome: 'Café Central', cidade: 'Coimbra' }, { repo, agente: 'research', permitidas: AGENTES.research.ferramentas });
+  assert.equal(r1.ok, false);
+  assert.match(r1.erro, /não tem permissão/);
+
+  await repo.receitas.insert({ amount_cents: 5000, campaign: 'x' });
+  const id = repo._dados.receitas[0].id;
+  const semAprovacao = await executar('receita_apagar', { id }, { repo, agente: 'backend', permitidas: Object.keys(FERRAMENTAS) });
+  assert.equal(semAprovacao.ok, false);
+  assert.equal(semAprovacao.precisaAprovacao, true);
+  assert.equal(repo._dados.receitas.length, 1, 'apagou sem aprovação');
+  const comAprovacao = await executar('receita_apagar', { id }, { repo, agente: 'backend', permitidas: Object.keys(FERRAMENTAS), aprovado: true });
+  assert.equal(comAprovacao.ok, true);
+  assert.equal(repo._dados.receitas.length, 0);
+});
+
+test('ferramentas: lead_criar não duplica nome+cidade', async () => {
+  const repo = createMemRepo();
+  const ctx = { repo, agente: 'backend', permitidas: Object.keys(FERRAMENTAS) };
+  const a = await executar('lead_criar', { nome: 'Café Central', cidade: 'Coimbra' }, ctx);
+  const b = await executar('lead_criar', { nome: 'cafe central ', cidade: 'COIMBRA' }, ctx);
+  assert.equal(a.ok, true);
+  assert.equal(b.dados.duplicado, true);
+  assert.equal(repo._dados.leads.length, 1);
+});
+
+test('ferramentas: o que não existe está declarado, não fingido', () => {
+  const ids = INDISPONIVEIS.map((i) => i.id);
+  for (const esperado of ['pesquisa_web', 'execucao_de_codigo', 'geracao_de_imagens']) assert.ok(ids.includes(esperado));
+  assert.equal(FERRAMENTAS.pesquisa_web, undefined);
+});
+
+test('validar: aceita args válidos e enumera erros em português', () => {
+  const ok = validar(FERRAMENTAS.leads_listar.parametros, { limite: 10, estado: 'novo' });
+  assert.deepEqual(ok.erros, []);
+  const mau = validar(FERRAMENTAS.leads_listar.parametros, { limite: 500, estado: 'x' });
+  assert.equal(mau.ok, false);
+  assert.equal(mau.erros.length, 2);
+});
+
+/* ---------- 5 · plano ---------- */
+test('plano: lê JSON embrulhado em prosa e normaliza agentes', () => {
+  const obj = lerPlano('Claro! Aqui vai:\n```json\n{"passos":[{"agente":"Agent 04 - Frontend","titulo":"t","instrucao":"fazer","criterio":"c"}],"limites":["sem web"]}\n```');
+  const p = normalizarPlano(obj);
+  assert.equal(p.passos.length, 1);
+  assert.equal(p.passos[0].agente, 'frontend');
+  assert.deepEqual(p.limites, ['sem web']);
+  assert.equal(normalizarPlano({ nada: true }), null);
+});
+
+/* ---------- 6 · orquestrador de ponta a ponta (fornecedor falso) ---------- */
+function fornecedorFalso({ plano = null, chamarFerramenta = null } = {}) {
+  const pedidos = [];
+  const fetchImpl = async (url, opt) => {
+    const corpo = JSON.parse(opt.body);
+    pedidos.push({ url, corpo });
+    const sistema = corpo.messages?.[0]?.content || '';
+    const ultima = corpo.messages[corpo.messages.length - 1];
+    let texto = 'feito.';
+
+    if (sistema.includes('Orchestrator')) {
+      texto = JSON.stringify(plano || {
+        passos: [
+          { agente: 'research', titulo: 'Ver o que já existe', instrucao: 'resume a mesa', criterio: 'numeros reais' },
+          { agente: 'backend', titulo: 'Guardar o lead', instrucao: 'cria o lead do Café Central', criterio: 'lead criado' },
+        ],
+        limites: ['sem pesquisa web'],
+      });
+    } else if (sistema.includes('Reviewer')) {
+      texto = JSON.stringify({ decisao: 'aprovado', justificacao: 'os passos devolveram resultados reais', corrigir: [] });
+    } else if (chamarFerramenta && ultima?.role !== 'tool') {
+      return json({
+        choices: [{ message: { content: '', tool_calls: [{ id: 'tc1', function: { name: chamarFerramenta.nome, arguments: JSON.stringify(chamarFerramenta.args) } }] } }],
+        usage: { prompt_tokens: 20, completion_tokens: 10 },
+      });
+    }
+    return json({ choices: [{ message: { content: texto } }], usage: { prompt_tokens: 30, completion_tokens: 20 } });
+  };
+  return { fetchImpl, pedidos };
+}
+
+test('orquestrador: plano → passos → ferramenta → revisão, tudo gravado na base', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'lead_criar', args: { nome: 'Café Central', cidade: 'Coimbra' } } });
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+  const run = await correr({ repo, motor, objetivo: 'Encontrar um cliente para o site do Café Central', env: envFalso });
+
+  assert.equal(run.estado, 'concluido', `esperava concluido, veio ${run.estado}: ${run.erro || ''}`);
+  assert.equal(run.plano.passos.length, 2);
+  assert.equal(run.revisao.decisao, 'aprovado');
+  assert.match(run.resultado, /Research/);
+  assert.equal(run.artefactos.ferramentasUsadas.some((f) => f.nome === 'lead_criar' && f.ok), true);
+
+  const passos = await repo.ia.steps.porRun(run.id);
+  assert.ok(passos.length >= 3, 'faltam passos gravados');
+  assert.equal(passos.every((p) => p.modelo), true, 'há passos sem modelo registado');
+  assert.equal(repo._dados.leads.length, 1, 'a ferramenta não mexeu na base');
+  assert.equal(repo._dados.leads[0].name, 'Café Central');
+
+  const uso = await repo.ia.uso.recentes();
+  assert.ok(uso.length >= 3, 'o uso não foi registado');
+  assert.equal(uso.every((u) => u.fornecedor === 'openrouter'), true);
+});
+
+test('orquestrador: sem fornecedor com chave, a execução falha com a razão escrita', async () => {
+  const repo = createMemRepo();
+  const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
+  const run = await correr({ repo, motor, objetivo: 'qualquer coisa', env: {} });
+  assert.equal(run.estado, 'falhou');
+  assert.match(run.erro, /nenhum fornecedor de IA configurado/);
+  assert.equal((await repo.ia.steps.porRun(run.id)).length, 0);
+});
+
+test('orquestrador: execução cancelada antes de começar fica cancelada', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso();
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+  const r = await repo.ia.runs.criar({ objetivo: 'x', estado: 'cancelado' });
+  const run = await correr({ repo, motor, objetivo: 'x', runId: r.id, env: envFalso });
+  assert.equal(run.estado, 'cancelado');
+});
+
+/* ---------- 7 · rotas ---------- */
+test('rota /ia/estado: sem chaves diz que não há motor, e nunca devolve a chave', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.pronto, false);
+  assert.equal(r.corpo.fornecedores.every((f) => f.configurado === false), true);
+  assert.ok(!JSON.stringify(r.corpo).includes(CHAVE));
+});
+
+test('rota /ia/estado: com chave mostra o NOME da variável, a máscara e «por testar»', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: envFalso });
+  const f = r.corpo.fornecedores.find((x) => x.id === 'openrouter');
+  assert.equal(f.configurado, true);
+  assert.equal(f.variavel, 'OPENROUTER_API_KEY');
+  assert.equal(f.estado, 'por_testar');
+  assert.ok(!JSON.stringify(r.corpo).includes(CHAVE), 'a chave saiu na resposta');
+  assert.ok(!JSON.stringify(r.corpo).includes('1234567890'));
+});
+
+test('rota /ia/testar: um teste REAL marca o fornecedor como funcional', async () => {
+  const repo = createMemRepo();
+  const chamadas = [];
+  const fetchImpl = async (url) => {
+    chamadas.push(url);
+    if (url.endsWith('/models')) return json({ data: [{ id: 'qwen/qwen3-coder:free' }] });
+    return json({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 3, completion_tokens: 1 } });
+  };
+  const r = await rotasIA(repo, { caminho: '/ia/testar', metodo: 'POST', corpo: { fornecedor: 'openrouter' }, env: envFalso, fetchImpl });
+  assert.equal(r.corpo.ok, true);
+  assert.equal(r.corpo.modelos, 1);
+  assert.equal(chamadas.length, 2);
+  const depois = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: envFalso });
+  const f = depois.corpo.fornecedores.find((x) => x.id === 'openrouter');
+  assert.equal(f.estado, 'funcional');
+  assert.equal(f.ultimoTeste.ok, true);
+});
+
+test('rota /ia/testar: falha real fica registada como erro (não como funciona)', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async (url) => (url.endsWith('/models') ? json({ data: [{ id: 'x' }] }) : json({ error: { message: 'invalid key' } }, 401));
+  const r = await rotasIA(repo, { caminho: '/ia/testar', metodo: 'POST', corpo: { fornecedor: 'openrouter' }, env: envFalso, fetchImpl });
+  assert.equal(r.corpo.ok, false);
+  assert.match(r.corpo.erro, /chave recusada/);
+  const estado = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: envFalso });
+  assert.equal(estado.corpo.fornecedores.find((x) => x.id === 'openrouter').estado, 'erro');
+});
+
+test('rota /ia/runs: cria, corre e devolve os passos', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'mesa_resumo', args: {} } });
+  const criada = await rotasIA(repo, { caminho: '/ia/runs', metodo: 'POST', corpo: { objetivo: 'Preparar a abordagem ao Café Central' }, env: envFalso });
+  assert.equal(criada.status, 201);
+  const id = criada.corpo.run.id;
+  const corrida = await rotasIA(repo, { caminho: `/ia/runs/${id}/correr`, metodo: 'POST', corpo: {}, env: envFalso, fetchImpl });
+  assert.equal(corrida.status, 200);
+  assert.equal(corrida.corpo.run.estado, 'concluido');
+  const lida = await rotasIA(repo, { caminho: `/ia/runs/${id}`, metodo: 'GET', env: envFalso });
+  assert.equal(lida.corpo.run.id, id);
+  assert.ok(lida.corpo.passos.length >= 2);
+  const curta = await rotasIA(repo, { caminho: '/ia/runs', metodo: 'POST', corpo: { objetivo: 'oi' }, env: envFalso });
+  assert.equal(curta.status, 400);
+});
+
+test('rota /ia/config: desligar um fornecedor tira-o da cadeia', async () => {
+  const repo = createMemRepo();
+  const env2 = { OPENROUTER_API_KEY: CHAVE, GROQ_API_KEY: CHAVE };
+  const p = await rotasIA(repo, { caminho: '/ia/config', metodo: 'PATCH', corpo: { desligados: ['groq'], agentes: { backend: { fornecedor: 'groq', modelo: 'qwen/qwen3-32b' } } }, env: env2 });
+  assert.deepEqual(p.corpo.desligados, ['groq']);
+  const motor = criarMotor({ repo, env: env2, fetchImpl: async () => json({}) });
+  const lista = await motor.cadeiaPara('codigo', { agente: 'backend' });
+  assert.ok(!lista.some((m) => m.fornec === 'groq'), 'o fornecedor desligado continuou na cadeia');
+});
+
+test('rota /ia/chat: usa o agente pedido, executa ferramentas e não inventa', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'leads_listar', args: { limite: 5 } } });
+  const r = await rotasIA(repo, { caminho: '/ia/chat', metodo: 'POST', corpo: { agente: 'research', mensagem: 'quem temos?' }, env: envFalso, fetchImpl });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.agente, 'research');
+  assert.equal(r.corpo.fornecedor, 'openrouter');
+  assert.equal(r.corpo.ferramentas[0].nome, 'leads_listar');
+  assert.equal(r.corpo.ferramentas[0].ok, true);
+  assert.equal(r.corpo.resposta.length > 0, true);
+});
+
+test('rota /ia/chat: mensagem vazia e gigante são recusadas', async () => {
+  const repo = createMemRepo();
+  const vazia = await rotasIA(repo, { caminho: '/ia/chat', metodo: 'POST', corpo: { mensagem: '  ' }, env: envFalso });
+  assert.equal(vazia.status, 400);
+  const grande = await rotasIA(repo, { caminho: '/ia/chat', metodo: 'POST', corpo: { mensagem: 'x'.repeat(9000) }, env: envFalso });
+  assert.equal(grande.status, 413);
+});
+
+test('rota /ia/uso: resume latência, erros e tokens por fornecedor', async () => {
+  const repo = createMemRepo();
+  await repo.ia.uso.registar({ fornecedor: 'openrouter', modelo: 'a', ok: true, ms: 100, tokens_in: 10, tokens_out: 5 });
+  await repo.ia.uso.registar({ fornecedor: 'openrouter', modelo: 'a', ok: false, ms: 300, tokens_in: 0, tokens_out: 0, erro: 'limite' });
+  const r = await rotasIA(repo, { caminho: '/ia/uso', metodo: 'GET', env: {} });
+  const linha = r.corpo.resumo[0];
+  assert.equal(linha.pedidos, 2);
+  assert.equal(linha.ok, 1);
+  assert.equal(linha.erros, 1);
+  assert.equal(linha.latenciaMediaMs, 200);
+  assert.equal(r.corpo.errosRecentes[0].erro, 'limite');
+});
+
+test('rotas desconhecidas e método errado não fingem sucesso', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, { caminho: '/ia/inventado', metodo: 'GET', env: {} });
+  assert.equal(r.status, 404);
+  assert.match(r.corpo.error, /ainda não serve/);
+});
+
+test('catálogo e agentes são coerentes: todas as ferramentas dos agentes existem', () => {
+  for (const a of Object.values(AGENTES)) {
+    for (const f of a.ferramentas) assert.ok(FERRAMENTAS[f], `${a.nome} pede uma ferramenta que não existe: ${f}`);
+    assert.ok(a.tipos.every((t) => typeof t === 'string'));
+  }
+  assert.equal(Object.keys(AGENTES).length, 8);
+  assert.ok(MODELOS.every((m) => FORNECEDORES[m.fornecedor]));
+});

@@ -1,3 +1,74 @@
+## 1.18.0 — 30 out 2026 · APIs multimodelo e orquestração de agentes
+
+O dono pediu uma infraestrutura de IA a sério: vários fornecedores, escolha de modelo por
+tarefa, agentes com ferramentas reais, um Control Center, e provas — não ecrãs bonitos.
+
+### Auditoria primeiro (o que já existia)
+
+- A mesa falava `/api` (1.17.0) com Supabase atrás; não havia **nenhuma** chamada a modelos.
+- `providers.mjs` (25 out) já sabia falar com APIs e CLIs, mas **só no servidor local**
+  (`npm start`): na Vercel não há binários, e as chaves nunca estiveram lá.
+- `integrations.mjs`/`mcp.mjs` servem o Claude Code local; não tocam no site publicado.
+- Tarefas criadas na mesa terminavam `failed — sem motor`. Era verdade, e deixou de ser.
+- O catálogo de fornecedores vem do README de `free-llm-api-resources` (abril 2026), extraído
+  para `api/_ia/catalogo.mjs` — com a nota de que os limites mudam e só um teste conta.
+
+### O que foi construído
+
+- **`api/_ia/catalogo.mjs`** — 11 fornecedores (OpenRouter, Google AI Studio, Groq, Cerebras,
+  Mistral, Hugging Face, NVIDIA NIM, Vercel AI Gateway, Anthropic, OpenAI, DeepSeek) e ~30
+  modelos com capacidades, janela, preço indicativo e limites.
+- **`api/_ia/cliente.mjs`** — uma função (`falar`) e três dialetos (openai, anthropic, google),
+  com tempo limite, classificação de erros (chave/crédito/limite/avaria/modelo) e uso de tokens.
+  A chave viaja em cabeçalho — no Google também (nunca em `?key=`).
+- **`api/_ia/router.mjs`** — escolhe por tipo de trabalho com etiquetas exigidas e desejadas,
+  respeita o modelo preferido de cada agente, ordena por custo/latência real, e devolve uma
+  cadeia com fallback e orçamento (16 chamadas / 160 mil tokens por execução).
+- **`api/_ia/ferramentas.mjs`** — 9 ferramentas que mexem na base a sério (leads, projetos,
+  rascunhos, dinheiro), com validação de argumentos, permissões por agente e aprovação
+  obrigatória nas destrutivas. O que não existe está declarado em `INDISPONIVEIS`.
+- **`api/_ia/agentes.mjs`** — os oito agentes (01 Orchestrator … 08 Reviewer), cada um com
+  instruções, ferramentas fechadas e critérios de conclusão.
+- **`api/_ia/orquestrador.mjs`** — plano → passos → ferramentas → revisão independente, tudo
+  gravado passo a passo (`orbita_ai_runs`/`steps`), com cancelamento verificado entre passos.
+- **`api/_ia/rotas.mjs`** — `/ia/estado`, `/ia/agentes`, `/ia/modelos`, `/ia/modelos/descobrir`,
+  `/ia/testar`, `/ia/chat`, `/ia/runs` (+correr/abrir/cancelar), `/ia/uso`, `/ia/config`.
+- **`supabase/orbita_ia.sql`** — quatro tabelas novas, RLS fechado, só `service_role`.
+- **AI Control Center** (`Mesa → IA`, `src/ia.js`): fornecedores com estado real, botão
+  **Testar** (dois pedidos a sério), descoberta de modelos, modelo por agente, execução de um
+  trabalho com o plano e os passos a aparecerem da base, cancelar, uso/latência/erros, e a lista
+  do que esta instalação não faz.
+
+### Regras que a camada cumpre
+
+- **Nunca** diz que um fornecedor funciona sem um teste real bem-sucedido (`por_testar` é um
+  estado próprio).
+- **Nunca** devolve uma chave: `/ia/estado` dá o nome da variável e a máscara; há um teste que
+  falha se a chave aparecer numa resposta.
+- **Nunca** inventa ferramentas: um agente só executa o que está na sua lista, validado no
+  servidor; o texto do modelo não é prova de execução — a prova é o `ok:true` do executor.
+- **Nunca** promete o que não há: pesquisa web, execução de código, ficheiros e imagens estão
+  declarados como indisponíveis, com a razão.
+
+### Provas
+
+- **`ia.test.mjs` — 30 provas, todas verdes**: os três dialetos (com `fetch` falso), classificação
+  de erros, router (chaves/desligados/preferido/visão), fallback com registo de uso, orçamento,
+  validação e permissões de ferramentas, dedupe de leads, plano em JSON embrulhado em prosa,
+  **orquestração completa** (plano → 2 passos → ferramenta a criar um lead → revisão aprovada,
+  com passos e uso gravados), falha honesta sem fornecedor, cancelamento, e as rotas `/ia/*`
+  incluindo o teste real a marcar «funcional» e uma chave recusada a marcar «erro».
+- Continua tudo o resto: **201 testes** no total, `mesa.smoke` e `scene.smoke` exit 0.
+
+### O que falta (dito, não escondido)
+
+1. **Chaves.** Nenhum fornecedor tem chave na Vercel ainda: o Control Center abre com
+   «Sem motor» e diz qual variável criar. Sem isso, nada corre — e é assim que deve ser.
+2. **Login.** O `/api` continua público (herdado de 1.17.0). Escrever na base a partir de um
+   agente só é seguro depois de haver contas.
+3. **Streaming.** Acompanhamento por polling de 2,5 s; o que se vê são passos gravados, não uma
+   animação.
+
 ## 1.17.0 — 30 out 2026 · A base de dados a sério (Supabase atrás do `/api`)
 
 O dono entregou as chaves do Supabase e disse «podes aplicar». Até aqui a mesa trabalhava no

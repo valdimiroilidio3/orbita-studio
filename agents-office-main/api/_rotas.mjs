@@ -108,8 +108,15 @@ function resumoPipeline(leads) {
 }
 
 /* ---------- o encaminhador ---------- */
-export async function responder(repo, { caminho, metodo = 'GET', corpo = null }) {
+export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
+
+  /* ---- 1.18.0 · tudo o que é IA vive em api/_ia (fornecedores, router, agentes) ---- */
+  if (caminhoLimpo === '/ia' || caminhoLimpo.startsWith('/ia/')) {
+    const { rotasIA } = await import('./_ia/rotas.mjs');
+    return rotasIA(repo, { caminho, metodo, corpo, env, fetchImpl });
+  }
+
   const seg = caminhoLimpo.split('/').filter(Boolean);
   const qs = new URLSearchParams(String(caminho).split('?')[1] || '');
   const m = String(metodo || 'GET').toUpperCase();

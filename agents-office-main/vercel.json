@@ -38,5 +38,10 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/setup.mjs": {
+      "includeFiles": "supabase/**"
+    }
+  }
 }

@@ -117,6 +117,7 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       async list(limit = 100) { return (await pedir(`orbita_messages?select=*&order=created_at.desc&limit=${Math.min(300, limit)}`)) || []; },
       async byId(id) { return um(await pedir(`orbita_messages?select=*&id=eq.${q(id)}&limit=1`)); },
       async rascunhos() { return (await pedir('orbita_messages?select=*&status=eq.rascunho&order=created_at.desc&limit=50')) || []; },
+      async inserir(m) { return um(await pedir('orbita_messages', { method: 'POST', body: m, prefer: 'return=representation' })); },
       async patch(id, campos) {
         const r = await pedir(`orbita_messages?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
         return um(r);
@@ -138,6 +139,60 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       async list(limit = 20) { return (await pedir(`orbita_atividade?select=*&order=at.desc&limit=${Math.min(200, limit)}`)) || []; },
       async add(tipo, texto) { return um(await pedir('orbita_atividade', { method: 'POST', body: { tipo, texto }, prefer: 'return=minimal' })); },
     },
+
+    /* ---- 1.18.0 · a memória da IA: execuções, passos, uso e configuração ---- */
+    ia: {
+      config: {
+        async ler() {
+          const linhas = (await pedir('orbita_ai_config?select=chave,valor')) || [];
+          return Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
+        },
+        async gravar(chave, valor) {
+          await pedir('orbita_ai_config?on_conflict=chave', {
+            method: 'POST', body: { chave, valor, actualizado: new Date().toISOString() },
+            prefer: 'resolution=merge-duplicates,return=minimal',
+          });
+          return true;
+        },
+      },
+      runs: {
+        async criar(r) { return um(await pedir('orbita_ai_runs', { method: 'POST', body: r, prefer: 'return=representation' })); },
+        async actualizar(id, campos) {
+          const r = await pedir(`orbita_ai_runs?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
+          return um(r);
+        },
+        async porId(id) { return um(await pedir(`orbita_ai_runs?select=*&id=eq.${q(id)}&limit=1`)); },
+        async listar(limit = 30) { return (await pedir(`orbita_ai_runs?select=*&order=criado.desc&limit=${Math.min(100, limit)}`)) || []; },
+      },
+      steps: {
+        async criar(s) { return um(await pedir('orbita_ai_steps', { method: 'POST', body: s, prefer: 'return=representation' })); },
+        async actualizar(id, campos) {
+          const r = await pedir(`orbita_ai_steps?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
+          return um(r);
+        },
+        async porRun(runId) { return (await pedir(`orbita_ai_steps?select=*&run_id=eq.${q(runId)}&order=ordem.asc`)) || []; },
+      },
+      uso: {
+        async registar(u) {
+          return um(await pedir('orbita_ai_uso', { method: 'POST', body: u, prefer: 'return=minimal' }));
+        },
+        async latencias() {
+          const linhas = (await pedir('orbita_ai_uso?select=fornecedor,modelo,ms&ok=eq.true&order=criado.desc&limit=300')) || [];
+          const soma = new Map();
+          for (const l of linhas) {
+            const k = `${l.fornecedor}\u0000${l.modelo}`;
+            const a = soma.get(k) || { n: 0, ms: 0 };
+            soma.set(k, { n: a.n + 1, ms: a.ms + (l.ms || 0) });
+          }
+          const out = {};
+          for (const [k, a] of soma) out[k] = Math.round(a.ms / a.n);
+          return out;
+        },
+        async recentes(limit = 200) {
+          return (await pedir(`orbita_ai_uso?select=*&order=criado.desc&limit=${Math.min(500, limit)}`)) || [];
+        },
+      },
+    },
   };
 }
 
@@ -145,6 +200,7 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [],
+    iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {},
     ...JSON.parse(JSON.stringify(seed)),
   };
   let n = 0;
@@ -195,6 +251,7 @@ export function createMemRepo(seed = {}) {
       async list(limit = 100) { return [...d.mensagens].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
       async byId(i) { return d.mensagens.find((m) => m.id === i) || null; },
       async rascunhos() { return d.mensagens.filter((m) => m.status === 'rascunho'); },
+      async inserir(m) { const novo = { id: id('m'), created_at: agora(), status: 'rascunho', ...m }; d.mensagens.push(novo); return novo; },
       async patch(i, campos) { const m = d.mensagens.find((x) => x.id === i); if (!m) return null; Object.assign(m, campos); return m; },
     },
     receitas: {
@@ -205,6 +262,38 @@ export function createMemRepo(seed = {}) {
     atividade: {
       async list(limit = 20) { return [...d.atividade].sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit); },
       async add(tipo, texto) { d.atividade.unshift({ id: id('a'), tipo, texto, at: agora() }); },
+    },
+
+    /* mesma interface que o Supabase, para os testes provarem o orquestrador sem rede */
+    ia: {
+      config: {
+        async ler() { return { ...d.iaConfig }; },
+        async gravar(chave, valor) { d.iaConfig[chave] = valor; return true; },
+      },
+      runs: {
+        async criar(r) { const novo = { id: id('run'), criado: agora(), estado: 'novo', ...r }; d.iaRuns.unshift(novo); return novo; },
+        async actualizar(i, campos) { const r = d.iaRuns.find((x) => x.id === i); if (!r) return null; Object.assign(r, campos); return r; },
+        async porId(i) { return d.iaRuns.find((x) => x.id === i) || null; },
+        async listar(limit = 30) { return [...d.iaRuns].slice(0, limit); },
+      },
+      steps: {
+        async criar(s) { const novo = { id: id('st'), criado: agora(), ...s }; d.iaSteps.push(novo); return novo; },
+        async actualizar(i, campos) { const s = d.iaSteps.find((x) => x.id === i); if (!s) return null; Object.assign(s, campos); return s; },
+        async porRun(runId) { return d.iaSteps.filter((s) => s.run_id === runId).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)); },
+      },
+      uso: {
+        async registar(u) { d.iaUso.unshift({ id: id('u'), criado: agora(), ...u }); return true; },
+        async latencias() {
+          const soma = new Map();
+          for (const l of d.iaUso.filter((u) => u.ok)) {
+            const k = `${l.fornecedor}\u0000${l.modelo}`;
+            const a = soma.get(k) || { n: 0, ms: 0 };
+            soma.set(k, { n: a.n + 1, ms: a.ms + (l.ms || 0) });
+          }
+          return Object.fromEntries([...soma].map(([k, a]) => [k, Math.round(a.ms / a.n)]));
+        },
+        async recentes(limit = 200) { return d.iaUso.slice(0, limit); },
+      },
     },
   };
 }

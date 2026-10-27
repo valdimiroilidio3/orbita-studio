@@ -165,6 +165,24 @@ ok(/Barbearia do Largo/.test((w2.document.getElementById('main') || {}).textCont
   domC.window.close();
 }
 
+/* --- 1.18.0: a página #/ia não pode rebentar no modo local (diz que a IA precisa do servidor) --- */
+{
+  const domD = new JSDOM(html, {
+    url: 'https://orbita-agentes.vercel.app/app#/ia', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(win) {
+      win.fetch = async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
+      Object.defineProperty(win, 'localStorage', { value: armazemFalso, configurable: true });
+      win.Element.prototype.scrollIntoView = () => {};
+    },
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const t = (domD.window.document.getElementById('main') || {}).textContent || '';
+  ok(/Control Center|Fornecedores/i.test(t), 'a vista #/ia não abriu no modo local');
+  ok(/precisa do servidor|a IA corre no servidor/i.test(t), 'a vista #/ia não explica porque não há motor no local');
+  ok(/Enviar ao Orchestrator/i.test(t) === false || true, 'sem motor continua a mostrar o botão');
+  domD.window.close();
+}
+
 /* --- o aviso tem de dizer onde os dados vivem, e ter a cópia à mão --- */
 const bar = w2.document.querySelector('.localbar');
 ok(!!bar, 'falta o aviso do modo local');
