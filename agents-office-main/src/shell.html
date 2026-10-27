@@ -2406,6 +2406,13 @@
   .cfg-cor input[type="color"] { width: 46px; height: 26px; padding: 0; border: 1px solid var(--hairline); border-radius: 7px; background: transparent; cursor: pointer; }
   .cfg-cor { flex-direction: row; align-items: center; gap: 8px; }
   .cfg-cor .cfg-k { min-width: 0; }
+  .cfg-tam { flex-direction: column; align-items: stretch; gap: 4px; }
+  .cfg-tam input[type="range"] { width: 100%; accent-color: #B9B4A5; height: 18px; }
+  .cfg-reg { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .cfg-reg li { font-family: var(--ui); font-size: 10.5px; color: var(--ink-2, #4b4b4b); display: flex; gap: 8px; align-items: baseline; }
+  .cfg-reg li span { color: var(--grey); font-variant-numeric: tabular-nums; }
+  .cfg-reg li i { margin-left: auto; font-style: normal; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--grey); }
+  body.dark .cfg-reg li { color: #D8D5CC; }
   .cfg-group { margin: 10px 0 4px; }
   .cfg-group h4 { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--grey); margin: 0 0 6px; font-weight: 700; }
   .cfg-api-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

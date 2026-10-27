@@ -1,3 +1,25 @@
+## 1.21.0 — 27 out 2026 · Salas: cor ao vivo, tamanho à mão e registo de quem mudou
+
+- **A cor de uma sala muda sem recarregar.** Ao escolher a cor, o painel chama
+  `window.ORBITA.recolor(dept, cor)` e repinta as peças seguras — vidro do chão,
+  base, borda, poça de luz, LED das secretárias, passadeiras e entrada. Paredes e
+  mobiliário ficam como estão: mudar a planta é construir outra sala, não pintar
+  esta. A interface diz **quantas peças** mudaram (não diz «feito» em abstracto), e
+  quando a cena ainda não está viva mantém o botão «Recarregar a cena».
+- **Tamanho à mão por sala** (`POST /controlo/salas/:dept/tamanho`): um cursor de
+  profundidade mostra o mínimo que a lotação exige (`data-minimo`) e vai até +20 m
+  (`CRESCER_MAX`). O servidor volta a aplicar o limite — pedir 999 m guarda o
+  máximo, pedir abaixo do mínimo sobe ao mínimo. A sala nunca encolhe abaixo do
+  que os agentes pedem.
+- **Registo de alterações** (`GET /controlo/registo`, também em `/controlo/estado`):
+  cada mudança de sala (cor, tamanho, agente que entra ou sai, substituição da
+  configuração) fica em `orbita_atividade` com hora e autor. O painel mostra as
+  últimas seis. O autor é **sempre «dono»** — não há login, e o registo di-lo em
+  vez de inventar utilizadores.
+- Provas: `controlo.test.mjs` passa de 16 para **20** (limites do tamanho, sala que
+  não encolhe, registo com hora/autor, e a tabela de peças que se repintam). Suite
+  completa **332/332**.
+
 ## 1.20.0 — 27 out 2026 · Configurações passam a Centro de Controlo
 
 Pedido do dono: «a aba de Configurações deve ser um Centro de Controlo Inteligente…

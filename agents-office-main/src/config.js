@@ -17,8 +17,8 @@
 // Órbita corre, e deixa funcionar o que é do browser (tema, painéis, avisos).
 
 import { THEMES, THEME_LABEL, readTheme, safeStore } from './theme.js';
-import { DEPTS, AGENTS } from './data.js';
-import { contarAgentes, corValida, filasNecessarias, gravarAjustes, lerAjustes } from './salas.js';
+import { DEPTS, AGENTS, LAYOUT } from './data.js';
+import { contarAgentes, corValida, filasNecessarias, gravarAjustes, lerAjustes, profundidadePara } from './salas.js';
 
 /* ---------- o que fica lembrado entre visitas ----------
    Só preferências do browser: o tema (em theme.js), os avisos (em notify.js) e os dois painéis. */
@@ -208,6 +208,12 @@ export function createConfig({
         <button type="button" class="cfg-btn quiet" data-mais="${esc(dept)}">+ agente</button>
         ${extras.map((a) => `<button type="button" class="cfg-btn quiet" data-menos="${esc(a.id)}" data-dept="${esc(dept)}" title="tirar ${esc(a.nome)}">× ${esc(a.nome)}</button>`).join('')}
       </div>
+      <label class="cfg-fld cfg-tam">
+        <span class="cfg-k">profundidade · ${Number(LAYOUT[dept]?.d || 0).toFixed(1)} m</span>
+        <input type="range" min="${profundidadePara(filasNecessarias(total)).toFixed(1)}" max="${(profundidadePara(filasNecessarias(total)) + 20).toFixed(1)}" step="0.5"
+          value="${Number(LAYOUT[dept]?.d || 0).toFixed(1)}" data-tamanho="${esc(dept)}"
+          data-minimo="${profundidadePara(filasNecessarias(total)).toFixed(1)}" aria-label="profundidade da sala ${esc(d.name)}">
+      </label>
       ${formSala === dept ? `<div class="cfg-line">
         <label class="cfg-fld"><span class="cfg-k">nome do agente</span>
           <input type="text" data-novo-nome placeholder="ex.: Gestor de tráfego" maxlength="28" autocomplete="off"></label>
@@ -250,6 +256,12 @@ export function createConfig({
           · ${ex?.runs24h || 0} execuções em 24 h · ${ex?.chamadas24h || 0} chamadas a modelos
           ${ex?.ultimaChamada ? `· última ${esc(new Date(ex.ultimaChamada).toLocaleString())}` : '· sem chamadas registadas'}
         </p>
+      </div>
+
+      <div class="cfg-group"><h4>Registo de alterações</h4>
+        ${(centro?.registo || []).length
+          ? `<ul class="cfg-reg">${centro.registo.slice(0, 6).map((r) => `<li><span>${esc(new Date(r.quando).toLocaleString())}</span> ${esc(r.o_que)} <i>${esc(r.quem)}</i></li>`).join('')}</ul>`
+          : `<p class="cfg-note small">sem alterações registadas — as mudanças de salas ficam aqui com hora e autor (o único perfil desta instalação é «dono»).</p>`}
       </div>
 
       <div class="cfg-group"><h4>Segurança</h4>
@@ -322,7 +334,7 @@ export function createConfig({
 
   /** Guarda no servidor e neste browser. A cena só muda no próximo arranque —
    *  e é isso que o aviso diz, em vez de fingir que já mudou. */
-  async function guardarSalas(pedido, { metodo = 'POST', caminho = '/controlo/salas' } = {}) {
+  async function guardarSalas(pedido, { metodo = 'POST', caminho = '/controlo/salas', pintadas = 0 } = {}) {
     let servidorOk = false, erro = '';
     const r = await pedir(caminho, { metodo, corpo: pedido || {} }).catch((e) => ({ erro: 'sem resposta do servidor: ' + e.message }));
     if (r?.erro) erro = r.erro;
@@ -330,9 +342,10 @@ export function createConfig({
 
     /* a cópia local é o que a cena consegue ler sem esperar por rede */
     if (ajustes) gravarAjustes(safeStore(), ajustes);
-    avisoSala = servidorOk
-      ? 'Guardado. A cena aplica isto no próximo arranque.'
-      : `Guardado só neste browser (${erro}). A cena aplica no próximo arranque.`;
+    const cena = pintadas > 0
+      ? `Cor aplicada agora mesmo em ${pintadas} peças da sala.`
+      : 'A cena aplica isto no próximo arranque.';
+    avisoSala = servidorOk ? `Guardado. ${cena}` : `Guardado só neste browser (${erro}). ${cena}`;
     formSala = null;
     render();
   }
@@ -429,8 +442,22 @@ export function createConfig({
         const dept = inp.getAttribute('data-cor');
         const cor = String(inp.value || '').trim();
         if (!corValida(cor)) { avisoSala = 'essa cor não é válida (#rrggbb)'; render(); return; }
-        if (DEPTS[dept]) DEPTS[dept].chip = cor;      // a interface mostra já; a cena, no arranque
-        guardarSalas({ cor }, { caminho: `/controlo/salas/${encodeURIComponent(dept)}/cor` });
+        if (DEPTS[dept]) DEPTS[dept].chip = cor;      // a interface mostra já
+        /* 1.21.0: se a cena estiver viva e souber repintar, muda AGORA */
+        let pintadas = 0;
+        try { pintadas = window.ORBITA?.recolor?.(dept, cor) || 0; } catch { pintadas = 0; }
+        guardarSalas({ cor }, { caminho: `/controlo/salas/${encodeURIComponent(dept)}/cor`, pintadas });
+      });
+    });
+    body.querySelectorAll('[data-tamanho]').forEach((inp) => {
+      /* mostra o valor enquanto se arrasta; grava ao largar (um pedido, não vinte) */
+      const eco = () => { const k = inp.closest('.cfg-fld')?.querySelector('.cfg-k'); if (k) k.textContent = `profundidade · ${Number(inp.value).toFixed(1)} m`; };
+      inp.addEventListener('input', eco);
+      inp.addEventListener('change', () => {
+        const dept = inp.getAttribute('data-tamanho');
+        const d = Number(inp.value);
+        const minimo = Number(inp.getAttribute('data-minimo')) || 8;
+        guardarSalas({ d, minimo, base: minimo }, { caminho: `/controlo/salas/${encodeURIComponent(dept)}/tamanho` });
       });
     });
     body.querySelectorAll('[data-mais]').forEach((b) => {

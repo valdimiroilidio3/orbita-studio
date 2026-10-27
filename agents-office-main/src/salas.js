@@ -71,6 +71,21 @@ export function plantaAjustada(layout, agentes) {
  *  sala ficaria com mais de seis filas e deixaria de caber no escritório. */
 export const MAX_POR_SALA = 12;
 
+/** Limites de um tamanho manual: a sala pode crescer à mão, mas nunca abaixo do
+ *  que a lotação exige nem acima do que o escritório comporta. */
+export const CRESCER_MAX = 20;     // metros a mais, no máximo
+export const FUNDO_MAX = 60;       // profundidade máxima de uma sala
+
+/** Ajusta um tamanho pedido à mão: número finito, dentro dos limites, e nunca
+ *  abaixo do mínimo calculado (a lotação manda). Devolve `null` se for inválido. */
+export function tamanhoValido(valor, { minimo = 0, base = 0 } = {}) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return null;
+  const min = Math.max(Number(minimo) || 0, Number(base) || 0);
+  const max = Math.min(min + CRESCER_MAX, Math.max(FUNDO_MAX, min));
+  return Math.round(Math.min(Math.max(n, min), max) * 10) / 10;
+}
+
 /** Uma cor só entra se for hexadecimal de 3 ou 6 dígitos. */
 export function corValida(cor) {
   return typeof cor === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(cor.trim());
@@ -113,7 +128,7 @@ export const CHAVE = 'orbita.salas';
 /** Lê os ajustes guardados. Nunca lança: uma configuração estragada é ignorada
  *  (a cena tem de abrir sempre, mesmo com um JSON meio escrito). */
 export function lerAjustes(store = null) {
-  const vazio = { cores: {}, agentes: [] };
+  const vazio = { cores: {}, agentes: [], tamanhos: {} };
   if (!store || typeof store.getItem !== 'function') return vazio;
   let bruto = null;
   try { bruto = JSON.parse(store.getItem(CHAVE) || 'null'); } catch { return vazio; }
@@ -121,6 +136,16 @@ export function lerAjustes(store = null) {
 
   const cores = {};
   for (const [k, v] of Object.entries(bruto.cores || {})) if (corValida(v)) cores[k] = v.trim();
+
+  const tamanhos = {};
+  for (const [k, t] of Object.entries(bruto.tamanhos || {})) {
+    if (!/^[a-z0-9-]{1,20}$/i.test(k) || !t || typeof t !== 'object') continue;
+    const w = Number(t.w), d = Number(t.d);
+    const limpo = {};
+    if (Number.isFinite(w) && w > 0) limpo.w = Math.min(Math.max(w, 8), 60);
+    if (Number.isFinite(d) && d > 0) limpo.d = Math.min(Math.max(d, 8), FUNDO_MAX);
+    if (Object.keys(limpo).length) tamanhos[k] = limpo;
+  }
 
   const agentes = (Array.isArray(bruto.agentes) ? bruto.agentes : [])
     .filter((a) => a && typeof a === 'object' && nomeCurto(a.nome) && typeof a.dept === 'string')
@@ -131,7 +156,7 @@ export function lerAjustes(store = null) {
       dept: String(a.dept).slice(0, 20),
       funcao: String(a.funcao || 'Agente acrescentado pelo dono').slice(0, 120),
     }));
-  return { cores, agentes };
+  return { cores, agentes, tamanhos };
 }
 
 export function gravarAjustes(store, ajustes) {
@@ -172,8 +197,41 @@ export function aplicarNaCena({ DEPTS, LAYOUT, AGENTS }, ajustes) {
   const planta = plantaAjustada(LAYOUT, AGENTS);
   const salas = {};
   for (const [dept, L] of Object.entries(planta)) {
-    LAYOUT[dept].d = L.d;
-    salas[dept] = { filas: L.filas, profundidade: L.d, agentes: contarAgentes(AGENTS, dept) };
+    /* o tamanho à mão entra DEPOIS da conta da lotação: nunca encolhe abaixo do
+       que os agentes precisam (a lotação manda), mas pode crescer mais. */
+    const manual = ajustes?.tamanhos?.[dept] || {};
+    const d = tamanhoValido(manual.d, { minimo: L.d, base: L.d }) ?? L.d;
+    LAYOUT[dept].d = d;
+    if (Number.isFinite(manual.w) && manual.w > 0) LAYOUT[dept].w = Math.min(Math.max(manual.w, LAYOUT[dept].w), 60);
+    salas[dept] = { filas: L.filas, profundidade: d, largura: LAYOUT[dept].w, agentes: contarAgentes(AGENTS, dept) };
   }
   return { cores, entraram, salas };
+}
+
+/* ===========================================================================
+   1.21.0 · QUE PEÇAS MUDAM DE COR A QUENTO (sem recarregar)
+
+   Só o que é seguro pintar a meio do voo. A planta (paredes, divisórias,
+   mobiliário) fica de fora: mudar isso é construir outra sala, não pintar
+   esta. A tabela vive aqui, e não no `main.js`, para poder ser provada sem
+   WebGL — o teste confirma peça a peça qual é o tom novo.
+   =========================================================================== */
+export const PARTES_VIVAS = {
+  floorBase: 'base',
+  floorEdge: 'edge',
+  floorGlass: 'glass',
+  floorPool: 'pool',
+  floorInlay: 'edge',
+  deskLed: 'chip',
+  walkwayLed: 'chip',
+  entranceLed: 'chip',
+  entranceSpill: 'chip',
+};
+
+/** Tom novo para uma peça, ou `null` se essa peça não é das que se repintam. */
+export function tomDaParte(parte, camadas, cor) {
+  const qual = PARTES_VIVAS[String(parte || '')];
+  if (!qual || !camadas || !corValida(cor)) return null;
+  const tom = qual === 'chip' ? cor : camadas[qual];
+  return typeof tom === 'string' && /^#[0-9a-f]{3,8}$/i.test(tom) ? tom : null;
 }

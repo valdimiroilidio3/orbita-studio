@@ -1,4 +1,4 @@
-# O Centro de Controlo (1.20.0)
+# O Centro de Controlo (1.21.0)
 
 A aba de Configurações deixou de ser uma lista de opções e passou a ser o sítio onde se
 vê — e se muda — o estado real da Órbita: as seis salas, a inteligência, a execução e a
@@ -76,7 +76,7 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
 
 ## 5 · Provas
 
-`controlo.test.mjs` — 16 provas que correm com `node --test`, sem rede (a última desenha o painel num DOM falso e confirma as seis salas e os três estados):
+`controlo.test.mjs` — 20 provas que correm com `node --test`, sem rede (uma desenha o painel num DOM falso e confirma as seis salas, os três estados, o cursor de tamanho e o registo; outra confirma peça a peça o que se repinta ao mudar a cor):
 
 - `filasNecessarias`, `profundidadePara`, `lugarLivre`, `plantaAjustada`;
 - a sala cresce com 11 agentes e **não encolhe** com zero;
@@ -85,6 +85,12 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
 - configuração estragada no armazenamento é ignorada (a cena abre na mesma);
 - rotas a guardar e a devolver; `POST /platform/key` recusado com a razão;
 - os três estados: `ligado` só com teste real, `a_funcionar` só com execuções nas
-  últimas 24 h (uma execução com três dias já não conta).
+  últimas 24 h (uma execução com três dias já não conta);
+- **tamanho (1.21.0):** o cursor obedece à lotação, 999 m guarda o máximo, 12 m
+  não encolhe a planta;
+- **registo (1.21.0):** três mudanças → três linhas com hora e autor `dono`;
+- **cor ao vivo (1.21.0):** `tomDaParte` devolve o tom certo para vidro, base,
+  borda, poça, LED, passadeira e entrada; devolve `null` para paredes, secretárias
+  e adereço, e para cores inválidas.
 
-Suite completa: **328/328**.
+Suite completa: **332/332**.
