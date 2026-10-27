@@ -29,6 +29,24 @@ existir em produção.
 - **Honestidade mantida**: uma tarefa criada sem motor continua a terminar «falhou — sem motor»; os
   custos de API aparecem a 0; enviar mensagem responde 501 (não há canal).
 
+### Aplicado de facto (30 out 2026)
+
+O esquema **foi aplicado** no Supabase, não ficou à espera de ninguém. Foi preciso um
+bootstrap temporário (`/api/setup`, com token, GET, apagado logo a seguir) porque as funções
+da Vercel não correm DDL pelo PostgREST e o ambiente de onde este código foi escrito não
+sai para `supabase.co`. Duas lições que ficaram no código:
+
+- o `pg` faz `Object.assign({}, config, parse(connectionString))` — **a URL ganha às
+  opções**, e a cadeia de certificados do pooler do Supabase não valida com o CA do
+  runtime da Vercel. Passar `ssl: { rejectUnauthorized: false }` com `connectionString`
+  não serve: os campos têm de ser montados à mão;
+- o PostgREST só conhece as tabelas novas depois de recarregar a cache do esquema (uns
+  segundos). O primeiro `insert` a seguir ao DDL ainda pode responder «falta o esquema».
+
+O resultado, em produção: `/api/health` → `{"ok":true,"faltam":[]}`, e um lead escrito pelo
+mesmo cliente que o `/api` usa, relido e apagado (o `smoke` do bootstrap), sem deixar lixo
+na base. Depois disso o bootstrap foi removido do repositório e o token apagado da Vercel.
+
 ### Provas
 
 - **`api.test.mjs` (novo, 14 testes)**: contrato completo (leads com dedupe, projetos à mão e a
