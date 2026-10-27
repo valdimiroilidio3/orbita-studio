@@ -296,6 +296,7 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
     document.body.classList.toggle('term-on', open);
     if (open) {
       connect();
+      refreshStats(); // sem servidor, é isto que troca o «a ligar…» pelo que é
       tabs();
       if (!backlog.length) info('terminal da oficina. :help para os comandos.');
       if (!machineShown && typeof fetch === 'function') {
