@@ -84,6 +84,18 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     } };
   }
 
+  /* 1.32.0 · «há IA gratuita a funcionar?» — uma resposta curta e verdadeira.
+     Mostra o que foi medido em produção e a cadeia real por tipo de trabalho. */
+  if (limpo === '/ia/gratuitos' && m === 'GET') {
+    const motor = criarMotor({ repo, env, fetchImpl });
+    const r = await motor.gratuitos();
+    const tipos = {};
+    for (const t of ['plano', 'codigo', 'texto', 'investigar', 'revisao', 'rapido', 'visao']) {
+      tipos[t] = await motor.cadeiaPara(t).catch(() => []);
+    }
+    return { status: 200, corpo: { ...r, cadeia: tipos } };
+  }
+
   if (limpo === '/ia/agentes' && m === 'GET') {
     return { status: 200, corpo: { agentes: LISTA } };
   }

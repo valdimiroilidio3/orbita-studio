@@ -20,7 +20,7 @@
    Limites: cada execução tem orçamento (chamadas e tokens). Esgotado, para —
    não continua a gastar para «parecer que trabalhou».
    =========================================================================== */
-import { FORNECEDORES, MODELOS } from './catalogo.mjs';
+import { FORNECEDORES, MODELOS, SEM_CHAVE } from './catalogo.mjs';
 
 export const TIPOS = {
   /* `exige` filtra (sem isso o modelo não serve); `gosta` só ordena. Misturar os
@@ -79,6 +79,32 @@ export function foraDoAr(fornec, modelo, agora = Date.now()) {
 
 export function limparFora() { FORA.clear(); }
 
+/* 1.32.0 · em serverless, a memória do processo morre a cada invocação — a lista
+   de «este modelo não existe» perdia-se e o mesmo erro era pago outra vez. Isto
+   permite ao motor guardá-la na base e recuperá-la no pedido seguinte. */
+export function exportarFora(agora = Date.now()) {
+  const saida = {};
+  for (const [chave, r] of FORA) {
+    if (agora - r.at > FORA_MS) continue;
+    saida[chave.replace('\u0000', '/')] = { at: r.at, motivo: r.motivo };
+  }
+  return saida;
+}
+
+export function importarFora(mapa = {}, agora = Date.now()) {
+  let n = 0;
+  for (const [chave, r] of Object.entries(mapa || {})) {
+    if (!r || !Number.isFinite(Number(r.at))) continue;
+    if (agora - Number(r.at) > FORA_MS) continue;
+    const [fornec, ...resto] = String(chave).split('/');
+    const modelo = resto.join('/');
+    if (!fornec || !modelo) continue;
+    FORA.set(chaveDe(fornec, modelo), { at: Number(r.at), motivo: String(r.motivo || '').slice(0, 120) });
+    n += 1;
+  }
+  return n;
+}
+
 /** A frase que os fornecedores usam quando o modelo não existe/está desligado. */
 export const eModeloIndisponivel = (erro) =>
   /(unavailable|not found|does not exist|não existe|nao existe|decommission|descontinuad|no such model)/i.test(String(erro || ''));
@@ -91,8 +117,14 @@ export function cadeia(tipo, {
   chaves = {}, desligados = [], preferido = null, catalogo = MODELOS,
   latencias = {}, tentados = [], limite = 4, semRepetir = true,
   usados = {},          // `${fornec}/${modelo}` que já responderam num teste real
+  provados = [],        // lista curada (medida em produção) — ver _ia/gratuitos.mjs
   agora = Date.now(),
 } = {}) {
+  /* `chaves` traz SEM_CHAVE para os keyless: isso não é uma chave, é a marca de
+     «não precisa». Contar isso como «tem chave» fazia os gratuitos passarem à
+     frente de quem tinha uma chave paga — o contrário do que se quer. */
+  const chaveReal = (id) => !!chaves?.[id] && chaves[id] !== SEM_CHAVE;
+  const haChaves = Object.keys(chaves || {}).some(chaveReal);
   const alvo = TIPOS[tipo] || TIPOS.texto;
   const exigidas = alvo.exige;
   const desejadas = alvo.gosta || [];
@@ -103,6 +135,43 @@ export function cadeia(tipo, {
     .filter((m) => !(semRepetir && jaTentados.has(`${m.fornecedor}\u0000${m.modelo}`)))
     .filter((m) => !foraDoAr(m.fornecedor, m.modelo, agora));
 
+  /* 1.32.0 · o que já respondeu de verdade entra na lista, mesmo que o catálogo
+     não tenha esse par. Foi exactamente o que faltou ao LLM7: o `codestral-latest`
+     respondeu 16 vezes em produção e nunca era escolhido, porque o catálogo só
+     o registava para a Mistral. Sem isto, a cadeia insistia em modelos que o
+     fornecedor diz não ter. */
+  /* 1.32.0 · o que já respondeu de verdade entra na lista — e, se o catálogo já
+     tinha o par, fica com as etiquetas dos dois. Foi exactamente o que faltou ao
+     LLM7: o `codestral-latest` respondeu 16 vezes em produção, o catálogo
+     conhecia-o mas sem `rapido`/`codigo`, e a cadeia preferia modelos que o
+     fornecedor diz não ter. */
+  const chaveDoPar = (fornec, modelo) => `${fornec}\u0000${modelo}`;
+  const juntos = new Map(disponiveis.map((m) => [chaveDoPar(m.fornecedor, m.modelo), { ...m, etiquetas: [...(m.etiquetas || [])] }]));
+
+  for (const p of (provados || [])) {
+    if (!p?.fornec || !p?.modelo) continue;
+    if (!fornecedorActivo(p.fornec, { chaves, desligados })) continue;
+    if (semRepetir && jaTentados.has(chaveDoPar(p.fornec, p.modelo))) continue;
+    if (foraDoAr(p.fornec, p.modelo, agora)) continue;
+    const chave = chaveDoPar(p.fornec, p.modelo);
+    const existente = juntos.get(chave);
+    if (existente) {
+      existente.etiquetas = [...new Set([...existente.etiquetas, ...(p.etiquetas || [])])];
+      existente.curado = true;
+    } else {
+      juntos.set(chave, {
+        fornecedor: p.fornec, modelo: p.modelo,
+        etiquetas: p.etiquetas || ['texto'],
+        janela: p.janela || 0, preco: p.preco || [0, 0], curado: true, ms: p.ms || 0,
+      });
+    }
+  }
+
+  const comCurados = [...juntos.values()];
+  /* o bónus é pelo PAR, não por ter entrado pela lista: um modelo do catálogo que
+     também está medido em produção tem o mesmo direito à frente. */
+  const chavesCuradas = new Map((provados || []).map((p) => [chaveDoPar(p.fornec, p.modelo), p]));
+
   /* Exigir a etiqueta é a regra; mas se o único fornecedor disponível não a
      declarar, é melhor tentar do que responder «todos os modelos falharam»
      sem ter chamado ninguém. A cadeia leva `relaxado: true` e o uso fica
@@ -110,17 +179,27 @@ export function cadeia(tipo, {
      (Visto a 27 out 2026: só o LLM7 respondia e nenhum modelo dele declara
      `raciocinio`, por isso o passo «plano» ficava sem candidatos.) */
   let relaxado = false;
-  let candidatos = disponiveis.filter((m) => exigidas.every((r) => temEtiqueta(m, r)));
+  let candidatos = comCurados.filter((m) => exigidas.every((r) => temEtiqueta(m, r)));
   if (!candidatos.length && !exigidas.includes('visao')) {
     /* Visão não se relaxa: um modelo sem olhos não lê uma imagem. Mais vale
        dizer que não há, do que aceitar um trabalho que não sabe fazer. */
     relaxado = true;
-    candidatos = disponiveis.filter((m) => temEtiqueta(m, 'texto'));
+    candidatos = comCurados.filter((m) => temEtiqueta(m, 'texto'));
   }
 
   const pontos = (m) => {
     let p = 0;
     if (preferido && preferido.fornecedor === m.fornecedor && preferido.modelo === m.modelo) p += 1000;
+    /* 1.32.0 · medido a responder em produção: parte à frente do catálogo.
+       O `ms` medido desempata — o mais rápido primeiro. */
+    const medido = chavesCuradas.get(`${m.fornecedor}\u0000${m.modelo}`);
+    /* 1.32.0 · quem configura uma chave quer usá-la: nesse caso o bónus do
+       «medido em produção» só conta para quem tem chave, e os keyless recuam
+       (mas ficam na cadeia — são o fallback). Sem chave nenhuma, os gratuitos
+       mandam: é o estado normal deste escritório. */
+    const semChavePropria = !chaveReal(m.fornecedor) && FORNECEDORES[m.fornecedor]?.keyless;
+    if (medido && !(haChaves && semChavePropria)) p += 2000 - Math.min(40, (medido.ms || 0) / 1000);
+    if (haChaves && semChavePropria) p -= 900;
     /* quem já passou num teste REAL deste fornecedor vem à frente */
     if (usados[`${m.fornecedor}/${m.modelo}`] || usados[`${m.fornecedor}\u0000${m.modelo}`]) p += 320;
     p += exigidas.filter((r) => temEtiqueta(m, r)).length * 10;
@@ -133,8 +212,8 @@ export function cadeia(tipo, {
     return p;
   };
 
-  return [...candidatos]
-    .sort((a, b) => pontos(b) - pontos(a) || String(a.modelo).localeCompare(String(b.modelo)))
+  const ordenado = [...candidatos].sort((a, b) => pontos(b) - pontos(a) || String(a.modelo).localeCompare(String(b.modelo)));
+  return ordenado
     .slice(0, limite)
     .map((m) => ({ fornec: m.fornecedor, modelo: m.modelo, etiquetas: m.etiquetas || [], janela: m.janela || 0, preco: m.preco || [0, 0], relaxado }));
 }
@@ -188,9 +267,9 @@ export function orcamento({ maxChamadas = 14, maxTokens = 120000 } = {}) {
 export async function falarComFallback(tipo, {
   chaves = {}, desligados = [], preferido = null, latencias = {},
   cadeiaFixa = null, executar, registar = () => {}, orc = orcamento(), catalogo = MODELOS, limite = 4,
-  usados = {},
+  usados = {}, provados = [],
 } = {}) {
-  const fila = cadeiaFixa || cadeia(tipo, { chaves, desligados, preferido, latencias, catalogo, limite, usados });
+  const fila = cadeiaFixa || cadeia(tipo, { chaves, desligados, preferido, latencias, catalogo, limite, usados, provados });
   if (!fila.length) {
     const e = new Error(`nenhum modelo disponível para «${tipo}» — falta configurar um fornecedor no Control Center`);
     e.codigo = 'semmotor';

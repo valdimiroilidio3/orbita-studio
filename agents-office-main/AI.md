@@ -8,6 +8,45 @@ ficheiros), **uma API dá-lhe voz** (escreve, não mexe em nada).
 Nada é instalado por ti. Se falta o binário ou a chave, o motor aparece como indisponível e a razão
 está escrita em português, na gaveta **IA** do painel de tarefas.
 
+## Sem chave nenhuma: os motores gratuitos (1.32.0)
+
+Há três pares que **responderam de verdade** em produção a 27 out 2026, sem chave e
+sem cartão. Estão em `api/_ia/gratuitos.mjs`, com a data, o número de sucessos e a
+latência medidos em `/ia/uso`:
+
+| Fornecedor | Modelo | Medido | Serve para |
+|---|---|---|---|
+| LLM7 (`api.llm7.io/v1`) | `codestral-latest` | 16/16 · 0,9–3,4 s | código, texto, passos rápidos |
+| OVH (`oai.endpoints.kepler.ai.cloud.ovh.net/v1`) | `Qwen3.5-397B-A17B` | 13 s | planos, raciocínio, revisão |
+| OVH | `gpt-oss-120b` | 13–45 s | raciocínio, código, ferramentas (último recurso) |
+
+O router põe estes pares à frente do catálogo (+2000 menos a latência medida). Se
+houver **uma chave real** no ambiente, os keyless recuam 900 pontos: quem configura
+uma chave quer usá-la. A lista não é uma promessa de quota — se um par falhar, o
+router marca-o de parte 6 h e segue para o próximo. Essa marca é gravada na config e
+sobrevive ao arranque a frio do serverless.
+
+O que **não** funciona e não vale a pena tentar (verificado):
+
+- os outros modelos do LLM7 (`gpt-oss-20b`, `GLM-4.6V-Flash`, `ministral-8b-2512`,
+  `Meta-Llama-3.1-8B-Instruct-Turbo`) respondem 400 «currently unavailable» — ficam
+  em `MODELOS_INDISPONIVEIS` com a data e o motivo;
+- a Vercel AI Gateway exige cartão: 55 pedidos, 0 respostas;
+- o Kilo já não responde a pedidos anónimos; `aclide` e `aihorde` falam um dialeto
+  próprio que o cliente não fala.
+
+Ver o estado, sem revelar chaves:
+
+```bash
+GET /ia/gratuitos          # produção (via /api/rpc?caminho=/ia/gratuitos)
+GET /api/ia/gratuitos      # servidor local
+```
+
+Devolve `pronto`, `total`, o mais rápido, o que foi medido e a cadeia real de cada
+tipo de trabalho (`plano`, `codigo`, `texto`, `investigar`, `revisao`, `rapido`,
+`visao`). `visao` não se relaxa: sem um modelo com olhos, a cadeia fica vazia em vez
+de aceitar um trabalho que não sabe fazer.
+
 ## O que já está ligado
 
 | Motor | Como é chamado | Precisa de |
