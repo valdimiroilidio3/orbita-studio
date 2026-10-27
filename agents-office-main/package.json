@@ -1,6 +1,6 @@
 {
   "name": "orbita",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "description": "Órbita Agentes — um escritório isométrico 3D onde 35 agentes de IA trabalham em seis salas em volta de um Cérebro. Criado por Chelton Mahoze.",
   "author": "Chelton Mahoze",
   "type": "module",
@@ -22,7 +22,8 @@
     "test:term": "node --test terminal.test.mjs",
     "forge": "node tools/forge.mjs",
     "brand": "node tools/brand.mjs",
-    "release": "node tools/brand.mjs && node build.mjs"
+    "release": "node tools/brand.mjs && node build.mjs",
+    "test:settings": "node --test settings.test.mjs"
   },
   "engines": {
     "node": ">=20"

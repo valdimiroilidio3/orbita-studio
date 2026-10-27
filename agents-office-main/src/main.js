@@ -83,6 +83,13 @@ import { initToday } from './today.js'; // 26 out 2026: o ecrã HOJE — decidir
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
 import { initBrain } from './brain.js';
+/* 29 out 2026 · PEDIDO: «configurações reais, tema claro↔escuro, notificações reais, afastar o campo
+   de IA e o estado das tarefas, e fechar as janelas no telemóvel». Três módulos, cada um com o seu
+   trabalho: o tema (preferência a sério, não uma tecla escondida), os avisos (só do que aconteceu) e
+   o painel das configurações (tema + APIs com sonda real + avisos + painéis). */
+import { readTheme, writeTheme, resolveTheme } from './theme.js';
+import { createNotifier } from './notify.js';
+import { createConfig, readPrefs, writePrefs } from './config.js';
 let tasks = null; // V3 task boards — initialised after the rail constants exist
 
 /* V7 (26 out 2026): o escritório valida-se primeiro. A lição de 1.9.2 foi essa — um erro pequeno
@@ -343,6 +350,9 @@ const crew = createCrew({
 
 // corredores dept -> Cérebro (28 out 2026: passadeira rolante preta, entrada na cor da sala)
 const ledRT = [];   // as faixas cujo offset se anima por frame (ver `tickLeds`)
+/* 29 out 2026: as passadeiras como foram DESENHADAS (comprimento, pontas e o platô do pé da
+   escada). O teste de cena lê daqui, em vez de repetir números à mão. */
+const walkRT = [];
 const entranceRT = [];   // 28 out 2026: a porta de cada sala (cor, sítio, direcção, anteparo)
 for (const k of DEPT_KEYS) {
   const L = LAYOUT[k];
@@ -364,6 +374,7 @@ for (const k of DEPT_KEYS) {
   const from = [plan.bridge.from.x, plan.bridge.from.z];
   const to = [plan.bridge.to.x, plan.bridge.to.z];
   const walk = makeWalkway(from, to, { glass: DEPTS[k].glass, chip: DEPTS[k].chip });
+  walkRT.push({ dept: k, ...walk.userData.walkway });
   walk.userData.dept = k; walk.userData.part = 'walkway';
   walk.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
   scene.add(walk);
@@ -820,8 +831,80 @@ addEventListener('keydown', (e) => {
   }
   else if (e.key === 'f' || e.key === 'F') { forgeTerm.toggle(); } // 27 out 2026: o terminal da oficina
   else if (e.key === 'v' || e.key === 'V') setCam(!document.body.classList.contains('cam'));
-  else if (e.key === 'd' || e.key === 'D') setDark(!darkOn);
+  else if (e.key === 'd' || e.key === 'D') applyTheme(darkOn ? 'light' : 'dark');
+  else if (e.key === ',') { if (cfg) cfg.toggle(); }
 });
+
+/* ---------- O TEMA (29 out 2026) ----------
+   A tecla D e o endereço `/dark` continuam a funcionar — mas a escolha passa a ser um valor a sério,
+   guardado no browser: Claro, Escuro ou Automático (o que o sistema disser). No arranque, o tema é
+   aplicado ANTES de se olhar para o `#dark=1`, para a preferência não ser atropelada por um link. */
+let cfg = null;                        // o painel das configurações (criado mais abaixo, usado por applyTheme)
+const themeMQ = (() => { try { return matchMedia('(prefers-color-scheme: dark)'); } catch { return null; } })();
+let themePref = readTheme();
+function applyTheme(pref = themePref) {
+  themePref = writeTheme(pref);
+  setDark(resolveTheme(themePref, !!(themeMQ && themeMQ.matches)) === 'dark');
+  if (cfg) cfg.refresh({ theme: themePref });
+  return themePref;
+}
+if (themeMQ && typeof themeMQ.addEventListener === 'function') {
+  themeMQ.addEventListener('change', (e) => { if (themePref === 'auto') setDark(!!e.matches); });
+}
+/* O tema aplica-se mais abaixo, no arranque, e não aqui: `setDark` fala com materiais, luzes e o
+   `mcp` — peças que ainda não existem neste ponto do ficheiro. Aplicar cedo demais foi, numa
+   primeira tentativa, uma cena em branco. */
+
+/* ---------- OS AVISOS (29 out 2026) ----------
+   Só nascem do que o servidor diz: um posto que ficou à espera do teu OK, um posto que falhou. O
+   primeiro retrato é o ponto de partida (não gera avisos) — senão, ao abrir, choviam janelas por
+   trabalho que já estava parado. */
+const notifier = createNotifier({ getLive: () => liveUi.all(), onStatus: () => { if (cfg) cfg.refresh(); } });
+liveUi.onChange((e) => { if (e && e.type === 'update') { try { notifier.ingest(); } catch { /* um aviso nunca derruba a cena */ } } });
+
+/* ---------- OS PAINÉIS QUE SE AFASTAM (29 out 2026) ----------
+   O campo de IA e o estado das tarefas passam a poder recolher-se, e a escolha fica no browser. Num
+   ecrã estreito a coluna das tarefas nasce recolhida: no telemóvel ela tapava meia cena. */
+let panelPrefs = readPrefs();
+function applyPanels(p = panelPrefs) {
+  document.body.classList.toggle('mc-folded', !!p.ai);
+  document.body.classList.toggle('tp-folded', !!p.tasks);
+  const cb = document.querySelector('.chat-fold');
+  if (cb) { cb.setAttribute('aria-pressed', String(!!p.ai)); cb.textContent = p.ai ? 'abrir campo ▴' : 'recolher campo ▾'; cb.title = p.ai ? 'abrir o campo de IA' : 'afastar o campo de IA — a conversa fica, a caixa recolhe'; }
+  const tb = document.querySelector('.tp-fold');
+  if (tb) { tb.setAttribute('aria-pressed', String(!!p.tasks)); tb.textContent = p.tasks ? 'tarefas ▴' : 'afastar ▸'; tb.title = p.tasks ? 'trazer o estado das tarefas' : 'afastar o estado das tarefas — fica um botão, volta com um clique'; }
+}
+function setPanel(kind, on) {
+  panelPrefs = writePrefs({ ...panelPrefs, [kind]: !!on });
+  applyPanels(panelPrefs);
+  if (cfg) cfg.refresh({ collapse: panelPrefs });
+}
+{
+  // primeiro arranque num telemóvel: a coluna das tarefas não começa por tapar a cena
+  const estreito = (() => { try { return matchMedia('(max-width: 640px)').matches; } catch { return false; } })();
+  if (estreito) { try { if (!localStorage.getItem('orbita.paineis')) setPanel('tasks', true); } catch { /* sem armazenamento */ } }
+}
+applyPanels(panelPrefs);
+
+/* ---------- O PAINEL DAS CONFIGURAÇÕES (29 out 2026) ---------- */
+cfg = createConfig({
+  theme: themePref,
+  collapse: panelPrefs,
+  notify: notifier,
+  onTheme: (t) => applyTheme(t),
+  onCollapse: (k, on) => setPanel(k, on),
+});
+{
+  const gear = document.getElementById('topCfg');
+  if (gear) gear.addEventListener('click', (e) => { e.stopPropagation(); cfg.toggle(); });
+  const tpf = document.querySelector('.tp-fold');
+  if (tpf) tpf.addEventListener('click', () => setPanel('tasks', !panelPrefs.tasks));
+  const chf = document.querySelector('.chat-fold');
+  if (chf) chf.addEventListener('click', () => setPanel('ai', !panelPrefs.ai));
+  // fechar a gaveta do posto (telemóvel): o ✕ a sério, não só a tecla Esc
+  const rc = document.getElementById('railClose');
+  if (rc) rc.addEventListener('click', () => exitFocus());
+}
 
 // camera mode: mid-tone backdrop for filming the screen (#cam=1 / V toggles)
 function setCam(on) { document.body.classList.toggle('cam', !!on); }
@@ -1673,6 +1756,7 @@ function resize() {
 }
 addEventListener('resize', resize);
 resize();
+applyTheme(themePref);   // 29 out 2026: a preferência de tema vale no arranque (Claro · Escuro · Automático)
 
 // deterministic view hooks for headless screenshots: #view=sales | #zoom=2.2
 {
@@ -1793,6 +1877,8 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
        onde começa e acaba a ponte. É a mesma conta que constrói a cena; o teste compara-a com o que
        foi construído, em vez de repetir os números à mão. */
     plates: PLATES,
+    // 29 out 2026: as passadeiras e o platô do pé da escada (a ponta que assenta na sala)
+    walkways: walkRT,
     // 28 out 2026: as passadeiras — a cor do tapete, para onde vai e quanto já rolou (o teste lê isto)
     belts: () => ledRT.filter((l) => l.mat.userData.belt).map((l) => ({
       dept: l.dept,
@@ -1831,7 +1917,13 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
   motion: { reduced: CALMO },
   forge: { toggle: () => forgeTerm.toggle(), open: () => forgeTerm.open(), close: () => forgeTerm.close(),
     isOpen: () => forgeTerm.isOpen(), command: (c) => forgeTerm.command(c), stats: () => forgeTerm.stats() },
-  toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };
+  toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines,
+  /* 29 out 2026: as configurações reais, para se poder provar (e para quem quiser automatizar):
+     o tema é uma preferência a sério, os painéis afastam-se, e o painel lê o catálogo do servidor. */
+  cfg: { open: () => cfg.open(), close: () => cfg.close(), toggle: () => cfg.toggle(), isOpen: () => cfg.isOpen() },
+  tema: { ler: () => themePref, aplicar: (t) => applyTheme(t), escuro: () => darkOn },
+  paineis: { ler: () => ({ ...panelPrefs }), por: (k, on) => setPanel(k, on) },
+  avisos: { estado: () => notifier.state(), ligar: () => notifier.ask(), desligar: () => notifier.setEnabled(false) } };
 
 /* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
 liveUi.onChange(() => {

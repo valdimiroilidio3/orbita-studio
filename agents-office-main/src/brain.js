@@ -545,7 +545,9 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     ring.material.opacity = dark ? 0.5 : 0.34;
     ring2.material.opacity = dark ? 0.24 : 0.16;
     coreGlow.material.opacity = dark ? 0.24 : 0.34;
-    eqMat.opacity = dark ? 0.2 : 0.16;
+    /* 29 out 2026: aqui havia `eqMat.opacity`, uma variável que já não existe (o equalizador da
+       nebulosa saiu em 1.9.x). Enquanto o modo escuro só se abria pela tecla D ou por `/dark`,
+       ninguém deu por ela; com o tema a aplicar-se no ARRANQUE, era a cena toda a rebentar. */
     coreGlow.material.color.set(dark ? '#A9C2A4' : '#C9DCC4');
     shellMat.uniforms.uDark.value = dark ? 1 : 0;
     shellMat.uniforms.uRim.value.set(dark ? '#B9CBB4' : '#9FB79E');

@@ -860,6 +860,19 @@ const server = http.createServer(async (req, res) => {
       const probed = await platform.probeAll({ force: true });
       return json(res, 200, { ok: true, changed: r.changed, probed: probed.length, apis: platform.status() });
     }
+    /* 29 out 2026 · «cria um campo para implementação de APIs, configurações reais».
+       Gravar uma chave é um acto LOCAL: só de loopback (a máquina onde o escritório corre) ou com o
+       token da API. Escreve no `.env`, relê-o e sonda o serviço — a resposta traz o HTTP e a latência
+       reais, ou o erro real. Nunca devolve o valor da chave. */
+    if (url.pathname === '/api/platform/key' && req.method === 'POST') {
+      const ip = String((req.socket && req.socket.remoteAddress) || '');
+      const local = /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ip);
+      if (!local && !requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 12000).catch((e) => ({ __erro: e }));
+      if (b.__erro) return json(res, b.__erro.status || 400, { ok: false, error: b.__erro.message });
+      const r = await platform.saveKey({ id: b.id, values: b.values });
+      return json(res, r.ok ? 200 : 400, r);
+    }
     if (url.pathname === '/api/platform/probe' && req.method === 'POST') {
       if (!requireIntegrationToken(req, res)) return;
       const probed = await platform.probeAll({ force: true });

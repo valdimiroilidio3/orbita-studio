@@ -776,6 +776,86 @@ const resumoCirculacao = (() => {
   const tapetes = Object.values(c.beltsByDept || {}).reduce((n, v) => n + v, 0);
   return `${c.led - tapetes} faixas de LED (${porSala} por sala) + ${tapetes} tapetes a rolar, corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
 })();
+/* ---------- as configurações reais (29 out 2026) ----------
+   Pedido do dono: «campo para implementação de APIs, configurações reais, tema claro↔escuro,
+   notificações reais, fechar as janelas no telemóvel, afastar o campo de IA e o estado das tarefas».
+   O que se prova aqui, sem olhos: os botões existem, o painel abre e fecha, o tema muda a cena e é
+   guardado, os dois painéis afastam-se e ficam lembrados, e o ✕ da gaveta existe. */
+{
+  const doc = win.document;
+  const cfgBtn = doc.getElementById('topCfg');
+  ok(!!cfgBtn, 'falta o botão das configurações na barra (#topCfg)');
+  const panel = doc.getElementById('cfgPanel');
+  ok(!!panel, 'falta o painel das configurações (#cfgPanel)');
+  ok(panel && panel.hidden, 'o painel das configurações devia começar fechado');
+  ok(!!(win.CC.cfg && typeof win.CC.cfg.toggle === 'function'), 'CC.cfg não está exposto');
+  if (win.CC.cfg) {
+    win.CC.cfg.open();
+    ok(win.CC.cfg.isOpen() === true, 'o painel das configurações não abriu');
+    ok(!panel.hidden, 'o #cfgPanel devia estar visível com o painel aberto');
+    const secoes = panel.querySelectorAll('.cfg-sec');
+    ok(secoes.length >= 3, `esperava tema, APIs, avisos e painéis no painel, há ${secoes.length} secções`);
+    const temas = [...panel.querySelectorAll('[data-theme]')].map((b) => b.getAttribute('data-theme'));
+    ok(temas.join(',') === 'auto,light,dark', `os temas deviam ser auto, light, dark — são ${temas.join(',')}`);
+    win.CC.cfg.close();
+    ok(win.CC.cfg.isOpen() === false, 'o painel das configurações não fechou');
+  }
+
+  // o tema: escolher «escuro» muda a cena e fica guardado
+  ok(!!win.CC.tema, 'CC.tema não está exposto');
+  if (win.CC.tema) {
+    win.CC.tema.aplicar('dark');
+    ok(doc.body.classList.contains('dark'), 'escolher «escuro» não pôs o modo escuro');
+    ok(win.CC.tema.escuro() === true, 'a cena não sabe que está escura');
+    ok(win.localStorage.getItem('orbita.tema') === 'dark', 'o tema escolhido não ficou guardado');
+    win.CC.tema.aplicar('light');
+    ok(!doc.body.classList.contains('dark'), 'escolher «claro» não voltou ao claro');
+    ok(win.localStorage.getItem('orbita.tema') === 'light', 'o tema claro não ficou guardado');
+  }
+
+  // os painéis que se afastam
+  ok(!!doc.querySelector('.tp-fold'), 'falta o botão que afasta o estado das tarefas');
+  ok(!!doc.querySelector('.chat-fold'), 'falta o botão que afasta o campo de IA');
+  ok(!!win.CC.paineis, 'CC.paineis não está exposto');
+  if (win.CC.paineis) {
+    win.CC.paineis.por('tasks', true);
+    ok(doc.body.classList.contains('tp-folded'), 'afastar as tarefas não mexeu na página');
+    win.CC.paineis.por('ai', true);
+    ok(doc.body.classList.contains('mc-folded'), 'afastar o campo de IA não mexeu na página');
+    const guardado = JSON.parse(win.localStorage.getItem('orbita.paineis') || '{}');
+    ok(guardado.tasks === true && guardado.ai === true, 'a escolha dos painéis não ficou guardada');
+    win.CC.paineis.por('tasks', false);
+    ok(!doc.body.classList.contains('tp-folded'), 'trazer as tarefas de volta não funcionou');
+  }
+
+  // fechar as janelas: o ✕ da gaveta do posto (o telemóvel não tem Esc)
+  ok(!!doc.getElementById('railClose'), 'falta o ✕ que fecha a gaveta do posto (telemóvel)');
+
+  // os avisos: existem e dizem o que o browser permite (aqui, sem permissões)
+  ok(!!win.CC.avisos && typeof win.CC.avisos.estado === 'function', 'CC.avisos não está exposto');
+  if (win.CC.avisos) {
+    const e = win.CC.avisos.estado();
+    ok(e && typeof e.permission === 'string', 'o estado dos avisos não diz a permissão');
+    ok(e.enabled === false, 'os avisos não deviam nascer ligados');
+  }
+}
+
+/* ---------- o pé da escada (29 out 2026) ----------
+   «mais um toque de melhoria na escada, só no canto que toca a sala em baixo». A prova: cada uma das
+   seis passadeiras tem um platô na ponta que assenta na SALA (e não na ponta do Cérebro), com o
+   comprimento desenhado, e o tapete continua a rolar. */
+{
+  const ws = (win.CC.office && win.CC.office.walkways) || [];
+  ok(ws.length === 6, `esperava as seis passadeiras, há ${ws.length}`);
+  ok(ws.every((w) => w.landing && w.landing.station === true), 'há passadeiras sem platô no pé da escada');
+  const erradas = ws.filter((w) => Math.abs(w.landing.at + w.len / 2) > 1e-6);
+  ok(erradas.length === 0, `o platô não está na ponta da sala: ${erradas.map((w) => w.dept).join(', ')}`);
+  ok(ws.every((w) => w.landing.len >= 1.2 && w.landing.len <= 2.2), 'o platô tem um comprimento estranho');
+  ok(ws.every((w) => w.landing.width > w.width), 'o platô devia ser mais largo que o tapete');
+  const belts = win.CC.office.belts ? win.CC.office.belts() : [];
+  ok(belts.length === 6, `esperava seis tapetes a rolar, há ${belts.length}`);
+}
+
 const resumoPedido36 = (() => {
   const p = (win.CC && win.CC.portas) || null;
   if (!p) return 'sem planta de portas';
@@ -789,6 +869,6 @@ const resumoPedido34 = (() => {
   const cores = [...new Set(e.map((x) => x.glass))].join(' · ');
   return `${b.length} passadeiras rolantes pretas nos corredores e ${e.length} entradas de sala na cor da sala (${cores})`;
 })();
-console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis) e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

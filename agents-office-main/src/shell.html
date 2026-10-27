@@ -2335,6 +2335,133 @@
     .oi-top h1 { font-size: 22px; }
   }
 
+
+  /* ===========================================================================
+     29 out 2026 · CONFIGURAÇÕES (pedido do dono: «configurações reais, campo para
+     implementação de APIs, mudança de tema e notificações reais»).
+     Um painel só, com quatro coisas: tema, APIs (com sonda a sério), avisos do
+     browser e o recolher dos painéis. Sem servidor, diz que as chaves vivem na
+     máquina — não finge que guardou nada.
+     =========================================================================== */
+  #topCfg { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; font-weight: 700; color: var(--grey);
+    background: none; border: 1px solid var(--hairline); border-radius: 99px; padding: 5px 11px; cursor: pointer; }
+  #topCfg:hover, #topCfg.on, #topCfg[aria-expanded="true"] { border-color: var(--ink); color: var(--ink); }
+  #topCfg svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 6px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+  @media (max-width: 900px) { #topCfg span { display: none; } #topCfg { padding: 5px 8px; } #topCfg svg { margin-right: 0; } }
+
+  #cfgPanel { position: absolute; z-index: 74; top: 54px; right: 18px; width: 588px; max-height: 80vh;
+    background: color-mix(in srgb, var(--cream) 97%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--ink); border-radius: 18px; box-shadow: 0 30px 80px rgba(21,20,20,.22);
+    display: flex; flex-direction: column; overflow: hidden; }
+  #cfgPanel[hidden] { display: none; }
+  .cfg-head { display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 11px; border-bottom: 1px solid var(--hairline); }
+  .cfg-head b { font-family: var(--serif); font-size: 19px; font-weight: 400; letter-spacing: .02em; }
+  .cfg-head .cfg-sum { font-family: var(--ui); font-size: 8.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--grey); }
+  .cfg-head .sp { flex: 1; }
+  .cfg-x { width: 34px; height: 34px; min-width: 34px; display: grid; place-items: center; background: none;
+    border: 1px solid var(--hairline); border-radius: 50%; color: var(--grey); font: inherit; font-size: 13px; cursor: pointer; }
+  .cfg-x:hover { border-color: var(--ink); color: var(--ink); }
+  .cfg-body { overflow: auto; padding: 4px 16px 18px; -webkit-overflow-scrolling: touch; }
+  .cfg-sec { padding: 14px 0 6px; border-bottom: 1px solid var(--hairline); }
+  .cfg-sec:last-child { border-bottom: 0; }
+  .cfg-h { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .cfg-h b { font-family: var(--ui); font-size: 10px; letter-spacing: .18em; font-weight: 700; }
+  .cfg-note { font-family: var(--ui); font-size: 10px; color: var(--grey); letter-spacing: .01em; }
+  .cfg-note.small { display: block; margin: -4px 0 8px; font-size: 9.5px; line-height: 1.5; }
+  .cfg-honest { margin: 0 0 12px; font-family: var(--ui); font-size: 10.5px; line-height: 1.6; color: var(--grey); }
+  .cfg-honest code { font-family: ui-monospace, Menlo, monospace; font-size: 10px; background: rgba(21,20,20,.06); padding: 1px 4px; border-radius: 4px; }
+  .cfg-seg { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--hairline); border-radius: 99px; background: rgba(21,20,20,.03); }
+  .cfg-r { font-family: var(--ui); font-size: 9.5px; letter-spacing: .1em; font-weight: 700; text-transform: uppercase;
+    border: 0; background: none; color: var(--grey); padding: 7px 14px; border-radius: 99px; cursor: pointer; }
+  .cfg-r.on { background: var(--ink); color: var(--cream); }
+  .cfg-sw { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer; }
+  .cfg-sw input { width: 18px; height: 18px; accent-color: var(--ink); margin-top: 1px; }
+  .cfg-sw-t { font-family: var(--ui); font-size: 11px; letter-spacing: .02em; }
+  .cfg-sw-t i { display: block; font-style: normal; font-size: 9.5px; color: var(--grey); margin-top: 2px; }
+  .cfg-group { margin: 12px 0 4px; }
+  .cfg-group h4 { margin: 0 0 6px; font-family: var(--ui); font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--grey); font-weight: 700; }
+  .cfg-api { border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 11px; margin-bottom: 8px; background: rgba(255,255,255,.5); }
+  .cfg-api-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cfg-api-h b { font-family: var(--ui); font-size: 11.5px; font-weight: 650; letter-spacing: .01em; }
+  .cfg-chip { font-family: var(--ui); font-size: 7.5px; letter-spacing: .12em; font-weight: 700; text-transform: uppercase;
+    padding: 2px 6px; border-radius: 4px; background: rgba(21,20,20,.07); color: var(--grey); }
+  .cfg-st { display: inline-flex; align-items: center; gap: 5px; font-family: var(--ui); font-size: 8.5px; letter-spacing: .1em;
+    text-transform: uppercase; font-weight: 700; color: var(--grey); margin-left: auto; }
+  .cfg-st i { width: 6px; height: 6px; border-radius: 50%; background: var(--grey); }
+  .cfg-st.s-on { color: var(--ok); } .cfg-st.s-on i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .cfg-st.s-warn { color: var(--warn); } .cfg-st.s-warn i { background: var(--warn); }
+  .cfg-st.s-off i { background: rgba(90,90,90,.4); }
+  .cfg-doc { font-family: var(--ui); font-size: 8.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--grey); text-decoration: none; }
+  .cfg-doc:hover { color: var(--ink); }
+  .cfg-fld { display: block; margin: 8px 0 0; }
+  .cfg-k { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 8.5px; letter-spacing: .06em; color: var(--grey); margin-bottom: 3px; }
+  .cfg-fld input { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 8px; background: #fff; color: var(--ink); }
+  .cfg-fld input:focus { outline: none; border-color: var(--ink); }
+  .cfg-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+  .cfg-btn { font-family: var(--ui); font-size: 9px; letter-spacing: .12em; font-weight: 700; text-transform: uppercase;
+    background: var(--ink); color: var(--cream); border: 1px solid var(--ink); border-radius: 99px; padding: 7px 13px; cursor: pointer; }
+  .cfg-btn:disabled { opacity: .38; cursor: default; }
+  .cfg-btn.quiet { background: none; color: var(--grey); border-color: var(--hairline); }
+  .cfg-btn.quiet:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+  .cfg-btn.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .cfg-res { font-family: var(--ui); font-size: 9.5px; color: var(--grey); letter-spacing: .02em; }
+  .cfg-out { font-family: var(--ui); font-size: 10px; letter-spacing: .01em; }
+  .cfg-out.good { color: var(--ok); } .cfg-out.bad { color: var(--risk); } .cfg-out.warn { color: var(--warn); }
+
+  /* os painéis que se afastam (#tpanel e o campo de IA): a escolha fica no browser */
+  .tp-fold { position: absolute; top: 8px; right: 8px; z-index: 3; width: 30px; height: 30px; min-width: 30px;
+    display: grid; place-items: center; background: color-mix(in srgb, var(--cream) 80%, transparent); border: 1px solid var(--hairline);
+    border-radius: 9px; color: var(--grey); font: inherit; font-size: 12px; cursor: pointer; }
+  .tp-fold:hover { border-color: var(--ink); color: var(--ink); }
+  /* o campo de IA recolhe-se a uma linha, no fluxo da conversa (sem tapar a primeira mensagem) */
+  .chat-fold { display: block; margin: 8px 10px 0 auto; height: 28px; padding: 0 11px; background: none;
+    border: 1px solid var(--hairline); border-radius: 8px; color: var(--grey); cursor: pointer;
+    font-family: var(--ui); font-size: 8.5px; letter-spacing: .12em; font-weight: 700; text-transform: uppercase; }
+  .chat-fold:hover { border-color: var(--ink); color: var(--ink); }
+  body.mc-folded .chat-fold { border-color: var(--ink); color: var(--ink); }
+  /* fechar a gaveta do posto no telemóvel: um ✕ a sério, com 44 px de alvo */
+  #railClose { position: absolute; top: 8px; right: 8px; z-index: 6; width: 34px; height: 34px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--cream) 80%, transparent); border: 1px solid var(--hairline); border-radius: 50%;
+    color: var(--grey); font: inherit; font-size: 13px; cursor: pointer; }
+  #railClose:hover { border-color: var(--ink); color: var(--ink); }
+  @media (max-width: 640px) { #railClose { width: 44px; height: 44px; } }
+  body.tp-folded #tpanel { top: auto; bottom: 18px; right: 18px; width: 214px; padding: 8px; gap: 0; }
+  body.tp-folded #tpanel > *:not(.tp-fold) { display: none !important; }
+  body.tp-folded #tpanel .tp-fold { position: static; width: auto; height: 34px; padding: 0 12px;
+    font-family: var(--ui); font-size: 9px; letter-spacing: .14em; font-weight: 700; text-transform: uppercase; }
+  body.mc-folded #mChat .m-hint, body.mc-folded #mChat #mc .mc-modes, body.mc-folded #mChat #mc textarea,
+  body.mc-folded #mChat #mc .mc-bottom, body.mc-folded #mChat #mc .mc-chips { display: none !important; }
+  body.mc-folded #mChat #mc { min-height: 0; padding: 8px 10px; }
+  body.mc-folded #mChat .chat-fold { margin-bottom: 9px; }
+
+  body.dark #cfgPanel { background: #1E1F24; border-color: rgba(236,234,227,.2); box-shadow: 0 30px 80px rgba(0,0,0,.7); }
+  body.dark .cfg-api { background: rgba(255,255,255,.04); }
+  body.dark .cfg-fld input { background: #15161A; color: #ECEAE3; border-color: rgba(236,234,227,.16); }
+  body.dark .cfg-seg { background: rgba(255,255,255,.05); }
+  body.dark .cfg-r.on { background: #ECEAE3; color: #15161A; }
+  body.dark .cfg-honest code { background: rgba(255,255,255,.09); }
+  body.dark .cfg-btn { background: #ECEAE3; color: #15161A; border-color: #ECEAE3; }
+  body.dark .cfg-btn.quiet { background: none; color: rgba(236,234,227,.7); border-color: rgba(236,234,227,.2); }
+  body.dark .tp-fold, body.dark .chat-fold { background: rgba(30,31,36,.85); color: rgba(236,234,227,.7); }
+
+  /* telemóvel: o painel ocupa o ecrã, e o fechar é um alvo de 44 px (polegar, não rato) */
+  /* telemóvel: as janelas que já existiam passam a ocupar o ecrã, e o ✕ é um alvo de 44 px */
+  @media (max-width: 640px) {
+    #leadsPanel, #opsPanel { position: fixed; inset: 0; width: auto; max-height: none; border-radius: 0; border: 0; z-index: 94; }
+    .ld-close, .op-close, #bvClose, #cvClose, .tm-x, .ai-close, .tb-close { min-width: 44px; min-height: 44px; }
+    #tpanel { left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; max-height: 62vh; }
+    #tpanel:not(.tp-folded) { padding-top: 42px; } /* deixa o «afastar» livre no cimo */
+    #cfgPanel { position: fixed; inset: 0; width: auto; max-height: none; border-radius: 0; border: 0; z-index: 96; }
+    .cfg-head { padding: 14px 14px 12px; }
+    .cfg-x { width: 44px; height: 44px; min-width: 44px; }
+    .cfg-body { padding: 0 14px 28px; }
+    #cfgPanel .cfg-fld input { font-size: 16px; padding: 11px 12px; } /* 16 px evita o zoom do iOS */
+    .cfg-btn { padding: 11px 16px; }
+    body.tp-folded #tpanel { bottom: 10px; right: 10px; }
+    .tp-fold, .chat-fold { width: 38px; height: 38px; min-width: 38px; }
+  }
+
   /* quem pediu menos movimento não perde a lista: perde só a entrada */
   @media (prefers-reduced-motion: reduce) {
     .oi:not([hidden]), .oi-wrap { animation: none; }
@@ -2370,6 +2497,8 @@
     <a id="topMesa" href="/app" target="_blank" rel="noopener" aria-label="Mesa" title="a mesa de trabalho: Hoje, os leads, a aprovação de cada mensagem, o saldo"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="2" y="8.9" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="8.9" width="5.1" height="5.1" rx="1.5"/></svg><span class="mb-t">Mesa</span></a>
     <button id="topLeads" aria-label="Leads" title="procura real na Google: empresas (Places) e informação (pesquisa web)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7.1" cy="7.1" r="4.3"/><path d="M10.3 10.3 14 14"/></svg><span class="mb-t">Leads</span></button>
     <button id="topCal" aria-label="Calendário" title="o calendário — tarefas e rotinas nos seus dias (P)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.2" width="12" height="10.8" rx="3"/><path d="M2 6.6h12M5.6 1.7v2.6M10.4 1.7v2.6"/></svg><span class="mb-t">Calendário</span></button>
+    <!-- 29 out 2026: as configurações reais — tema, APIs, avisos, painéis (tecla ,) -->
+    <button id="topCfg" aria-label="Configurações" aria-expanded="false" aria-controls="cfgPanel" title="configurações: tema, APIs com chave e sonda real, avisos do browser, painéis (,)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M12.5 3.5l-1.4 1.4M4.9 11.1l-1.4 1.4"/></svg><span>Config</span></button>
   </div>
   <span id="topAppr" style="display:none" role="status" title="decisões à tua espera"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.1 14.2 13.2H1.8Z"/><path d="M8 6.5v3"/><path d="M8 11.3v.3"/></svg><span>0</span></span>
   <span id="clock">—</span>
@@ -2399,6 +2528,14 @@
   <div class="op-tabs"><button class="op-tab on" data-k="leads">Leads</button><button class="op-tab" data-k="messages">Mensagens</button><button class="op-tab" data-k="auto">Autonomia</button><button class="op-tab" data-k="saldo">Saldo</button><button class="op-tab" data-k="queue">Fila e rasto</button></div>
   <div class="op-body"></div>
   <div class="op-foot"><span class="op-note">Nada sai daqui sem o teu OK. O funil só avança um passo de cada vez.</span></div>
+</div>
+<!-- 29 out 2026 · CONFIGURAÇÕES. Pedido do dono: «campo para implementação de APIs, configurações
+     reais, até mudança de tema (claro para escuro) e notificações reais». O corpo é desenhado por
+     src/config.js a partir do catálogo REAL do servidor; aqui só vive a moldura. -->
+<div id="cfgPanel" role="dialog" aria-modal="false" aria-labelledby="cfgTitle" hidden aria-hidden="true">
+  <div class="cfg-head"><b id="cfgTitle">Configurações</b><span class="cfg-sum">esta máquina</span><span class="sp"></span>
+    <button class="cfg-x" type="button" data-close aria-label="fechar as configurações (Esc)" title="fechar (Esc)">✕</button></div>
+  <div class="cfg-body"></div>
 </div>
 <!-- 26 out 2026 · HOJE: três perguntas e mais nada. A decisão é um gesto. -->
 <div id="todayOv" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tdTitle">
@@ -2449,6 +2586,7 @@
   <a class="sahni" id="sahniMark" href="https://github.com/valdimiroilidio3/orbita-studio" target="_blank" rel="noopener" title="Órbita Project — por Chelton Mahoze. Abrir o repositório."><span class="wm">chelton<i>_</i></span></a>
 </div>
 <div id="rail" style="display:none">
+  <button id="railClose" type="button" aria-label="fechar o painel do posto (Esc)" title="fechar (Esc)">✕</button>
   <div id="railDept" class="rview">
     <div id="railHeader"></div>
   <div id="railAgent" class="rview">
@@ -2473,6 +2611,8 @@
          em pílulas. Escreve-se aqui como se escreve numa conversa — Enter envia,
          Shift + Enter muda de linha. Nenhum id mudou (#mIn, #mSend, #mChips, #mMsgs). -->
     <div id="mChat" class="mpane" style="display:none">
+      <!-- 29 out 2026: o campo de IA afasta-se — a conversa fica, a caixa recolhe (pedido do dono) -->
+      <button class="chat-fold" type="button" aria-pressed="false" aria-controls="mc" title="afastar o campo de IA — a conversa fica, a caixa recolhe">recolher campo ▾</button>
       <div id="mMsgs" class="m-log"></div>
       <div class="m-foot">
         <div id="mChips"></div>
@@ -2594,6 +2734,8 @@
 </div>
 <!-- V3.3: the Task Status panel — always on, right side -->
 <div id="tpanel">
+  <!-- 29 out 2026: afastar a coluna das tarefas (pedido do dono). A escolha fica guardada. -->
+  <button class="tp-fold" type="button" aria-pressed="false" title="afastar o estado das tarefas — fica um botão, volta com um clique">afastar ▸</button>
   <div class="tp-cmd">
     <div class="tp-r1">
       <button class="tp-dd" title="departamento"><span class="dot"></span><span class="tp-ddn">MARKETING</span></button>

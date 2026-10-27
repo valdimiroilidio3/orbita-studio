@@ -171,6 +171,31 @@ export function parseEnvFile(text) {
   return out;
 }
 
+/** Escreve pares num `.env` SEM perder o resto: comentários, ordem e as outras chaves ficam onde
+ *  estão. Um valor vazio APAGA a chave (é assim que se remove uma chave pela interface). */
+export function upsertEnv(text, writes = {}) {
+  const keys = Object.keys(writes);
+  const done = new Set();
+  const quote = (v) => (/^[A-Za-z0-9_./:@+=\-]*$/.test(v) ? v : `"${String(v).replace(/"/g, '\\"')}"`);
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+    if (!m || !keys.includes(m[1])) { out.push(line); continue; }
+    const k = m[1];
+    if (done.has(k)) continue;                       // uma chave, uma linha
+    done.add(k);
+    const v = String(writes[k] ?? '');
+    if (!v.length) continue;                         // valor vazio = apagar
+    out.push(`${k}=${quote(v)}`);
+  }
+  const faltam = keys.filter((k) => !done.has(k) && String(writes[k] ?? '').length);
+  if (faltam.length) {
+    if (out.length && out[out.length - 1].trim()) out.push('');
+    for (const k of faltam) out.push(`${k}=${quote(String(writes[k]))}`);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 export function createPlatform({
   root = ROOT,
   env = process.env,
@@ -225,7 +250,8 @@ export function createPlatform({
     const verified = !!(c && fresh && c.ok);
     return {
       id: p.id, name: p.name, kind: p.kind, docs: p.docs || '',
-      configured, missing,
+      // os NOMES das variáveis (nunca os valores): é o que a interface mostra e o que ela apaga
+      env: p.env.slice(), configured, missing,
       ready: verified || (configured && !p.probe),
       verified,
       checkedAt: c ? new Date(c.at).toISOString() : null,
@@ -407,8 +433,50 @@ export function createPlatform({
     return { unwatch, stop: unwatch };
   }
 
+  /* ---------- escrever uma chave pelo browser ----------
+     Pedido do dono (29 out 2026): «cria um campo para implementação de APIs, configurações reais».
+     O que isto faz, dito sem marketing: valida que a variável pertence MESMO ao serviço, grava no
+     `.env` do projecto, relê o ficheiro (sem reiniciar nada) e SONDA o serviço — o resultado que
+     volta é o da sonda real, com HTTP e latência, não um «guardado com sucesso» vazio.
+     O que NÃO faz: nunca devolve o valor da chave (só o nome da variável), e nunca aceita uma
+     variável que não esteja declarada no serviço. */
+  async function saveKey({ id, values = {} } = {}) {
+    const p = all().find((x) => x.id === String(id || '').trim().toLowerCase());
+    if (!p) return { ok: false, error: 'serviço desconhecido', known: all().map((x) => x.id) };
+    const allowed = new Set(p.env);
+    const writes = {};
+    for (const [k, raw] of Object.entries(values || {})) {
+      if (!allowed.has(k)) return { ok: false, error: `${k} não pertence a ${p.name}`, env: p.env };
+      const v = String(raw ?? '').trim();
+      if (v.length > 4096) return { ok: false, error: 'o valor é longo demais (máx. 4096)', env: p.env };
+      if (/[\r\n]/.test(v)) return { ok: false, error: 'o valor tem uma mudança de linha', env: p.env };
+      writes[k] = v;
+    }
+    if (!Object.keys(writes).length) return { ok: false, error: 'sem valores — nada a guardar', env: p.env };
+    let text = '';
+    try { text = fs.readFileSync(envFile, 'utf8'); } catch { /* primeiro arranque */ }
+    const next = upsertEnv(text, writes);
+    try {
+      fs.mkdirSync(path.dirname(envFile), { recursive: true });
+      const mode = fs.existsSync(envFile) ? (fs.statSync(envFile).mode & 0o777) : 0o600;
+      fs.writeFileSync(envFile, next.endsWith('\n') || !next.length ? next : next + '\n', { mode });
+    } catch (e) {
+      return { ok: false, error: 'não consegui escrever o .env: ' + oneLine(e.message, 120), env: p.env };
+    }
+    reloadEnv();
+    const saved = Object.keys(writes);
+    const cleared = saved.filter((k) => !writes[k].length);
+    const complete = p.env.every(filled);
+    const probe = complete && p.probe ? await probeOne(p) : null;
+    return {
+      ok: true, id: p.id, name: p.name, saved, cleared, configured: complete,
+      missing: p.env.filter((k) => !filled(k)),
+      probe, apis: status(),
+    };
+  }
+
   return {
-    machine, tools, status, probeAll, reloadEnv, watchEnv, endpoints, start,
+    machine, tools, status, probeAll, reloadEnv, watchEnv, endpoints, start, saveKey,
     get envFile() { return envFile; },
     get meta() { return { reloads, lastReloadAt, fromFileKeys: [...fromFile] }; },
     _cache: cache,   // para os testes poderem olhar para o que foi sondado, sem esperar
