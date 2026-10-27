@@ -9,6 +9,7 @@
      503 { ok: false, base: '<ref>', faltam: ['orbita_leads', …] }
      503 { ok: false, modo: 'local', error: 'sem chaves' }
    =========================================================================== */
+import { VERSAO } from './_versao.mjs';
 import { createSupabaseRepo, envBase } from './_repo.mjs';
 import { comChave, MODELOS } from './_ia/catalogo.mjs';
 import { envDoPedido } from './_env.mjs';
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
 
   try {
     const h = await createSupabaseRepo(env).health();
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: '1.18.0', ia });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia });
   } catch (e) {
     res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu' });
   }

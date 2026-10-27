@@ -10,6 +10,8 @@
    local (`src/localapi.js`) implementou: mudar de um para o outro não muda
    nada na interface.
    =========================================================================== */
+import { VERSAO } from './_versao.mjs';
+
 
 const TIPOS_PROJETO = [
   { id: 'landing', label: 'Página de conversão' },
@@ -136,7 +138,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   /* ---- health: a prova de que a base responde ---- */
   if (caminhoLimpo === '/health') {
     const h = await repo.health();
-    return { status: h.ok ? 200 : 503, corpo: { ...h, modo: 'base', versao: '1.17.0' } };
+    return { status: h.ok ? 200 : 503, corpo: { ...h, modo: 'base', versao: VERSAO } };
   }
 
   /* ---- Hoje ---- */
