@@ -20,7 +20,7 @@ import { responder } from './api/_rotas.mjs';
 import { createMemRepo } from './api/_repo.mjs';
 
 const CHAVE_GEO = 'geo-de-teste-nao-e-uma-chave-a-serio';
-const CHAVE_TAV = 'tvly-de-teste-nao-e-uma-chave-a-serio';
+const CHAVE_TAV = 'chave-falsa-para-teste-nao-e-segredo';
 const ENV = { GEOAPIFY_API_KEY: CHAVE_GEO, TAVILY_API_KEY: CHAVE_TAV };
 
 const GEO = {
@@ -84,7 +84,7 @@ test('pesquisa: sem chaves diz o que falta, em vez de fingir que sabe procurar',
 
 test('pesquisa: mascarar mostra o suficiente para reconhecer, nunca a chave toda', () => {
   const m = mascarar(CHAVE_TAV);
-  assert.ok(m.startsWith('tvly') && m.includes('…'));
+  assert.ok(m.startsWith('chav') && m.includes('…'));
   assert.equal(m.length < CHAVE_TAV.length, true);
   assert.equal(mascarar('curta'), '••••');
 });
@@ -292,4 +292,22 @@ test('rotas: o Centro de Controlo vê as duas fontes e testa-as a sério', async
   /* o teste fica guardado: da próxima vez a lista diz que está verificada */
   const depois = await chamar(repo, '/platform/apis');
   assert.equal(depois.corpo.list.find((x) => x.id === 'geoapify').verified, true);
+});
+
+test('rotas: por GET a pesquisa é só leitura — nada entra no funil', async () => {
+  const repo = createMemRepo();
+  const f = falso({ 'geocode/search': { json: GEO }, 'v2/places': { json: PLACES } });
+  const r = await chamar(repo, '/pesquisa/leads?oQue=dentistas&onde=Coimbra&limite=5', 'GET', null, { fetchImpl: f });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.encontrados, 2);
+  assert.equal(r.corpo.guardados, null);
+  assert.equal(repo._dados.leads.length, 0, 'um GET não pode escrever na base');
+
+  const t = await chamar(repo, '/pesquisa/teste?fonte=geoapify', 'GET', null, { fetchImpl: f });
+  assert.equal(t.status, 200);
+  assert.equal(t.corpo.ok, true);
+  assert.equal(t.corpo.fonte, 'geoapify');
+  assert.equal(repo._dados.atividade.some((a) => String(a.kind || a.tipo || '').includes('pesquisa')), false, 'um GET não assina o registo');
+  const x = await chamar(repo, '/pesquisa/teste?fonte=naoexiste', 'GET', null, { fetchImpl: f });
+  assert.equal(x.status, 404);
 });

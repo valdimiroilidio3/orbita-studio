@@ -360,21 +360,32 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { total: CATEGORIAS.length, categorias: CATEGORIAS.map((x) => ({ id: x.id, categoria: x.categoria })) } };
   }
 
-  if (caminhoLimpo === '/pesquisa/leads' && m === 'POST') {
+  if (caminhoLimpo === '/pesquisa/teste' && m === 'GET') {
+    /* diagnóstico: um pedido real a uma fonte, sem escrever nada */
     const p = await import('./_pesquisa.mjs');
-    const oQue = limpo(corpo?.oQue || corpo?.what || corpo?.atividade);
-    const onde = limpo(corpo?.onde || corpo?.where || corpo?.zona);
+    const fonte = limpo(qs.get('fonte')) || 'geoapify';
+    const r = await p.testarFonte(fonte, { env, fetchImpl });
+    return { status: r.codigo === 'desconhecida' ? 404 : 200, corpo: { ...r, fonte } };
+  }
+
+  if (caminhoLimpo === '/pesquisa/leads' && (m === 'POST' || m === 'GET')) {
+    const p = await import('./_pesquisa.mjs');
+    /* por GET é só leitura: nunca escreve no funil */
+    const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
+    const oQue = limpo(fonte?.oQue || fonte?.what || fonte?.atividade);
+    const onde = limpo(fonte?.onde || fonte?.where || fonte?.zona);
     try {
       const r = await p.procurarLeads({
         oQue, onde,
-        categoria: limpo(corpo?.categoria) || null,
-        limite: Number(corpo?.limite || corpo?.limit) || 20,
-        raio: Number(corpo?.raio) || 12000,
-        pais: limpo(corpo?.pais) || null,
-        lang: limpo(corpo?.lang) || 'pt',
+        categoria: limpo(fonte?.categoria) || null,
+        limite: Number(fonte?.limite || fonte?.limit) || 20,
+        raio: Number(fonte?.raio) || 12000,
+        pais: limpo(fonte?.pais) || null,
+        lang: limpo(fonte?.lang) || 'pt',
       }, { env, fetchImpl });
       let guardados = null;
-      if (corpo?.guardar !== false && r.leads.length) {
+      const podeGuardar = m === 'POST' && fonte?.guardar !== false;
+      if (podeGuardar && r.leads.length) {
         const linhas = r.leads.map((l) => ({
           dedupe_key: dedupe(l.nome, l.cidade), name: l.nome, category: l.categoria || null,
           city: l.cidade || null, phone: l.telefone || null, email: l.email || null,
@@ -394,13 +405,14 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     }
   }
 
-  if (caminhoLimpo === '/pesquisa/web' && m === 'POST') {
+  if (caminhoLimpo === '/pesquisa/web' && (m === 'POST' || m === 'GET')) {
     const p = await import('./_pesquisa.mjs');
+    const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
     try {
       const r = await p.pesquisarWeb({
-        consulta: limpo(corpo?.consulta || corpo?.q || corpo?.query),
-        limite: Number(corpo?.limite || corpo?.limit) || 8,
-        profundidade: limpo(corpo?.profundidade) || 'basic',
+        consulta: limpo(fonte?.consulta || fonte?.q || fonte?.query),
+        limite: Number(fonte?.limite || fonte?.limit) || 8,
+        profundidade: limpo(fonte?.profundidade) || 'basic',
       }, { env, fetchImpl });
       /* resultados da web não são empresas: não entram no funil sem alguém os ler */
       return { status: 200, corpo: { ok: true, ...r, guardados: null, nota: 'a web dá contexto, não leads — nada foi escrito no funil' } };
