@@ -42,6 +42,31 @@ const KIND_LABEL = {
   pagamentos: 'Pagamentos', correio: 'Correio', mensagens: 'Mensagens', voz: 'Voz', api: 'API',
 };
 
+
+/* ---------- falar com o servidor ----------
+   A Vercel só alcança a função de `api/` no caminho exacto do ficheiro: não há
+   `/api/ops/summary` nem `/api/controlo/estado` (dá 404). O caminho vai dentro do
+   pedido, em `/api/rpc` — é o mesmo contrato que a mesa já usa. Antes desta
+   versão, este painel pedia `/api/platform/apis` a sério e recebia 404 em
+   produção: a lista de APIs nunca aparecia. */
+async function pedir(caminho, { metodo = 'GET', corpo = null } = {}) {
+  if (metodo === 'GET') {
+    const r = await fetch(`/api/rpc?caminho=${encodeURIComponent(caminho)}`, { headers: { accept: 'application/json' } });
+    if (r.status === 404 || r.status === 503) return { semServidor: true };
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    return { dados: j.corpo ?? j, status: j.status ?? 200 };
+  }
+  const r = await fetch('/api/rpc', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ caminho, metodo, corpo: corpo ?? {} }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { erro: j.error || `HTTP ${r.status}` };
+  if ((j.status || 200) >= 400) return { erro: j.corpo?.error || j.corpo?.erro || `HTTP ${j.status}` };
+  return { dados: j.corpo ?? j, status: j.status };
+}
+
 /* ---------- 1.20.0 · o Centro de Controlo ----------
    Três marcas por linha, e nenhuma inventada: `configurado` (existe chave),
    `ligado` (o último teste real passou) e `a_funcionar` (houve execuções nas
@@ -258,8 +283,9 @@ export function createConfig({
     const lista = (k) => apis.list.filter((p) => (k === 'outros' ? !grupos.includes(p.kind) : p.kind === k));
     return `<div class="cfg-sec">
       <div class="cfg-h"><b>APIs</b><span class="cfg-note">${prontas} com sonda a responder · ${s.configured || 0} com chave · ${s.total || apis.list.length} no catálogo</span></div>
-      <p class="cfg-honest">A chave é gravada no <code>.env</code> desta máquina (nunca no browser) e o serviço é
-      sondado logo a seguir — o resultado ao lado é o que ele respondeu, não um «guardado com sucesso».</p>
+      <p class="cfg-honest">Aqui vê-se o que existe no ambiente do servidor e o que falta a cada serviço. Escrever
+      chaves pela interface só funciona na tua máquina (<code>npm start</code>); em produção as variáveis são
+      geridas na Vercel (Settings → Environment Variables) e esta aba diz isso em vez de fingir que guardou.</p>
       ${porTipo.map((k) => `<div class="cfg-group"><h4>${esc(KIND_LABEL[k] || 'Outros')}</h4>${lista(k).map(apiRow).join('')}</div>`).join('')}
     </div>`;
   }
@@ -274,12 +300,12 @@ export function createConfig({
   async function loadApis() {
     if (busy) return; busy = true;
     try {
-      const r = await fetch('/api/platform/apis', { headers: { accept: 'application/json' } });
-      if (r.status === 404) { semServidor = true; apis = null; lastError = ''; }
-      else if (!r.ok) { lastError = `o servidor respondeu HTTP ${r.status} — o catálogo não abriu`; apis = null; }
-      else { apis = await r.json(); semServidor = false; lastError = ''; }
+      const r = await pedir('/platform/apis');
+      if (r.semServidor) { semServidor = true; apis = null; lastError = ''; }
+      else if (!r.dados?.list) { lastError = 'o catálogo não abriu'; apis = null; }
+      else { apis = r.dados; semServidor = false; lastError = ''; }
     } catch (e) {
-      semServidor = true; apis = null; lastError = '';
+      semServidor = false; apis = null; lastError = `sem resposta do servidor: ${e.message}`;
     }
     busy = false;
     render();
@@ -287,15 +313,10 @@ export function createConfig({
 
   async function loadCentro() {
     try {
-      const r = await fetch('/api/controlo/estado', { headers: { accept: 'application/json' } });
-      if (r.status === 404) { semServidor = true; centro = null; }
-      else if (!r.ok) { centro = null; lastError = `o Centro de Controlo respondeu HTTP ${r.status}`; }
-      else {
-        centro = await r.json();
-        semServidor = false;
-        if (centro.ajustes) ajustes = centro.ajustes;
-      }
-    } catch { centro = null; }
+      const r = await pedir('/controlo/estado');
+      if (r.semServidor) { semServidor = true; centro = null; }
+      else { centro = r.dados || null; semServidor = false; if (centro?.ajustes) ajustes = centro.ajustes; }
+    } catch (e) { centro = null; lastError = `Centro de Controlo: ${e.message}`; }
     render();
   }
 
@@ -303,15 +324,9 @@ export function createConfig({
    *  e é isso que o aviso diz, em vez de fingir que já mudou. */
   async function guardarSalas(pedido, { metodo = 'POST', caminho = '/controlo/salas' } = {}) {
     let servidorOk = false, erro = '';
-    try {
-      const r = await fetch(`/api${caminho}`, {
-        method: metodo, headers: { 'content-type': 'application/json' }, body: JSON.stringify(pedido || {}),
-      });
-      const j = await r.json().catch(() => ({}));
-      servidorOk = r.ok && j.ok !== false;
-      if (!servidorOk) erro = j.error || `HTTP ${r.status}`;
-      if (servidorOk && j.ajustes) ajustes = j.ajustes;
-    } catch (e) { erro = 'sem resposta do servidor: ' + e.message; }
+    const r = await pedir(caminho, { metodo, corpo: pedido || {} }).catch((e) => ({ erro: 'sem resposta do servidor: ' + e.message }));
+    if (r?.erro) erro = r.erro;
+    else { servidorOk = true; if (r?.dados?.ajustes) ajustes = r.dados.ajustes; }
 
     /* a cópia local é o que a cena consegue ler sem esperar por rede */
     if (ajustes) gravarAjustes(safeStore(), ajustes);
@@ -336,14 +351,13 @@ export function createConfig({
     if (btn) { btn.disabled = true; btn.textContent = 'a guardar e a sondar…'; }
     if (out) { out.className = 'cfg-out'; out.textContent = ''; }
     try {
-      const r = await fetch('/api/platform/key', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, values }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.ok === false) {
-        if (out) { out.className = 'cfg-out bad'; out.textContent = j.error || `HTTP ${r.status}`; }
+      const r = await pedir('/platform/key', { metodo: 'POST', corpo: { id, values } });
+      if (r.erro) {
+        /* em produção as variáveis são só de leitura: diz-se, não se finge */
+        if (out) { out.className = 'cfg-out bad'; out.textContent = r.erro; }
         return;
       }
+      const j = r.dados || {};
       for (const inp of row.querySelectorAll('input[data-env]')) inp.value = '';
       const pr = j.probe;
       const msg = pr
@@ -370,11 +384,8 @@ export function createConfig({
     if (!alvo.length) { if (out) out.textContent = 'nada a apagar'; return; }
     for (const k of alvo) values[k] = '';
     try {
-      const r = await fetch('/api/platform/key', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, values }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (out) { out.className = 'cfg-out ' + (j.ok ? 'warn' : 'bad'); out.textContent = j.ok ? 'chave apagada' : (j.error || `HTTP ${r.status}`); }
+      const r = await pedir('/platform/key', { metodo: 'POST', corpo: { id, values } });
+      if (out) { out.className = 'cfg-out ' + (r.erro ? 'bad' : 'warn'); out.textContent = r.erro || 'chave apagada'; }
       setTimeout(() => loadApis(), 400);
     } catch (e) {
       if (out) { out.className = 'cfg-out bad'; out.textContent = 'sem resposta: ' + e.message; }
