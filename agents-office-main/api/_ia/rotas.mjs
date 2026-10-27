@@ -131,10 +131,14 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
 
   /* ---------------- teste real ---------------- */
   if (limpo === '/ia/testar' && m === 'POST') {
-    const fornecedor = String(corpoDe(corpo).fornecedor || '');
+    const pedido = corpoDe(corpo);
+    const fornecedor = String(pedido.fornecedor || '');
     if (!FORNECEDORES[fornecedor]) return { status: 400, corpo: { error: 'fornecedor desconhecido' } };
+    /* `modelo` é opcional: sem ele prova-se o fornecedor (como antes); com ele
+       prova-se exactamente aquele modelo, que é o que o botão «Provar» pede. */
+    const modelo = pedido.modelo ? String(pedido.modelo) : null;
     try {
-      const r = await motor.testar(fornecedor);
+      const r = await motor.testar(fornecedor, { modelo });
       return { status: 200, corpo: { ...r, fornecedor, prova: 'pedido real a este fornecedor, agora' } };
     } catch (e) {
       return { status: 200, corpo: { ok: false, fornecedor, erro: e.message, codigo: e.codigo || 'erro' } };

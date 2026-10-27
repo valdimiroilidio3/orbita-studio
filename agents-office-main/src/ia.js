@@ -110,6 +110,47 @@ export function vistaIA(S, { esc, hhmm, when }) {
         é o dono, em Configurações → Centro de Controlo, onde cada serviço diz o que falta — aqui não
         se mostra configuração, mostra-se trabalho. O separador «Fornecedores» lista os limites de cada um.</div>`;
 
+  /* 1.33.0 · «IA gratuita» — a pergunta é sempre a mesma: «o que é que funciona
+     mesmo?». A resposta separa o que tem resposta registada do que só existe e
+     está pronto. Os «por provar» aparecem, mas não como funcionais: sem verde,
+     sem botão de usar, com a razão à vista. */
+  const gr = S.iaGratuitos || null;
+  const grProvados = gr?.modelos || [];
+  const grPorProvar = gr?.porProvar || [];
+  const grCadeia = gr?.cadeia || {};
+  const trabalhos = [
+    ['plano', 'planear'], ['codigo', 'código'], ['texto', 'texto'],
+    ['investigar', 'investigar'], ['revisao', 'revisão'], ['visao', 'visão'],
+  ].filter(([id]) => (grCadeia[id] || []).length);
+  const cartaoGratuitos = !gr ? '' : `<div class="card">
+      <h3 style="margin-top:0">IA gratuita <span class="ia-sub">· ${gr.total} provados · ${gr.totalPorProvar} por provar</span></h3>
+      <p class="ia-sub" style="margin-top:0">${esc(gr.estado?.frase || 'sem medição')}${gr.medidoEm ? ` · medido em ${esc(gr.medidoEm)}` : ''}</p>
+      ${grProvados.length ? `<table class="ia-tab">
+        <thead><tr><th>Modelo</th><th>Fornecedor</th><th>Medido</th><th>Serve para</th></tr></thead>
+        <tbody>${grProvados.map((m) => `<tr class="ia-ok">
+          <td><b>${esc(m.modelo)}</b> ${etiqueta('provado', 'ok')}</td>
+          <td>${esc(m.fornecedor || m.fornec)}${m.keyless || m.semChave ? ` <span class="ia-sub">sem chave</span>` : ''}</td>
+          <td>${esc(m.medidoMs != null ? `${m.medidoMs} ms` : '—')}${m.nota ? `<div class="ia-sub">${esc(m.nota)}</div>` : ''}</td>
+          <td>${(m.etiquetas || []).map((e) => etiqueta(esc(e), '')).join(' ')}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : '<div class="ia-faixa warn">Nenhum gratuito com resposta registada. O que está ligado aparece abaixo como <b>por provar</b> — não conta como funcional.</div>'}
+      ${grPorProvar.length ? `<details style="margin-top:10px"><summary class="ia-sub">${grPorProvar.length} por provar — existem e estão prontos, mas ainda não responderam</summary>
+        <table class="ia-tab" style="margin-top:8px">
+          <thead><tr><th>Modelo</th><th>Fornecedor</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${grPorProvar.map((m) => `<tr>
+            <td class="ia-mono">${esc(m.modelo)}</td>
+            <td>${esc(m.fornecedor || m.fornec)}${m.semChave ? ` <span class="ia-sub">sem chave</span>` : ''}${m.descoberto ? ` ${etiqueta('descoberto', '')}` : ''}</td>
+            <td>${etiqueta('por provar', 'warn')}<div class="ia-sub">${esc(m.nota || (m.semChave ? 'não precisa de chave; falta a primeira resposta' : 'pronto, falta a primeira resposta'))}</div></td>
+            <td class="ia-acts"><button class="btn quiet small" data-act="ia-provar" data-fornec="${esc(m.fornec)}" data-modelo="${esc(m.modelo)}">Provar</button></td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <div class="ia-sub">Provar faz <b>um</b> pedido curto a este modelo e guarda o resultado em <code>/ia/uso</code>. Só depois de responder é que passa a provado.</div>
+      </details>` : ''}
+      ${trabalhos.length ? `<div class="ia-sub" style="margin-top:10px"><b>Por tipo de trabalho</b> (a ordem em que seriam tentados):</div>
+        ${trabalhos.map(([id, nome]) => `<div class="ia-sub" style="margin-top:2px"><b>${nome}</b> · ${(grCadeia[id] || []).map((x) => esc(`${x.fornec}/${x.modelo}`)).join(' → ')}</div>`).join('')}` : ''}
+      ${gr.nota ? `<div class="ia-sub" style="margin-top:8px">${esc(gr.nota)}</div>` : ''}
+    </div>`;
+
   const linhaFornecedor = (f) => {
     const st = ESTADO_FORNECEDOR[f.estado] || ESTADO_FORNECEDOR.sem_chave;
     const teste = f.ultimoTeste
@@ -199,6 +240,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
 
   return `<div class="wrap">
     ${aviso}
+
+    ${cartaoGratuitos}
 
     <div class="card">
       <h3 style="margin-top:0">Um trabalho, de ponta a ponta</h3>
@@ -308,6 +351,24 @@ export function vistaIA(S, { esc, hhmm, when }) {
 export async function accaoIA(nome, el, api) {
   const { call, S, paint, toast } = api;
   const id = el?.dataset?.id;
+
+  if (nome === 'ia-provar') {
+    /* 1.33.0 · provar UM modelo «por provar»: um pedido curto, e só se ele
+       responder é que sai da lista. O que responder por outro caminho (o
+       fornecedor a escolher outro modelo) não conta como prova deste. */
+    const fornec = el?.dataset?.fornec;
+    const modelo = el?.dataset?.modelo;
+    try {
+      toast(`A provar ${fornec}/${modelo}…`);
+      const r = await call('/ia/testar', 'POST', { fornecedor: fornec, modelo });
+      if (r.ok && r.modelo === modelo) toast(`${fornec}/${modelo}: respondeu em ${r.ms} ms. Passa a provado.`);
+      else if (r.ok) toast(`${fornec}: respondeu com ${r.modelo}, não com o ${modelo} — este continua por provar.`, true);
+      else toast(`${fornec}/${modelo}: ${r.erro || 'não respondeu'}`, true);
+      await carregarIA(api);
+      paint();
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
 
   if (nome === 'ia-testar') {
     try {

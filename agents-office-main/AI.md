@@ -38,6 +38,20 @@ latência medidos em `/ia/uso`:
 provar** (existem e estão prontos, mas ainda não responderam). Só os primeiros
 contam como funcionais.
 
+A mesma resposta existe em `GET /ia/gratuitos` (na função) e em
+`GET /api/ia/gratuitos` (no `serve.mjs` local, sem base de dados: as latências ao
+vivo ficam de fora, a lista medida e a cadeia são as mesmas). Nada disto precisa
+de chave.
+
+O Control Center mostra os dois grupos no cartão **IA gratuita**, com a cadeia
+real por tipo de trabalho (plano → código → texto → investigar → revisão →
+visão). Cada linha «por provar» tem o botão **Provar**: faz um pedido curto
+àquele modelo — `POST /ia/testar {fornecedor, modelo}` — e só o promove a
+provado se ele responder. Se responder por outro modelo, o toast di-lo e o
+pedido não conta como prova. As provas ficam em
+`cfg.testes[fornecedor].provados[modelo]` e em `/ia/uso`; a lista real que o
+fornecedor publicou (`lista`) não se perde quando um teste falha.
+
 O router põe estes pares à frente do catálogo (+2000 menos a latência medida). Se
 houver **uma chave real** no ambiente, os keyless recuam 900 pontos: quem configura
 uma chave quer usá-la. A lista não é uma promessa de quota — se um par falhar, o

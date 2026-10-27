@@ -203,7 +203,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     },
 
     /** Teste REAL: lista modelos e faz um pedido pequeno. Só isto marca «funcional». */
-    async testar(fornecedor) {
+    async testar(fornecedor, { modelo: exigido = null } = {}) {
       const prov = FORNECEDORES[fornecedor];
       if (!prov) throw new ErroIA(`fornecedor desconhecido: ${fornecedor}`, { fornec: fornecedor });
       const chave = valorDaChave(fornecedor);
@@ -229,7 +229,15 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
            todo o orçamento de saída a «pensar» e devolver texto vazio — isso
            não é um teste bem-sucedido (visto no OVH a 27 out 2026). */
         const doCatalogo = modelosDe(fornecedor).map((m) => m.modelo);
-        const ordem = [...new Set([...doCatalogo.filter((m) => modelos.includes(m)), ...modelos])].slice(0, 3);
+        /* 1.33.0 · «Provar» aponta a um modelo concreto: esse vai à frente de
+           todos os outros, senão o botão provava um qualquer e o dito continuava
+           por provar. */
+        const pedido = exigido ? String(exigido) : null;
+        const ordem = [...new Set([
+          ...(pedido ? [pedido] : []),
+          ...doCatalogo.filter((m) => modelos.includes(m)),
+          ...modelos,
+        ])].slice(0, pedido ? 4 : 3);
         if (!ordem.length) throw new ErroIA(`${fornecedor} não devolveu modelos (${avisoLista || 'lista vazia'})`, { fornec: fornecedor, codigo: 'vazio' });
         let alvo = null;
         let r = null;
@@ -247,6 +255,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
         }
         if (!alvo) throw ultimoErro || new ErroIA(`${fornecedor} não respondeu`, { fornec: fornecedor, codigo: 'vazio' });
         const ms = Date.now() - inicio;
+        const anteriores = testes[fornecedor] || {};
         testes[fornecedor] = {
           ok: true, ms, quando: agora(), modelos: modelos.length || null,
           usado: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista,
@@ -254,13 +263,22 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
              mudam (o OpenCode mudou 4 de 4 em dois meses) e escrevê-los à mão
              no catálogo era garantir que ficavam velhos. */
           lista: modelos.slice(0, 60),
+          /* …e a prova fica registada por modelo: é o que tira um «por provar»
+             da lista dos que nunca responderam (gratuitos.provasDe). */
+          provados: {
+            ...(anteriores.provados || {}),
+            [alvo]: { ok: true, ms, quando: new Date().toISOString() },
+          },
         };
         await repo.ia.config.gravar('testes', testes);
         await repo.ia.uso.registar({ fornecedor, modelo: alvo, agente: 'teste', tipo: 'teste', ok: true, ms, tokens_in: r.uso?.entrada || 0, tokens_out: r.uso?.saida || 0, erro: null });
         return { ok: true, ms, modelos: modelos.length || null, modelo: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };
       } catch (e) {
         const ms = Date.now() - inicio;
-        testes[fornecedor] = { ok: false, ms, quando: agora(), erro: String(e.message || e).slice(0, 300) };
+        testes[fornecedor] = {
+          ...(testes[fornecedor] || {}),
+          ok: false, ms, quando: agora(), erro: String(e.message || e).slice(0, 300),
+        };
         try { await repo.ia.config.gravar('testes', testes); } catch { /* sem base */ }
         try { await repo.ia.uso.registar({ fornecedor, modelo: '(teste)', agente: 'teste', tipo: 'teste', ok: false, ms, tokens_in: 0, tokens_out: 0, erro: String(e.message || e).slice(0, 300) }); } catch { /* sem base */ }
         throw e;
