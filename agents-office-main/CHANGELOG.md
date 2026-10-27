@@ -1,3 +1,21 @@
+## 1.14.1 — 29 out 2026 · o que só se vê com o site aberto
+
+A página estava publicada; estas quatro coisas só apareceram ao lê-la **em produção**, com os olhos de
+quem chega de fora.
+
+- **A barra dizia «LIGADO A» sem nada ligado.** A correção do rótulo existia num caminho, mas o ciclo de
+  desenho reescrevia-o por frame (ao entrar e sair de uma sala). Passa a haver **uma constante**
+  (`ROTULO`) usada nos três sítios: **CONECTORES** quando não há servidor.
+- **A oficina (tecla F) ficava em «a ligar…» para sempre.** Sem servidor não há nada a ligar; agora
+  consulta o estado ao abrir e diz **«sem servidor — abre com `npm start` para ver a oficina a trabalhar»**.
+- **O contador de aprovações nascia em 1.** Os 35 postos estão `idle` e o contador vinha do cartão de
+  demonstração. Agora nasce em **0** e só sobe quando a base de dados tem uma tarefa `awaiting_approval`.
+- **A mesa (`/app`) respondia «HTTP 404»** na vista publicada. Um 404 aqui não é uma avaria: é «não há
+  servidor neste sítio». Passa a explicar isso e a apontar para `npm start` e para o escritório.
+
+Provado na página publicada: `CONECTORES · sem servidor`, `MOTOR · sem servidor`, `⚠ 0 À ESPERA DE
+APROVAÇÃO` nas seis salas, `SÓ VISUALIZAÇÃO` no painel de tarefas, **130/130** testes e cena verde.
+
 ## 1.14.0 — 29 out 2026 · Lançamento: a marca, o sítio e a honestidade de estar sem servidor
 
 Pedido: *«faça as melhorias gerais finais, analisa coisa por coisa, passo por passo e depois faça o
