@@ -115,6 +115,26 @@ const w2 = dom2.window;
 ok(/Barbearia do Largo/.test((w2.document.getElementById('main') || {}).textContent || '') || /modo local/i.test((w2.document.getElementById('main') || {}).textContent || ''),
   'ao reabrir, a mesa não voltou a ler o que estava guardado');
 
+/* --- 1.17.0: há /api mas a base não está ligada (503) → a mesa cai no local e DIZ PORQUÊ --- */
+{
+  const domB = new JSDOM(html, {
+    url: 'https://orbita-agentes.vercel.app/app', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(win) {
+      win.fetch = async (url) => (String(url).startsWith('/api')
+        ? { ok: false, status: 503, json: async () => ({ modo: 'local', error: 'esta instalação não tem base de dados ligada' }), text: async () => '' }
+        : { ok: false, status: 404, json: async () => ({}), text: async () => '' });
+      Object.defineProperty(win, 'localStorage', { value: armazemFalso, configurable: true });
+      win.Element.prototype.scrollIntoView = () => {};
+    },
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const t = (domB.window.document.getElementById('main') || {}).textContent || '';
+  ok(/modo local/i.test(t), 'com a base em baixo, a mesa não voltou ao modo local');
+  ok(/não está a responder/i.test(t), 'a mesa não diz que a base não respondeu');
+  ok(/base de dados ligada/i.test(t) === false, 'diz «ligada» quando a base está em baixo');
+  domB.window.close();
+}
+
 /* --- o aviso tem de dizer onde os dados vivem, e ter a cópia à mão --- */
 const bar = w2.document.querySelector('.localbar');
 ok(!!bar, 'falta o aviso do modo local');
