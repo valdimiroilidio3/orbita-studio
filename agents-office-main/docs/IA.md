@@ -183,3 +183,22 @@ node serve.mjs      # a mesa local; a IA continua a precisar do /api na Vercel
 
 O modo local da mesa (`localStorage`) mostra o Control Center em cinzento com a razão: as chaves
 não existem no browser, e não devem existir.
+
+
+## 11. Estado real da ligação (27 out 2026)
+
+| passo | resultado em produção |
+|---|---|
+| esquema SQL | aplicado por `/api/setup` (temporário, já apagado); 10 tabelas, smoke de escrita/leitura/limpeza `true` |
+| credencial | **nenhuma chave de fornecedor**; o AI Gateway usa o token OIDC do próprio deployment |
+| pedido real | o Gateway autenticou e recusou: *«requires a valid credit card on file»* |
+| trabalho completo | `run 52f24794…` → `falhou`, com a frase do fornecedor e os dois modelos da cadeia; zero passos inventados |
+
+Para o motor arrancar é preciso **uma** destas coisas:
+
+1. **Cartão na conta Vercel** → desbloqueia os $5/mês de crédito do AI Gateway (nenhuma chave).
+2. **Chave de um fornecedor sem cartão** → `GROQ_API_KEY` (a mais rápida de obter),
+   `GOOGLE_AI_API_KEY`, `CEREBRAS_API_KEY` ou `OPENROUTER_API_KEY`. Depois: `Mesa → IA → Testar`.
+
+O token OIDC nunca é guardado: `api/_env.mjs` copia-o para o ambiente **daquele pedido** e o
+`/ia/estado` só mostra o nome da variável e a máscara.
