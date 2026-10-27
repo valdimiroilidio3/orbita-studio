@@ -1034,6 +1034,31 @@ const server = http.createServer(async (req, res) => {
       return json(res, r.ok ? 200 : r.codigo === 'parametros' ? 400 : r.codigo === 'semchave' ? 503 : 502, r);
     }
 
+    /* ---- 1.32.0: os motores gratuitos, também no local -------------------
+       A mesma lista curada que o router usa em produção (o que respondeu de
+       verdade em /ia/uso), lida do catálogo. Sem base de dados aqui: as
+       latências ao vivo ficam de fora, mas o que foi medido e a cadeia real por
+       tipo de trabalho são os mesmos. Nada disto precisa de chave. */
+    if (url.pathname === '/api/ia/gratuitos' && req.method === 'GET') {
+      const [{ resumo, estadoCurto, PROVADOS }, { cadeia }, { chavesDoAmbiente }] = await Promise.all([
+        import('./api/_ia/gratuitos.mjs'),
+        import('./api/_ia/router.mjs'),
+        import('./api/_ia/motor.mjs'),
+      ]);
+      const chaves = chavesDoAmbiente(process.env);
+      const tipos = {};
+      for (const t of ['plano', 'codigo', 'texto', 'investigar', 'revisao', 'rapido', 'visao']) {
+        tipos[t] = cadeia(t, { chaves, provados: PROVADOS });
+      }
+      return json(res, 200, {
+        ...resumo({ chaves }),
+        estado: estadoCurto({ chaves }),
+        cadeia: tipos,
+        modo: 'local',
+        nota: 'no servidor local não há base de dados: as latências ao vivo não entram, mas a lista medida e a cadeia são as mesmas da produção.',
+      });
+    }
+
     /* 1.30.0: o consumo e o catálogo, também no servidor local */
     if (url.pathname === '/api/pesquisa/uso' && req.method === 'GET') {
       return json(res, 200, { ok: true, ...limites.uso(process.env), execucoes: ferramentas.execucoes(20) });

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, comChave } from './api/_ia/catalogo.mjs';
 import {
   PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, estadoCurto, etiquetasDoId,
-  porProvar, porVelocidade, provadosActivos, resumo,
+  porProvar, porVelocidade, provadosActivos, provasDe, resumo,
 } from './api/_ia/gratuitos.mjs';
 import { falar } from './api/_ia/cliente.mjs';
 import {
@@ -318,4 +318,96 @@ test('gratuitos: separa o que está provado do que só existe', () => {
   assert.match(estadoCurto({ chaves }).frase, /provados .* por provar/);
   assert.equal(etiquetasDoId('nemotron-3.5-super-vl-free').includes('visao'), true);
   assert.equal(porProvar({ chaves }).every((p) => p.etiquetas.length > 0), true);
+});
+
+
+/* ---------- a prova que faz a diferença: «por provar» → «provado» ---------- */
+
+test('provar: um modelo específico que responde deixa de estar «por provar»', async () => {
+  const repo = createMemRepo();
+  let pedido = null;
+  const fetchImpl = async (url, opt = {}) => {
+    const u = String(url);
+    if (u.endsWith('/models')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ name: 'big-pickle' }, { name: 'deepseek-v4.1-flash-free' }]) };
+    }
+    pedido = { url: u, corpo: JSON.parse(opt.body || '{}'), auth: opt.headers?.authorization || null };
+    return json({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+
+  /* antes: o modelo existe e está pronto, mas nunca respondeu */
+  const antes = await motor.gratuitos();
+  assert.ok(antes.porProvar.some((p) => p.fornec === 'opencode' && p.modelo === 'deepseek-v4.1-flash-free'));
+
+  const r = await motor.testar('opencode', { modelo: 'deepseek-v4.1-flash-free' });
+  assert.equal(r.ok, true);
+  assert.equal(r.modelo, 'deepseek-v4.1-flash-free', 'o botão «Provar» tem de provar o modelo pedido, não outro');
+  assert.equal(pedido.corpo.model, 'deepseek-v4.1-flash-free');
+  assert.equal(pedido.auth, 'Bearer public', 'o OpenCode prova-se com a chave que ele próprio publica');
+
+  const cfg = await repo.ia.config.ler();
+  assert.equal(cfg.testes.opencode.provados['deepseek-v4.1-flash-free'].ok, true, 'a prova fica registada por modelo');
+  assert.equal(typeof cfg.testes.opencode.provados['deepseek-v4.1-flash-free'].ms, 'number');
+  assert.ok(cfg.testes.opencode.lista.includes('big-pickle'), 'a lista do fornecedor não se perde ao provar');
+
+  /* depois: passou a provado, com a fonte certa, e saiu dos que faltam */
+  const depois = await motor.gratuitos();
+  const provado = depois.modelos.find((m) => m.fornec === 'opencode' && m.modelo === 'deepseek-v4.1-flash-free');
+  assert.ok(provado, 'um modelo que respondeu tem de contar como provado');
+  assert.equal(provado.latenciaActualMs != null || provado.medidoMs != null, true);
+  assert.equal(depois.porProvar.some((p) => p.fornec === 'opencode' && p.modelo === 'deepseek-v4.1-flash-free'), false);
+  assert.equal(depois.total, antes.total + 1);
+});
+
+test('provar: se o fornecedor responder por outro modelo, o pedido não conta como prova', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async (url, opt = {}) => {
+    const u = String(url);
+    if (u.endsWith('/models')) return { ok: true, status: 200, text: async () => JSON.stringify([{ name: 'big-pickle' }]) };
+    /* recusa o modelo pedido, responde por outro: é o que um gateway faz */
+    const modelo = String(JSON.parse(opt.body || '{}').model || '');
+    if (modelo === 'nao-existe-free') return { ok: false, status: 400, text: async () => '{"error":"model unavailable"}' };
+    return json({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.testar('opencode', { modelo: 'nao-existe-free' });
+  assert.equal(r.ok, true);
+  assert.equal(r.modelo, 'big-pickle', 'caiu para o modelo que responde');
+  const cfg = await repo.ia.config.ler();
+  assert.equal(cfg.testes.opencode.provados['nao-existe-free'], undefined, 'o que não respondeu não é provado');
+  assert.equal(cfg.testes.opencode.provados['big-pickle'].ok, true);
+});
+
+test('provar: uma falha não apaga a lista nem as provas anteriores', async () => {
+  const repo = createMemRepo();
+  let falhar = false;
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/models')) return { ok: true, status: 200, text: async () => JSON.stringify([{ name: 'big-pickle' }]) };
+    if (falhar) return { ok: false, status: 500, text: async () => '{"error":"rebentou"}' };
+    return json({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  await motor.testar('opencode', { modelo: 'big-pickle' });
+  falhar = true;
+  await assert.rejects(() => motor.testar('opencode', { modelo: 'big-pickle' }));
+  const cfg = await repo.ia.config.ler();
+  assert.equal(cfg.testes.opencode.ok, false, 'o último teste diz a verdade: falhou');
+  assert.deepEqual(cfg.testes.opencode.lista, ['big-pickle'], 'a descoberta não se perde numa falha');
+  assert.equal(cfg.testes.opencode.provados['big-pickle'].ok, true, 'a prova histórica não é apagada');
+});
+
+test('gratuitos: a rota /ia/testar aceita o modelo e devolve qual respondeu', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/models')) return { ok: true, status: 200, text: async () => JSON.stringify([{ name: 'openai-fast' }]) };
+    return { ok: true, status: 200, text: async () => 'ok' };
+  };
+  const r = await responder(repo, { caminho: '/ia/testar', metodo: 'POST', corpo: { fornecedor: 'pollinations', modelo: 'openai-fast' }, env: {}, fetchImpl });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.ok, true);
+  assert.equal(r.corpo.modelo, 'openai-fast');
+  assert.equal(r.corpo.prova, 'pedido real a este fornecedor, agora');
 });

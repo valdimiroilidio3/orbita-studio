@@ -58,13 +58,45 @@ export const PROVADOS = [
   },
 ];
 
-/** Os pares curados cujo fornecedor está utilizável agora (chave ou keyless). */
-export function provadosActivos({ chaves = {}, desligados = [] } = {}) {
-  return PROVADOS.filter((p) => {
+/**
+ * Provas feitas pela própria app: `/ia/testar` guarda em
+ * `cfg.testes[fornecedor].provados[modelo] = {ok, ms, quando}`. É a única lista
+ * que cresce sozinha — e a única que pode promover um «por provar» a «provado».
+ */
+export function provasDe(cfg = {}) {
+  const saida = [];
+  for (const [fornec, teste] of Object.entries(cfg?.testes || {})) {
+    const prov = FORNECEDORES[fornec];
+    if (!prov || prov.usavel === false) continue;
+    for (const [modelo, p] of Object.entries(teste?.provados || {})) {
+      if (!modelo || !p || p.ok === false) continue;
+      const ms = Number.isFinite(p.ms) ? p.ms : null;
+      saida.push({
+        fornec, modelo,
+        etiquetas: etiquetasDoId(modelo),
+        janela: 131072, preco: [0, 0],
+        keyless: !!prov.keyless, chavePublica: !!prov.chavePublica,
+        ms, ok: 1, erros: 0,
+        medido: p.quando || null, fonte: '/ia/testar',
+        nota: `Provado pela app${p.quando ? ` em ${String(p.quando).slice(0, 16).replace('T', ' ')}` : ''}${ms != null ? ` (${ms} ms)` : ''}: respondeu a um pedido curto.`,
+      });
+    }
+  }
+  return saida;
+}
+
+/** Os pares curados cujo fornecedor está utilizável agora (chave, chave pública ou keyless). */
+export function provadosActivos({ chaves = {}, desligados = [], cfg = null } = {}) {
+  const vistos = new Set();
+  return [...PROVADOS, ...provasDe(cfg || {})].filter((p) => {
     const prov = FORNECEDORES[p.fornec];
     if (!prov || prov.usavel === false) return false;
     if (desligados.includes(p.fornec)) return false;
-    return !!chaves[p.fornec] || !!prov.keyless;
+    if (!(!!chaves[p.fornec] || !!prov.keyless || !!prov.chavePublica)) return false;
+    const k = `${p.fornec}\u0000${p.modelo}`;
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
   });
 }
 
@@ -138,8 +170,8 @@ export function catalogoDaCadeia(cfg = {}, base = MODELOS) {
  * ou chave do dono) mas ainda não há resposta registada. É a lista honesta do
  * «existe, falta provar» — a interface não deve chamar-lhes funcionais.
  */
-export function porProvar({ chaves = {}, desligados = [], base = MODELOS } = {}) {
-  const provados = new Set(PROVADOS.map((p) => `${p.fornec}\u0000${p.modelo}`));
+export function porProvar({ chaves = {}, desligados = [], base = MODELOS, provados: provas = [] } = {}) {
+  const provados = new Set([...PROVADOS, ...provas].map((p) => `${p.fornec}\u0000${p.modelo}`));
   return base
     .filter((m) => !provados.has(`${m.fornecedor}\u0000${m.modelo}`))
     .filter((m) => !desligados.includes(m.fornecedor))
@@ -168,7 +200,8 @@ export const porVelocidade = (a, b) => (a.ms || 0) - (b.ms || 0);
  * haver fornecedores no catálogo.
  */
 export function resumo({ chaves = {}, desligados = [], latencias = {}, cfg = null } = {}) {
-  const activos = provadosActivos({ chaves, desligados });
+  const provas = provasDe(cfg || {});
+  const activos = provadosActivos({ chaves, desligados, cfg });
   const medidos = activos.map((p) => {
     const real = latencias[`${p.fornec}\u0000${p.modelo}`];
     return {
@@ -184,7 +217,7 @@ export function resumo({ chaves = {}, desligados = [], latencias = {}, cfg = nul
   });
   const keyless = medidos.filter((m) => m.keyless);
   const base = cfg ? catalogoDaCadeia(cfg) : MODELOS;
-  const falta = porProvar({ chaves, desligados, base });
+  const falta = porProvar({ chaves, desligados, base, provados: provas });
   return {
     ok: true,
     pronto: medidos.length > 0,
