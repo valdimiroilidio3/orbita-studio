@@ -150,8 +150,11 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     const run = await repo.ia.runs.porId(id);
     if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
     if (['a_planear', 'a_executar'].includes(run.estado)) return { status: 409, corpo: { error: 'esta execução já está a correr' } };
-    const aprovado = !!corpoDe(corpo).aprovado;
-    const final = await correr({ repo, motor, objetivo: run.objetivo, runId: id, aprovado, env });
+    const c = corpoDe(corpo);
+    const aprovado = !!c.aprovado;
+    const retomar = !!c.retomar;
+    if (retomar && !run.plano) return { status: 409, corpo: { error: 'esta execução não tem plano gravado — retomar só serve para continuar trabalho já planeado' } };
+    const final = await correr({ repo, motor, objetivo: run.objetivo, runId: id, aprovado, retomar, env });
     return { status: 200, corpo: { run: final, passos: await repo.ia.steps.porRun(id) } };
   }
 

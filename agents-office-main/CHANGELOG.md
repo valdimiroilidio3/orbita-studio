@@ -30,7 +30,8 @@ tarefa, agentes com ferramentas reais, um Control Center, e provas — não ecr�
 - **`api/_ia/agentes.mjs`** — os oito agentes (01 Orchestrator … 08 Reviewer), cada um com
   instruções, ferramentas fechadas e critérios de conclusão.
 - **`api/_ia/orquestrador.mjs`** — plano → passos → ferramentas → revisão independente, tudo
-  gravado passo a passo (`orbita_ai_runs`/`steps`), com cancelamento verificado entre passos.
+  gravado passo a passo (`orbita_ai_runs`/`steps`), com cancelamento verificado entre passos e
+  **retomar** que continua do plano gravado sem repetir os passos já concluídos.
 - **`api/_ia/rotas.mjs`** — `/ia/estado`, `/ia/agentes`, `/ia/modelos`, `/ia/modelos/descobrir`,
   `/ia/testar`, `/ia/chat`, `/ia/runs` (+correr/abrir/cancelar), `/ia/uso`, `/ia/config`.
 - **`supabase/orbita_ia.sql`** — quatro tabelas novas, RLS fechado, só `service_role`.
@@ -74,7 +75,9 @@ tarefa, agentes com ferramentas reais, um Control Center, e provas — não ecr�
   **orquestração completa** (plano → 2 passos → ferramenta a criar um lead → revisão aprovada,
   com passos e uso gravados), falha honesta sem fornecedor, cancelamento, e as rotas `/ia/*`
   incluindo o teste real a marcar «funcional» e uma chave recusada a marcar «erro».
-- Continua tudo o resto: **201 testes** no total, `mesa.smoke` e `scene.smoke` exit 0.
+- **`ia.test.mjs` — 33 provas** com o retomar incluído: plano gravado → corre só o passo em falta,
+  reaproveita o contexto do passo anterior, não volta a pedir plano; e retomar sem plano é 409.
+- Continua tudo o resto: **204 testes** no total, `mesa.smoke` e `scene.smoke` exit 0.
 
 ### O que falta (dito, não escondido)
 

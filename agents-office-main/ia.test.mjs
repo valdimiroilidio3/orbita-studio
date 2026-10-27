@@ -319,7 +319,51 @@ test('orquestrador: execução cancelada antes de começar fica cancelada', asyn
   assert.equal(run.estado, 'cancelado');
 });
 
+test('orquestrador: retomar continua do plano gravado e não repete o que já está feito', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl, pedidos } = fornecedorFalso();
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+  const plano = {
+    passos: [
+      { agente: 'research', titulo: 'Ver o que já existe', instrucao: 'resume a mesa', criterio: 'números reais' },
+      { agente: 'backend', titulo: 'Guardar o lead', instrucao: 'regista o que falta', criterio: 'lead gravado' },
+    ],
+    limites: ['sem pesquisa web'],
+  };
+  const criada = await repo.ia.runs.criar({ objetivo: 'retomar isto', estado: 'parcial', plano });
+  await repo.ia.steps.criar({ run_id: criada.id, ordem: 1, agente: 'research', titulo: 'Ver o que já existe', estado: 'concluido', saida: '3 leads na base' });
+
+  const run = await correr({ repo, motor, objetivo: criada.objetivo, runId: criada.id, retomar: true, env: envFalso });
+
+  assert.equal(run.estado, 'concluido', `esperava concluido, veio ${run.estado}: ${run.erro || ''}`);
+  const passos = await repo.ia.steps.porRun(criada.id);
+  assert.equal(passos.filter((x) => x.ordem === 1).length, 1, 'o passo já concluído foi repetido');
+  assert.equal(passos.some((x) => x.ordem === 2 && x.agente === 'backend'), true, 'o passo em falta não correu');
+  assert.match(run.resultado, /3 leads na base/, 'o contexto do passo anterior não foi reaproveitado');
+  const planeou = pedidos.filter((x) => String(x.corpo.messages?.[0]?.content || '').includes('Responde SÓ com um objecto JSON'));
+  assert.equal(planeou.length, 0, 'voltou a pedir um plano em vez de usar o gravado');
+  assert.equal(run.revisao.decisao, 'aprovado');
+});
+
+test('orquestrador: retomar sem plano gravado continua a planear do zero', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso();
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+  const criada = await repo.ia.runs.criar({ objetivo: 'sem plano ainda', estado: 'novo' });
+  const run = await correr({ repo, motor, objetivo: criada.objetivo, runId: criada.id, retomar: true, env: envFalso });
+  assert.equal(run.estado, 'concluido');
+  assert.equal(run.plano.passos.length, 2);
+});
+
 /* ---------- 7 · rotas ---------- */
+test('rota /ia/runs/:id/correr: retomar sem plano é recusado com razão', async () => {
+  const repo = createMemRepo();
+  const r0 = await repo.ia.runs.criar({ objetivo: 'sem plano', estado: 'parcial' });
+  const r = await rotasIA(repo, { caminho: `/ia/runs/${r0.id}/correr`, metodo: 'POST', corpo: { retomar: true }, env: envFalso });
+  assert.equal(r.status, 409);
+  assert.match(r.corpo.error, /não tem plano gravado/);
+});
+
 test('rota /ia/estado: sem chaves diz que não há motor, e nunca devolve a chave', async () => {
   const repo = createMemRepo();
   const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: {} });

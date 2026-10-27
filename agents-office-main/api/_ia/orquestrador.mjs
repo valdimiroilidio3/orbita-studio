@@ -92,7 +92,10 @@ const blocoContexto = (resumos) => resumos.map((r, i) => `${i + 1}. [${r.agente}
  * Corre um trabalho de ponta a ponta. Devolve o run final (como está na base).
  * `aoMudar(run)` é chamado a cada passo — a interface lê da base, não disto.
  */
-export async function correr({ repo, motor, objetivo, runId = null, aoMudar = () => {}, aprovado = false, limites = {}, env = process.env }) {
+export async function correr({
+  repo, motor, objetivo, runId = null, aoMudar = () => {}, aprovado = false,
+  limites = {}, env = process.env, retomar = false,
+}) {
   const orc = orcamento({ maxChamadas: limites.maxChamadas || 16, maxTokens: limites.maxTokens || 160000 });
   const ctx = { repo, aprovado, allowFerramentas: true };
 
@@ -100,7 +103,10 @@ export async function correr({ repo, motor, objetivo, runId = null, aoMudar = ()
     ? await repo.ia.runs.porId(runId)
     : await repo.ia.runs.criar({ objetivo: String(objetivo || '').slice(0, 2000), estado: 'a_planear', plano: null, agente: 'orchestrator' });
   if (!run) throw new Error('execução não encontrada');
-  if (run.estado === 'cancelado') return run;   // cancelada antes de começar: não se começa
+  /* retomar = continuar de um plano já gravado, sem repetir os passos que já
+     ficaram concluídos. Sem plano (ou sem pedido de retomar), é começar do zero. */
+  const retomando = !!(runId && retomar && run.plano && Array.isArray(run.plano.passos) && run.plano.passos.length);
+  if (run.estado === 'cancelado' && !retomando) return run;   // cancelada antes de começar: não se começa
   const mudar = async (campos) => {
     const r = await repo.ia.runs.actualizar(run.id, campos);
     try { aoMudar(r); } catch { /* quem escuta não pode partir a execução */ }
@@ -114,34 +120,42 @@ export async function correr({ repo, motor, objetivo, runId = null, aoMudar = ()
       return await mudar({ estado: 'falhou', erro, fim: new Date().toISOString() });
     }
 
-    /* --- 2/3 · planear --- */
-    const contextoMesa = await executarFerramenta('mesa_resumo', {}, ctx);
-    const planoR = await motor.pedir('plano', [
-      { role: 'system', content: `${promptDe('orchestrator')}
+    /* --- 2/3 · planear (ou reaproveitar o plano de uma execução anterior) --- */
+    let plano;
+    if (retomando) {
+      plano = run.plano;
+      await mudar({ estado: 'a_executar', erro: null, plano });
+    } else {
+      const contextoMesa = await executarFerramenta('mesa_resumo', {}, ctx);
+      const planoR = await motor.pedir('plano', [
+        { role: 'system', content: `${promptDe('orchestrator')}\n\nResponde SÓ com um objecto JSON, sem prosa, neste formato:\n{\"passos\":[{\"agente\":\"research|design|frontend|backend|qa|creative|reviewer\",\"titulo\":\"...\",\"instrucao\":\"...\",\"criterio\":\"...\"}],\"limites\":[\"o que não é possível nesta instalação\"]}` },
+        { role: 'user', content: `Objectivo do dono:\n${objetivo}\n\nContexto real da mesa agora: ${JSON.stringify(contextoMesa.dados || {})}\n\nFerramentas que existem: ${Object.keys(FERRAMENTAS).join(', ')}.\nNÃO existem: ${INDISPONIVEIS.map((i) => i.id).join(', ')}.` },
+      ], { agente: 'orchestrator', maxTokens: 1400, orc });
 
-Responde SÓ com um objecto JSON, sem prosa, neste formato:
-{"passos":[{"agente":"research|design|frontend|backend|qa|creative|reviewer","titulo":"...","instrucao":"...","criterio":"..."}],"limites":["o que não é possível nesta instalação"]}` },
-      { role: 'user', content: `Objectivo do dono:\n${objetivo}\n\nContexto real da mesa agora: ${JSON.stringify(contextoMesa.dados || {})}\n\nFerramentas que existem: ${Object.keys(FERRAMENTAS).join(', ')}.\nNÃO existem: ${INDISPONIVEIS.map((i) => i.id).join(', ')}.` },
-    ], { agente: 'orchestrator', maxTokens: 1400, orc });
-
-    const plano = normalizarPlano(lerPlano(planoR.texto));
-    if (!plano) {
-      return await mudar({
-        estado: 'falhou', modelo: planoR.modelo, fornecedor: planoR.fornec,
-        erro: `o modelo não devolveu um plano legível (${String(planoR.texto || '').slice(0, 200)})`,
-        fim: new Date().toISOString(),
-      });
+      plano = normalizarPlano(lerPlano(planoR.texto));
+      if (!plano) {
+        return await mudar({
+          estado: 'falhou', modelo: planoR.modelo, fornecedor: planoR.fornec,
+          erro: `o modelo não devolveu um plano legível (${String(planoR.texto || '').slice(0, 200)})`,
+          fim: new Date().toISOString(),
+        });
+      }
+      await mudar({ estado: 'a_executar', plano, modelo: planoR.modelo, fornecedor: planoR.fornec });
     }
-    await mudar({ estado: 'a_executar', plano, modelo: planoR.modelo, fornecedor: planoR.fornec });
 
-    /* --- 4/5 · executar --- */
-    const resumos = [];
-    let ordem = 0;
-    for (const passo of plano.passos) {
+    /* --- 4/5 · executar (e, ao retomar, saltar o que já está concluído) --- */
+    const anteriores = retomando ? await repo.ia.steps.porRun(run.id) : [];
+    const jaFeitos = anteriores
+      .filter((x) => x.estado === 'concluido' && x.agente !== 'reviewer')
+      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+    const feitos = new Set(jaFeitos.map((x) => x.ordem));
+    const resumos = jaFeitos.map((x) => ({ agente: x.agente, titulo: x.titulo, saida: x.saida || '(vazio)', ferramentas: x.ferramentas || [] }));
+    for (const [indice, passo] of plano.passos.entries()) {
+      const ordem = indice + 1;
       const actual = await repo.ia.runs.porId(run.id);
       if (actual?.estado === 'cancelado') return mudar({ estado: 'cancelado', fim: new Date().toISOString() });
+      if (feitos.has(ordem)) continue;   // retomada: não se repete trabalho já feito
 
-      ordem += 1;
       const step = await repo.ia.steps.criar({
         run_id: run.id, ordem, agente: passo.agente, titulo: passo.titulo,
         estado: 'a_correr', entrada: passo.instrucao,
@@ -196,7 +210,7 @@ Responde SÓ com JSON: {"decisao":"aprovado|com_ressalvas|rejeitado","justificac
       };
       revisao.fornecedor = rv.fornec;
       await repo.ia.steps.criar({
-        run_id: run.id, ordem: ordem + 1, agente: 'reviewer', titulo: 'Revisão final',
+        run_id: run.id, ordem: plano.passos.length + 1, agente: 'reviewer', titulo: 'Revisão final',
         estado: 'concluido', saida: revisao.justificacao, modelo: revisao.modelo, fornecedor: revisao.fornecedor,
       });
     } catch (e) {

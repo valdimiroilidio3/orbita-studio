@@ -139,6 +139,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
   const passos = S.iaRun?.passos || [];
   const [rotuloRun, tipoRun] = ESTADO_RUN[run?.estado] || ['—', ''];
   const aCorrer = ['a_planear', 'a_executar'].includes(run?.estado);
+  /* retomar só faz sentido quando há plano gravado e a execução parou a meio */
+  const podeRetomar = !aCorrer && !!run?.plano?.passos?.length && ['falhou', 'parcial', 'cancelado', 'aguarda_aprovacao'].includes(run?.estado);
 
   const painelRun = run ? `
     <div class="card ia-run">
@@ -148,6 +150,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
         </div>
         <div class="ia-acts">
           ${aCorrer ? `<button class="btn quiet small" data-act="ia-cancelar" data-id="${run.id}">Cancelar</button>` : ''}
+          ${podeRetomar ? `<button class="btn primary small" data-act="ia-retomar" data-id="${run.id}">Retomar do passo em falta</button>` : ''}
           <button class="btn quiet small" data-act="ia-recarregar">Actualizar</button>
         </div>
       </div>
@@ -286,24 +289,34 @@ export async function accaoIA(nome, el, api) {
     return true;
   }
 
+  /* dispara uma execução e acompanha-a pelo servidor; não se espera pelo fim */
+  const lancar = (runId, extra) => {
+    seguir(api, runId);
+    paint();
+    call(`/ia/runs/${runId}/correr`, 'POST', extra || {}).then(async () => {
+      pararSeguimento();
+      try { S.iaRun = await call(`/ia/runs/${runId}`); } catch { /* fica o último */ }
+      S.iaRuns = (await call('/ia/runs').catch(() => ({ runs: [] }))).runs || [];
+      paint();
+    }).catch((e) => { pararSeguimento(); toast(e.message, true); paint(); });
+  };
+
   if (nome === 'ia-correr') {
     const obj = String(S.iaObjetivo || (document.getElementById('iaObjetivo')?.value) || '').trim();
     if (obj.length < 6) { toast('descreve o trabalho com mais de 5 caracteres', true); return true; }
     try {
       const criada = await call('/ia/runs', 'POST', { objetivo: obj });
-      const runId = criada.run.id;
       S.iaObjetivo = '';
       S.iaRun = { run: criada.run, passos: [] };
-      seguir(api, runId);
-      paint();
-      // não se espera: o trabalho pode demorar; a vista acompanha pelo servidor
-      call(`/ia/runs/${runId}/correr`, 'POST', {}).then(async () => {
-        pararSeguimento();
-        try { S.iaRun = await call(`/ia/runs/${runId}`); } catch { /* fica o último */ }
-        S.iaRuns = (await call('/ia/runs').catch(() => ({ runs: [] }))).runs || [];
-        paint();
-      }).catch((e) => { pararSeguimento(); toast(e.message, true); paint(); });
+      lancar(criada.run.id);
+      toast('Execução criada — o plano aparece quando o Orchestrator responder.');
     } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-retomar') {
+    try { lancar(id, { retomar: true }); toast('A retomar do passo em falta — os passos já feitos não se repetem.'); }
+    catch (e) { toast(e.message, true); }
     return true;
   }
 
