@@ -50,6 +50,22 @@ tarefa, agentes com ferramentas reais, um Control Center, e provas — não ecr�
 - **Nunca** promete o que não há: pesquisa web, execução de código, ficheiros e imagens estão
   declarados como indisponíveis, com a razão.
 
+### Provas em produção (27 out 2026, `orbita-agentes.vercel.app`)
+
+1. `/api/setup?…&smoke=1` aplicou `orbita_mesa.sql` + `orbita_ia.sql` nas dez tabelas e provou a
+   escrita/leitura/limpeza nas quatro tabelas da IA (`runCriado`, `runRelido`, `stepCriado`,
+   `usoRegistado`, `configGravada`, `limpeza` — tudo `true`, `restam: 0`). **As tabelas existem.**
+2. `/api/health` responde `versao:"1.18.0"` e `ia.fornecedoresComChave:["vercel"]`: o motor
+   encontrou o AI Gateway **sem chave nenhuma**, pelo token OIDC que a Vercel injecta em cada
+   pedido (`x-vercel-oidc-token` → `Bearer`). O token não é guardado nem devolvido.
+3. `/api/setup?…&ia=1` fez um pedido real ao Gateway e um trabalho completo. Resultado honesto:
+   o Gateway autenticou (o token foi aceite) e **recusou por falta de cartão**:
+   *«AI Gateway requires a valid credit card on file to service requests»*. O `run` fechou
+   `falhou` com essa frase, os dois modelos da cadeia tentados, zero passos inventados.
+   Ou seja: o caminho está construído e testado ponta a ponta; falta um cartão **ou** uma chave
+   de um fornecedor sem cartão (Groq, Google AI Studio, Cerebras, OpenRouter).
+4. O `/api/setup` era temporário: foi **apagado** e o `SETUP_TOKEN` também, no mesmo dia.
+
 ### Provas
 
 - **`ia.test.mjs` — 30 provas, todas verdes**: os três dialetos (com `fetch` falso), classificação
