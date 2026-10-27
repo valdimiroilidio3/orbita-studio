@@ -257,3 +257,31 @@ Ver `docs/OPENMONTAGE.md`. Resumo: fila em `orbita_media_jobs`, worker com
 FFmpeg + Node, e o OpenMontage **por fora** do repositório (AGPL-3.0).
 
 Sem worker, um trabalho fica `indisponivel` com a razão — nunca «concluído».
+
+## 15. 1.19.1 · o que a produção ensinou
+
+Testar contra a Vercel e o Supabase reais (27 out 2026) desmentiu três certezas
+do 1.19.0. Ficam escritas para não voltarem:
+
+| o que o código dizia | o que a produção disse | o que mudou |
+|---|---|---|
+| «keyless está pronto» | estava pronto no estado e **fora** do router: `fornecedorActivo()` exigia chave | keyless entra na cadeia por direito próprio |
+| «o Kilo é anónimo, 200 req/h» | `403 — You need to sign in to use this model` | `keyless: false`, nota e limite corrigidos |
+| «o OVH serve sem chave» | verdade, mas o catálogo não tinha **nenhum** modelo dele | 9 modelos de chat vindos de `/v1/models` (lista real, sem ids inventados) |
+
+O que ficou provado com pedidos reais:
+
+- **OVH AI Endpoints, sem chave**: 22 modelos listados, resposta em ~0,8 s,
+  marcado `funcional` pelo `/ia/testar`.
+- **Vercel AI Gateway por OIDC**: o token é aceite como autenticação (aparece
+  mascarado), mas o Gateway recusa servir sem cartão:
+  `AI Gateway requires a valid credit card on file`.
+- **Registo de uso**: as tentativas falhadas ficam em `orbita_ai_uso` com o erro
+  e a latência — a interface não inventa métricas.
+- **Limite dos keyless**: o OVH limita por IP (~2 pedidos/min). Chega para
+  provar que responde; **não** chega para uma execução de vários passos. Sem
+  chave própria, oito agentes não correm.
+
+O esquema foi aplicado em produção por um endpoint temporário
+(`/api/setup`, protegido por token, já removido): `orbita_ai_memoria` e
+`orbita_media_jobs` existem na base, e `orbita_ai_uso` já tem linhas reais.

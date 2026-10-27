@@ -62,12 +62,13 @@ export default async function handler(req, res) {
           fornecedoresConfigurados: est.fornecedores.filter((f) => f.configurado).map((f) => `${f.id}${f.configurado && !f.variavel ? ' (sem chave)' : ''}`),
           testes: {},
         };
-        for (const f of est.fornecedores.filter((x) => x.configurado)) {
+        const so = q.get('so');   // testar só um fornecedor (poupa quota dos keyless)
+        for (const f of est.fornecedores.filter((x) => x.configurado && (!so || x.id === so))) {
           try { saida.ia.testes[f.id] = await motor.testar(f.id); } catch (e) { saida.ia.testes[f.id] = { ok: false, erro: String(e.message).slice(0, 200) }; }
           if (Object.keys(saida.ia.testes).length >= 3) break;   // não varrer 76 fornecedores
         }
         const algumOk = Object.values(saida.ia.testes).some((t) => t.ok);
-        if (algumOk) {
+        if (algumOk && !so) {
           const run = await correr({ repo, motor, objetivo: 'Dizer ao dono quantos leads existem agora, com o número real, e registar o resultado numa nota de memória.', orc: null });
           const passos = await repo.ia.steps.porRun(run.id);
           saida.ia.run = {
