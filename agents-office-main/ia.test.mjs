@@ -37,9 +37,10 @@ test('catálogo: comChave só vê variáveis com valor (mais os keyless), e a m�
      é isso que os torna utilizáveis já; os outros continuam a precisar dela. */
   const semNada = comChave({});
   assert.equal(semNada.every((x) => x.semChave), true, 'apareceu um fornecedor com chave sem haver chave');
-  /* 27 out 2026: o Kilo fechou o anónimo (medido em produção), por isso só o
-     OVH continua a estar «pronto» sem chave nenhuma. */
-  assert.deepEqual(semNada.map((x) => x.id).sort(), ['ovh']);
+  /* 27 out 2026: o Kilo fechou o anónimo (medido em produção); sobram o OVH
+     (anónimo, ~2 pedidos/min) e o LLM7 (anónimo, 100/h — o freellmapi diz que
+     os modelos básicos respondem sem chave). */
+  assert.deepEqual(semNada.map((x) => x.id).sort(), ['llm7', 'ovh']);
   assert.equal(comChave({ OPENROUTER_API_KEY: CHAVE }).some((x) => x.id === 'openrouter' && x.variavel === 'OPENROUTER_API_KEY'), true);
   const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' }).filter((x) => !x.semChave);
   assert.deepEqual(vistos, [{ id: 'groq', variavel: 'GROQ_API_KEY' }]);
@@ -143,7 +144,7 @@ test('router: só fornecedores utilizáveis (chave ou keyless), e o tipo certo p
   /* sem chave nenhuma só entram os keyless — e o OVH, que responde anónimo,
      agora traz modelos reais ao catálogo (antes não trazia nenhum). */
   assert.ok(semChave.length > 0);
-  assert.ok(semChave.every((m) => m.fornec === 'ovh'));
+  assert.ok(semChave.every((m) => FORNECEDORES[m.fornec].keyless), 'entrou um fornecedor com chave obrigatória sem chave');
   const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' }, desligados: ['ovh'] });
   assert.ok(comOpenRouter.length > 0);
   assert.ok(comOpenRouter.every((m) => m.fornec === 'openrouter'));
@@ -167,7 +168,7 @@ test('router: preferido do agente vai à frente, e desligado fica de fora', () =
   /* sem chave nenhuma o router ainda tem o OVH (anónimo); desligando os
      keyless é que fica sem nada — antes ficava sem nada mesmo com eles vivos. */
   assert.equal(diagnostico({ chaves: {} }).pronto, true);
-  assert.deepEqual(diagnostico({ chaves: {}, desligados: ['ovh'] }).pronto, false);
+  assert.deepEqual(diagnostico({ chaves: {}, desligados: ['ovh', 'llm7', 'kilo'] }).pronto, false);
 });
 
 test('router: um fornecedor keyless entra na cadeia sem haver chave dele', () => {
@@ -303,7 +304,7 @@ test('orquestrador: plano → passos → ferramenta → revisão, tudo gravado n
   const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'lead_criar', args: { nome: 'Café Central', cidade: 'Coimbra' } } });
   /* o teste fixa o fornecedor: o OVH (keyless) seria candidato e este falso só
      fala o dialeto que o teste preparou. Desligar é uma função real do motor. */
-  await repo.ia.config.gravar('desligados', ['ovh', 'kilo']);
+  await repo.ia.config.gravar('desligados', ['ovh', 'kilo', 'llm7']);
   const motor = criarMotor({ repo, env: envFalso, fetchImpl });
   const run = await correr({ repo, motor, objetivo: 'Encontrar um cliente para o site do Café Central', env: envFalso });
 
@@ -328,7 +329,7 @@ test('orquestrador: sem fornecedor pronto (keyless desligados), falha com a raz�
   const repo = createMemRepo();
   /* 1.19.0: por omissão há dois keyless prontos; para provar a falha honesta,
      desligam-se os dois — é o mesmo caminho de quem não tem nada configurado. */
-  await repo.ia.config.gravar('desligados', ['kilo', 'ovh']);
+  await repo.ia.config.gravar('desligados', ['kilo', 'ovh', 'llm7']);
   const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
   const run = await correr({ repo, motor, objetivo: 'qualquer coisa', env: {} });
   assert.equal(run.estado, 'falhou');
@@ -397,7 +398,7 @@ test('rota /ia/estado: só os keyless ficam prontos sem chave, e nunca devolve a
   /* Só o OVH funciona sem chave (o Kilo passou a exigir conta — medido a
      27 out 2026) → há motor, mas nada está «funcional» até um teste real. */
   const prontos = r.corpo.fornecedores.filter((f) => f.configurado).map((f) => f.id).sort();
-  assert.deepEqual(prontos, ['ovh']);
+  assert.deepEqual(prontos, ['llm7', 'ovh']);
   assert.equal(r.corpo.fornecedores.every((f) => f.estado !== 'funcional'), true, 'alguém ficou «funcional» sem teste');
   assert.ok(!JSON.stringify(r.corpo).includes(CHAVE));
 });
