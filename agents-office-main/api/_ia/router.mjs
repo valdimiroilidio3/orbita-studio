@@ -70,10 +70,24 @@ export function cadeia(tipo, {
   const desejadas = alvo.gosta || [];
   const jaTentados = new Set(tentados.map((t) => `${t.fornec}\u0000${t.modelo}`));
 
-  const candidatos = catalogo
+  const disponiveis = catalogo
     .filter((m) => fornecedorActivo(m.fornecedor, { chaves, desligados }))
-    .filter((m) => exigidas.every((r) => temEtiqueta(m, r)))
     .filter((m) => !(semRepetir && jaTentados.has(`${m.fornecedor}\u0000${m.modelo}`)));
+
+  /* Exigir a etiqueta é a regra; mas se o único fornecedor disponível não a
+     declarar, é melhor tentar do que responder «todos os modelos falharam»
+     sem ter chamado ninguém. A cadeia leva `relaxado: true` e o uso fica
+     registado com essa marca — não se esconde a diferença.
+     (Visto a 27 out 2026: só o LLM7 respondia e nenhum modelo dele declara
+     `raciocinio`, por isso o passo «plano» ficava sem candidatos.) */
+  let relaxado = false;
+  let candidatos = disponiveis.filter((m) => exigidas.every((r) => temEtiqueta(m, r)));
+  if (!candidatos.length && !exigidas.includes('visao')) {
+    /* Visão não se relaxa: um modelo sem olhos não lê uma imagem. Mais vale
+       dizer que não há, do que aceitar um trabalho que não sabe fazer. */
+    relaxado = true;
+    candidatos = disponiveis.filter((m) => temEtiqueta(m, 'texto'));
+  }
 
   const pontos = (m) => {
     let p = 0;
@@ -91,7 +105,7 @@ export function cadeia(tipo, {
   return [...candidatos]
     .sort((a, b) => pontos(b) - pontos(a) || String(a.modelo).localeCompare(String(b.modelo)))
     .slice(0, limite)
-    .map((m) => ({ fornec: m.fornecedor, modelo: m.modelo, etiquetas: m.etiquetas || [], janela: m.janela || 0, preco: m.preco || [0, 0] }));
+    .map((m) => ({ fornec: m.fornecedor, modelo: m.modelo, etiquetas: m.etiquetas || [], janela: m.janela || 0, preco: m.preco || [0, 0], relaxado }));
 }
 
 /** O que este router sabe sobre o mundo, para a interface poder ser honesta. */
