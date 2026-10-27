@@ -67,6 +67,21 @@ prová-lo. `GET /api/rpc?caminho=/ops/summary` fica como porta de leitura para d
 (nunca aceita escrita por GET); `GET /api/health` é um ficheiro próprio, plano, que responde
 no caminho exacto.
 
+### A barra não aparecia com a base ligada
+
+`paint()` só punha a barra de estado quando `S.modoLocal` era verdade. Com a base a responder,
+a mesa funcionava e não dizia onde — que é exactamente o que não pode acontecer. Agora há dois
+estados visíveis: **verde** («Base de dados ligada — o que escreves aqui fica guardado e anda
+contigo entre aparelhos») ou **âmbar** (modo local, com o motivo do 503 escrito por extenso).
+`mesa.smoke` passa a cobrir os três casos: 404 (sem `/api`), 503 (base em baixo) e envelopes do
+`/api/rpc` (base a responder). Em produção, `/app` mostra a barra verde.
+
+### Limitação declarada: ainda não há contas
+
+O `/api` é público: quem souber o endereço pode ler e escrever na mesa. Não é um descuido —
+é o passo que falta (login com Supabase Auth, e o RLS a sério por utilizador). Até lá, a única
+protecção é o endereço não ser divulgado. Fica escrito aqui e no relatório ao dono.
+
 ### Provas
 
 - **`api.test.mjs` (novo, 14 testes)**: contrato completo (leads com dedupe, projetos à mão e a
