@@ -1,3 +1,21 @@
+## 1.26.0 — 27 out 2026 · Verificar em produção sem escrever nada
+
+A cópia de segurança (1.23.0) e a cifra (1.25.0) já existiam. Faltava poder
+**verificar** as duas na aplicação publicada, onde não há cliente que faça POST.
+Duas rotas passam a aceitar leitura:
+
+- **`GET /backup/teste`** — faz o ensaio completo (exportar → reler → conferir a
+  marca → restaurar em memória) e **não** escreve no registo de alterações. O
+  POST continua a ser o botão «Testar cópia», e esse assina.
+- **`GET /backup/cifrado`** — devolve o pacote cifrado por leitura pura, sem
+  escrever nada nem devolver a cópia em claro ao lado.
+
+Nada disto mudou o comportamento anterior: os testes de 1.23.0 (em
+`controlo.test.mjs`) continuam a passar, e o módulo `api/_backup.mjs` não foi
+tocado.
+
+Prova: 3 testes em `backup.test.mjs`; suite completa verde.
+
 ## 1.25.2 — 27 out 2026 · Etiquetas do OpenStreetMap não são a atividade
 
 A verificação seguinte, no mesmo sítio, apanhou outra: a Clínica Delille saía com

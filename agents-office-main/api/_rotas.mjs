@@ -432,7 +432,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   }
 
   /* ---- 1.25.0 · a cópia que sai do servidor pode sair cifrada ---- */
-  if (caminhoLimpo === '/backup/cifrado' && m === 'POST') {
+  if (caminhoLimpo === '/backup/cifrado' && (m === 'POST' || m === 'GET')) {
     const { exportar } = await import('./_backup.mjs');
     const c = await import('./_cripto.mjs');
     const k = c.chaveMestre(env);
@@ -469,10 +469,11 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { ok: true, copia } };
   }
 
-  if (caminhoLimpo === '/backup/teste' && m === 'POST') {
+  if (caminhoLimpo === '/backup/teste' && (m === 'POST' || m === 'GET')) {
     const { testar } = await import('./_backup.mjs');
     const r = await testar(repo);
-    await repo.atividade.add('config', `cópia de segurança testada: ${r.ok ? `ok, ${r.total} linhas` : `falhou (${r.problemas[0] || 'sem razão'})`}`).catch(() => {});
+    /* por GET é diagnóstico: faz o ensaio todo mas não assina o registo */
+    if (m === 'POST') await repo.atividade.add('config', `cópia de segurança testada: ${r.ok ? `ok, ${r.total} linhas` : `falhou (${r.problemas[0] || 'sem razão'})`}`).catch(() => {});
     return { status: 200, corpo: r };
   }
 
