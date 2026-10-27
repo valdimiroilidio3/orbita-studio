@@ -41,7 +41,13 @@
   ],
   "functions": {
     "api/prova1.mjs": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "supabase/**"
+    },
+    "api/setup.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "supabase/**"
     }
-  }
+  },
+  "build": {}
 }
