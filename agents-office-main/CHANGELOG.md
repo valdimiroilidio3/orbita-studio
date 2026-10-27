@@ -1,3 +1,31 @@
+## 1.25.0 — 27 out 2026 · A pesquisa passa a existir na aplicação publicada
+
+Até aqui, procurar leads só funcionava em `serve.mjs`, ou seja, na máquina de quem
+abria o escritório. Na versão publicada não havia pesquisa nenhuma — e as duas
+chaves que o dono deu não serviam de nada. Agora:
+
+- **Geoapify** (`GEOAPIFY_API_KEY`): geocodifica a zona e devolve empresas reais
+  do OpenStreetMap por categoria (`/pesquisa/leads`). A atividade escrita em
+  português é traduzida para a categoria do Geoapify (26 atividades); o que não
+  está na tabela é **recusado com a lista**, não substituído por negócios ao acaso.
+- **Tavily** (`TAVILY_API_KEY`): pesquisa web com excertos e resposta curta
+  (`/pesquisa/web`) e extracção de uma página já conhecida (`/pesquisa/pagina`).
+  Resultados da web **não** entram no funil: dão contexto, não são leads.
+- **Google** continua disponível, mas exige chave com facturação ligada; sem ela
+  o estado diz que falta, em vez de fingir que procura.
+- **Centro de Controlo**: as duas fontes aparecem no inventário com o botão
+  «Testar ligação» a fazer um pedido real (GET no Geoapify, POST na Tavily).
+- **Cifra** (`api/_cripto.mjs`, AES-256-GCM): `POST /backup/cifrado` devolve a
+  cópia de segurança cifrada e `POST /backup/decifrar` confirma-a sem despejar
+  dados. Chave mestra de `ORBITA_CHAVE` ou derivada (HKDF) da chave da base.
+- **Guarda**: `segredos.test.mjs` falha se alguma chave com formato verdadeiro
+  entrar num ficheiro versionado.
+
+Provas: 16 testes em `pesquisa.test.mjs`, 9 em `cripto.test.mjs`, 3 em
+`segredos.test.mjs`; suite completa verde. **Limites:** a base não está cifrada
+campo a campo, a aplicação continua sem autenticação, e a quota gratuita dos
+fornecedores não é garantida.
+
 ## 1.24.0 — 27 out 2026 · Ligações por conector, sem confundir com chaves
 
 - **Um conector não é uma chave.** O assistente pode ter o Vercel ligado por

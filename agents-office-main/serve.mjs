@@ -55,6 +55,7 @@ import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
+import * as pesquisa from './api/_pesquisa.mjs'; // 27 out 2026 (1.25.0): Geoapify (leads) e Tavily (contexto), as mesmas do servidor
 import * as ops from './src/ops/index.mjs';
 import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
 import { createBus } from './forge/bus.mjs';
@@ -941,6 +942,40 @@ const server = http.createServer(async (req, res) => {
         console.log(`🔎 ${kind === 'places' ? 'Places' : 'Pesquisa web'}: "${[b.what, b.where].filter(Boolean).join(' em ') || b.q}" → ${found.length} resultados · +${saved.added} novos`);
         return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, baseDeDados: db, results: found.slice(0, limit) });
       } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
+    }
+    // ---- 1.25.0: as fontes que não pedem cartão, iguais às da função publicada ----
+    if (url.pathname === '/api/pesquisa' && req.method === 'GET') {
+      return json(res, 200, { ok: true, fontes: pesquisa.estado(), google: google.state(), leads: google.stats(DATA) });
+    }
+    if (url.pathname === '/api/pesquisa/leads' && req.method === 'POST') {
+      const b = await body(req);
+      const t0 = Date.now();
+      try {
+        const r = await pesquisa.procurarLeads({
+          oQue: b.oQue || b.what, onde: b.onde || b.where, categoria: b.categoria || null,
+          limite: Math.max(1, Math.min(50, +b.limite || +b.limit || 20)), raio: +b.raio || 12000,
+          pais: b.pais || null, lang: b.lang || 'pt',
+        });
+        let guardados = null;
+        if (b.guardar !== false && r.leads.length && OPS?.leads) {
+          try {
+            guardados = OPS.leads.importLeads(OPS.db, r.leads.map(l => ({
+              name: l.nome, city: l.cidade, phone: l.telefone, email: l.email, website: l.website,
+              category: l.categoria, source: 'geoapify', notes: `nota ${l.nota} · ${l.porque}`,
+            })), 'pesquisa', 'geoapify');
+          } catch (e) { console.warn('  pesquisa: não consegui guardar na base — ' + e.message); }
+        }
+        console.log(`🔎 Geoapify: ${r.pedido.oQue || r.categoria} em ${r.pedido.onde} → ${r.encontrados} empresas`);
+        return json(res, 200, { ok: true, ms: Date.now() - t0, ...r, guardados });
+      } catch (e) { return json(res, 502, { ok: false, ms: Date.now() - t0, error: e.message }); }
+    }
+    if (url.pathname === '/api/pesquisa/web' && req.method === 'POST') {
+      const b = await body(req);
+      const t0 = Date.now();
+      try {
+        const r = await pesquisa.pesquisarWeb({ consulta: b.consulta || b.q, limite: Math.max(1, Math.min(20, +b.limite || 8)), profundidade: b.profundidade || 'basic' });
+        return json(res, 200, { ok: true, ms: Date.now() - t0, ...r, nota: 'a web dá contexto, não leads — nada foi escrito no funil' });
+      } catch (e) { return json(res, 502, { ok: false, ms: Date.now() - t0, error: e.message }); }
     }
     if (url.pathname === '/api/leads' && req.method === 'GET') {
       const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));

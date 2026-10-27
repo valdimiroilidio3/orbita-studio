@@ -144,6 +144,16 @@ const SERVICOS = [
     cabecalhos: (e) => ({ Authorization: `Bearer ${e.RESEND_API_KEY}` }),
     leitura: (j) => (Array.isArray(j?.data) ? `${j.data.length} domínio(s)` : 'conta respondeu'),
   },
+  /* 1.25.0: as duas fontes de pesquisa do escritório. A sonda é a mesma função
+     que serve as rotas — um pedido real, não uma lista de boas intenções. */
+  {
+    id: 'geoapify', name: 'Geoapify (empresas)', kind: 'dados', env: ['GEOAPIFY_API_KEY'], docs: 'https://myprojects.geoapify.com',
+    sondar: async ({ env, fetchImpl }) => (await import('./_pesquisa.mjs')).testarFonte('geoapify', { env, fetchImpl }),
+  },
+  {
+    id: 'tavily', name: 'Tavily (pesquisa web)', kind: 'pesquisa', env: ['TAVILY_API_KEY'], docs: 'https://app.tavily.com',
+    sondar: async ({ env, fetchImpl }) => (await import('./_pesquisa.mjs')).testarFonte('tavily', { env, fetchImpl }),
+  },
 ];
 
 /** Faz o pedido de sonda a um serviço. Não inventa: sem chave, devolve o que falta. */
@@ -152,6 +162,18 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch }
   if (!s) return { ok: false, erro: 'integração desconhecida', codigo: 'desconhecida' };
   const faltam = s.env.filter((v) => !env[v]);
   if (faltam.length) return { ok: false, erro: `falta ${faltam.join(' e ')} no ambiente`, codigo: 'semchave', faltam };
+  /* 1.25.0: algumas fontes precisam de mais do que um GET (a Tavily é POST).
+     Quem tem `sondar` trata do seu próprio pedido; as restantes seguem o caminho
+     genérico abaixo. */
+  if (typeof s.sondar === 'function') {
+    const inicio = Date.now();
+    try {
+      const r = await s.sondar({ env, fetchImpl });
+      return { ...r, quando: r.quando || new Date().toISOString(), ms: r.ms ?? (Date.now() - inicio) };
+    } catch (e) {
+      return { ok: false, ms: Date.now() - inicio, erro: String(e.message || e).slice(0, 200), codigo: e.codigo || 'erro' };
+    }
+  }
   const alvo = typeof s.sonda === 'function' ? s.sonda(env) : s.sonda;
   const inicio = Date.now();
   try {
@@ -320,6 +342,112 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
         porConector: list.filter((x) => x.conector).length,
       },
     } };
+  }
+
+  /* ---- 1.25.0 · a pesquisa, servida pela função e não só pela máquina do dono ----
+     Antes disto, procurar leads só acontecia em `serve.mjs`: na aplicação
+     publicada não havia pesquisa nenhuma. Aqui há três rotas, todas com chave
+     no servidor e nenhuma a inventar resultados. */
+  if (caminhoLimpo === '/pesquisa/estado' && m === 'GET') {
+    const p = await import('./_pesquisa.mjs');
+    const c = await import('./_cripto.mjs');
+    const k = c.chaveMestre(env);
+    return { status: 200, corpo: { ok: true, fontes: p.estado(env), cifra: { disponivel: !!k.chave, fonte: k.fonte, motivo: k.motivo } } };
+  }
+
+  if (caminhoLimpo === '/pesquisa/categorias' && m === 'GET') {
+    const { CATEGORIAS } = await import('./_pesquisa.mjs');
+    return { status: 200, corpo: { total: CATEGORIAS.length, categorias: CATEGORIAS.map((x) => ({ id: x.id, categoria: x.categoria })) } };
+  }
+
+  if (caminhoLimpo === '/pesquisa/leads' && m === 'POST') {
+    const p = await import('./_pesquisa.mjs');
+    const oQue = limpo(corpo?.oQue || corpo?.what || corpo?.atividade);
+    const onde = limpo(corpo?.onde || corpo?.where || corpo?.zona);
+    try {
+      const r = await p.procurarLeads({
+        oQue, onde,
+        categoria: limpo(corpo?.categoria) || null,
+        limite: Number(corpo?.limite || corpo?.limit) || 20,
+        raio: Number(corpo?.raio) || 12000,
+        pais: limpo(corpo?.pais) || null,
+        lang: limpo(corpo?.lang) || 'pt',
+      }, { env, fetchImpl });
+      let guardados = null;
+      if (corpo?.guardar !== false && r.leads.length) {
+        const linhas = r.leads.map((l) => ({
+          dedupe_key: dedupe(l.nome, l.cidade), name: l.nome, category: l.categoria || null,
+          city: l.cidade || null, phone: l.telefone || null, email: l.email || null,
+          website: l.website || null, source: 'geoapify', status: 'novo',
+          notes: `nota ${l.nota} · ${l.porque}`,
+        }));
+        const existentes = await repo.leads.existentes(linhas.map((l) => l.dedupe_key));
+        const chaves = new Set(existentes.map((e) => e.dedupe_key));
+        const novos = linhas.filter((l) => !chaves.has(l.dedupe_key));
+        if (novos.length) await repo.leads.inserir(novos);
+        guardados = { novos: novos.length, repetidos: linhas.length - novos.length, total: linhas.length };
+        await repo.atividade.add('pesquisa', `${oQue || r.categoria} em ${onde}: ${r.encontrados} encontrados, ${novos.length} novos`).catch(() => {});
+      }
+      return { status: 200, corpo: { ok: true, ...r, guardados } };
+    } catch (e) {
+      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
+    }
+  }
+
+  if (caminhoLimpo === '/pesquisa/web' && m === 'POST') {
+    const p = await import('./_pesquisa.mjs');
+    try {
+      const r = await p.pesquisarWeb({
+        consulta: limpo(corpo?.consulta || corpo?.q || corpo?.query),
+        limite: Number(corpo?.limite || corpo?.limit) || 8,
+        profundidade: limpo(corpo?.profundidade) || 'basic',
+      }, { env, fetchImpl });
+      /* resultados da web não são empresas: não entram no funil sem alguém os ler */
+      return { status: 200, corpo: { ok: true, ...r, guardados: null, nota: 'a web dá contexto, não leads — nada foi escrito no funil' } };
+    } catch (e) {
+      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
+    }
+  }
+
+  if (caminhoLimpo === '/pesquisa/pagina' && m === 'POST') {
+    const p = await import('./_pesquisa.mjs');
+    try {
+      const r = await p.extrairPagina({ url: limpo(corpo?.url) }, { env, fetchImpl });
+      return { status: 200, corpo: { ok: true, ...r } };
+    } catch (e) {
+      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
+    }
+  }
+
+  /* ---- 1.25.0 · a cópia que sai do servidor pode sair cifrada ---- */
+  if (caminhoLimpo === '/backup/cifrado' && m === 'POST') {
+    const { exportar } = await import('./_backup.mjs');
+    const c = await import('./_cripto.mjs');
+    const k = c.chaveMestre(env);
+    if (!k.chave) throw falha(503, `não posso cifrar: ${k.motivo}`);
+    const copia = await exportar(repo);
+    const pacote = c.cifrar(copia, k.chave);
+    return { status: 200, corpo: {
+      ok: true, formato: pacote.formato, alg: pacote.alg, bytes: pacote.bytes,
+      impressao: c.impressao(pacote), chaveDe: k.fonte, quando: new Date().toISOString(),
+      /* só o retrato da cópia: os dados vão cifrados, não ao lado deles */
+      copia: { quando: copia.quando, tabelas: Object.keys(copia.tabelas || {}), total: copia.total },
+      pacote,
+    } };
+  }
+
+  if (caminhoLimpo === '/backup/decifrar' && m === 'POST') {
+    const c = await import('./_cripto.mjs');
+    const k = c.chaveMestre(env);
+    if (!k.chave) throw falha(503, `não posso decifrar: ${k.motivo}`);
+    if (!corpo?.pacote) throw falha(400, 'falta o pacote cifrado');
+    try {
+      const aberto = c.decifrar(corpo.pacote, k.chave);
+      /* devolve só o retrato da cópia; os dados não voltam ao browser por esta rota */
+      return { status: 200, corpo: { ok: true, quando: aberto.quando, tabelas: Object.keys(aberto.tabelas || {}), total: aberto.total, contagens: aberto.contagens, marca: aberto.marca || null } };
+    } catch (e) {
+      throw falha(400, String(e.message || e));
+    }
   }
 
   /* ---- 1.23.0 · cópia de segurança que se pode testar ---- */

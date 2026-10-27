@@ -160,3 +160,32 @@ estar incompletos — quem lê confirma antes de contactar.
 
 Prova sem chave nenhuma, contra um Places falso local: `npm run test:integrations` (5 dos 18 testes
 são da camada Google: estado honesto, mapeamento, nota, deduplicação e o servidor MCP por stdio).
+
+
+---
+
+## 1.25.0 · As fontes que funcionam na aplicação publicada
+
+O que está acima descreve a pesquisa **local** (Google Places + Programmable
+Search), que precisa de chave com facturação. Na aplicação publicada a pesquisa
+passa a ser servida pela função, com duas fontes que não pedem cartão:
+
+| Rota (via `/api/rpc?caminho=`) | Fonte | O que devolve |
+|---|---|---|
+| `GET /pesquisa/estado` | — | o que está ligado, o que falta, e se há chave de cifra |
+| `GET /pesquisa/categorias` | — | as 26 atividades que o Geoapify sabe procurar |
+| `POST /pesquisa/leads` | Geoapify | empresas reais na zona pedida, com telefone, site, email e nota |
+| `POST /pesquisa/web` | Tavily | excertos e resposta curta (contexto, não leads) |
+| `POST /pesquisa/pagina` | Tavily | o texto limpo de um endereço já conhecido |
+
+Exemplo:
+
+```
+GET /api/rpc?caminho=/pesquisa/leads  (POST)
+{ "oQue": "dentistas", "onde": "Coimbra", "limite": 10, "raio": 8000 }
+→ { ok, categoria: "healthcare.dentist", centro, encontrados, leads: [...], guardados: {novos, repetidos} }
+```
+
+Regras que continuam de pé: sem chave, a resposta diz qual variável falta; uma
+atividade desconhecida é recusada com a lista; a web não escreve no funil; e
+procurar não contacta ninguém — enviar continua a exigir o teu OK.
