@@ -192,6 +192,38 @@ test('connect: a metadata do conector separa «não existe/ligado» de «credenc
   assert.equal(sem.codigo, 'semcredencial');
 });
 
+/* ---------- 4c · o sujeito certo para o tipo de conector ---------- */
+test('connect: se o conector só aceita utilizadores, o erro diz isso (e não culpa a rede)', async () => {
+  limparCache();
+  const sdk = {
+    getTokenResponse: async () => { throw erroCom('ConnectError', { status: 401, code: 'unresolved_token' }); },
+    getConnectorMetadata: async () => ({ uid: CONECTOR_PADRAO, type: 'api-key', service: 'opencode', supportedSubjectTypes: ['user'] }),
+  };
+  const r = await testar({ forcar: true }, { env: { AI_GATEWAY_API_KEY: 'oidc' }, importar: importarCom(sdk) });
+  assert.equal(r.ok, false);
+  assert.equal(r.codigo, 'precisa-sujeito');
+  assert.match(r.erro, /só emite tokens do tipo «user»/);
+  assert.match(r.erro, /ORBITA_DONO_ID/);
+  assert.deepEqual(r.podeSerSujeito, { suportados: ['user'], usado: 'app' });
+});
+
+test('connect: com ORBITA_DONO_ID o sujeito passa a ser esse utilizador', async () => {
+  limparCache();
+  const traco = [];
+  await tokenPara({}, { env: { AI_GATEWAY_API_KEY: 'oidc', ORBITA_DONO_ID: 'usr_123' }, importar: importarCom(sdkFalso({ traco })) });
+  assert.deepEqual(traco[0].params.subject, { type: 'user', id: 'usr_123' });
+});
+
+test('connect: o estado mostra o tipo de conector e os sujeitos que aceita', async () => {
+  limparCache();
+  const sdk = {
+    getTokenResponse: async () => ({ token: 't', expiresAt: Date.now() + 60000, connector: { uid: CONECTOR_PADRAO } }),
+    getConnectorMetadata: async () => ({ uid: CONECTOR_PADRAO, type: 'api-key', service: 'opencode', supportedSubjectTypes: ['user'] }),
+  };
+  const e = await estado({ AI_GATEWAY_API_KEY: 'oidc' }, { importar: importarCom(sdk) });
+  assert.deepEqual(e.conectorTipo, { tipo: 'api-key', sujeitos: ['user'], servico: 'opencode' });
+});
+
 /* ---------- 5 · as rotas ---------- */
 const chamar = (repo, caminho, metodo = 'GET', corpo = null, env = {}, importarConect = null) =>
   responder(repo, { caminho, metodo, corpo, env, ...(importarConect ? { importarConect } : {}) });

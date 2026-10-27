@@ -186,6 +186,11 @@ export async function estado(env = process.env, { importar = null } = {}) {
     sdk = { disponivel: false, motivo: e.message };
   }
   const guardado = [...CACHE.values()].find((t) => t.conector?.uid === conector) || null;
+  /* uma leitura só da metadata: tipo de conector e sujeitos que aceita */
+  const meta = cred.valor ? await metadataDoConector({ modoCredencial: 'auto' }, { env, importar }).catch(() => null) : null;
+  const conectorTipo = meta?.metadata
+    ? { tipo: meta.metadata.type || null, sujeitos: meta.metadata.supportedSubjectTypes || [], servico: meta.metadata.service || null }
+    : null;
   return {
     ok: sdk.disponivel && !!cred.valor,
     conector,
@@ -197,6 +202,9 @@ export async function estado(env = process.env, { importar = null } = {}) {
       fontes: { oidcNoProcesso: !!env?.VERCEL_OIDC_TOKEN, oidcNoPedido: !!env?.AI_GATEWAY_API_KEY, chaveVercel: !!env?.VERCEL_TOKEN },
     },
     assunto,
+    /* o tipo do conector e os sujeitos que aceita: sem isto, um `api-key` com
+       sujeito `app` parece um erro de rede quando é só um sujeito errado */
+    conectorTipo,
     cache: guardado ? { presente: true, expiraEm: new Date(guardado.expiresAt).toISOString(), emCache: true } : { presente: false },
     nota: 'o token nunca sai da função: só o tipo, a validade e o sujeito. Quem guarda o refresh token é a Vercel.',
   };
@@ -260,14 +268,28 @@ export async function testar({ pedido = null, escopos = null, forcar = true, mod
       prova: 'token pedido agora ao Vercel Connect (o valor não sai daqui)',
     };
   } catch (e) {
+    /* Antes de culpar a credencial, olhar para o conector: um conector do tipo
+       `api-key` só emite tokens de utilizador, e pedir um token `app` nunca ia
+       funcionar. A metadata diz isso sem precisar de acertar às cegas. */
+    let sujeito = null;
+    try {
+      const m = await metadataDoConector({ modoCredencial }, { env, importar });
+      const tipos = m?.metadata?.supportedSubjectTypes || [];
+      if (m.ok && tipos.length && !tipos.includes(assuntoDe(env, pedido).type)) {
+        sujeito = { suportados: tipos, usado: assuntoDe(env, pedido).type };
+      }
+    } catch { /* a metadata é um extra: sem ela, fica o erro original */ }
     return {
       ok: false,
       ms: Date.now() - t0,
       conector: conectorDe(env),
       credencial: credencialDe(env, modoCredencial).tipo,
-      codigo: e.codigo || 'erro',
-      erro: String(e.message || e).slice(0, 300),
+      codigo: sujeito ? 'precisa-sujeito' : (e.codigo || 'erro'),
+      erro: sujeito
+        ? `este conector só emite tokens do tipo «${sujeito.suportados.join(', ')}» — foi pedido «${sujeito.usado}». Define ORBITA_DONO_ID com o id do utilizador que autorizou o conector.`
+        : String(e.message || e).slice(0, 300),
       detalhe: e.detalhe || null,
+      podeSerSujeito: sujeito,
       precisaConsentimento: !!e.precisaConsentimento,
       quando: new Date().toISOString(),
     };
