@@ -1,3 +1,34 @@
+## 1.33.1 — 27 out 2026 · provar um modelo gratuito, e o estado honesto na mesa
+
+Continuação do 1.33.0: a ligação existia, faltava a prova modelo a modelo.
+
+**1 · «Provar» um modelo, não só um fornecedor.** O cartão novo **IA gratuita**
+mostra os dois grupos: os **provados** (com resposta registada e latência) e os
+**por provar**, cada um com o botão «Provar». O botão chama `/ia/testar` com
+`{fornecedor, modelo}` e faz **um** pedido curto a esse modelo — só se ele
+responder é que sai da lista. Se o fornecedor responder por outro modelo, o
+toast di-lo («respondeu com X, não com o Y») e o Y continua por provar. O
+resultado fica em `/ia/uso` e em `cfg.testes[fornecedor].provados[modelo]`; a
+lista real do fornecedor (`lista`) e as provas anteriores sobrevivem a um teste
+que corra mal.
+
+**2 · 402 com retry.** O `402` (Pollinations usa-o para o limite por IP) passa a
+ser explicitamente retentável noutro fornecedor, em vez de morrer ali.
+
+**Testes:** 464/464, com 11 novos em `ia-gratuitos.test.mjs`: o GET do Pollinations
+sem chave, o `Bearer public` do OpenCode a responder quando os outros falham, o
+teste real do Pollinations a guardar a lista, a descoberta a alimentar a cadeia (e
+a recusar modelos pagos num gateway), a separação provados/por provar, e a prova
+a promover um modelo — incluindo o caso em que o fornecedor responde por outro
+e isso **não** conta como prova, e o caso em que uma falha não apaga a lista.
+
+**Limitação declarada:** o sandbox desta sessão só alcança github/npm/pypi, por
+isso o POST ao OpenCode e o GET ao Pollinations a partir da app ficam por testar
+aqui — o endpoint do Pollinations foi provado por HTTP directo e o OpenCode por
+`GET /models`. A prova final é `/ia/testar` em produção depois do deploy.
+
+**Testes:** 464/464 (4 novos), 94/95 no check (falta Chromium).
+
 ## 1.33.0 — 27 out 2026 · OpenCode Zen e Pollinations, sem chave do dono
 
 Pedido do dono: *«liga»* — as duas IA gratuitas que não precisam de nenhuma chave
@@ -33,31 +64,6 @@ OpenCode, o Pollinations e os modelos do OVH nunca medidos). O Pollinations foi
 provado por HTTP directo, mas ainda não pela app, por isso **não** entra na
 primeira lista até o `/ia/testar` o registar. A frase do Control Center diz as
 duas contas.
-
-**5 · «Provar» um modelo, não só um fornecedor.** O cartão novo **IA gratuita**
-mostra os dois grupos: os **provados** (com resposta registada e latência) e os
-**por provar**, cada um com o botão «Provar». O botão chama `/ia/testar` com
-`{fornecedor, modelo}` e faz **um** pedido curto a esse modelo — só se ele
-responder é que sai da lista. Se o fornecedor responder por outro modelo, o
-toast di-lo («respondeu com X, não com o Y») e o Y continua por provar. O
-resultado fica em `/ia/uso` e em `cfg.testes[fornecedor].provados[modelo]`; a
-lista real do fornecedor (`lista`) e as provas anteriores sobrevivem a um teste
-que corra mal.
-
-**6 · 402 com retry.** O `402` (Pollinations usa-o para o limite por IP) passa a
-ser explicitamente retentável noutro fornecedor, em vez de morrer ali.
-
-**Testes:** 464/464, com 11 novos em `ia-gratuitos.test.mjs`: o GET do Pollinations
-sem chave, o `Bearer public` do OpenCode a responder quando os outros falham, o
-teste real do Pollinations a guardar a lista, a descoberta a alimentar a cadeia (e
-a recusar modelos pagos num gateway), a separação provados/por provar, e a prova
-a promover um modelo — incluindo o caso em que o fornecedor responde por outro
-e isso **não** conta como prova, e o caso em que uma falha não apaga a lista.
-
-**Limitação declarada:** o sandbox desta sessão só alcança github/npm/pypi, por
-isso o POST ao OpenCode e o GET ao Pollinations a partir da app ficam por testar
-aqui — o endpoint do Pollinations foi provado por HTTP directo e o OpenCode por
-`GET /models`. A prova final é `/ia/testar` em produção depois do deploy.
 
 ## 1.32.0 — 27 out 2026 · A IA gratuita começa a trabalhar
 
