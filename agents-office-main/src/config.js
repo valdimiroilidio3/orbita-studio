@@ -297,8 +297,10 @@ export function createConfig({
       </div>`;
     }
     if (!apis) {
+      /* 27 out 2026 · enquanto o catálogo não chega, mostra-se a forma do que vem:
+         um esqueleto que desliza diz «está a acontecer» melhor do que uma frase parada. */
       return `<div class="cfg-sec"><div class="cfg-h"><b>APIs</b><span class="cfg-note">a ler o catálogo do servidor…</span></div>
-        ${lastError ? `<p class="cfg-honest">${esc(lastError)}</p>` : ''}</div>`;
+        ${lastError ? `<p class="cfg-honest">${esc(lastError)}</p>` : '<div class="cfg-skel"></div><div class="cfg-skel"></div><div class="cfg-skel"></div>'}</div>`;
     }
     const s = apis.summary || {};
     const prontas = apis.list.filter((p) => p.verified).length;
@@ -318,7 +320,7 @@ export function createConfig({
   function render() {
     if (!body) return;
     body.innerHTML = themeRow() + centroSection() + apisSection() + notifyRow() + prefsRow();
-    if (title) title.textContent = semServidor ? 'sem servidor · configurações do browser' : 'esta máquina';
+    if (title) title.textContent = semServidor ? 'sem servidor · só o browser' : 'ligações e preferências';
     wire();
   }
 

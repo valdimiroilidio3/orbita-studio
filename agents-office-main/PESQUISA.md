@@ -1,4 +1,22 @@
-# Pesquisa real: leads da Google
+# Pesquisa real: empresas e web
+
+> **Estado em 27 out 2026 (1.28.0):** a pesquisa que está ligada em produção é
+> **Geoapify** (empresas reais do OpenStreetMap — é a fonte dos leads) e
+> **Tavily** (web com excertos e resposta curta — é a fonte do contexto). Ambas
+> são pedidas pelo servidor (`/api/rpc?caminho=/pesquisa/*`) e as chaves vivem
+> nas variáveis da Vercel, nunca no browser. O Google descrito abaixo continua
+> possível, mas **não está configurado** e deixou de ser necessário: o escritório
+> procura, guarda e mostra sem ele.
+
+Prova de 27 out 2026, na aplicação publicada:
+
+| Pedido | Resposta |
+|---|---|
+| `GET /pesquisa/teste` | `ok:true`, 575 ms, «Coimbra (40.211, -8.429)» |
+| `GET /pesquisa/leads?oQue=dentistas&onde=Coimbra` | 5 empresas reais (Clínica Santa Madalena, Optidente, Clínica Delille, O meu Doutor, Clínica de Medicina Dentária de Celas), notas 80/48 |
+| `GET /pesquisa/web?q=mercado de clínicas dentárias em Coimbra` | Tavily, 3 fontes com excertos e resposta curta |
+
+---
 
 O escritório escrevia bem; faltava-lhe matéria-prima verdadeira. Este documento explica como se
 liga a pesquisa da Google, o que ela devolve, o que fica guardado e como os agentes a usam.
