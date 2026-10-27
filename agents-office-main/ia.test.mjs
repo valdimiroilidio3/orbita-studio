@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { createMemRepo } from './api/_repo.mjs';
 import { FORNECEDORES, comChave, mascarar, MODELOS } from './api/_ia/catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './api/_ia/cliente.mjs';
-import { cadeia, diagnostico, falarComFallback, orcamento } from './api/_ia/router.mjs';
+import { cadeia, diagnostico, falarComFallback, limparFora, orcamento, marcarFora, foraDoAr, eModeloIndisponivel } from './api/_ia/router.mjs';
 import { FERRAMENTAS, INDISPONIVEIS, executar, validar } from './api/_ia/ferramentas.mjs';
 import { criarMotor } from './api/_ia/motor.mjs';
 import { correr, lerPlano, normalizarPlano } from './api/_ia/orquestrador.mjs';
@@ -596,4 +596,68 @@ test('router: sem modelos com a etiqueta exigida, a cadeia relaxa e diz que rela
   /* quando há modelos com a etiqueta, não se relaxa nada */
   const normal = cadeia('texto', { chaves: {}, desligados: ['ovh', 'kilo'] });
   assert.equal(normal.some((m) => m.relaxado), false);
+});
+
+/* ---------- 1.23.1 · o router aprende com o que o fornecedor recusa ---------- */
+test('router: um modelo que o fornecedor disse não ter sai da cadeia seguinte', () => {
+  limparFora();
+  const catalogo = [
+    { fornecedor: 'llm7', modelo: 'bom', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+    { fornecedor: 'llm7', modelo: 'morto', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+  ];
+  const chaves = { llm7: null };
+  const antes = cadeia('texto', { chaves, catalogo, limite: 5 }).map((x) => x.modelo);
+  assert.deepEqual(antes.sort(), ['bom', 'morto']);
+
+  marcarFora('llm7', 'morto', "Model 'morto' is currently unavailable");
+  assert.equal(foraDoAr('llm7', 'morto'), true);
+  const depois = cadeia('texto', { chaves, catalogo, limite: 5 }).map((x) => x.modelo);
+  assert.deepEqual(depois, ['bom'], 'o modelo recusado não devia voltar à cadeia');
+  /* e passado o prazo volta a ser considerado */
+  assert.equal(foraDoAr('llm7', 'morto', Date.now() + 7 * 60 * 60 * 1000), false);
+  limparFora();
+});
+
+test('router: quem já respondeu num teste real vai à frente da cadeia', () => {
+  const catalogo = [
+    { fornecedor: 'llm7', modelo: 'a', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+    { fornecedor: 'llm7', modelo: 'b', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+  ];
+  const semDica = cadeia('texto', { chaves: { llm7: null }, catalogo, limite: 5 }).map((x) => x.modelo);
+  const comDica = cadeia('texto', { chaves: { llm7: null }, catalogo, limite: 5, usados: { 'llm7/b': true } }).map((x) => x.modelo);
+  assert.notEqual(semDica[0], 'b', 'sem dica, a ordem é por mérito das etiquetas');
+  assert.equal(comDica[0], 'b', 'o modelo que já respondeu devia ir à frente');
+});
+
+test('router: as frases de «este modelo não existe» são reconhecidas', () => {
+  for (const frase of [
+    "Model 'gpt-oss-20b' is currently unavailable.",
+    'llm7 recusou o pedido (HTTP 400): model not found',
+    'no such model: x',
+    'este modelo não existe',
+  ]) assert.equal(eModeloIndisponivel(frase), true, frase);
+  for (const frase of ['chave recusada (HTTP 401)', 'rate limit', 'Responde apenas: ok']) {
+    assert.equal(eModeloIndisponivel(frase), false, frase);
+  }
+});
+
+test('router: falarComFallback marca o modelo indisponível ao ouvir a recusa', async () => {
+  limparFora();
+  const catalogo = [
+    { fornecedor: 'llm7', modelo: 'morto', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+    { fornecedor: 'llm7', modelo: 'vivo', etiquetas: ['texto'], janela: 32000, preco: [0, 0] },
+  ];
+  const visto = [];
+  const r = await falarComFallback('texto', {
+    chaves: { llm7: null }, catalogo, limite: 5, cadeiaFixa: null,
+    executar: async (entrada) => {
+      visto.push(entrada.modelo);
+      if (entrada.modelo === 'morto') throw new Error("Model 'morto' is currently unavailable");
+      return { texto: 'ok', uso: { entrada: 1, saida: 1 }, ms: 3 };
+    },
+  });
+  assert.equal(r.texto, 'ok');
+  assert.deepEqual(visto, ['morto', 'vivo']);
+  assert.equal(foraDoAr('llm7', 'morto'), true);
+  limparFora();
 });
