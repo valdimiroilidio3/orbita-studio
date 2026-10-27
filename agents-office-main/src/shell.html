@@ -2467,6 +2467,61 @@
     .oi:not([hidden]), .oi-wrap { animation: none; }
     .skip-link { transition: none; }
   }
+
+  /* ===========================================================================
+     30 out 2026 · OS CARTÕES DAS SALAS NO TELEMÓVEL (pedido do dono: «diminui o
+     tamanho dos quadrados de indicação da sala … deixa bem responsivo»).
+
+     O cartão foi desenhado para uma secretária: 138 px de largura mínima e três
+     métricas em linha (rótulo à esquerda, número à direita). Num telemóvel de
+     390 px, seis destes tapavam o escritório inteiro. Aqui a mesma informação
+     passa a caber sem perder um único número:
+
+       · as três métricas ficam em três colunas — rótulo curto por cima, número
+         por baixo (é a mesma tabela, lida na vertical);
+       · o tipo desce o suficiente para se ler a 30 cm do ecrã;
+       · a fila de aprovação reduz-se ao ⚠ e ao contador («À ESPERA DE
+         APROVAÇÃO» desaparece — o cartão já se chama sala e o aria-label diz a
+         frase inteira a quem usa leitor de ecrã);
+       · o filete da cor do vidro encurta com o cartão, para não sair dos cantos.
+
+     Nada aqui muda o ecrã grande: tudo vive dentro de dois media queries.
+     =========================================================================== */
+  @media (max-width: 640px) {
+    .badge {
+      min-width: 88px; max-width: 124px; padding: 6px 7px 5px; border-radius: 11px;
+      box-shadow: 0 6px 16px rgba(21,20,20,.10);
+    }
+    .badge::before { left: 9px; right: 9px; height: 2px; }
+    .badge .b-name { font-size: 8px; letter-spacing: .09em; gap: 4px; white-space: nowrap; }
+    .badge .dot { width: 5.5px; height: 5.5px; }
+    .badge .live { width: 5px; height: 5px; }
+    .badge .b-count { gap: 4px; margin-top: 1px; }
+    .badge .b-num { font-size: 21px; }
+    .badge .b-lab { font-size: 6.5px; letter-spacing: .1em; }
+    .badge .b-metrics {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;
+      margin-top: 4px; padding-top: 4px; text-align: center;
+    }
+    .badge .m-row { display: block; padding: 0; gap: 0; }
+    /* o rótulo comprido sai; fica o curto, escrito pela cena (data-short) */
+    .badge .m-lab { display: block; font-size: 0; letter-spacing: .04em; line-height: 1.2; }
+    .badge .m-lab::after { content: attr(data-short); font-size: 6px; }
+    .badge .m-val { display: block; font-size: 12.5px; line-height: 1.15; }
+    .badge .b-appr { margin-top: 4px; padding: 3px 4px; gap: 3px; border-radius: 6px; font-size: 7.5px; letter-spacing: .04em; }
+    .badge .b-appr .ap-t { display: none; }
+    .badge.brainTag { padding: 4px 9px 4px 7px; border-radius: 99px; }
+    .badge.brainTag .b-name { font-size: 7.5px; letter-spacing: .1em; gap: 4px; }
+    .badge.brainTag .b-name b { font-size: 11.5px; margin: 0 2px 0 3px; }
+    .badge.brainTag::before { left: 10px; right: 10px; }
+  }
+  /* telemóveis estreitos (iPhone SE, 360 px): mais um passo, sem tocar no tipo */
+  @media (max-width: 400px) {
+    .badge { min-width: 80px; max-width: 108px; padding: 5px 6px 4px; }
+    .badge .b-num { font-size: 18px; }
+    .badge .m-val { font-size: 11.5px; }
+    .badge .m-lab::after { font-size: 5.6px; }
+  }
 </style>
 </head>
 <body>

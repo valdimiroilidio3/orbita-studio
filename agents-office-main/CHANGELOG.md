@@ -1,3 +1,42 @@
+## 1.15.1 — 30 out 2026 · Os cartões das salas no telemóvel
+
+Pedido do dono: *«na versão mobile eu quero que diminuas o tamanho dos quadrados de indicação da sala
+(as tabelas de indicação dos temas das salas) — deixa bem responsivo na versão mobile»*.
+
+O cartão de cada sala foi desenhado para uma secretária: **138 px** de largura mínima e três métricas
+em linha (rótulo à esquerda, número à direita). Num telemóvel de 390 px, seis destes tapavam o
+escritório. No ecrã pequeno o mesmo cartão passa a caber — **sem perder um número**:
+
+- **as três métricas passam a três colunas**: rótulo curto por cima (`CURSO · ESPERA · 24H`, o texto
+  completo continua no DOM e no `aria-label`), número por baixo;
+- o cartão fica em **88 px** de largura mínima (80 px abaixo dos 400 px de janela) e o tipo desce o
+  suficiente para se ler a 30 cm do ecrã;
+- a fila de aprovação reduz-se a **⚠ e ao contador** — a frase inteira continua no `aria-label`;
+- o filete da cor do vidro encurta com o cartão, e o cartão do Cérebro encolhe para uma pastilha
+  ainda mais fina.
+
+E duas coisas que não são só CSS:
+
+- **a escala acompanha a janela** (`badgeFit`: 1,00 a partir de 900 px, 0,88 aos 400 px) — a cena
+  continua a projetar os cartões nos sítios certos, só que mais pequenos;
+- **em ecrã ≤ 640 px os cartões arrumam-se**: quem colidir com outro é empurrado para baixo até
+  deixar de o tapar, com o topo e o fundo do ecrã como limites. Nenhum cartão sai da vista e nenhum
+  fica escondido atrás de outro.
+
+O ecrã grande não mudou — as regras novas vivem dentro de dois `@media` e a arrumação só corre em
+ecrã estreito.
+
+### Provas
+
+- `scene.smoke.mjs` passou a provar: a escala desce com a largura (`1280 → 1,00`, `640 < 900`,
+  `390 < 0,95`), os **7** cartões (6 salas + Cérebro) continuam com as **três** métricas e com o
+  rótulo curto, o «À ESPERA DE APROVAÇÃO» não desapareceu do cartão, três cartões no mesmo sítio
+  saem de cima uns dos outros, e o CSS do telemóvel está no bundle (três colunas, `attr(data-short)`,
+  o passo dos 400 px).
+- **144/144** testes (`a11y · office · forge · platform · terminal · circulation · settings`).
+- Nota de honestidade: o harness não tem layout (`offsetWidth` é 0), por isso o tamanho final do
+  cartão prova-se pela conta (escala + CSS) e pelo olho — não por uma medição em jsdom.
+
 ## 1.15.0 — 29 out 2026 · Configurações a sério: APIs, tema, avisos, painéis — e o pé da escada
 
 Pedido do dono: *«cria um campo para implementação de APIs, configurações reais, até mudança de tema
@@ -9,7 +48,7 @@ um toque de melhoria na escada, só no canto que toca a sala em baixo»*.
 
 Tecla **`,`** ou o botão **Config** na barra. Tudo o que aqui se guarda é a sério; nada é decorativo.
 
-- **APIs.** O catálogo real do servidor (`/api/platform/apis`): 24 serviços, o que cada um é, e o que
+- **APIs.** O catálogo real do servidor (`/api/platform/apis`): 27 serviços, o que cada um é, e o que
   lhe falta. Um campo por variável de ambiente e **«Guardar e testar»**: a chave é escrita no `.env`
   da máquina, o ficheiro é relido sem reiniciar nada (o vigia já existia desde 1.12) e o serviço é
   **sondado logo a seguir** — o que aparece é o HTTP e a latência reais, ou o erro real

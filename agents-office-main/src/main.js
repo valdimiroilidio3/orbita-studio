@@ -624,6 +624,9 @@ const BB_ROWS = {
   delivery: [['EM CURSO', () => deptCount('delivery', 'live')], ['À ESPERA', () => deptCount('delivery', 'waiting')], ['CONCLUÍDAS 24H', () => deptCount('delivery', 'done')]],
   marketing: [['EM CURSO', () => deptCount('marketing', 'live')], ['À ESPERA', () => deptCount('marketing', 'waiting')], ['CONCLUÍDAS 24H', () => deptCount('marketing', 'done')]],
 };
+/* 30 out 2026: a mesma linha, escrita curta para o telemóvel (o CSS troca o texto
+   quando a janela tem ≤ 640 px). É a mesma métrica — muda o comprimento, não o número. */
+const BB_SHORT = { 'EM CURSO': 'CURSO', 'À ESPERA': 'ESPERA', 'CONCLUÍDAS 24H': '24H' };
 /** Conta os postos daquela sala que estão em cada estado — do retrato do servidor, não da cena. */
 function deptCount(dept, kind) {
   let n = 0;
@@ -687,9 +690,9 @@ for (const k of [...DEPT_KEYS, 'brain']) {
     <div class="b-name"><span class="dot" style="background:${dept.chip}"></span>${dept.short}<span class="live"></span></div>
     <div class="b-count">${k === 'brain' ? '<span class="b-num">∞</span><span class="b-lab">CONHECIMENTO</span>' : `<span class="b-num">${n}</span><span class="b-lab">AGENTES</span>`}</div>
     <div class="b-metrics">${(BB_ROWS[k] || []).map((row, i) => `
-      <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-m="${k}-${i}">${row[1]()}</span></div>`).join('')}
+      <div class="m-row"><span class="m-lab" data-short="${BB_SHORT[row[0]] || row[0]}">${row[0]}</span><span class="m-val" data-m="${k}-${i}">${row[1]()}</span></div>`).join('')}
     </div>
-    <button type="button" class="b-appr" style="display:none" aria-label="decisões à tua espera — abrir a primeira">⚠ <span class="ap-n">0</span> À ESPERA DE APROVAÇÃO</button>`;
+    <button type="button" class="b-appr" style="display:none" aria-label="decisões à tua espera — abrir a primeira">⚠ <span class="ap-n">0</span> <span class="ap-t">À ESPERA DE APROVAÇÃO</span></button>`;
   b.addEventListener('click', (e) => {
     if (e.target.closest('.b-appr')) { zoomToApproval(k); e.stopPropagation(); }
     else if (e.target.closest('.b-tasks') && tasks) { tasks.openFor(k); e.stopPropagation(); }
@@ -1183,7 +1186,7 @@ function buildDeptRail(k) {
     <div class="b-metrics">${BB_ROWS[k].map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-rm="${k}-${i}">${row[1]()}</span></div>`).join('')}</div>
     ${tasks ? tasks.rowHTML(k) : ''}
-    <button type="button" class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}" aria-label="decisões à tua espera nesta sala — abrir a primeira">⚠ <span class="ap-n">${stuckIn(k).length}</span> À ESPERA DE APROVAÇÃO</button>`;
+    <button type="button" class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}" aria-label="decisões à tua espera nesta sala — abrir a primeira">⚠ <span class="ap-n">${stuckIn(k).length}</span> <span class="ap-t">À ESPERA DE APROVAÇÃO</span></button>`;
   const trow = rh.querySelector('.b-tasks');
   if (trow) trow.addEventListener('click', () => tasks.toggle());
   rh.querySelector('.b-appr').addEventListener('click', () => {
@@ -1638,32 +1641,73 @@ function toScreen(p) {
 }
 function smooth(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 
+/* ---------- os cartões das salas: quanto encolhem e como se arrumam ---------- */
+/* 30 out 2026 — pedido do dono: «diminui o tamanho dos quadrados de indicação da sala …
+   deixa bem responsivo na versão mobile». Duas coisas, e o ecrã grande fica exactamente
+   como estava:
+   1) `badgeFit()` dá a escala geométrica conforme a largura da janela (1 a partir de 900 px);
+   2) em ecrã estreito, `arrumarCartoes()` empurra para baixo quem colidir com outro — os
+      cartões deixam de se tapar, e nenhum sai do ecrã (o topo e o fundo são limites). */
+function badgeFit(w = innerWidth) {
+  if (w >= 900) return 1;                 // secretária: como sempre foi
+  if (w <= 400) return 0.88;              // telemóvel estreito
+  return 0.88 + 0.12 * ((w - 400) / 500); // 0,88 → 1,00 entre 400 e 900 px
+}
+function arrumarCartoes(caixas) {
+  const gap = 6, topo = 64, fundo = innerHeight - 8;
+  const postos = [];
+  for (const c of [...caixas].sort((a, b) => (a.top - b.top) || (a.left - b.left))) {
+    for (let n = 0; n < 12; n++) {
+      const choque = postos.find(p => c.left < p.left + p.bw + gap && c.left + c.bw + gap > p.left
+        && c.top < p.top + p.bh + gap && c.top + c.bh + gap > p.top);
+      if (!choque) break;
+      c.top = choque.top + choque.bh + gap; // empurra para baixo — o cartão continua debaixo da sua sala
+    }
+    c.top = clamp(c.top, topo, Math.max(topo, fundo - c.bh));
+    postos.push(c);
+  }
+}
 function tickLOD() {
   const z = view.zoom;
   const detail = smooth(1.75, 2.5, z);
   const pillA = smooth(1.45, 1.85, z); // pills stay on at near — they name the agents
-  // billboards persist at every zoom (v1 rule) — slightly larger when far, compact when near
-  const badgeScale = 1.02 - 0.3 * smooth(1.2, 2.6, z);
+  // billboards persist at every zoom (v1 rule) — slightly larger when far, compact when near,
+  // and smaller again on a narrow window (30 out 2026)
+  const badgeScale = (1.02 - 0.3 * smooth(1.2, 2.6, z)) * badgeFit();
+  /* V3.3: os cartões nunca ficam por baixo do painel das tarefas. No telemóvel o painel é uma
+     folha em baixo (não uma coluna à direita): descontar a largura dele empurrava os sete
+     cartões todos para a margem esquerda. Aí o limite é a janela inteira (30 out 2026). */
+  const rightEdge = innerWidth <= 640
+    ? innerWidth - 8
+    : innerWidth - ((tasks ? tasks.panelWidth() : 400) + 26);
+  const caixas = [];
   for (const [k, d] of Object.entries(deptRT)) {
     if (focused === k && k !== 'brain') continue; // this billboard is docked in the rail
     let [sx, sy] = toScreen(d.badgeAnchor);
     // keep billboards fully on screen (camera-readability rule)
     const bh = d.badge.offsetHeight * badgeScale, bw = d.badge.offsetWidth * badgeScale;
-    let xf;
+    let xf, left, top;
     if (d.sideBadge) { // anchored by an edge, vertically centred (emails/sales/fin/delivery)
-      const rightEdge = innerWidth - ((tasks ? tasks.panelWidth() : 400) + 26); // V3.3: never under the panel
       sy = clamp(sy, 64 + bh / 2, innerHeight - bh / 2 - 8);
-      if (d.sideLeft) { sx = clamp(sx, bw + 8, rightEdge); xf = 'translate(-100%,-50%)'; }
-      else { sx = clamp(sx, 8, rightEdge - bw); xf = 'translate(0,-50%)'; }
+      if (d.sideLeft) { sx = clamp(sx, bw + 8, rightEdge); xf = 'translate(-100%,-50%)'; left = sx - bw; }
+      else { sx = clamp(sx, 8, rightEdge - bw); xf = 'translate(0,-50%)'; left = sx; }
+      top = sy - bh / 2;
     } else {
-      const rightEdge = innerWidth - ((tasks ? tasks.panelWidth() : 400) + 26);
       sy = clamp(sy, bh + 64, innerHeight - 12);
       sx = clamp(sx, bw / 2 + 8, rightEdge - bw / 2);
       xf = 'translate(-50%,-100%)';
+      left = sx - bw / 2; top = sy - bh;
     }
-    d.badge.style.transform = `translate(${sx}px,${sy}px) ${xf} scale(${badgeScale})`;
-    d.badge.style.opacity = 1 - 0.75 * focusDim; // unfocused boards recede with the scene
-    d.badge.style.pointerEvents = 'auto';
+    caixas.push({ d, sx, sy, xf, left, top, bw, bh });
+  }
+  if (innerWidth <= 640) arrumarCartoes(caixas); // telemóvel: um cartão não tapa outro
+  for (const c of caixas) {
+    // o mesmo ponto de ancoragem, agora com o desvio que a arrumação impôs
+    const sx = c.left + (c.xf === 'translate(0,-50%)' ? 0 : c.xf === 'translate(-100%,-50%)' ? c.bw : c.bw / 2);
+    const sy = c.top + (c.xf.endsWith('-100%)') ? c.bh : c.bh / 2);
+    c.d.badge.style.transform = `translate(${sx}px,${sy}px) ${c.xf} scale(${badgeScale})`;
+    c.d.badge.style.opacity = 1 - 0.75 * focusDim; // unfocused boards recede with the scene
+    c.d.badge.style.pointerEvents = 'auto';
   }
   // name pills stay on at EVERY zoom (AJ's call) — smaller when far, full-size when near
   const pillScale = 0.62 + 0.38 * smooth(1.2, 2.4, z);
@@ -1923,7 +1967,11 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
   cfg: { open: () => cfg.open(), close: () => cfg.close(), toggle: () => cfg.toggle(), isOpen: () => cfg.isOpen() },
   tema: { ler: () => themePref, aplicar: (t) => applyTheme(t), escuro: () => darkOn },
   paineis: { ler: () => ({ ...panelPrefs }), por: (k, on) => setPanel(k, on) },
-  avisos: { estado: () => notifier.state(), ligar: () => notifier.ask(), desligar: () => notifier.setEnabled(false) } };
+  avisos: { estado: () => notifier.state(), ligar: () => notifier.ask(), desligar: () => notifier.setEnabled(false) },
+  /* 30 out 2026: os cartões das salas em ecrã pequeno — a escala e a arrumação, ao alcance
+     do teste: uma conta que só se vê no telemóvel tem de poder provar-se fora dele. */
+  badges: { escala: (w) => badgeFit(w), arrumar: (caixas) => { arrumarCartoes(caixas); return caixas; },
+    compacto: () => innerWidth <= 640 } };
 
 /* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
 liveUi.onChange(() => {
