@@ -175,6 +175,25 @@
   .btn.small { padding: 9px var(--s4); font-size: var(--t-s); border-radius: var(--r-s); flex: none; }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
   .btn.quiet { background: transparent; border-color: transparent; color: var(--muted); padding: 9px var(--s2); flex: none; }
+
+  /* 30 out 2026 · o aviso do modo local (pedido do dono: «chega de demonstrações só»).
+     Não é um erro e não se fecha: é a informação de onde os dados vivem. Discreto no
+     desktop, duas linhas no telemóvel, e as acções da cópia sempre à mão. */
+  .localbar {
+    display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+    margin: var(--s3) var(--s4) 0; padding: 10px 12px 10px 14px;
+    background: #FFF8E6; border: 1px solid #F0DCB0; border-radius: var(--r2, 12px);
+    font-size: var(--t-xs, 12px); line-height: 1.45; color: #6B5320;
+  }
+  .localbar b { color: #4A3A12; }
+  .localbar > span:first-child { flex: 1 1 260px; min-width: 0; }
+  .localbar .lb-act { display: flex; gap: 4px; flex: none; }
+  .localbar .btn { color: #6B5320; }
+  .localbar .btn:hover { color: #2F2609; }
+  @media (max-width: 720px) {
+    .localbar { margin: var(--s2) var(--s2) 0; font-size: 12px; }
+    .localbar .lb-act { width: 100%; justify-content: flex-end; }
+  }
   .btn.quiet:hover { color: var(--ink); }
 
   .hint { color: var(--muted); font-size: var(--t-s); margin-top: var(--s3); }

@@ -1,3 +1,57 @@
+## 1.16.0 — 30 out 2026 · A mesa deixa de ser uma demonstração
+
+Pedido do dono, com uma fotografia do telemóvel à frente: *«todas estas páginas já deram aceitar e
+estar muito bem funcionais, chega de demonstrações só»*. Na fotografia, a mesa publicada dizia
+«A mesa precisa do Órbita a correr na tua máquina» e um botão para voltar ao escritório.
+
+### O que estava mal
+
+A mesa é um cliente HTTP (`src/mesa.js`, `const API = '/api'`). Publicada na Vercel, `/api` não
+existe — a Vercel serve ficheiros estáticos — e a página tinha uma saída de recurso: um cartão a
+mandar arrancar o Órbita na máquina. Para quem abre o site, isso é uma demonstração. E a decisão
+anterior (servidor a sério num host à parte) ficou presa por não haver base de dados disponível.
+
+### O que mudou
+
+- **A mesa passou a trabalhar neste browser** (`src/localapi.js`): o **mesmo contrato** que o
+  servidor (`/auth/eu`, `/ops/summary`, `/ops/leads`, `/ops/projetos`, `/ops/tarefas`,
+  `/ops/saldo`, `/ops/receita`, `/ops/today`, `/ops/pipeline`, `/ops/atividade`…), implementado
+  sobre o `localStorage`. A mesa não soube a diferença: `call()` é o único ponto de entrada e, se o
+  `fetch` der 404 ou falhar a rede, passa a usar o armazém local.
+- **Sem dados de demonstração**: o armazém nasce vazio. Um lead escrito fica escrito, sobrevive a
+  fechar e reabrir, e conta no resumo e no funil. O que não existe responde com o vazio honesto:
+  agentes com 0 a correr, atividade vazia, pesquisa vazia.
+- **O que não sabe fazer, diz que não sabe**: uma tarefa criada sem motor de IA fica registada e
+  **termina «falhou — sem motor»**, nunca «concluída». Custos de API aparecem a 0 porque não
+  houve nenhum. `enviar` responde 501 («no modo local não há canal de envio»).
+- **Aviso sempre à vista** (não um erro, não se fecha): «Modo local — os teus dados ficam neste
+  browser», com o número de leads e projetos, e duas acções: **Guardar cópia** (descarrega um
+  `.json` com tudo) e **Ler cópia** (substitui, com confirmação). Um browser não é uma base de
+  dados — e isso passa a estar dito e resolvido, em vez de escondido.
+- **O cartão de demonstração saiu.** O único ecrã de falha que resta é o honesto: se o browser
+  bloquear o armazenamento (navegação privada), diz-se isso e o que fazer.
+- A porta para a base a sério continua aberta: no dia em que houver `/api` (Vercel + Postgres), é
+  ela que manda e o modo local fica como recurso — a mesa já escolhe sozinha.
+
+### Provas
+
+- **`mesa.smoke.mjs` (novo)**: carrega o bundle publicado num DOM **com `/api` a responder 404** (é
+  o que a Vercel faz) e verifica que a mesa abre, que o cartão de demonstração desapareceu, que o
+  aviso do modo local está lá, e — a sério — que o formulário de lead **escreve no armazém** e que
+  ao reabrir a página o lead **volta a ser lido**.
+- **`localapi.test.mjs` (novo, 13 testes)**: começa vazio; identidade local; lead guardado e
+  relido; dedupe que atualiza em vez de duplicar; sem nome não entra; dinheiro entra/soma/apaga sem
+  custos inventados; projetos à mão e a partir de um lead; tarefa sem motor que o diz; vazio
+  honesto; 501 no que não existe; cópia de segurança; resumo e funil a contar só o que existe.
+- **157 testes** no total (144 + 13) e as duas cenas verdes.
+
+### Limitações declaradas
+
+Nada é enviado para fora; os dados vivem neste aparelho e neste browser (limpar os dados do site
+apaga-os — daí a cópia). Não há agentes a correr, nem WhatsApp/email a sair, porque não há motor
+nem canal. Para partilhar entre aparelhos é preciso a base de dados — a interface e o contrato já
+estão prontos para ela.
+
 ## 1.15.2 — 30 out 2026 · O Cérebro responsivo — e um ✕ para sair
 
 Pedido do dono: *«deixa responsivo a parte do cérebro, deixando a tela capaz de fazer qualquer

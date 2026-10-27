@@ -7,7 +7,21 @@
 // Regras que esta camada não quebra: nada sai sem aprovação; o envio de WhatsApp é um link
 // aberto à mão e confirmado depois; o email só sai com token e consentimento, e a recusa é
 // mostrada por palavras; e nenhum número aparece sem vir da base de dados.
+import { createLocalApi } from './localapi.js';
+
 const API = '/api';
+/* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
+   `/api` atrás (a Vercel serve ficheiros estáticos). Em vez do cartão que mandava arrancar o
+   Órbita na máquina, a mesa passa a funcionar sobre o armazém deste browser — o mesmo contrato
+   (`/auth/*`, `/ops/*`), escritas a sério. Quando houver `/api` a sério, é ela que manda. */
+let local = null;
+let modoLocal = false;
+function usarLocal() {
+  if (!local) local = createLocalApi();
+  modoLocal = true;
+  S.modoLocal = true;
+  return local;
+}
 // Autenticado não é autorizado: a mesa esconde o que o papel não permite (o servidor recusa de
 // qualquer forma — isto é cortesia, não é a segurança).
 const may = perm => S.eu?.perms?.[perm] !== false;
@@ -83,7 +97,15 @@ async function call(path, method = 'GET', body) {
   if (body !== undefined) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
   const token = adminToken();
   if (token) opt.headers['x-orbita-admin'] = token;
-  const r = await fetch(API + path, opt);
+  let r;
+  try {
+    r = await fetch(API + path, opt);
+  } catch {
+    // sem rede nenhuma: o trabalho continua neste browser
+    return usarLocal().call(path, method, body);
+  }
+  // 404 em /api = não há servidor publicado. Não é um erro da mesa: é uma instalação sem API.
+  if (r.status === 404 || r.status === 405) return usarLocal().call(path, method, body);
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
   if (r.status === 401) {
@@ -101,8 +123,30 @@ async function call(path, method = 'GET', body) {
       return call(path, method, body);
     }
   }
-  if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
+  if (!r.ok || j.ok === false) {
+    const e = new Error(j.error || `HTTP ${r.status}`);
+    e.status = r.status;
+    throw e;
+  }
   return j;
+}
+
+/* o ficheiro escolhido substitui o armazém — só depois de o dono confirmar */
+function ligarImportacao() {
+  document.addEventListener('change', async (e) => {
+    if (e.target && e.target.id === 'lbFile') {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      try {
+        const antes = (local || usarLocal()).estado();
+        if (antes.leads + antes.projetos > 0 && !confirm(`Isto substitui o que está aqui (${antes.leads} leads, ${antes.projetos} projetos). Continuar?`)) return;
+        const r = usarLocal().importar(await f.text());
+        toast(`Cópia lida: ${r.leads} leads, ${r.projetos} projetos.`);
+        await boot();
+      } catch (err) { toast('Não consegui ler essa cópia: ' + err.message, true); }
+      e.target.value = '';
+    }
+  });
 }
 
 function toast(msg, bad = false) {
@@ -999,24 +1043,37 @@ function viewSaldo() {
 }
 
 /* ---------------- pintar ---------------- */
+/* o aviso de que os dados são deste browser — curto, sempre à vista, com a cópia à mão */
+function avisoLocal() {
+  if (!S.modoLocal) return '';
+  const e = (local && local.estado()) || { leads: 0, projetos: 0 };
+  return `<div class="localbar" role="status">
+    <span><b>Modo local</b> — os teus dados ficam neste browser (${e.leads} leads · ${e.projetos} projetos). Não há servidor publicado: nada é enviado para fora.</span>
+    <span class="lb-act">
+      <button class="btn quiet small" data-act="exportar-local" title="descarregar uma cópia de tudo">Guardar cópia</button>
+      <button class="btn quiet small" data-act="importar-local" title="ler uma cópia que guardaste">Ler cópia</button>
+      <input type="file" id="lbFile" accept="application/json,.json" hidden>
+    </span>
+  </div>`;
+}
+
 function paint() {
   if (S.needLogin) { main().innerHTML = viewLogin(); return; }
+  if (S.modoLocal) { main().innerHTML = avisoLocal(); }
+  const pintar = (html) => { main().innerHTML = (S.modoLocal ? avisoLocal() : '') + html; };
   // uma rota que o papel não permite não se mostra: volta a Hoje, sem drama
   if (S.route.name === 'contas' && !may('admin')) { S.route = { name: 'hoje', id: null }; }
   if (S.error && !S.summary) {
-    /* 29 out 2026: a mesa também se publica (é /app no site). Um 404 não é uma avaria: é a
-       diferença entre «servidor estragado» e «não há servidor aqui». Diz-se qual é. */
-    const semServidor = /HTTP 404/.test(S.error);
-    main().innerHTML = semServidor
-      ? `<div class="wrap"><div class="card empty"><h3>A mesa precisa do Órbita a correr na tua máquina</h3>
-          <p>Esta é a vista publicada e é só o escritório: os leads, as aprovações e a fila vivem na base de dados local.
-          Arranca com <code>npm start</code> e abre a mesa em <code>localhost:4520/app</code> — aí tudo o que vês é trabalho registado.</p>
-          <div class="acts" style="justify-content:center"><a class="btn primary" href="/" style="max-width:220px">Voltar ao escritório</a></div></div></div>`
-      : `<div class="wrap"><div class="card empty"><h3>Não consegui falar com o Órbita</h3><p>${esc(S.error)}</p>
-          <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
+    /* 30 out 2026: o cartão «precisa do Órbita a correr na tua máquina» saiu. A mesa trabalha
+       neste browser (src/localapi.js) e só falha se o armazém do browser estiver bloqueado —
+       e nesse caso diz-se isso, não se manda ninguém instalar nada. */
+    main().innerHTML = `<div class="wrap"><div class="card empty"><h3>Não consegui abrir o armazém deste browser</h3>
+        <p>${esc(S.error)}</p>
+        <p class="hint">Se estás em navegação privada, o browser apaga os dados ao fechar a janela e pode bloquear o armazenamento. Abre numa janela normal, ou corre o Órbita na tua máquina com <code>npm start</code>.</p>
+        <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
     return;
   }
-  main().innerHTML = S.route.name === 'hoje' ? viewHoje()
+  pintar(S.route.name === 'hoje' ? viewHoje()
     : S.route.name === 'leads' ? viewLeads()
       : S.route.name === 'lead' ? viewLead()
         : S.route.name === 'projetos' ? viewProjetos()
@@ -1025,7 +1082,7 @@ function paint() {
               : S.route.name === 'agentes' ? viewAgentes()
               : S.route.name === 'contas' ? viewContas()
             : S.route.name === 'conversas' ? viewConversas()
-              : viewSaldo();
+              : viewSaldo());
 }
 
 /* ---------------- acções ---------------- */
@@ -1318,6 +1375,20 @@ async function act(name, el, ev) {
       return;
     }
 
+    /* 30 out 2026 · cópia de segurança do modo local: um browser não é uma base de dados */
+    if (name === 'exportar-local') {
+      const api = usarLocal();
+      const blob = new Blob([api.exportar()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mesa-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Cópia guardada. É o ficheiro com tudo o que está aqui.');
+      return;
+    }
+    if (name === 'importar-local') { $('#lbFile')?.click(); return; }
+
     if (name === 'receita') {
       const valor = Number(String($('#valor')?.value || '').replace(',', '.'));
       if (!valor) { toast('Diz o valor que entrou.', true); return; }
@@ -1392,6 +1463,7 @@ function start() {
     paint();
     main().scrollIntoView({ block: 'start' });
   });
+  ligarImportacao();
   boot(true);
 }
 
