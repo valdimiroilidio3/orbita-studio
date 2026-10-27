@@ -856,6 +856,48 @@ const resumoCirculacao = (() => {
   ok(belts.length === 6, `esperava seis tapetes a rolar, há ${belts.length}`);
 }
 
+/* ---------- os cartões das salas no telemóvel (30 out 2026) ----------
+   Pedido do dono: «diminui o tamanho dos quadrados de indicação da sala … deixa bem responsivo na
+   versão mobile». O harness não tem layout (offsetWidth é 0), por isso prova-se o que decide o
+   tamanho e a arrumação: a escala desce com a largura, os sete cartões continuam com as três
+   métricas e o rótulo curto, e três cartões no mesmo sítio saem de cima uns dos outros. */
+{
+  const B = win.CC && win.CC.badges;
+  ok(!!B, 'CC.badges não está exposto (a escala dos cartões não pode ser provada)');
+  if (B) {
+    ok(B.escala(1280) === 1, 'no ecrã grande o cartão devia ficar a 100%');
+    ok(B.escala(390) < B.escala(640) && B.escala(640) < B.escala(900), 'a escala do cartão não desce com a largura da janela');
+    ok(B.escala(390) < 0.95, `o cartão quase não encolhe no telemóvel (${B.escala(390)})`);
+    ok(B.escala(390) >= 0.8, `o cartão encolheu de mais no telemóvel (${B.escala(390)})`);
+    const cartoes = [...doc.querySelectorAll('#hud .badge')];
+    ok(cartoes.length === 7, `esperava 7 cartões (6 salas + Cérebro), há ${cartoes.length}`);
+    const salas = cartoes.filter((c) => !c.classList.contains('brainTag'));
+    ok(salas.length === 6, `esperava 6 cartões de sala, há ${salas.length}`);
+    ok(salas.every((c) => c.querySelectorAll('.b-metrics .m-row').length === 3), 'um cartão de sala perdeu uma métrica');
+    ok(salas.every((c) => [...c.querySelectorAll('.m-lab')].every((l) => (l.dataset.short || '').length > 0)),
+      'falta o rótulo curto que o telemóvel mostra (data-short)');
+    ok(cartoes.every((c) => c.querySelector('.b-appr .ap-t')), 'o «À ESPERA DE APROVAÇÃO» desapareceu do cartão (só o telemóvel o esconde por CSS)');
+    // a arrumação: três cartões no mesmo sítio — nenhum fica por baixo de outro
+    const caixas = [
+      { left: 20, top: 100, bw: 90, bh: 70 },
+      { left: 26, top: 108, bw: 90, bh: 70 },
+      { left: 32, top: 116, bw: 90, bh: 70 },
+    ];
+    B.arrumar(caixas);
+    const tapam = (a, b) => a.left < b.left + b.bw && a.left + a.bw > b.left && a.top < b.top + b.bh && a.top + a.bh > b.top;
+    ok(!tapam(caixas[0], caixas[1]) && !tapam(caixas[1], caixas[2]) && !tapam(caixas[0], caixas[2]),
+      'a arrumação do telemóvel deixou dois cartões um em cima do outro');
+    ok(caixas.every((c) => c.top + c.bh <= (win.innerHeight || 768) - 8 + 1e-6), 'a arrumação empurrou um cartão para fora do ecrã');
+  }
+  // o CSS do telemóvel tem de estar no bundle: três colunas de métricas e o rótulo curto
+  const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('\n');
+  ok(/\.badge\s*\{[^}]*min-width:\s*138px/.test(css), 'o cartão de sala perdeu a medida do ecrã grande (138 px)');
+  ok(css.includes('@media (max-width: 640px)') && css.includes('grid-template-columns: repeat(3, 1fr)'),
+    'falta a tabela de três colunas do cartão no telemóvel');
+  ok(css.includes('content: attr(data-short)'), 'falta a troca para o rótulo curto no telemóvel');
+  ok(css.includes('@media (max-width: 400px)'), 'falta o passo extra para telemóveis estreitos (≤ 400 px)');
+}
+
 const resumoPedido36 = (() => {
   const p = (win.CC && win.CC.portas) || null;
   if (!p) return 'sem planta de portas';
@@ -869,6 +911,6 @@ const resumoPedido34 = (() => {
   const cores = [...new Set(e.map((x) => x.glass))].join(' · ');
   return `${b.length} passadeiras rolantes pretas nos corredores e ${e.length} entradas de sala na cor da sala (${cores})`;
 })();
-console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis) e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis), cartões de sala que encolhem e se arrumam no telemóvel e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);
