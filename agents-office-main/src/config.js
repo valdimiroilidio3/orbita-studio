@@ -39,7 +39,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 const KIND_LABEL = {
   ia: 'IA', dados: 'Dados', 'base-de-dados': 'Base de dados', codigo: 'Código', deploy: 'Deploy',
-  pagamentos: 'Pagamentos', correio: 'Correio', mensagens: 'Mensagens', voz: 'Voz', api: 'API',
+  pagamentos: 'Pagamentos', correio: 'Correio', mensagens: 'Mensagens', voz: 'Voz', api: 'API', credenciais: 'Credenciais',
 };
 
 
