@@ -57,6 +57,32 @@ export function fornecedorActivo(id, { chaves = {}, desligados = [] } = {}) {
   return !!prov.keyless && prov.usavel !== false;
 }
 
+/* 1.23.1 · o que o fornecedor já disse que não tem
+   A 27 out 2026 o LLM7 respondeu «Model 'gpt-oss-20b' is currently unavailable»
+   e o router insistiu nele em cada passo, gastando a cadeia toda. Aqui guarda-se
+   o que foi recusado por não existir, com prazo (6 h), e a cadeia seguinte já
+   não conta com isso. É memória curta e descartável — não vai para a base. */
+const FORA = new Map();
+const FORA_MS = 6 * 60 * 60 * 1000;
+const chaveDe = (fornec, modelo) => `${fornec}\u0000${modelo}`;
+
+export function marcarFora(fornec, modelo, motivo = '') {
+  FORA.set(chaveDe(fornec, modelo), { at: Date.now(), motivo: String(motivo).slice(0, 120) });
+}
+
+export function foraDoAr(fornec, modelo, agora = Date.now()) {
+  const r = FORA.get(chaveDe(fornec, modelo));
+  if (!r) return false;
+  if (agora - r.at > FORA_MS) { FORA.delete(chaveDe(fornec, modelo)); return false; }
+  return true;
+}
+
+export function limparFora() { FORA.clear(); }
+
+/** A frase que os fornecedores usam quando o modelo não existe/está desligado. */
+export const eModeloIndisponivel = (erro) =>
+  /(unavailable|not found|does not exist|não existe|nao existe|decommission|descontinuad|no such model)/i.test(String(erro || ''));
+
 /**
  * Cadeia ordenada de candidatos para um tipo de trabalho.
  * `chaves` = {openrouter:'OPENROUTER_API_KEY', …} (só ids, nunca segredos).
@@ -64,6 +90,8 @@ export function fornecedorActivo(id, { chaves = {}, desligados = [] } = {}) {
 export function cadeia(tipo, {
   chaves = {}, desligados = [], preferido = null, catalogo = MODELOS,
   latencias = {}, tentados = [], limite = 4, semRepetir = true,
+  usados = {},          // `${fornec}/${modelo}` que já responderam num teste real
+  agora = Date.now(),
 } = {}) {
   const alvo = TIPOS[tipo] || TIPOS.texto;
   const exigidas = alvo.exige;
@@ -72,7 +100,8 @@ export function cadeia(tipo, {
 
   const disponiveis = catalogo
     .filter((m) => fornecedorActivo(m.fornecedor, { chaves, desligados }))
-    .filter((m) => !(semRepetir && jaTentados.has(`${m.fornecedor}\u0000${m.modelo}`)));
+    .filter((m) => !(semRepetir && jaTentados.has(`${m.fornecedor}\u0000${m.modelo}`)))
+    .filter((m) => !foraDoAr(m.fornecedor, m.modelo, agora));
 
   /* Exigir a etiqueta é a regra; mas se o único fornecedor disponível não a
      declarar, é melhor tentar do que responder «todos os modelos falharam»
@@ -92,6 +121,8 @@ export function cadeia(tipo, {
   const pontos = (m) => {
     let p = 0;
     if (preferido && preferido.fornecedor === m.fornecedor && preferido.modelo === m.modelo) p += 1000;
+    /* quem já passou num teste REAL deste fornecedor vem à frente */
+    if (usados[`${m.fornecedor}/${m.modelo}`] || usados[`${m.fornecedor}\u0000${m.modelo}`]) p += 320;
     p += exigidas.filter((r) => temEtiqueta(m, r)).length * 10;
     p += desejadas.filter((r) => temEtiqueta(m, r)).length * 4;
     p += (m.etiquetas || []).filter((r) => r === 'ferramentas').length * 6;   // quem tem mãos serve mais
@@ -157,8 +188,9 @@ export function orcamento({ maxChamadas = 14, maxTokens = 120000 } = {}) {
 export async function falarComFallback(tipo, {
   chaves = {}, desligados = [], preferido = null, latencias = {},
   cadeiaFixa = null, executar, registar = () => {}, orc = orcamento(), catalogo = MODELOS, limite = 4,
+  usados = {},
 } = {}) {
-  const fila = cadeiaFixa || cadeia(tipo, { chaves, desligados, preferido, latencias, catalogo, limite });
+  const fila = cadeiaFixa || cadeia(tipo, { chaves, desligados, preferido, latencias, catalogo, limite, usados });
   if (!fila.length) {
     const e = new Error(`nenhum modelo disponível para «${tipo}» — falta configurar um fornecedor no Control Center`);
     e.codigo = 'semmotor';
@@ -178,6 +210,9 @@ export async function falarComFallback(tipo, {
       erros.push({ fornec: entrada.fornec, modelo: entrada.modelo, erro: e.message, codigo: e.codigo || '' });
       registar({ ok: false, ...entrada, ms, erro: e.message, codigo: e.codigo || '' });
       if (e.codigo === 'orcamento') throw e;
+      /* o fornecedor disse que este modelo não existe: não vale a pena insistir
+         nas próximas chamadas (a cadeia seguinte já o deixa de fora) */
+      if (eModeloIndisponivel(e.message)) marcarFora(entrada.fornec, entrada.modelo, e.message);
       const valeTentarOutro = e.retentavel || ['limite', 'avaria', 'tempo', 'rede', 'modelo', 'credito'].includes(e.codigo);
       if (!valeTentarOutro && i === fila.length - 1) break;
       if (!valeTentarOutro) continue;   // chave recusada / pedido inválido: passa ao próximo modelo

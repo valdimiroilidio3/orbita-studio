@@ -1,3 +1,19 @@
+## 1.23.1 — 27 out 2026 · O router aprende com o que o fornecedor recusa
+
+- **Modelo indisponível deixa de ser tentado.** O LLM7 respondeu *«Model
+  'gpt-oss-20b' is currently unavailable»* e o router insistia nele em cada
+  passo, gastando a cadeia toda e falhando execuções que tinham alternativa.
+  Agora, quando a resposta é «não existe / indisponível», o par
+  fornecedor+modelo fica de fora durante **6 h** (`foraDoAr`, marcado por
+  `marcarFora`) e a chamada seguinte já não conta com ele. É memória curta, em
+  processo — não vai para a base e não esconde nada.
+- **Quem já respondeu vem à frente.** O modelo que passou no último teste real
+  do fornecedor sobe na ordem da cadeia (`usados`), em vez de se escolher só por
+  etiquetas e preço.
+- Provas: `ia.test.mjs` passa de 40 para **44** (o modelo recusado sai da
+  cadeia e volta depois do prazo; a dica do teste real muda a ordem; as frases
+  de recusa são reconhecidas; `falarComFallback` marca ao ouvir a recusa).
+
 ## 1.23.0 — 27 out 2026 · Cópia de segurança que se pode testar
 
 - **`GET /backup`** — um JSON com as tabelas que interessam (leads, projetos,

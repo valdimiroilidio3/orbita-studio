@@ -108,8 +108,14 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const cfg = await config();
       const desligados = cfg.desligados || [];
       const pref = preferido || cfg.agentes?.[agente]?.modelo || null;
+      /* quem já passou num teste REAL deste fornecedor vai à frente na cadeia */
+      const cfgAgora = await config();
+      const usados = {};
+      for (const [fornec, t] of Object.entries(cfgAgora.testes || {})) {
+        if (t?.ok && t?.usado) usados[`${fornec}/${t.usado}`] = true;
+      }
       const resultado = await falarComFallback(tipo, {
-        chaves, desligados, preferido: pref, latencias: await latencias(), orc, limite,
+        chaves, desligados, preferido: pref, latencias: await latencias(), orc, limite, usados,
         executar: (entrada) => chamar(entrada, mensagens, { ferramentas, maxTokens, temperatura, timeoutMs }),
         registar: async (evento) => {
           try {
