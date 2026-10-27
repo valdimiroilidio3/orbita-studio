@@ -461,6 +461,37 @@ test('motor.testar: um keyless (ovh) não é «falta chave» — testa anónimo,
   assert.equal(est.fornecedores.find((f) => f.id === 'ovh').estado, 'funcional');
 });
 
+test('motor.testar: resposta vazia não conta como sucesso — tenta o modelo seguinte', async () => {
+  /* 27 out 2026, OVH: o primeiro modelo do catálogo é de raciocínio e devolveu
+     texto vazio com 16 tokens de saída; o estado dizia «funcional» com «» como
+     resposta. Agora vazio é falha e passa-se ao candidato seguinte. */
+  const repo = createMemRepo();
+  const usados = [];
+  const fetchImpl = async (url, opt = {}) => {
+    if (String(url).endsWith('/models')) return json({ data: [{ id: 'Qwen3.5-397B-A17B' }, { id: 'gpt-oss-20b' }] });
+    const modelo = JSON.parse(opt.body).model;
+    usados.push(modelo);
+    if (modelo === 'Qwen3.5-397B-A17B') return json({ choices: [{ message: { content: '' } }] });
+    return json({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 4, completion_tokens: 1 } });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.testar('ovh');
+  assert.equal(r.ok, true);
+  assert.equal(r.modelo, 'gpt-oss-20b');
+  assert.deepEqual(usados, ['Qwen3.5-397B-A17B', 'gpt-oss-20b']);
+});
+
+test('motor.testar: se todos responderem vazio, fica erro (não «funcional»)', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async (url) => (String(url).endsWith('/models')
+    ? json({ data: [{ id: 'Qwen3.5-397B-A17B' }] })
+    : json({ choices: [{ message: { content: '   ' } }] }));
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  await assert.rejects(() => motor.testar('ovh'), /respondeu vazio/);
+  const est = await motor.estado();
+  assert.equal(est.fornecedores.find((f) => f.id === 'ovh').estado, 'erro');
+});
+
 test('motor.testar: quem exige chave e não a tem continua a ser recusado', async () => {
   const repo = createMemRepo();
   const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
