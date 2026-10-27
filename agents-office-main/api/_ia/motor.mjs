@@ -139,7 +139,9 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const prov = FORNECEDORES[fornecedor];
       if (!prov) throw new ErroIA(`fornecedor desconhecido: ${fornecedor}`, { fornec: fornecedor });
       const chave = valorDaChave(fornecedor);
-      if (!chave) throw new ErroIA(`falta ${prov.chave.join(' ou ')} no ambiente`, { fornec: fornecedor, codigo: 'semchave' });
+      /* sem chave por desenho (anónimo) não é erro: é o caso do Kilo/OVH. Só
+         falta chave quando o fornecedor exige uma e ela não está no ambiente. */
+      if (!chave && !prov.keyless) throw new ErroIA(`falta ${prov.chave.join(' ou ')} no ambiente`, { fornec: fornecedor, codigo: 'semchave' });
       const inicio = Date.now();
       const cfg = await config();
       const testes = { ...(cfg.testes || {}) };

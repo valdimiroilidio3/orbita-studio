@@ -424,6 +424,32 @@ test('rota /ia/testar: falha real fica registada como erro (não como funciona)'
   assert.equal(estado.corpo.fornecedores.find((x) => x.id === 'openrouter').estado, 'erro');
 });
 
+test('motor.testar: um keyless (kilo) não é «falta chave» — testa anónimo, sem Bearer', async () => {
+  /* Encontrado em produção a 27 out 2026: /api/setup dizia «falta KILO_API_KEY»
+     para um fornecedor marcado como sem chave. A rota /ia/testar tem de o testar
+     a sério (pedido anónimo), não recusar antes de tentar. */
+  const repo = createMemRepo();
+  const cabecalhos = [];
+  const fetchImpl = async (url, opt = {}) => {
+    cabecalhos.push(opt.headers || {});
+    if (String(url).endsWith('/models')) return json({ data: [{ id: 'kilo/auto' }] });
+    return json({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 2, completion_tokens: 1 } });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.testar('kilo');
+  assert.equal(r.ok, true);
+  assert.equal(cabecalhos.length, 2, 'não fez o teste real');
+  assert.ok(cabecalhos.every((h) => !h.authorization), 'mandou um Bearer sem haver chave');
+  const est = await motor.estado();
+  assert.equal(est.fornecedores.find((f) => f.id === 'kilo').estado, 'funcional');
+});
+
+test('motor.testar: quem exige chave e não a tem continua a ser recusado', async () => {
+  const repo = createMemRepo();
+  const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
+  await assert.rejects(() => motor.testar('openrouter'), /falta OPENROUTER_API_KEY/);
+});
+
 test('rota /ia/runs: cria, corre e devolve os passos', async () => {
   const repo = createMemRepo();
   const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'mesa_resumo', args: {} } });
