@@ -27,7 +27,7 @@
        cadeia segue; a lista não é uma promessa, é uma vantagem de partida;
      · nada aqui inventa quotas nem preços: `medido` diz quando e onde.
    =========================================================================== */
-import { FORNECEDORES } from './catalogo.mjs';
+import { FORNECEDORES, MODELOS } from './catalogo.mjs';
 
 /* Formato igual ao das entradas da cadeia (`fornec`, `modelo`, `etiquetas`) para
    o router poder ordenar as duas origens juntas, sem código especial. */
@@ -70,6 +70,95 @@ export function provadosActivos({ chaves = {}, desligados = [] } = {}) {
 
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+/**
+ * Etiquetas prováveis de um id de modelo. É inferência, não prova: serve para o
+ * modelo entrar na cadeia certa até um teste real dizer outra coisa. Sem isto,
+ * os modelos `-free` descobertos ficavam com «texto» só, e um modelo de código
+ * nunca era escolhido para código.
+ */
+export function etiquetasDoId(id) {
+  const n = semAcento(id);
+  const t = new Set(['texto']);
+  if (/(^|[-_/])(vl|vision|vlm)([-_/]|$)|vision/.test(n)) t.add('visao');
+  if (/cod(e|er)|pickle|deepseek|glm|qwen|kimi|minimax|codex|coder/.test(n)) t.add('codigo');
+  if (/think|reason|nemotron|deepseek|glm|r1|thinking|super/.test(n)) t.add('raciocinio');
+  if (/flash|lightning|mini|nano|fast|small|spark/.test(n)) t.add('rapido');
+  if (/tool|pickle|glm|qwen|nemotron/.test(n)) t.add('ferramentas');
+  return [...t];
+}
+
+/** Um fornecedor sem custo: não precisa de chave, publica a sua, ou é gratuito. */
+const semCusto = (prov) => !!prov && prov.usavel !== false && (!!prov.keyless || !!prov.chavePublica || prov.gratuito === true);
+
+/** Um fornecedor cujo **serviço inteiro** é gratuito (não é um gateway misto). */
+const servicoGratuito = (prov) => !!prov && (!!prov.keyless || !!prov.chavePublica);
+
+/** O id diz que é gratuito? (`x:free`, `y-free`, `free-z`) */
+export const pareceGratuito = (id) => /(^|[-:/_])free($|[-:/_])/i.test(String(id || ''));
+
+/**
+ * Modelos que o fornecedor **disse** ter (lista de `/models` guardada no teste),
+ * prontos para entrar na cadeia. Só de fornecedores sem custo: um modelo pago
+ * descoberto nunca é escolhido por acidente. Continuam por provar — quem prova
+ * é o primeiro pedido real, e o router marca de parte o que falhar.
+ */
+export function descobertosGratuitos(cfg = {}) {
+  const saida = [];
+  const vistos = new Set();
+  for (const [fornec, teste] of Object.entries(cfg.testes || {})) {
+    const prov = FORNECEDORES[fornec];
+    if (!semCusto(prov) || !Array.isArray(teste?.lista)) continue;
+    for (const modelo of teste.lista) {
+      const id = String(modelo || '');
+      if (!id || vistos.has(`${fornec}\u0000${id}`)) continue;
+      /* Num gateway misto (OpenRouter, Requesty…) a lista traz modelos pagos:
+         só entram os que se anunciam como gratuitos. Num serviço gratuito
+         (LLM7, OVH, OpenCode Zen, Pollinations) a lista é toda dela. */
+      if (!servicoGratuito(prov) && !pareceGratuito(id)) continue;
+      vistos.add(`${fornec}\u0000${id}`);
+      saida.push({
+        fornecedor: fornec, modelo: id,
+        etiquetas: etiquetasDoId(id),
+        janela: 131072, preco: [0, 0], gratuito: true, descoberto: true,
+        rotulo: `${id} (${prov.nome}, descoberto)`,
+      });
+    }
+  }
+  return saida;
+}
+
+/** O catálogo que a cadeia usa: o de sempre + o que a descoberta encontrou. */
+export function catalogoDaCadeia(cfg = {}, base = MODELOS) {
+  const extra = descobertosGratuitos(cfg).filter((d) => !base.some((m) => m.fornecedor === d.fornecedor && m.modelo === d.modelo));
+  return [...base, ...extra];
+}
+
+/**
+ * Gratuitos **por provar**: estão prontos no catálogo (sem chave, chave pública
+ * ou chave do dono) mas ainda não há resposta registada. É a lista honesta do
+ * «existe, falta provar» — a interface não deve chamar-lhes funcionais.
+ */
+export function porProvar({ chaves = {}, desligados = [], base = MODELOS } = {}) {
+  const provados = new Set(PROVADOS.map((p) => `${p.fornec}\u0000${p.modelo}`));
+  return base
+    .filter((m) => !provados.has(`${m.fornecedor}\u0000${m.modelo}`))
+    .filter((m) => !desligados.includes(m.fornecedor))
+    .filter((m) => {
+      const prov = FORNECEDORES[m.fornecedor];
+      if (!semCusto(prov)) return false;
+      return !!chaves[m.fornecedor] || !!prov.keyless || !!prov.chavePublica;
+    })
+    .map((m) => ({
+      fornec: m.fornecedor,
+      fornecedor: FORNECEDORES[m.fornecedor]?.nome || m.fornecedor,
+      modelo: m.modelo,
+      etiquetas: m.etiquetas || [],
+      semChave: !chaves[m.fornecedor] || String(chaves[m.fornecedor]).startsWith('\u0000'),
+      descoberto: !!m.descoberto,
+    }))
+    .slice(0, 60);
+}
+
 /** Ordem dentro dos curados: primeiro o que responde depressa. */
 export const porVelocidade = (a, b) => (a.ms || 0) - (b.ms || 0);
 
@@ -78,7 +167,7 @@ export const porVelocidade = (a, b) => (a.ms || 0) - (b.ms || 0);
  * `pronto` só é verdadeiro se houver pelo menos um curado activo — não basta
  * haver fornecedores no catálogo.
  */
-export function resumo({ chaves = {}, desligados = [], latencias = {} } = {}) {
+export function resumo({ chaves = {}, desligados = [], latencias = {}, cfg = null } = {}) {
   const activos = provadosActivos({ chaves, desligados });
   const medidos = activos.map((p) => {
     const real = latencias[`${p.fornec}\u0000${p.modelo}`];
@@ -94,15 +183,19 @@ export function resumo({ chaves = {}, desligados = [], latencias = {} } = {}) {
     };
   });
   const keyless = medidos.filter((m) => m.keyless);
+  const base = cfg ? catalogoDaCadeia(cfg) : MODELOS;
+  const falta = porProvar({ chaves, desligados, base });
   return {
     ok: true,
     pronto: medidos.length > 0,
     total: medidos.length,
     semChaveNecessaria: keyless.length,
     modelos: medidos,
+    porProvar: falta,
+    totalPorProvar: falta.length,
     nota: medidos.length
-      ? 'lista curada: o que respondeu em produção, do mais rápido para o mais lento. Não é promessa de quota — o router marca de parte o que falhar.'
-      : 'nenhum modelo gratuito activo: configura um fornecedor no Control Center ou liga o que não precisa de chave (LLM7, OVH).',
+      ? 'lista curada: o que respondeu em produção, do mais rápido para o mais lento. Não é promessa de quota — o router marca de parte o que falhar. Os «por provar» existem e estão prontos, mas ainda não há resposta registada deles.'
+      : 'nenhum modelo gratuito activo: configura um fornecedor no Control Center ou liga o que não precisa de chave (LLM7, OVH, OpenCode Zen, Pollinations).',
     medidoEm: '2026-10-27',
     fonte: '/ia/uso (produção)',
   };
@@ -113,9 +206,10 @@ export function estadoCurto(opcoes = {}) {
   const r = resumo(opcoes);
   if (!r.pronto) return { pronto: false, frase: 'nenhum motor gratuito activo' };
   const primeiro = [...r.modelos].sort(porVelocidade)[0];
+  const resto = r.totalPorProvar ? ` · ${r.totalPorProvar} por provar` : '';
   return {
     pronto: true,
-    frase: `${r.total} modelo(s) gratuitos, o mais rápido ${primeiro.fornecedor} · ${primeiro.modelo} (${primeiro.medidoMs} ms medidos)`,
+    frase: `${r.total} gratuitos provados${resto} — o mais rápido é ${primeiro.fornecedor} · ${primeiro.modelo} (${primeiro.medidoMs} ms)`,
     semChave: primeiro.keyless,
   };
 }

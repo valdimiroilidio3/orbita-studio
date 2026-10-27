@@ -54,6 +54,8 @@ export function fornecedorActivo(id, { chaves = {}, desligados = [] } = {}) {
   if (!prov) return false;
   if (desligados.includes(id)) return false;
   if (chaves[id]) return true;
+  /* 1.33.0 · chave publicada pelo próprio serviço (OpenCode Zen: `public`) */
+  if (prov.chavePublica && prov.usavel !== false) return true;
   return !!prov.keyless && prov.usavel !== false;
 }
 
@@ -123,7 +125,7 @@ export function cadeia(tipo, {
   /* `chaves` traz SEM_CHAVE para os keyless: isso não é uma chave, é a marca de
      «não precisa». Contar isso como «tem chave» fazia os gratuitos passarem à
      frente de quem tinha uma chave paga — o contrário do que se quer. */
-  const chaveReal = (id) => !!chaves?.[id] && chaves[id] !== SEM_CHAVE;
+  const chaveReal = (id) => !!chaves?.[id] && !String(chaves[id]).startsWith('\u0000');
   const haChaves = Object.keys(chaves || {}).some(chaveReal);
   const alvo = TIPOS[tipo] || TIPOS.texto;
   const exigidas = alvo.exige;

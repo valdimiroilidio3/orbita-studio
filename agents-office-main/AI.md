@@ -19,6 +19,24 @@ latência medidos em `/ia/uso`:
 | LLM7 (`api.llm7.io/v1`) | `codestral-latest` | 16/16 · 0,9–3,4 s | código, texto, passos rápidos |
 | OVH (`oai.endpoints.kepler.ai.cloud.ovh.net/v1`) | `Qwen3.5-397B-A17B` | 13 s | planos, raciocínio, revisão |
 | OVH | `gpt-oss-120b` | 13–45 s | raciocínio, código, ferramentas (último recurso) |
+| Pollinations (`text.pollinations.ai`) | `openai-fast` | provado por HTTP a 27 out 2026 | o mesmo GPT-OSS 20B por outra estrada, quando o OVH dá 429 (1 pedido/15 s) |
+
+### 1.33.0 · dois gratuitos que não precisam de chave nenhuma sua
+
+- **OpenCode Zen** — o serviço publica a chave dos modelos gratuitos
+  (`Authorization: Bearer public`), por isso funciona sem conta. Nove modelos
+  `-free`; o `nemotron-3.5-super-vl-free` é a segunda fonte com **visão**.
+- **Pollinations** — tier anónimo por GET (não é OpenAI): o cliente ganhou o
+  dialeto `pollinations`.
+- **A lista de modelos não é escrita à mão.** `GET /models` é guardado em
+  `testes[x].lista` e a cadeia passa a incluí-lo (`catalogoDaCadeia`), só para
+  fornecedores sem custo; num gateway misto só entram ids com `free`. Motivo
+  concreto: os quatro nomes do OpenCode que estavam no catálogo **já não existiam**
+  no serviço.
+
+`/ia/gratuitos` separa agora **provados** (com resposta registada) de **por
+provar** (existem e estão prontos, mas ainda não responderam). Só os primeiros
+contam como funcionais.
 
 O router põe estes pares à frente do catálogo (+2000 menos a latência medida). Se
 houver **uma chave real** no ambiente, os keyless recuam 900 pontos: quem configura

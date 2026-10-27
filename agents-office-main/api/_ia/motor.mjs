@@ -10,10 +10,10 @@
      · dizer que um fornecedor funciona sem um teste real bem-sucedido;
      · esconder um erro atrás de texto bonito.
    =========================================================================== */
-import { FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
+import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
-import { PROVADOS, estadoCurto, resumo as resumoGratuitos } from './gratuitos.mjs';
+import { PROVADOS, catalogoDaCadeia, estadoCurto, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
   const mapa = {};
@@ -25,7 +25,12 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
   const chaves = chavesDoAmbiente(env);
   const valorDaChave = (id) => {
     const nome = chaves[id];
-    if (!nome || nome === SEM_CHAVE) return '';        // keyless: não há chave para ler
+    const prov = FORNECEDORES[id];
+    if (!nome || nome === SEM_CHAVE || nome === CHAVE_PUBLICA) {
+      /* 1.33.0 · keyless não tem chave; quem publica a sua (OpenCode Zen)
+         usa exactamente a que o serviço indica — não é segredo nem invenção. */
+      return prov?.chavePublica || '';
+    }
     return String(env[nome] || '');
   };
 
@@ -87,7 +92,9 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     chaves,
     /* «pronto» = tem chave, ou não precisa dela (keyless). Nunca confundir
        «pronto» com «funcional»: isso é o teste real. */
-    temChave: (id) => !!chaves[id] || (!!FORNECEDORES[id]?.keyless && FORNECEDORES[id]?.usavel !== false),
+    temChave: (id) => !!chaves[id]
+      || (!!FORNECEDORES[id]?.keyless && FORNECEDORES[id]?.usavel !== false)
+      || (!!FORNECEDORES[id]?.chavePublica && FORNECEDORES[id]?.usavel !== false),
     config,
     latencias,
     limparCaches() { cacheConfig = null; cacheLat = null; },
@@ -99,15 +106,20 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const testes = cfg.testes || {};
       const lat = await latencias();
       const fornecedores = Object.entries(FORNECEDORES).map(([id, p]) => {
-        const variavel = chaves[id] === SEM_CHAVE ? null : (chaves[id] || null);
+        /* 1.33.0 · uma chave publicada pelo serviço não é uma variável do dono:
+           na interface aparece como «não precisa», nunca com uma marca interna. */
+        const marca = chaves[id];
+        const publica = marca === CHAVE_PUBLICA;
+        const variavel = (!marca || marca === SEM_CHAVE || publica) ? null : marca;
         const t = testes[id] || null;
-        const pronto = !!variavel || (!!p.keyless && p.usavel !== false);
+        const pronto = !!variavel || publica || (!!p.keyless && p.usavel !== false);
         return {
           id, nome: p.nome, site: p.site, docs: p.docs, estilo: p.estilo,
           gratuito: !!p.gratuito, limites: p.limites, nota: p.nota || '',
           variavel,                                    // NOME da variável, não valor (null = sem chave por desenho)
           variaveis: p.chave,                          // o que aceita (para a interface dizer)
-          semChave: !!p.keyless,
+          semChave: !!p.keyless || publica,
+          publica,
           familia: p.familia || 'nucleo',
           tipo: p.tipo || 'chat',
           chaveMascarada: variavel ? mascarar(env[variavel]) : '',
@@ -148,8 +160,11 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       await restaurarFora();
       const resultado = await falarComFallback(tipo, {
         chaves, desligados, preferido: pref, latencias: await latencias(), orc, limite, usados,
-        /* 1.32.0 · os gratuitos medidos entram à frente do catálogo */
+        /* 1.32.0 · os gratuitos medidos entram à frente do catálogo
+           1.33.0 · e o catálogo passa a incluir o que a descoberta encontrou
+           nos fornecedores sem custo (OpenCode Zen, Pollinations) */
         provados: PROVADOS,
+        catalogo: catalogoDaCadeia(cfgAgora),
         executar: (entrada) => chamar(entrada, mensagens, { ferramentas, maxTokens, temperatura, timeoutMs }),
         registar: async (evento) => {
           try {
@@ -169,8 +184,12 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora. */
     async gratuitos() {
       const cfg = await config();
-      const r = resumoGratuitos({ chaves, desligados: cfg.desligados || [], latencias: await latencias() });
-      return { ...r, estado: estadoCurto({ chaves, desligados: cfg.desligados || [] }), medido: PROVADOS.map((p) => ({ fornec: p.fornec, modelo: p.modelo, ms: p.ms, ok: p.ok, erros: p.erros, medido: p.medido, fonte: p.fonte })) };
+      const r = resumoGratuitos({ chaves, desligados: cfg.desligados || [], latencias: await latencias(), cfg });
+      return {
+        ...r,
+        estado: estadoCurto({ chaves, desligados: cfg.desligados || [], cfg }),
+        medido: PROVADOS.map((p) => ({ fornec: p.fornec, modelo: p.modelo, ms: p.ms, ok: p.ok, erros: p.erros, medido: p.medido, fonte: p.fonte })),
+      };
     },
 
     /** Cadeia que este motor usaria agora — para a interface poder explicar. */
@@ -179,6 +198,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       return cadeia(tipo, {
         chaves, desligados: cfg.desligados || [], preferido: cfg.agentes?.[agente]?.modelo || null,
         latencias: await latencias(), provados: PROVADOS,
+        catalogo: catalogoDaCadeia(cfg),
       });
     },
 
@@ -227,7 +247,14 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
         }
         if (!alvo) throw ultimoErro || new ErroIA(`${fornecedor} não respondeu`, { fornec: fornecedor, codigo: 'vazio' });
         const ms = Date.now() - inicio;
-        testes[fornecedor] = { ok: true, ms, quando: agora(), modelos: modelos.length || null, usado: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };
+        testes[fornecedor] = {
+          ok: true, ms, quando: agora(), modelos: modelos.length || null,
+          usado: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista,
+          /* 1.33.0 · a lista real fica guardada: os nomes dos modelos gratuitos
+             mudam (o OpenCode mudou 4 de 4 em dois meses) e escrevê-los à mão
+             no catálogo era garantir que ficavam velhos. */
+          lista: modelos.slice(0, 60),
+        };
         await repo.ia.config.gravar('testes', testes);
         await repo.ia.uso.registar({ fornecedor, modelo: alvo, agente: 'teste', tipo: 'teste', ok: true, ms, tokens_in: r.uso?.entrada || 0, tokens_out: r.uso?.saida || 0, erro: null });
         return { ok: true, ms, modelos: modelos.length || null, modelo: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };

@@ -678,7 +678,10 @@
    ],
    "ficheiro": "providers/index.ts",
    "usavel": true,
-   "porque": null
+   "porque": null,
+   "chavePublica": "public",
+   "timeoutMs": 60000,
+   "nota": "Modelos `-free` sem conta: o serviço aceita a chave pública `public` no cabeçalho Authorization (é o que a própria documentação do Zen usa para pedidos anónimos). A lista real de modelos obtém-se em GET /models, sem chave — confirmado a 27 out 2026 (80+ modelos, 9 deles `-free`). Se a chave pública deixar de valer, o router marca o fornecedor de parte 6 h e a cadeia segue."
   },
   {
    "id": "openrouter",
@@ -758,17 +761,20 @@
   {
    "id": "pollinations",
    "nome": "Pollinations",
-   "base": "https://gen.pollinations.ai/v1",
-   "dialeto": "openai",
+   "base": "https://text.pollinations.ai",
+   "dialeto": "pollinations",
    "tipo": "chat",
-   "keyless": false,
+   "keyless": true,
    "chave": [
     "POLLINATIONS_API_KEY"
    ],
    "nomeDeFicheiro": "Pollinations",
    "ficheiro": "providers/pollinations.ts",
    "usavel": true,
-   "porque": null
+   "porque": null,
+   "timeoutMs": 35000,
+   "nota": "O tier anónimo é um GET a `https://text.pollinations.ai/<prompt>?model=openai-fast`, sem conta e sem chave (confirmado a 27 out 2026: devolveu texto). É lento por desenho: um pedido a cada 15 s por IP. A base `gen.pollinations.ai/v1` do freellmapi exige chave (`POLLINATIONS_API_KEY`) e não é usada enquanto não houver uma.",
+   "limites": "anónimo: 1 pedido/15 s por IP · com chave: sem limite por IP"
   },
   {
    "id": "qianfan",
@@ -2795,95 +2801,6 @@
    "buraco": "sem limites declarados"
   },
   {
-   "plataforma": "opencode",
-   "modelo": "big-pickle",
-   "rotulo": "Big Pickle (OpenCode Zen, stealth)",
-   "inteligencia": 10,
-   "velocidade": 4,
-   "tamanho": "Large",
-   "rpm": 20,
-   "rpd": 200,
-   "tpm": null,
-   "tpd": null,
-   "orcamento": "promo (trial)",
-   "contexto": 131072,
-   "migracao": "20260101_000000_legacy_baseline.ts",
-   "etiquetas": [
-    "texto",
-    "codigo",
-    "rapido",
-    "contexto"
-   ],
-   "buraco": null
-  },
-  {
-   "plataforma": "opencode",
-   "modelo": "deepseek-v4-flash-free",
-   "rotulo": "DeepSeek V4 Flash Free (OpenCode Zen)",
-   "inteligencia": 4,
-   "velocidade": 4,
-   "tamanho": "Frontier",
-   "rpm": 20,
-   "rpd": 200,
-   "tpm": null,
-   "tpd": null,
-   "orcamento": "promo (trial)",
-   "contexto": 131072,
-   "migracao": "20260101_000000_legacy_baseline.ts",
-   "etiquetas": [
-    "texto",
-    "codigo",
-    "raciocinio",
-    "rapido",
-    "contexto"
-   ],
-   "buraco": null
-  },
-  {
-   "plataforma": "opencode",
-   "modelo": "mimo-v2.5-free",
-   "rotulo": "MiMo-V2.5 Free (OpenCode Zen)",
-   "inteligencia": 14,
-   "velocidade": 4,
-   "tamanho": "Medium",
-   "rpm": 20,
-   "rpd": 200,
-   "tpm": null,
-   "tpd": null,
-   "orcamento": "promo (trial)",
-   "contexto": 131072,
-   "migracao": "20260101_000000_legacy_baseline.ts",
-   "etiquetas": [
-    "texto",
-    "codigo",
-    "rapido",
-    "contexto"
-   ],
-   "buraco": null
-  },
-  {
-   "plataforma": "opencode",
-   "modelo": "nemotron-3-super-free",
-   "rotulo": "Nemotron 3 Super Free (OpenCode Zen)",
-   "inteligencia": 12,
-   "velocidade": 4,
-   "tamanho": "Large",
-   "rpm": 20,
-   "rpd": 200,
-   "tpm": null,
-   "tpd": null,
-   "orcamento": "promo (trial)",
-   "contexto": 131072,
-   "migracao": "20260101_000000_legacy_baseline.ts",
-   "etiquetas": [
-    "texto",
-    "codigo",
-    "rapido",
-    "contexto"
-   ],
-   "buraco": null
-  },
-  {
    "plataforma": "openrouter",
    "modelo": "arcee-ai/trinity-large-preview:free",
    "rotulo": "Trinity Large Preview (free)",
@@ -3451,12 +3368,12 @@
    "tpd": null,
    "orcamento": "~? (anon)",
    "contexto": 131072,
-   "migracao": "20260101_000000_legacy_baseline.ts",
+   "migracao": "GET /models a 2026-10-27 (tier anónimo: um só modelo)",
    "etiquetas": [
     "texto",
-    "contexto"
+    "raciocinio"
    ],
-   "buraco": "sem limites declarados"
+   "buraco": "um pedido a cada 15 s; sem ferramentas no modo GET"
   },
   {
    "plataforma": "zhipu",
@@ -3687,6 +3604,193 @@
     "texto"
    ],
    "buraco": "o único com visão"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "big-pickle",
+   "rotulo": "Big Pickle (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "raciocinio",
+    "ferramentas"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "beam-free",
+   "rotulo": "Beam Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "flint-40b-free",
+   "rotulo": "Flint 40B Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "raciocinio"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "mimo-v2.6-flash-free",
+   "rotulo": "MiMo V2.6 Flash Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "rapido"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "nemotron-3.5-super-vl-free",
+   "rotulo": "Nemotron 3.5 Super VL Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "visao",
+    "texto",
+    "raciocinio"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "nemotron-3.5-lightning-free",
+   "rotulo": "Nemotron 3.5 Lightning Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "raciocinio",
+    "rapido"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "jev-1.13-free",
+   "rotulo": "Jev 1.13 Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "deepseek-v4.1-flash-free",
+   "rotulo": "DeepSeek V4.1 Flash Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "raciocinio",
+    "rapido"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
+  },
+  {
+   "plataforma": "opencode",
+   "modelo": "glm-5.3-flash-free",
+   "rotulo": "GLM 5.3 Flash Free (OpenCode Zen)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "gratuito (modelo `-free`)",
+   "contexto": 131072,
+   "migracao": "GET /zen/v1/models a 2026-10-27",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "raciocinio",
+    "rapido"
+   ],
+   "buraco": "etiquetas inferidas do nome: só um teste real as confirma"
   }
  ]
 }

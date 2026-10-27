@@ -12,10 +12,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FORNECEDORES } from './api/_ia/catalogo.mjs';
+import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, comChave } from './api/_ia/catalogo.mjs';
 import {
-  PROVADOS, curado, estadoCurto, porVelocidade, provadosActivos, resumo,
+  PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, estadoCurto, etiquetasDoId,
+  porProvar, porVelocidade, provadosActivos, resumo,
 } from './api/_ia/gratuitos.mjs';
+import { falar } from './api/_ia/cliente.mjs';
 import {
   cadeia, exportarFora, falarComFallback, foraDoAr, importarFora, limparFora, marcarFora,
 } from './api/_ia/router.mjs';
@@ -73,8 +75,12 @@ test('cadeia: «visão» não é relaxada — só entram modelos com olhos', () 
   const fila = cadeiaDe('visao', { limite: 10 });
   assert.ok(fila.length > 0, 'há um modelo de visão no catálogo (OVH Qwen2.5-VL)');
   assert.equal(fila.every((m) => (m.etiquetas || []).includes('visao')), true);
+  /* 1.33.0: o OpenCode Zen também tem um modelo com olhos (nemotron VL) */
+  const semOvh = cadeia('visao', { chaves: {}, desligados: ['ovh'], limite: 10 });
+  assert.equal(semOvh.length > 0, true);
+  assert.equal(semOvh.every((m) => m.etiquetas.includes('visao')), true);
   /* e se não houver nenhum, fica vazia em vez de aceitar um cego */
-  assert.deepEqual(cadeia('visao', { chaves: {}, desligados: ['ovh'], limite: 10 }), []);
+  assert.deepEqual(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode'], limite: 10 }), []);
 });
 
 test('cadeia: respeita a lista de desligados e de modelos já tentados', () => {
@@ -185,4 +191,131 @@ test('rota: /ia/gratuitos diz o que há, sem chaves', async () => {
   assert.equal(nomes(r.corpo.cadeia.codigo)[0], 'llm7/codestral-latest');
   assert.equal(JSON.stringify(r.corpo).includes('API_KEY'), false);
   assert.equal(JSON.stringify(r.corpo).includes('Bearer'), false);
+});
+
+
+/* ---------- 6 · 1.33.0 · OpenCode Zen e Pollinations, sem chave do dono ---------- */
+
+test('catálogo: o OpenCode publica a chave e o Pollinations é keyless', () => {
+  assert.equal(FORNECEDORES.opencode.chavePublica, 'public');
+  assert.equal(FORNECEDORES.pollinations.keyless, true);
+  assert.equal(FORNECEDORES.pollinations.estilo, 'pollinations', 'o tier anónimo não é OpenAI');
+  assert.equal(FORNECEDORES.pollinations.base, 'https://text.pollinations.ai');
+  /* os quatro nomes antigos do OpenCode já não existem no serviço */
+  const ids = MODELOS.filter((m) => m.fornecedor === 'opencode').map((m) => m.modelo);
+  assert.ok(ids.includes('deepseek-v4.1-flash-free'), 'a lista é a real de GET /models');
+  assert.equal(ids.includes('deepseek-v4-flash-free'), false);
+  assert.ok(ids.length >= 8);
+
+  const prontos = comChave({}).map((p) => p.id);
+  assert.ok(prontos.includes('opencode'), 'sem conta: a chave é a publicada pelo serviço');
+  assert.ok(prontos.includes('pollinations'));
+  const pub = comChave({}).find((p) => p.id === 'opencode');
+  assert.equal(pub.variavel, CHAVE_PUBLICA);
+  assert.equal(pub.semChave, true);
+});
+
+test('pollinations: fala por GET, sem chave, e devolve o texto simples', async () => {
+  const pedidos = [];
+  const fetchImpl = async (url, opt = {}) => {
+    pedidos.push({ url: String(url), opt });
+    return { ok: true, status: 200, text: async () => 'teste' };
+  };
+  const r = await falar({
+    fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: '', modelo: 'openai-fast',
+    mensagens: [{ role: 'system', content: 'sê breve' }, { role: 'user', content: 'Diz apenas a palavra teste' }],
+    fetchImpl,
+  });
+  assert.equal(r.texto, 'teste');
+  assert.equal(r.uso.entrada, 0);
+  const [p] = pedidos;
+  assert.equal(p.opt.method, 'GET');
+  assert.equal(p.opt.body, undefined, 'GET não leva corpo');
+  assert.equal(p.opt.headers.authorization, undefined, 'keyless: nenhum cabeçalho de chave');
+  assert.match(p.url, /^https:\/\/text\.pollinations\.ai\/Diz%20apenas%20a%20palavra%20teste\?/);
+  assert.match(p.url, /model=openai-fast/);
+  assert.match(p.url, /system=s/i, 'o system prompt viaja no pedido');
+});
+
+test('pollinations: o limite (402) é retentável e cai no fornecedor seguinte', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 402, text: async () => '{"error":"rate limited"}' });
+  await assert.rejects(
+    () => falar({
+      fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: '', modelo: 'openai-fast',
+      mensagens: [{ role: 'user', content: 'olá' }], fetchImpl,
+    }),
+    (e) => e.codigo === 'credito' && e.retentavel === true,
+  );
+});
+
+test('descoberta: a lista real do fornecedor alimenta a cadeia (e a paga não)', () => {
+  const cfg = { testes: { opencode: { ok: true, lista: ['modelo-novo-free', 'nemotron-3.5-super-vl-free'] } } };
+  const extra = descobertosGratuitos(cfg);
+  assert.deepEqual(extra.map((d) => d.modelo), ['modelo-novo-free', 'nemotron-3.5-super-vl-free']);
+  assert.equal(extra[0].gratuito, true);
+  assert.equal(extra[0].preco[0], 0);
+  assert.ok(extra[1].etiquetas.includes('visao'), 'o nome diz VL: entra na cadeia de visão');
+
+  const catalogo = catalogoDaCadeia(cfg);
+  assert.ok(catalogo.some((m) => m.modelo === 'modelo-novo-free'));
+  /* um fornecedor pago descoberto não entra: só os sem custo */
+  const pago = { testes: { openrouter: { ok: true, lista: ['gpt-5', 'qwen/qwen3-coder:free'] } } };
+  assert.deepEqual(descobertosGratuitos(pago).map((d) => d.modelo), ['qwen/qwen3-coder:free'], 'num gateway misto só entra o que diz free');
+  assert.equal(catalogoDaCadeia(pago, []).some((m) => m.modelo === 'gpt-5'), false, 'o pago nunca é acrescentado pela descoberta');
+});
+
+test('motor: sem nenhuma chave, o OpenCode entra pelo `Bearer public`', async () => {
+  limparFora();
+  const pedidos = [];
+  const fetchImpl = async (url, opt = {}) => {
+    const u = String(url);
+    pedidos.push({ url: u, headers: opt.headers || {}, corpo: opt.body ? JSON.parse(opt.body) : null });
+    if (u.includes('llm7.io')) return json({ error: { message: "Model 'codestral-latest' is currently unavailable." } }, 400);
+    if (u.includes('ovh.net')) return json({ error: { message: 'API rate limit exceeded' } }, 429);
+    return json({ choices: [{ message: { content: 'feito pelo opencode' } }], usage: { prompt_tokens: 9, completion_tokens: 3 } });
+  };
+  const motor = criarMotor({ repo: createMemRepo(), env: {}, fetchImpl });
+  const r = await motor.pedir('codigo', [{ role: 'user', content: 'escreve uma função' }]);
+  assert.equal(r.texto, 'feito pelo opencode');
+  assert.equal(r.fornec, 'opencode');
+  const doOpencode = pedidos.filter((p) => p.url.includes('opencode.ai'));
+  assert.ok(doOpencode.length >= 1);
+  assert.equal(doOpencode[0].headers.authorization, 'Bearer public', 'a chave publicada pelo serviço, não inventada');
+  assert.equal(JSON.stringify(pedidos).includes('sem-chave'), false);
+  limparFora();
+});
+
+test('motor: o teste real do Pollinations lista os modelos e responde', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async (url, opt = {}) => {
+    const u = String(url);
+    if (u.endsWith('/models')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ name: 'openai-fast', description: 'GPT-OSS 20B (OVH)' }]) };
+    }
+    return { ok: true, status: 200, text: async () => 'ok' };
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.testar('pollinations');
+  assert.equal(r.ok, true);
+  assert.equal(r.modelo, 'openai-fast');
+  assert.equal(r.modelos, 1);
+  const cfg = await repo.ia.config.ler();
+  assert.deepEqual(cfg.testes.pollinations.lista, ['openai-fast'], 'a lista fica guardada para a cadeia');
+  assert.equal(cfg.testes.pollinations.ok, true);
+});
+
+test('gratuitos: separa o que está provado do que só existe', () => {
+  const chaves = comChave({});
+  const r = resumo({ chaves });
+  assert.ok(r.total >= 3);
+  assert.ok(r.porProvar.length >= 5, 'há gratuitos prontos por provar');
+  const nomesFalta = r.porProvar.map((p) => `${p.fornec}/${p.modelo}`);
+  assert.ok(nomesFalta.includes('pollinations/openai-fast'));
+  assert.ok(nomesFalta.some((n) => n.startsWith('opencode/')));
+  /* nenhum dos provados aparece na lista dos que faltam provar */
+  const nomesProvados = r.modelos.map((m) => `${m.fornec}/${m.modelo}`);
+  assert.equal(nomesFalta.some((n) => nomesProvados.includes(n)), false);
+  assert.match(estadoCurto({ chaves }).frase, /provados .* por provar/);
+  assert.equal(etiquetasDoId('nemotron-3.5-super-vl-free').includes('visao'), true);
+  assert.equal(porProvar({ chaves }).every((p) => p.etiquetas.length > 0), true);
 });
