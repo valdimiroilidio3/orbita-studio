@@ -22,6 +22,12 @@
    numa chave só. Manter o código do Google era manter uma promessa que ninguém
    tinha ligado — e um caminho a mais para explicar a quem usa o escritório.
 
+   Qualidade dos resultados (1.30.0): a Tavily devolve sempre *alguma coisa*, com
+   uma pontuação de relevância que pode ser de 0,06. Sem limiar, «zxqv inexistente»
+   trazia seis páginas sobre um ETF — apresentadas como resposta. Agora há um limiar
+   (0,15 por omissão, `ORBITA_RELEVANCIA_MIN`) e o que cai fora é **contado**, não
+   escondido em silêncio. E quando a zona pedida não é a zona encontrada, diz-se.
+
    Regras:
      · As chaves vivem SÓ no ambiente (variáveis da Vercel, cifradas em repouso
        pela plataforma). Nunca são escritas em ficheiros, nunca voltam ao
@@ -31,9 +37,12 @@
      · Nada disto envia correio nem contacta ninguém: procurar não é falar.
    =========================================================================== */
 
-const GEOCODE = 'https://api.geoapify.com/v1/geocode/search';
-const PLACES = 'https://api.geoapify.com/v2/places';
-const TAVILY = 'https://api.tavily.com';
+/* Os endereços são os do fornecedor, mas podem ser trocados por ambiente: dá para
+   testar o caminho completo sem gastar créditos e para pôr um proxy à frente sem
+   tocar em nenhum agente. Não são segredos — as chaves continuam a ser. */
+const GEOCODE = process.env.ORBITA_GEOAPIFY_URL ? `${process.env.ORBITA_GEOAPIFY_URL.replace(/\/$/, '')}/v1/geocode/search` : 'https://api.geoapify.com/v1/geocode/search';
+const PLACES = process.env.ORBITA_GEOAPIFY_URL ? `${process.env.ORBITA_GEOAPIFY_URL.replace(/\/$/, '')}/v2/places` : 'https://api.geoapify.com/v2/places';
+const TAVILY = (process.env.ORBITA_TAVILY_URL || 'https://api.tavily.com').replace(/\/$/, '');
 
 /** Esconde um segredo para se poder falar dele sem o mostrar. */
 export const mascarar = (s) => {
@@ -139,7 +148,11 @@ async function pedirJson(url, opcoes, fetchImpl, segundos = 20) {
   try {
     return await fetchImpl(url, { ...opcoes, signal: ctl.signal });
   } catch (e) {
-    if (e?.name === 'AbortError') throw new Error(`o serviço não respondeu em ${segundos} s`);
+    if (e?.name === 'AbortError') {
+      const tempo = new Error(`o serviço não respondeu em ${segundos} s`);
+      tempo.codigo = 'timeout';
+      throw tempo;
+    }
     throw new Error(`não consegui chegar ao serviço: ${String(e?.message || e).slice(0, 120)}`);
   } finally { clearTimeout(t); }
 }
@@ -227,6 +240,30 @@ export function notaDeLead({ website, telefone, email, categorias = [] } = {}) {
   return { nota: Math.max(0, Math.min(100, nota)), porque: bits.join(' · ') };
 }
 
+/**
+ * A zona pedida é a zona encontrada?
+ *
+ * Aconteceu em produção: `onde=Lisboa` resolveu para «Parque de Lisboa, Alcorcón»
+ * e devolveu vinte restaurantes de Madrid; `onde=Ilha Inexistente XYZ` resolveu
+ * para a Madeira. Os dados estavam certos — a resposta é que mentia por omissão.
+ * Aqui compara-se o que foi pedido com o que veio, e o que não bate é dito.
+ */
+export function zonaDiverge(pedido, centro) {
+  const n = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const pedidoN = n(pedido);
+  const resolvidoN = n([centro?.texto, centro?.cidade, centro?.pais].filter(Boolean).join(' · '));
+  const cidadeN = n(centro?.cidade);
+  if (!pedidoN || !resolvidoN) return { diverge: false, motivo: null };
+  /* uma coisa contém a outra — é o caso normal («Coimbra» ⊂ «Coimbra, Portugal») */
+  if (resolvidoN.includes(pedidoN) || (cidadeN && (pedidoN.includes(cidadeN) || cidadeN.includes(pedidoN)))) {
+    return { diverge: false, motivo: null };
+  }
+  return {
+    diverge: true,
+    motivo: `pediste «${pedido}» e o serviço resolveu «${centro?.texto || centro?.cidade}» — confirma que é a zona que querias`,
+  };
+}
+
 /** Procura empresas: geocodifica a zona, depois pede os sítios daquela categoria. */
 export async function procurarLeads({ oQue, onde, categoria = null, limite = 20, raio = 12000, lang = 'pt', pais = null } = {}, { env = process.env, fetchImpl = fetch } = {}) {
   const cat = categoria ? (acharCategoria(categoria) || { id: 'directo', categoria }) : acharCategoria(oQue);
@@ -249,11 +286,29 @@ export async function procurarLeads({ oQue, onde, categoria = null, limite = 20,
   const j = await r.json();
   const alvo = { cidade: centro.cidade, categoria: cat.categoria };
   const leads = (Array.isArray(j?.features) ? j.features : []).map((f) => leadDeSitio(f, alvo)).filter(Boolean);
-  return { fonte: 'geoapify', categoria: cat.categoria, pedido: { oQue: String(oQue || ''), onde: String(onde), raio: Number(raio) || 12000 }, centro, encontrados: leads.length, leads };
+  const zona = zonaDiverge(onde, centro);
+  const avisos = [];
+  if (zona.diverge) avisos.push(zona.motivo);
+  if (pais && centro.codigoPais && String(pais).toUpperCase() !== centro.codigoPais) {
+    avisos.push(`pediste ${String(pais).toUpperCase()} e a zona resolvida é ${centro.codigoPais}`);
+  }
+  return {
+    fonte: 'geoapify', categoria: cat.categoria,
+    pedido: { oQue: String(oQue || ''), onde: String(onde), raio: Number(raio) || 12000 },
+    centro, encontrados: leads.length, leads,
+    ...(avisos.length ? { avisoZona: avisos.join(' · '), avisos, zonaDiverge: zona.diverge } : { avisoZona: null, avisos: [], zonaDiverge: false }),
+  };
 }
 
 /* ---------- Tavily: a web ---------- */
-export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'basic', resposta = true, topico = 'general', dias = null, dominios = null } = {}, { env = process.env, fetchImpl = fetch } = {}) {
+/** Abaixo disto, um resultado da Tavily é ruído com URL. 0,15 porque o lixo medido
+    em produção andou em 0,06–0,13 e o que presta começa nos 0,7. */
+export const limiarDe = (env = process.env, pedido = null) => {
+  const n = Number(pedido ?? env?.ORBITA_RELEVANCIA_MIN ?? 0.15);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0.15;
+};
+
+export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'basic', resposta = true, topico = 'general', dias = null, dominios = null, minRelevancia = null } = {}, { env = process.env, fetchImpl = fetch } = {}) {
   const k = tem(env, 'TAVILY_API_KEY', 'TAVILY_KEY');
   if (!k) throw new Error('falta TAVILY_API_KEY no ambiente');
   const texto = String(consulta || q || '').trim();
@@ -279,14 +334,24 @@ export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'ba
   }, fetchImpl, 25);
   if (!r.ok) throw erroHttp('a Tavily', r, await corpoDeErro(r));
   const j = await r.json();
-  const resultados = (Array.isArray(j?.results) ? j.results : []).map((x) => ({
+  const limiar = limiarDe(env, minRelevancia);
+  const todos = (Array.isArray(j?.results) ? j.results : []).map((x) => ({
     titulo: String(x.title || ''),
     url: String(x.url || ''),
     excerto: String(x.content || '').slice(0, 1200),
     relevancia: typeof x.score === 'number' ? Math.round(x.score * 100) / 100 : null,
     publicado: x.published_date || null,
   }));
-  return { fonte: 'tavily', consulta: texto, topico: noticias ? 'news' : 'general', respostaCurta: j?.answer || null, resultados, encontrados: resultados.length };
+  /* sem pontuação não se inventa uma: conta como aceitável (a API pode não pontuar),
+     mas o campo vai a `null` para quem lê saber que não houve medição. */
+  const resultados = todos.filter((r) => r.relevancia == null || r.relevancia >= limiar);
+  const descartados = todos.length - resultados.length;
+  return {
+    fonte: 'tavily', consulta: texto, topico: noticias ? 'news' : 'general',
+    respostaCurta: resultados.length ? (j?.answer || null) : null,
+    resultados, encontrados: resultados.length, descartados, limiar,
+    ...(descartados && !resultados.length ? { aviso: `nada com relevância suficiente (limiar ${limiar}); ${descartados} resultado(s) ficaram de fora` } : {}),
+  };
 }
 
 /** Extrai o texto limpo de um endereço já conhecido (Tavily /extract). */

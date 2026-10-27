@@ -31,7 +31,7 @@ O projeto original foi concebido como uma aplicação local. Antes de o expor pu
 | GET | `/api/integrations` | Estado de configuração dos providers (sem segredos) | Público, só metadados |
 | GET | `/api/github/repo?owner=OWNER&repo=REPO` | Metadados de repositório GitHub | Bearer obrigatório; `GITHUB_TOKEN` opcional no servidor |
 | PUT | `/api/github/file` | Cria/atualiza um ficheiro num branch e faz commit | Bearer, `approved:true`, `GITHUB_TOKEN` com Contents: write; bloqueia segredos e workflows |
-| MCP | `orbita_business_discover`, `orbita_leads_*`, `orbita_ai_assist`, `orbita_content_*` | Ferramentas usadas pelos agentes de trabalho | Via `orbita_integrations` no `.mcp.json`; providers externos continuam sujeitos a chaves/quota |
+| MCP | `orbita_business_search`, `orbita_business_discover`, `orbita_web_search`, `orbita_research_usage`, `orbita_leads_*`, `orbita_ai_assist`, `orbita_content_*` | Ferramentas usadas pelos agentes de trabalho | Via `orbita_integrations` no `.mcp.json`; providers externos continuam sujeitos a chaves/quota |
 | POST | `/api/whatsapp/link` | Gera um link `wa.me` com texto pré-preenchido | Bearer obrigatório; não envia a mensagem |
 | POST | `/api/crm/leads/discover` | Pesquisa manual por zona/categoria via Nominatim + Overpass | Bearer obrigatório para evitar abuso do serviço público; `save:true` grava no CRM |
 | GET | `/api/crm/leads?limit=100` | Lista CRM | Bearer obrigatório |
@@ -141,9 +141,13 @@ no mesmo sítio — a primeira ganharia sempre, em silêncio — o CRM vive em `
 | Prospeção do escritório | `/api/leads` | Google Places / pesquisa web | painel de Prospeção e Vendas |
 | CRM das integrações | `/api/crm/leads` | OpenStreetMap + entrada manual + MCP | ferramentas `orbita_leads_*` dos agentes |
 
-As duas listas existem mesmo: uma não é cópia da outra. Se quiseres uma só, o caminho é mapear o
-resultado de `orbita_business_discover` para o formato da prospeção e gravar com `google.saveAll`
-em `serve.mjs` — não está feito.
+As duas listas existem mesmo: uma não é cópia da outra.
+
+Desde 1.30.0 a pesquisa dos agentes passa por `api/_ferramentas.mjs` — a mesma camada da
+interface e das rotas `/pesquisa/*`: validação antes de gastar um crédito, cache de 5 minutos,
+tecto por minuto/dia/mês e uma linha de registo por execução. `orbita_business_discover`
+mantém-se por compatibilidade e, com chave do Geoapify, responde a partir dele (sem chave,
+volta ao OSM). Ver [PESQUISA.md](../PESQUISA.md).
 
 ## O que esta camada não tem
 

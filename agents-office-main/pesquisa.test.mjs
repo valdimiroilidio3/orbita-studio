@@ -323,7 +323,11 @@ test('rotas: por GET a pesquisa é só leitura — nada entra no funil', async (
   assert.equal(t.status, 200);
   assert.equal(t.corpo.ok, true);
   assert.equal(t.corpo.fonte, 'geoapify');
-  assert.equal(repo._dados.atividade.some((a) => String(a.kind || a.tipo || '').includes('pesquisa')), false, 'um GET não assina o registo');
+  /* 1.30.0: ler deixa rasto de telemetria (ferramenta, estado, fontes) — o que um
+     GET continua a não fazer é escrever no funil. */
+  const rasto = repo._dados.atividade.filter((a) => String(a.tipo || a.kind || '').includes('pesquisa'));
+  assert.equal(rasto.length > 0, true, 'cada execução deixa uma linha de registo');
+  assert.equal(repo._dados.leads.length, 0, 'o rasto não é um lead');
   const x = await chamar(repo, '/pesquisa/teste?fonte=naoexiste', 'GET', null, { fetchImpl: f });
   assert.equal(x.status, 404);
 });

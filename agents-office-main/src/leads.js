@@ -86,6 +86,7 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
 
   const S = {
     estado: null,        // /pesquisa/estado — o que está ligado, sem nomes de variáveis
+    uso: null,           // /pesquisa/uso — quanto já se gastou hoje (1.30.0)
     categorias: [],      // /pesquisa/categorias — as sugestões
     resultados: [],      // o que veio desta pesquisa
     guardados: [],       // /ops/leads — o funil
@@ -172,6 +173,16 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
         ? (prontoWeb() ? (S.topico === 'news' ? 'Tavily · notícias' : 'Tavily · pesquisa principal') : 'pesquisa indisponível')
         : (S.estado?.fontes?.geoapify?.disponivel ? 'Geoapify · OpenStreetMap' : 'empresas indisponível');
     }
+    /* o consumo não ocupa espaço: vive no título do selo da fonte */
+    if (P.fonte && S.uso?.fornecedores) {
+      const id = S.modo === 'web' ? 'tavily' : 'geoapify';
+      const f = S.uso.fornecedores.find((x) => x.fornecedor === id);
+      if (f) {
+        const c = f.creditos || {};
+        const teto = c.tetoDia == null ? 'sem tecto diário' : `${c.hoje || 0} de ${c.tetoDia} hoje`;
+        P.fonte.title = `${f.nome || id} · ${teto}${c.tetoMes ? ` · ${c.mes || 0} de ${c.tetoMes} no mês` : ''} · ${f.cacheHits || 0} resposta(s) da cache · ${f.janela?.usadoNoMinuto || 0} de ${f.janela?.porMinuto || 0} no último minuto`;
+      }
+    }
     P.go.disabled = S.ocupado || !pronto();
     pintarAviso();
   }
@@ -207,11 +218,14 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
 
   async function carregar(tambemGuardados = false) {
     try {
-      const [e, l] = await Promise.all([
+      const [e, l, u] = await Promise.all([
         pedir('/pesquisa/estado'),
         tambemGuardados ? pedir('/ops/leads?limit=30') : Promise.resolve(null),
+        /* 1.30.0: o consumo do dia, para se ver o travão antes de bater nele */
+        pedir('/pesquisa/uso').catch(() => null),
       ]);
       S.estado = e.dados?.fontes ? e.dados : S.estado;
+      if (u?.dados?.fornecedores) S.uso = u.dados;
       if (l?.dados?.leads) S.guardados = l.dados.leads;
       if (!S.categorias.length) {
         const c = await pedir('/pesquisa/categorias').catch(() => null);

@@ -431,73 +431,144 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: r.codigo === 'desconhecida' ? 404 : 200, corpo: { ...r, fonte } };
   }
 
+  /* ---- 1.30.0 · as mesmas rotas, agora pela camada de ferramentas ----
+     A pesquisa passa toda por `_ferramentas.mjs`: validação de parâmetros antes de
+     gastar um crédito, cache de 5 minutos, tecto por minuto e por dia, e uma linha
+     de registo por execução (ferramenta, estado, fontes, erro). As respostas mantêm
+     os campos que a interface já conhece e ganham os novos — nada foi partido. */
   if (caminhoLimpo === '/pesquisa/leads' && (m === 'POST' || m === 'GET')) {
-    const p = await import('./_pesquisa.mjs');
-    /* por GET é só leitura: nunca escreve no funil */
+    const f = await import('./_ferramentas.mjs');
+    /* por GET é só leitura: nunca escreve no funil (mas fica no registo da pesquisa) */
     const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
     const oQue = limpo(fonte?.oQue || fonte?.what || fonte?.atividade);
     const onde = limpo(fonte?.onde || fonte?.where || fonte?.zona);
-    try {
-      const r = await p.procurarLeads({
-        oQue, onde,
-        categoria: limpo(fonte?.categoria) || null,
-        limite: Number(fonte?.limite || fonte?.limit) || 20,
-        raio: Number(fonte?.raio) || 12000,
-        pais: limpo(fonte?.pais) || null,
-        lang: limpo(fonte?.lang) || 'pt',
-      }, { env, fetchImpl });
-      let guardados = null;
-      const podeGuardar = m === 'POST' && fonte?.guardar !== false;
-      if (podeGuardar && r.leads.length) {
-        const linhas = r.leads.map((l) => ({
-          dedupe_key: dedupe(l.nome, l.cidade), name: l.nome, category: l.categoria || null,
-          city: l.cidade || null, phone: l.telefone || null, email: l.email || null,
-          website: l.website || null, source: 'geoapify', status: 'novo',
-          notes: `nota ${l.nota} · ${l.porque}`,
-        }));
-        const existentes = await repo.leads.existentes(linhas.map((l) => l.dedupe_key));
-        const chaves = new Set(existentes.map((e) => e.dedupe_key));
-        const novos = linhas.filter((l) => !chaves.has(l.dedupe_key));
-        if (novos.length) await repo.leads.inserir(novos);
-        guardados = { novos: novos.length, repetidos: linhas.length - novos.length, total: linhas.length };
-        await repo.atividade.add('pesquisa', `${oQue || r.categoria} em ${onde}: ${r.encontrados} encontrados, ${novos.length} novos`).catch(() => {});
-      }
-      return { status: 200, corpo: { ok: true, ...r, guardados } };
-    } catch (e) {
-      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
+    const r = await f.executar('pesquisar_empresas', {
+      oQue, onde,
+      categoria: limpo(fonte?.categoria) || null,
+      limite: Number(fonte?.limite || fonte?.limit) || 20,
+      raio: Number(fonte?.raio) || 12000,
+      pais: limpo(fonte?.pais) || null,
+      lang: limpo(fonte?.lang) || null,
+    }, { env, fetchImpl, repo });
+
+    const emprestado = {
+      ok: r.ok,
+      fonte: r.fornecedor,
+      categoria: r.dados?.categoria || null,
+      pedido: r.dados?.pedido || { oQue, onde },
+      centro: r.dados?.centro || null,
+      encontrados: r.dados?.empresas?.length || 0,
+      leads: r.dados?.empresas || [],
+      avisoZona: r.avisos.find((a) => /resolveu|pediste/.test(a)) || null,
+      avisos: r.avisos,
+      repetidos: r.dados?.repetidos || 0,
+      ferramenta: r.ferramenta, ms: r.ms, cache: r.cache,
+      codigo: r.codigo, erro: r.erro,
+    };
+
+    if (!r.ok) {
+      /* 400 para parâmetros, 429 para limite/quota, 502 para o resto — o código diz qual */
+      const status = r.codigo === 'parametros' ? 400
+        : r.codigo === 'limite' || r.codigo === 'quota' ? 429
+          : 502;
+      return { status, corpo: { ...emprestado, erro: r.erro, esperarMs: r.esperarMs || null, guardados: null } };
     }
+
+    let guardados = null;
+    const podeGuardar = m === 'POST' && fonte?.guardar !== false;
+    if (podeGuardar && emprestado.leads.length) {
+      const linhas = emprestado.leads.map((l) => ({
+        dedupe_key: dedupe(l.nome, l.cidade), name: l.nome, category: l.categoria || null,
+        city: l.cidade || null, phone: l.telefone || null, email: l.email || null,
+        website: l.website || null, source: 'geoapify', status: 'novo',
+        notes: `nota ${l.nota} · ${l.porque}`,
+      }));
+      const existentes = await repo.leads.existentes(linhas.map((l) => l.dedupe_key));
+      const chaves = new Set(existentes.map((e) => e.dedupe_key));
+      const novos = linhas.filter((l) => !chaves.has(l.dedupe_key));
+      if (novos.length) await repo.leads.inserir(novos);
+      guardados = { novos: novos.length, repetidos: linhas.length - novos.length, total: linhas.length };
+    }
+    return { status: 200, corpo: { ...emprestado, guardados } };
   }
 
   if (caminhoLimpo === '/pesquisa/web' && (m === 'POST' || m === 'GET')) {
-    const p = await import('./_pesquisa.mjs');
+    const f = await import('./_ferramentas.mjs');
     const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
-    try {
-      const r = await p.pesquisarWeb({
-        consulta: limpo(fonte?.consulta || fonte?.q || fonte?.query),
-        limite: Number(fonte?.limite || fonte?.limit) || 8,
-        profundidade: limpo(fonte?.profundidade) || 'basic',
-        /* 1.29.0: notícias com recorte temporal — a Tavily é a pesquisa principal */
-        topico: limpo(fonte?.topico || fonte?.topic) || 'general',
-        dias: Number(fonte?.dias || fonte?.days) || null,
-        dominios: limpo(fonte?.dominios || fonte?.domains)
-          ? String(fonte.dominios || fonte.domains).split(',').map((x) => x.trim()).filter(Boolean)
-          : null,
-      }, { env, fetchImpl });
+    const r = await f.executar('pesquisar_web', {
+      consulta: limpo(fonte?.consulta || fonte?.q || fonte?.query),
+      limite: Number(fonte?.limite || fonte?.limit) || 8,
+      profundidade: limpo(fonte?.profundidade) || 'basic',
+      /* 1.29.0: notícias com recorte temporal — a Tavily é a pesquisa principal */
+      topico: limpo(fonte?.topico || fonte?.topic) || 'general',
+      dias: Number(fonte?.dias || fonte?.days) || null,
+      dominios: limpo(fonte?.dominios || fonte?.domains)
+        ? String(fonte.dominios || fonte.domains).split(',').map((x) => x.trim()).filter(Boolean)
+        : null,
+      minRelevancia: fonte?.minRelevancia == null ? undefined : Number(fonte.minRelevancia),
+    }, { env, fetchImpl, repo });
+
+    const corpoWeb = {
+      ok: r.ok,
+      fonte: r.fornecedor,
+      consulta: r.pedido?.consulta || limpo(fonte?.consulta || fonte?.q || fonte?.query),
+      topico: r.dados?.topico || r.pedido?.topico || 'general',
+      respostaCurta: r.dados?.respostaCurta || null,
+      resultados: r.dados?.resultados || [],
+      encontrados: r.dados?.resultados?.length || 0,
+      descartados: r.dados?.descartados || 0,
+      limiar: r.dados?.limiar ?? null,
+      fontes: r.fontes || [],
+      avisos: r.avisos || [],
+      ferramenta: r.ferramenta, ms: r.ms, cache: r.cache, codigo: r.codigo, erro: r.erro,
       /* resultados da web não são empresas: não entram no funil sem alguém os ler */
-      return { status: 200, corpo: { ok: true, ...r, guardados: null, nota: 'a web dá contexto, não leads — nada foi escrito no funil' } };
-    } catch (e) {
-      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
+      guardados: null,
+      nota: 'a web dá contexto, não leads — nada foi escrito no funil',
+    };
+    if (!r.ok) {
+      const status = r.codigo === 'parametros' ? 400
+        : r.codigo === 'limite' || r.codigo === 'quota' ? 429
+          : r.codigo === 'vazio' ? 200 : 502;
+      return { status, corpo: corpoWeb };
     }
+    return { status: 200, corpo: corpoWeb };
   }
 
   if (caminhoLimpo === '/pesquisa/pagina' && m === 'POST') {
-    const p = await import('./_pesquisa.mjs');
-    try {
-      const r = await p.extrairPagina({ url: limpo(corpo?.url) }, { env, fetchImpl });
-      return { status: 200, corpo: { ok: true, ...r } };
-    } catch (e) {
-      return { status: 502, corpo: { ok: false, erro: String(e.message || e).slice(0, 400) } };
-    }
+    const f = await import('./_ferramentas.mjs');
+    const r = await f.executar('ler_pagina', { url: limpo(corpo?.url) }, { env, fetchImpl, repo });
+    const corpoPagina = {
+      ok: r.ok, fonte: r.fornecedor, url: r.dados?.url || limpo(corpo?.url),
+      titulo: r.dados?.titulo || null, texto: r.dados?.texto || '',
+      caracteres: r.dados?.caracteres || 0, ms: r.ms, cache: r.cache,
+      erro: r.erro, codigo: r.codigo,
+    };
+    const status = r.ok ? 200 : r.codigo === 'parametros' ? 400 : r.codigo === 'limite' || r.codigo === 'quota' ? 429 : 502;
+    return { status, corpo: corpoPagina };
+  }
+
+  /* ---- 1.30.0 · o consumo e o que os agentes têm ----
+     Duas rotas de leitura: quanto se gastou hoje (por fornecedor, com o tecto e o
+     que resta) e quais são as ferramentas que os agentes podem chamar. Nenhuma
+     devolve chaves — só nomes, contadores e o endereço da documentação do plano. */
+  if (caminhoLimpo === '/pesquisa/uso' && m === 'GET') {
+    const lim = await import('./_limites.mjs');
+    const f = await import('./_ferramentas.mjs');
+    const janela = Number(qs.get('execucoes')) || 20;
+    return {
+      status: 200,
+      corpo: {
+        ok: true,
+        ...lim.uso(env),
+        execucoes: f.execucoes(janela),
+        nota: 'o consumo é medido por instância da função; a factura real está no painel do fornecedor.',
+      },
+    };
+  }
+
+  if (caminhoLimpo === '/pesquisa/ferramentas' && m === 'GET') {
+    const f = await import('./_ferramentas.mjs');
+    return { status: 200, corpo: { ok: true, ...f.estadoFerramentas(env) } };
   }
 
   /* ---- 1.25.0 · a cópia que sai do servidor pode sair cifrada ---- */

@@ -56,6 +56,8 @@ import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · G
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as leadsStore from './leads-store.mjs'; // 1.29.0: a lista local de leads, sem fornecedor nenhum agarrado
 import * as pesquisa from './api/_pesquisa.mjs'; // 27 out 2026 (1.25.0): Geoapify (leads) e Tavily (contexto), as mesmas do servidor
+import * as ferramentas from './api/_ferramentas.mjs'; // 1.30.0: a mesma camada de ferramentas que os agentes usam
+import * as limites from './api/_limites.mjs';
 import * as ops from './src/ops/index.mjs';
 import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
 import { createBus } from './forge/bus.mjs';
@@ -926,23 +928,54 @@ const server = http.createServer(async (req, res) => {
       const kind = b.kind === 'places' ? 'places' : 'web';
       const limit = Math.max(1, Math.min(20, +b.limit || 10));
       const t0 = Date.now();
-      try {
-        if (kind === 'web') {
-          const r = await pesquisa.pesquisarWeb({ consulta: b.q || [b.what, b.where].filter(Boolean).join(' '), limite: limit, topico: b.topico, dias: b.dias }, { env: process.env });
-          /* resultados da web são contexto: nunca entram no funil sem alguém os ler */
-          return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: r.encontrados, added: 0, updated: 0, total: leadsStore.stats(DATA).total, results: r.resultados, respostaCurta: r.respostaCurta, nota: 'a web dá contexto, não leads — nada foi escrito no funil' });
+      /* 1.30.0: o que a interface pede passa pela mesma camada de ferramentas que os
+         agentes usam — cache, tecto por minuto e registo incluídos. Sem isto, a
+         interface era a única porta sem travão. */
+      if (kind === 'web') {
+        const r = await ferramentas.executar('pesquisar_web', {
+          consulta: b.q || [b.what, b.where].filter(Boolean).join(' '),
+          limite: limit, topico: b.topico || 'general', dias: b.dias || null,
+        }, { env: process.env });
+        if (!r.ok) {
+          const status = r.codigo === 'parametros' ? 400 : r.codigo === 'limite' || r.codigo === 'quota' ? 429 : 502;
+          return json(res, status, { ok: false, kind, ms: Date.now() - t0, error: r.erro, codigo: r.codigo, esperarMs: r.esperarMs || null });
         }
-        const r = await pesquisa.procurarLeads({ oQue: b.what, onde: b.where, categoria: b.categoria || null, limite: limit }, { env: process.env });
-        const comoLead = r.leads.map((l) => ({
-          source: 'geoapify', name: l.nome, city: l.cidade, address: l.morada, phone: l.telefone,
-          website: l.website, email: l.email, rating: null, reviews: null, mapsUrl: '',
-          type: l.categoria, score: l.nota, why: l.porque,
-        }));
-        const guardar = b.save !== false;
-        const saved = guardar ? leadsStore.saveAll(comoLead, DATA) : { added: 0, updated: 0, total: leadsStore.stats(DATA).total, leads: comoLead };
-        console.log(`🔎 Empresas: "${b.what} em ${b.where}" → ${comoLead.length} encontradas · +${saved.added} novas`);
-        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: comoLead.length, added: saved.added, updated: saved.updated, total: saved.total, results: comoLead });
-      } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
+        return json(res, 200, {
+          ok: true, kind, ms: Date.now() - t0, found: r.dados.resultados.length,
+          added: 0, updated: 0, total: leadsStore.stats(DATA).total,
+          results: r.dados.resultados, respostaCurta: r.dados.respostaCurta,
+          fontes: r.fontes, descartados: r.dados.descartados, limiar: r.dados.limiar,
+          avisos: r.avisos, cache: r.cache,
+          nota: 'a web dá contexto, não leads — nada foi escrito no funil',
+        });
+      }
+      const r = await ferramentas.executar('pesquisar_empresas', {
+        oQue: b.what, onde: b.where, categoria: b.categoria || null, limite: limit,
+      }, { env: process.env });
+      if (!r.ok) {
+        const status = r.codigo === 'parametros' ? 400 : r.codigo === 'limite' || r.codigo === 'quota' ? 429 : 502;
+        return json(res, status, { ok: false, kind, ms: Date.now() - t0, error: r.erro, codigo: r.codigo, avisos: r.avisos });
+      }
+      const comoLead = r.dados.empresas.map((l) => ({
+        source: 'geoapify', name: l.nome, city: l.cidade, address: l.morada, phone: l.telefone,
+        website: l.website, email: l.email, rating: null, reviews: null, mapsUrl: '',
+        type: l.categoria, score: l.nota, why: l.porque,
+      }));
+      const guardar = b.save !== false;
+      const saved = guardar ? leadsStore.saveAll(comoLead, DATA) : { added: 0, updated: 0, total: leadsStore.stats(DATA).total, leads: comoLead };
+      console.log(`🔎 Empresas: "${b.what} em ${b.where}" → ${comoLead.length} encontradas · +${saved.added} novas${r.cache ? ' (cache)' : ''}`);
+      return json(res, 200, {
+        ok: true, kind, ms: Date.now() - t0, found: comoLead.length, added: saved.added, updated: saved.updated,
+        total: saved.total, results: comoLead, centro: r.dados.centro, repetidos: r.dados.repetidos,
+        avisos: r.avisos, avisoZona: r.avisos.find((a) => /resolveu|pediste/.test(a)) || null, cache: r.cache,
+      });
+    }
+    /* 1.30.0: o consumo e o catálogo, também no servidor local */
+    if (url.pathname === '/api/pesquisa/uso' && req.method === 'GET') {
+      return json(res, 200, { ok: true, ...limites.uso(process.env), execucoes: ferramentas.execucoes(20) });
+    }
+    if (url.pathname === '/api/pesquisa/ferramentas' && req.method === 'GET') {
+      return json(res, 200, { ok: true, ...ferramentas.estadoFerramentas(process.env) });
     }
     // ---- 1.25.0: as fontes que não pedem cartão, iguais às da função publicada ----
     if (url.pathname === '/api/pesquisa' && req.method === 'GET') {

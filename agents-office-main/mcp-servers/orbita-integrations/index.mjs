@@ -4,6 +4,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as api from '../../integrations.mjs';
+import * as ferramentas from '../../api/_ferramentas.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -46,15 +47,127 @@ const TOOLS = [
   { name: 'orbita_email_suppress', description: 'Regista um endereço na lista de supressão para prevenir futuros envios. Usa quando alguém pede para não ser contactado.', inputSchema: { type: 'object', properties: { email: { type: 'string', format: 'email' }, reason: { type: 'string', maxLength: 120 } }, required: ['email'], additionalProperties: false } },
   { name: 'orbita_instagram_publish', description: 'PUBLICA UMA IMAGEM no Instagram profissional via Meta Graph API. Só chamar quando o dono pedir explicitamente, nesta tarefa, para publicar este conteúdo. Requer approved=true, um draftId existente com URL de imagem HTTPS pública ou imageUrl+caption, e credenciais Meta válidas. Não publica Reels, Stories ou carrosséis.', inputSchema: { type: 'object', properties: { approved: { type: 'boolean' }, draftId: { type: 'string', maxLength: 60 }, imageUrl: { type: 'string', maxLength: 2000 }, caption: { type: 'string', maxLength: 2200 } }, required: ['approved'], additionalProperties: false } },
   { name: 'orbita_vercel_deploy', description: 'DISPARA um novo deployment do projeto e branch vinculados ao Vercel Deploy Hook configurado. Só chamar após pedido explícito do dono para fazer o deploy nesta tarefa. Requer approved=true e VERCEL_DEPLOY_HOOK_URL. A URL do hook é secreta e não deve ser exposta. O retorno apenas confirma aceitação do pedido, não sucesso do build.', inputSchema: { type: 'object', properties: { approved: { type: 'boolean' } }, required: ['approved'], additionalProperties: false } },
+  /* ---- 1.30.0 · pesquisa real para os agentes ----
+     Duas ferramentas que faltavam: a web (Tavily) e as empresas (Geoapify).
+     Passam ambas pela mesma camada (`api/_ferramentas.mjs`), por isso o agente
+     recebe sempre o mesmo envelope — ferramenta, fornecedor, estado, fontes,
+     erro — e trocar de fornecedor não muda o que o agente vê. */
+  { name: 'orbita_web_search', description: 'Pesquisa a web em tempo real (Tavily) e devolve título, URL, excerto e data de cada fonte, mais uma resposta curta opcional. Usa para factos atuais, notícias, concorrência e contexto de mercado. Diz sempre a fonte e a data; o que não vier da resposta é inferência tua, não facto. Só para notícias usa topic=news com days.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 2, maxLength: 400 }, limit: { type: 'integer', minimum: 1, maximum: 20 }, topic: { type: 'string', enum: ['general', 'news'] }, days: { type: 'integer', minimum: 1, maximum: 365 }, domains: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 10 }, depth: { type: 'string', enum: ['basic', 'advanced'] }, minScore: { type: 'number', minimum: 0, maximum: 1 } }, required: ['query'], additionalProperties: false } },
+  { name: 'orbita_business_search', description: 'Procura empresas reais por atividade e cidade (Geoapify: nome, morada, telefone, site e email quando existem nos dados). Aceita atividade em português ou a categoria do Geoapify. Remove duplicados. Nunca inventa telefone, email ou site: campo vazio quer dizer desconhecido, não inexistente. Resultados públicos a confirmar antes de qualquer contacto.', inputSchema: { type: 'object', properties: { location: { type: 'string', minLength: 2, maxLength: 120 }, activity: { type: 'string', minLength: 2, maxLength: 120 }, category: { type: 'string', maxLength: 120 }, countryCode: { type: 'string', minLength: 2, maxLength: 2 }, radiusMeters: { type: 'integer', minimum: 100, maximum: 50000 }, limit: { type: 'integer', minimum: 1, maximum: 50 } }, required: ['location'], additionalProperties: false } },
+  { name: 'orbita_research_usage', description: 'Mostra quanto da pesquisa já foi gasto (por fornecedor, dia e mês, com tecto e o que resta) e as últimas execuções com estado, tempo e fontes. Não revela chaves. Usa antes de pedir muitas pesquisas seguidas.', inputSchema: { type: 'object', properties: { executions: { type: 'integer', minimum: 1, maximum: 200 } }, additionalProperties: false } },
 ];
 
 function resultText(value, isError = false) {
   return { jsonrpc: '2.0', result: { content: [{ type: 'text', text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) } };
 }
+/* O enum antigo da descoberta era em inglês; as categorias da casa são em português. */
+const EN_PARA_PT = {
+  salon: 'cabeleireiro', restaurant: 'restaurante', cafe: 'cafe', dentist: 'dentista',
+  clinic: 'clinica', hotel: 'hotel', school: 'escola', shop: 'loja', office: 'escritorio',
+  service: 'servicos',
+};
+
 async function invokeTool(name, args = {}) {
   switch (name) {
     case 'orbita_integration_status': return api.integrationStatus();
-    case 'orbita_business_discover': return api.discoverBusinesses(args);
+    /* 1.30.0: com Geoapify configurado, a descoberta de empresas passa por lá
+       (mais rica e sem duplicados); sem chave, continua o OSM de antes. */
+    case 'orbita_business_discover': {
+      const geo = await ferramentas.executar('pesquisar_empresas', {
+        oQue: EN_PARA_PT[String(args.category || '').toLowerCase()] || args.category,
+        onde: args.location,
+        limite: args.limit || 20,
+        raio: args.radiusMeters || 5000,
+      }, { env: process.env });
+      if (!geo.ok) return api.discoverBusinesses(args);
+      return {
+        ok: true, provider: geo.fornecedor, location: args.location, category: args.category,
+        radiusMeters: geo.dados?.pedido?.raio || args.radiusMeters || 5000,
+        count: geo.dados?.empresas?.length || 0,
+        results: (geo.dados?.empresas || []).map((l) => ({
+          name: l.nome, category: l.categoria, website: l.website || null, phone: l.telefone || null,
+          publicEmail: l.email || null, address: l.morada || null, city: l.cidade || null,
+          lat: l.lat, lon: l.lon, distanceMeters: l.distancia ?? null,
+        })),
+        resolvedPlace: geo.dados?.centro?.nome || null,
+        duplicatesRemoved: geo.dados?.repetidos || 0,
+        warnings: geo.avisos || [], creditsUsed: geo.custo ?? null,
+        note: geo.avisos?.length ? geo.avisos.join(' · ') : 'Dados públicos do Geoapify/OSM a confirmar antes de contactar.',
+        via: 'geoapify',
+      };
+    }
+    case 'orbita_web_search': {
+      const r = await ferramentas.executar('pesquisar_web', {
+        consulta: args.query,
+        limite: args.limit || 8,
+        topico: args.topic || 'general',
+        dias: args.days || null,
+        dominios: args.domains || null,
+        profundidade: args.depth || 'basic',
+        minRelevancia: args.minScore,
+      }, { env: process.env });
+      return {
+        ok: r.ok,
+        provider: r.fornecedor,
+        tool: r.ferramenta,
+        query: r.pedido?.consulta || args.query,
+        topic: r.pedido?.topico || args.topic || 'general',
+        answer: r.dados?.respostaCurta || null,
+        results: (r.dados?.resultados || []).map((x) => ({
+          title: x.titulo, url: x.url, snippet: x.excerto, score: x.relevancia, published: x.publicado || null,
+        })),
+        sources: r.fontes || [],
+        dropped: r.dados?.descartados || 0,
+        threshold: r.dados?.limiar ?? null,
+        warnings: r.avisos || [],
+        creditsUsed: r.custo ?? null,
+        cached: !!r.cache, ms: r.ms,
+        error: r.erro || null, code: r.codigo || null,
+        real: !!r.ok, inferred: false,
+        note: 'São resultados de pesquisa com data de publicação; não os tomes por verificação independente sem abrir a fonte.',
+      };
+    }
+    case 'orbita_business_search': {
+      const r = await ferramentas.executar('pesquisar_empresas', {
+        oQue: args.activity || args.category || null,
+        onde: args.location,
+        categoria: args.activity ? null : (EN_PARA_PT[String(args.category || '').toLowerCase()] ? null : args.category || null),
+        limite: args.limit || 20,
+        raio: args.radiusMeters || 12000,
+        pais: args.countryCode || null,
+      }, { env: process.env });
+      return {
+        ok: r.ok,
+        provider: r.fornecedor,
+        tool: r.ferramenta,
+        location: args.location,
+        resolvedPlace: r.dados?.centro ? { city: r.dados.centro.cidade, country: r.dados.centro.codigoPais, lat: r.dados.centro.lat, lon: r.dados.centro.lon } : null,
+        category: r.dados?.categoria || null,
+        count: r.dados?.empresas?.length || 0,
+        results: (r.dados?.empresas || []).map((l) => ({
+          name: l.nome, category: l.categoria, address: l.morada || null, city: l.cidade || null,
+          phone: l.telefone || null, website: l.website || null, email: l.email || null,
+          lat: l.lat, lon: l.lon, distanceMeters: l.distancia ?? null, note: l.nota ?? null, why: l.porque ?? null,
+        })),
+        duplicatesRemoved: r.dados?.repetidos || 0,
+        warnings: r.avisos || [],
+        creditsUsed: r.custo ?? null,
+        cached: !!r.cache, ms: r.ms,
+        error: r.erro || null, code: r.codigo || null,
+        real: !!r.ok, inferred: false,
+        note: 'Telefone, email e site só aparecem se estiverem nos dados públicos. Vazio = desconhecido.',
+      };
+    }
+    case 'orbita_research_usage': {
+      const lim = await import('../../api/_limites.mjs');
+      const emFicheiro = ferramentas.execucoesEmFicheiro(args.executions || 20);
+      return {
+        ok: true, ...lim.uso(process.env),
+        executions: ferramentas.execucoes(args.executions || 20),
+        executionsFromFiles: emFicheiro,
+        note: 'Contadores por instância do processo; a factura real está no painel do fornecedor.',
+      };
+    }
     case 'orbita_leads_list': return { ok: true, storage: process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? 'supabase' : 'local-json', leads: await api.listLeads(DATA_DIR, args.limit || 100) };
     case 'orbita_leads_save': return api.saveLeads(DATA_DIR, args.leads || []);
     case 'orbita_lead_update': {
