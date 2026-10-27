@@ -11,6 +11,7 @@
    =========================================================================== */
 import { createSupabaseRepo, envBase } from './_repo.mjs';
 import { comChave, MODELOS } from './_ia/catalogo.mjs';
+import { envDoPedido } from './_env.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
   /* 1.18.0 · a saúde inclui a IA: quantos fornecedores têm chave (nomes de
      variáveis, nunca valores) e quantos modelos o catálogo conhece. Não faz
      nenhum pedido a um fornecedor — isso é o `/ia/testar`, que é a sério. */
-  const ia = { fornecedoresComChave: comChave().map((x) => x.id), modelosNoCatalogo: MODELOS.length };
+  const ia = { fornecedoresComChave: comChave(envDoPedido(req)).map((x) => x.id), modelosNoCatalogo: MODELOS.length };
 
   try {
     const h = await createSupabaseRepo(env).health();

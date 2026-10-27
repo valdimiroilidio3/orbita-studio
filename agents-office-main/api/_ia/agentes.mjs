@@ -31,7 +31,7 @@ Usa no máximo 6 passos. ${HONESTIDADE}`,
     instrucoes: `Organizas o que já se sabe: lês a mesa (leads, projetos, dinheiro) e resumos o contexto que os outros agentes precisam.
 Não tens acesso à internet nesta instalação; se precisares de uma fonte externa, escreve exactamente o que falta consultar, para o dono decidir.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'leads_listar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar'],
     tipos: ['investigar'],
     criterios: ['distingue o que veio da base do que é sugestão'],
   },

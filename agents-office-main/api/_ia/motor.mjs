@@ -71,6 +71,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
           id, nome: p.nome, site: p.site, docs: p.docs, estilo: p.estilo,
           gratuito: !!p.gratuito, limites: p.limites, nota: p.nota || '',
           variavel,                                    // NOME da variável, não valor
+          variaveis: p.chave,                          // o que aceita (para a interface dizer)
           chaveMascarada: variavel ? mascarar(env[variavel]) : '',
           configurado: !!variavel,
           desligado: desligados.includes(id),
