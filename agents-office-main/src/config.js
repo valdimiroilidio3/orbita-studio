@@ -265,6 +265,15 @@ export function createConfig({
           : `<p class="cfg-note small">sem alterações registadas — as mudanças de salas ficam aqui com hora e autor (o único perfil desta instalação é «dono»).</p>`}
       </div>
 
+      <div class="cfg-group"><h4>Backups</h4>
+        <div class="cfg-line">
+          <button type="button" class="cfg-btn" data-act="copia">Descarregar cópia</button>
+          <button type="button" class="cfg-btn quiet" data-act="testar-copia">Testar cópia</button>
+          <span class="cfg-out" role="status" aria-live="polite" data-backup-out></span>
+        </div>
+        <p class="cfg-note small">A cópia é um JSON com as tabelas e uma marca (sha256) do conteúdo. «Testar cópia» exporta, relê, confere a marca e <b>restaura de facto numa base em memória</b> — uma cópia que nunca foi aberta não é uma cópia. O restauro numa base de produção é um ensaio à parte, e não se finge aqui.</p>
+      </div>
+
       <div class="cfg-group"><h4>Segurança</h4>
         <p class="cfg-note small">
           login <b>${seg?.autenticacao ? 'activo' : 'não configurado'}</b> · chaves no servidor <b>${seg?.chavesNoServidor ? 'sim' : 'não'}</b>
@@ -430,6 +439,56 @@ export function createConfig({
     }
   }
 
+  /* 1.23.0 · cópia de segurança: descarregar e testar (a sério) */
+  async function descarregarCopia() {
+    const out = body.querySelector('[data-backup-out]');
+    if (out) { out.className = 'cfg-out'; out.textContent = 'a preparar a cópia…'; }
+    try {
+      const r = await pedir('/backup');
+      const copia = r.dados?.copia;
+      if (r.erro || !copia) throw new Error(r.erro || 'sem cópia');
+      const texto = JSON.stringify(copia, null, 2);
+      const nome = `orbita-copia-${copia.quando.slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      let href = null;
+      try {
+        href = URL.createObjectURL(new Blob([texto], { type: 'application/json' }));
+      } catch {
+        href = 'data:application/json;charset=utf-8,' + encodeURIComponent(texto);
+      }
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = nome;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(href); } catch { /* data URL */ } }, 4000);
+      if (out) {
+        out.className = 'cfg-out good';
+        out.textContent = `✓ ${copia.total} linhas · marca ${copia.marca.slice(0, 10)}… · ${nome}`;
+      }
+    } catch (e) {
+      if (out) { out.className = 'cfg-out bad'; out.textContent = 'não consegui a cópia: ' + e.message; }
+    }
+  }
+
+  async function testarCopia() {
+    const out = body.querySelector('[data-backup-out]');
+    if (out) { out.className = 'cfg-out'; out.textContent = 'a testar a cópia…'; }
+    try {
+      const r = await pedir('/backup/teste', { metodo: 'POST', corpo: {} });
+      const d = r.dados || {};
+      if (out) {
+        out.className = 'cfg-out ' + (d.ok ? 'good' : 'bad');
+        out.textContent = d.ok
+          ? `✓ cópia inteira e restaurada: ${d.total} linhas · ${d.ms} ms · marca ${String(d.marca || '').slice(0, 10)}…`
+          : `✗ ${(d.problemas || [r.erro || 'falhou']).join(' · ')}`;
+      }
+    } catch (e) {
+      if (out) { out.className = 'cfg-out bad'; out.textContent = 'sem resposta: ' + e.message; }
+    }
+  }
+
   function wire() {
     if (!body) return;
     body.querySelectorAll('[data-theme]').forEach((b) => {
@@ -506,6 +565,11 @@ export function createConfig({
         guardarSalas({}, { metodo: 'DELETE', caminho: `/controlo/agentes/${encodeURIComponent(id)}` });
       });
     });
+    const baixar = body.querySelector('[data-act="copia"]');
+    if (baixar) baixar.addEventListener('click', () => descarregarCopia());
+    const testarBk = body.querySelector('[data-act="testar-copia"]');
+    if (testarBk) testarBk.addEventListener('click', () => testarCopia());
+
     const recarregar = body.querySelector('[data-act="recarregar"]');
     if (recarregar) recarregar.addEventListener('click', () => location.reload());
 

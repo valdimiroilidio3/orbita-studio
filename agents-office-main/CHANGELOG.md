@@ -1,3 +1,22 @@
+## 1.23.0 — 27 out 2026 · Cópia de segurança que se pode testar
+
+- **`GET /backup`** — um JSON com as tabelas que interessam (leads, projetos,
+  tarefas, mensagens, receitas, atividade, execuções, uso e configuração), as
+  contagens e uma **marca sha256** do conteúdo.
+- **`POST /backup/teste`** — exporta, relê o que exportou, confere a marca,
+  compara contagem com lista e **restaura de facto tudo numa base em memória**,
+  linha a linha. Se faltar uma linha, falha e diz qual. Fica no registo de
+  alterações.
+- **Interface:** secção «Backups» com «Descarregar cópia» (ficheiro
+  `orbita-copia-<data>.json`) e «Testar cópia», que mostra `✓ 42 linhas · 7 ms ·
+  marca …` na própria linha.
+- **Limite declarado:** prova que a cópia está inteira e que volta a entrar numa
+  base com o mesmo esquema. O restauro no Postgres de produção é um ensaio à
+  parte — não se afirma feito.
+- Provas: `controlo.test.mjs` passa de 22 para **25** (marca estável, marca que
+  apanha uma linha alterada, restauro contado, e o caso em que o destino perde
+  linhas e o teste **falha** de propósito). Suite **337/337**.
+
 ## 1.22.0 — 27 out 2026 · Testar cada integração, uma a uma
 
 - **`POST /platform/testar`** — o botão que faltava: faz um pedido real à

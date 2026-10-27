@@ -254,9 +254,14 @@ test('interface: o painel desenha as seis salas, a cor e os três estados', asyn
   };
   const apis = { status: 200, corpo: { list: [{ id: 'github', name: 'GitHub', kind: 'codigo', env: [], missing: ['GITHUB_TOKEN'], configured: false, verified: false }], summary: { total: 1, configuradas: 0, verificadas: 0 } } };
 
-  globalThis.fetch = async (url) => {
-    const u = decodeURIComponent(String(url));   // o caminho vai codificado em ?caminho=
-    const corpo = u.includes('/controlo/estado') ? estado : u.includes('/platform/apis') ? apis : { status: 404, corpo: {} };
+  const backup = { status: 200, corpo: { ok: true, total: 42, ms: 7, marca: 'abcdef0123456789', problemas: [] } };
+  globalThis.fetch = async (url, opt = {}) => {
+    /* o caminho vai codificado em ?caminho= (GET) ou no corpo do POST */
+    const u = decodeURIComponent(String(url) + (typeof opt.body === 'string' ? opt.body : ''));
+    const corpo = u.includes('/controlo/estado') ? estado
+      : u.includes('/platform/apis') ? apis
+      : u.includes('/backup/teste') ? backup
+      : { status: 404, corpo: {} };
     return { ok: true, status: 200, json: async () => corpo };
   };
 
@@ -285,6 +290,13 @@ test('interface: o painel desenha as seis salas, a cor e os três estados', asyn
   assert.match(html, /Registo de alterações/);
   assert.match(html, /fundo 44 m/);
   assert.match(html, /<i>dono<\/i>/);
+  /* 1.23.0: a cópia de segurança tem botão e teste, e o teste diz números */
+  assert.match(html, /Backups/);
+  assert.match(html, /data-act="testar-copia"/);
+  const btn = document.querySelector('[data-act="testar-copia"]');
+  btn.dispatchEvent(new dom.window.Event('click'));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.match(document.querySelector('[data-backup-out]').textContent, /42 linhas/);
   cfg.close();
 });
 
@@ -431,4 +443,73 @@ test('integrações: a lista de /platform/apis inclui a IA (antes vinha vazia) e
   const llm7 = r.corpo.list.find((x) => x.id === 'llm7');
   assert.equal(llm7.configured, true);
   assert.equal(llm7.verified, false);
+});
+
+/* ---------- 11 · cópia de segurança que se pode testar ---------- */
+test('backup: exporta, a marca apanha alterações, e o restauro conta linha a linha', async () => {
+  const { exportar, marca, testar } = await import('./api/_backup.mjs');
+  const api = createMemRepo();
+  await api.leads.inserir([
+    { nome: 'Ana', cidade: 'Coimbra', dedupe_key: 'ana|coimbra', status: 'novo' },
+    { nome: 'Rui', cidade: 'Porto', dedupe_key: 'rui|porto', status: 'novo' },
+  ]);
+  await api.projetos.insert({ name: 'Site da Ana', status: 'briefing' });
+  await api.tarefas.insert({ titulo: 'Briefing', estado: 'aberta' });
+  await api.mensagens.inserir({ canal: 'email', assunto: 'Olá', corpo: 'texto' });
+
+  const copia = await exportar(api);
+  assert.equal(copia.formato, 'orbita-backup/1');
+  assert.equal(copia.contagens.leads, 2);
+  assert.equal(copia.contagens.projetos, 1);
+  assert.equal(copia.total >= 5, true);
+  assert.match(copia.marca, /^[0-9a-f]{32}$/);
+
+  /* a marca é estável se nada mudar… */
+  assert.equal(marca(JSON.parse(JSON.stringify(copia))), copia.marca);
+  /* …e muda se alguém mexer numa linha (é o ponto de uma marca) */
+  const mexida = JSON.parse(JSON.stringify(copia));
+  mexida.tabelas.leads[0].nome = 'Outra pessoa';
+  assert.notEqual(marca(mexida), copia.marca);
+
+  /* o teste sério: exporta, relê, confere e restaura */
+  const r = await testar(api);
+  assert.equal(r.ok, true, `o teste devia passar: ${JSON.stringify(r.problemas)}`);
+  assert.equal(r.contagens.leads, 2);
+  assert.equal(r.restaurado.leads, 2);
+  assert.equal(r.restaurado.projetos, 1);
+  assert.equal(r.restaurado.tarefas, 1);
+  assert.equal(r.restaurado.mensagens, 1);
+  assert.match(r.prova, /restaurada/);
+  assert.deepEqual(r.problemas, []);
+});
+
+test('backup: o teste falha — e di-lo — quando a cópia está estragada', async () => {
+  const { testar } = await import('./api/_backup.mjs');
+  const api = createMemRepo();
+  await api.leads.inserir([{ nome: 'Ana', cidade: 'Coimbra', dedupe_key: 'ana|coimbra' }]);
+
+  /* um destino que perde linhas ao restaurar: o teste tem de dar por isso */
+  const destinoMau = () => {
+    const d = createMemRepo();
+    d.leads.inserir = async () => [];
+    return d;
+  };
+  const r = await testar(api, { criarDestino: destinoMau });
+  assert.equal(r.ok, false);
+  assert.ok(r.problemas.some((p) => /restaurou 0 de 1|devolve 0/.test(p)), JSON.stringify(r.problemas));
+});
+
+test('backup: as rotas devolvem a cópia e o resultado do teste (e o registo fica com a prova)', async () => {
+  const api = createMemRepo();
+  await api.leads.inserir([{ nome: 'Ana', cidade: 'Coimbra', dedupe_key: 'ana|coimbra' }]);
+  const copia = await chamar(api, '/backup');
+  assert.equal(copia.status, 200);
+  assert.equal(copia.corpo.copia.contagens.leads, 1);
+
+  const t = await chamar(api, '/backup/teste', 'POST', {});
+  assert.equal(t.status, 200);
+  assert.equal(t.corpo.ok, true);
+
+  const reg = await chamar(api, '/controlo/registo');
+  assert.ok(reg.corpo.registo.some((x) => /cópia de segurança testada/.test(x.o_que)));
 });
