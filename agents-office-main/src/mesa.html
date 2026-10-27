@@ -339,6 +339,12 @@
   .form { display: grid; grid-template-columns: 140px 1fr auto; gap: var(--s2); margin-bottom: var(--s5); }
   .form.three { grid-template-columns: 1fr 1fr 1fr; }
   .form.two { grid-template-columns: 1fr 1fr auto; }
+  /* 1.36.0 · campos com rótulo por cima (editar um lead): o rótulo é pequeno e
+     discreto, o campo ocupa o espaço todo, e em ecrã estreito passa a uma coluna */
+  .form.pares { grid-template-columns: 1fr 1fr; align-items: end; }
+  .fld { display: grid; gap: 4px; }
+  .fld > span { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  .fld .in { width: 100%; box-sizing: border-box; }
   .in { border: 1px solid var(--hair); background: #fff; border-radius: var(--r-s); padding: 11px var(--s3); font-size: var(--t-m); width: 100%; }
 
   /* ---------- estados, avisos, barra inferior ---------- */
@@ -374,7 +380,7 @@
     .why-grid { grid-template-columns: 1fr; }
     .money { grid-template-columns: 1fr; }
     .cards2 { grid-template-columns: 1fr; }
-    .form, .form.three, .form.two { grid-template-columns: 1fr; }
+    .form, .form.three, .form.two, .form.pares { grid-template-columns: 1fr; }
     .acts { position: sticky; bottom: 84px; background: linear-gradient(to top, var(--bg) 70%, transparent); padding: var(--s2) 0; }
     .tabbar {
       display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;

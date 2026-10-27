@@ -79,7 +79,7 @@ const NAV = [
 const S = {
   route: { name: 'hoje', id: null },
   summary: null, today: null, leads: [], messages: [], saldo: null, clientes: null,
-  lead: null, leadMessages: [], dossier: null,
+  lead: null, leadMessages: [], dossier: null, editandoLead: false,
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
@@ -336,6 +336,7 @@ async function loadProjeto(id) {
 async function loadLead(id) {
   const r = await call(`/ops/leads/${encodeURIComponent(id)}`);
   S.lead = r.lead;
+  S.editandoLead = false;   // abrir outro lead nunca herda o formulário do anterior
   S.dossier = r.dossier || null;
   S.leadMessages = r.messages || [];
 }
@@ -671,6 +672,38 @@ function leadMessageCard(m) {
   </div>`;
 }
 
+/* 1.36.0 · editar o lead sem sair da mesa (pedido 57e: «actualizar» também é
+   corrigir o que está errado). Os campos são os que a API aceita em PATCH —
+   telefone, email, site, nicho, cidade e notas — e a nota de estado (funil)
+   continua a ser dada pelos botões do funil, para não haver dois caminhos para
+   a mesma decisão. Vazio quer dizer «não sei», e apaga o que lá estava. */
+function leadEditForm() {
+  const l = S.lead || {};
+  const campo = (id, rotulo, valor, tipo = 'text', extra = '') =>
+    `<label class="fld"><span>${esc(rotulo)}</span><input class="in" id="${id}" type="${tipo}" value="${esc(valor || '')}" ${extra}></label>`;
+  return `<div class="card">
+    <div class="sec-h"><h3>Editar este lead</h3><span class="count">o que está errado corrige-se aqui</span></div>
+    <div class="form two pares">
+      ${campo('elTelefone', 'Telefone', l.phone, 'tel', 'inputmode="tel" placeholder="+351 …"')}
+      ${campo('elEmail', 'Email', l.email, 'email', 'placeholder="nome@empresa.pt"')}
+    </div>
+    <div class="form two pares" style="margin-top:var(--s2)">
+      ${campo('elSite', 'Site', l.website, 'text', 'placeholder="empresa.pt"')}
+      ${campo('elNicho', 'Nicho', l.category, 'text', 'placeholder="dentista, restaurante…"')}
+    </div>
+    <div class="form pares" style="margin-top:var(--s2)">
+      ${campo('elCidade', 'Cidade', l.city, 'text', 'placeholder="Coimbra"')}
+    </div>
+    <label class="fld" style="margin-top:var(--s2)"><span>Notas</span>
+      <textarea class="in" id="elNotas" rows="3" placeholder="o que sabes e não cabe nos campos">${esc(l.notes || '')}</textarea></label>
+    <div class="acts" style="margin-top:var(--s3)">
+      <button class="btn primary" data-act="guardar-edicao-lead" data-id="${esc(l.id)}">Guardar alterações</button>
+      <button class="btn ghost" data-act="cancelar-edicao-lead">Cancelar</button>
+    </div>
+    <div class="hint">Deixar um campo vazio apaga-o — «não sei» é melhor do que um telefone errado. O histórico de mensagens não é tocado.</div>
+  </div>`;
+}
+
 function leadFacts() {
   const l = S.lead;
   const r = S.dossier?.research || { status: 'por_fazer' };
@@ -720,11 +753,12 @@ function viewLead() {
     <div class="head">
       <div><h1 style="font-size:34px">${esc(l.name)}</h1>
         <div class="sub">${esc([l.category, l.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}${l.rating ? ` · ${Number(l.rating).toLocaleString('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ★` : ''}${l.source ? ` · ${esc(l.source)}` : ''}</div></div>
-      <div class="head-acts">${scoreBadge(l.score)}<span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span></div>
+      <div class="head-acts">${scoreBadge(l.score)}<span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span>
+        ${may('write') ? `<button class="btn small ghost" data-act="editar-lead" title="corrigir telefone, email, site, nicho ou notas">✎ Editar</button>` : ''}</div>
     </div>
     ${leadMessageCard(m)}
     <div style="display:grid;gap:var(--s4);margin-top:var(--s4)">
-      ${leadFacts()}
+      ${S.editandoLead ? leadEditForm() : leadFacts()}
       ${projetoDoLead
         ? `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="tag ${PROJ_TAG[projetoDoLead.status]}">${esc(PROJ_LABEL[projetoDoLead.status] || projetoDoLead.status)}</span></div>
             <p class="hint" style="margin-top:0">${esc(projetoDoLead.name)}</p>
@@ -1498,6 +1532,56 @@ async function act(name, el, ev) {
         toast(`${S.leads.length} lead(s) lidos da base agora.`);
         paint();
       } catch (e) { toast(`Não consegui actualizar: ${e.message}`, true); }
+      return;
+    }
+
+    /* 1.36.0 · a edição do lead (pedido 57e). Valida-se antes de enviar: um email
+       sem @ ou um telefone com dois dígitos não vão para a base só para voltarem
+       como erro genérico. O site aceita-se escrito à mão (`empresa.pt`) e é
+       normalizado para https:// — o formulário não obriga a saber o protocolo. */
+    if (name === 'editar-lead') {
+      S.editandoLead = true;
+      paint();
+      setTimeout(() => $('#elTelefone')?.focus(), 30);
+      return;
+    }
+    if (name === 'cancelar-edicao-lead') {
+      S.editandoLead = false;
+      paint();
+      return;
+    }
+    if (name === 'guardar-edicao-lead') {
+      const v = (k) => String($('#' + k)?.value || '').trim();
+      /* o telefone guarda-se como a pessoa o escreveu (com espaços, +351 …): o que
+         se valida são os dígitos, mas não se reescreve o número por ela */
+      const telefone = v('elTelefone').replace(/(?!^)\+/g, '').replace(/\s+/g, ' ');
+      const email = v('elEmail');
+      const site = v('elSite');
+      const digitos = telefone.replace(/\D/g, '');
+      if (telefone && digitos.length < 6) { toast('Esse telefone tem poucos dígitos — confirma antes de guardar.', true); return; }
+      if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$/.test(email)) { toast('Esse email não parece um email (falta o @ ou o domínio).', true); return; }
+      const siteLimpo = site
+        ? (/^https?:\/\//i.test(site) ? site : `https://${site.replace(/^\/\//, '')}`)
+        : '';
+      if (siteLimpo && !/^https?:\/\/[^\s.]+\.[^\s]{2,}/i.test(siteLimpo)) { toast('Esse site não parece um endereço (ex.: empresa.pt).', true); return; }
+      const corpoEdicao = {
+        phone: telefone, email, website: siteLimpo,
+        category: v('elNicho'), city: v('elCidade'), notes: v('elNotas'),
+      };
+      let r;
+      try {
+        r = await call(`/ops/leads/${encodeURIComponent(id)}`, 'PATCH', corpoEdicao);
+      } catch (e) {
+        toast(`A base recusou a alteração: ${e.message}`, true);
+        return;
+      }
+      if (!r || r.ok === false || !r.lead) { toast('A alteração não ficou guardada.', true); return; }
+      S.lead = r.lead;
+      S.editandoLead = false;
+      const i = S.leads.findIndex((x) => x.id === r.lead.id);
+      if (i >= 0) S.leads[i] = r.lead;
+      toast('Alterações guardadas.');
+      paint();
       return;
     }
 
