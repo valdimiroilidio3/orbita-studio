@@ -537,7 +537,7 @@ function novoLeadForm() {
       <input class="in" id="nlSite" placeholder="Site (se tiver)" aria-label="site">
       <button class="btn primary small" data-act="guardar-lead" style="padding:0 var(--s5)">Guardar</button>
     </div>
-    <div class="hint">A pesquisa da Google enche isto sozinha quando houver chave. Sem chave, escreve tu — o lead é pontuado pelas mesmas regras.</div>
+    <div class="hint">O melhor caminho é não escreveres nada disto à mão: abre <b>◈ LEADS</b> na barra, escolhe a atividade e a zona, e o que voltar fica guardado, pontuado e sem duplicados. O que escreveres aqui é pontuado pelas mesmas regras.</div>
   </div>`;
 }
 
@@ -568,7 +568,7 @@ function viewLeads() {
       : `<div class="card empty">${IC.vazio}<h3>${total ? 'Nenhum lead neste filtro' : 'Ainda não há leads guardados'}</h3>
         <p>${total
           ? 'Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro — os dados que existem estão todos aqui.'
-          : 'Os leads entram pela pesquisa real do escritório: abre ◈ LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Sem chaves de pesquisa, podes acrescentá-los à mão.'}</p></div>`}
+          : 'Os leads entram pela pesquisa real do escritório: abre ◈ LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Se preferires, podes acrescentá-los à mão.'}</p></div>`}
   </div>`;
 }
 

@@ -641,7 +641,7 @@
       <input class="in" id="nlSite" placeholder="Site (se tiver)" aria-label="site">
       <button class="btn primary small" data-act="guardar-lead" style="padding:0 var(--s5)">Guardar</button>
     </div>
-    <div class="hint">A pesquisa da Google enche isto sozinha quando houver chave. Sem chave, escreve tu \u2014 o lead \xE9 pontuado pelas mesmas regras.</div>
+    <div class="hint">O melhor caminho \xE9 n\xE3o escreveres nada disto \xE0 m\xE3o: abre <b>\u25C8 LEADS</b> na barra, escolhe a atividade e a zona, e o que voltar fica guardado, pontuado e sem duplicados. O que escreveres aqui \xE9 pontuado pelas mesmas regras.</div>
   </div>`}function te(){let a=Ya(),e=t.leads.length,r=t.leads.filter(o=>(o.score||0)>=60).length,s=[["todos","Todos"],["novo","Por contactar"],["sem-site","Sem site"],["responderam","Responderam"]];return`<div class="wrap">
     ${H({title:"Leads",sub:e?`${e} guardados \xB7 ${r} com nota alta \xB7 ${t.leads.filter(o=>!["novo"].includes(o.status)).length} j\xE1 contactados`:"ainda n\xE3o h\xE1 nenhum lead guardado",right:`${I("write")?'<button class="btn small ghost" data-act="novo-lead">+ Lead</button>':""}${W()}`})}
     ${t.adding?ee():""}
@@ -657,7 +657,7 @@
       <div class="cell"><span class="tag ${i(o.status)}">${i(sa[o.status]||o.status)}</span></div>
       ${oa(o.score)}
     </button>`).join("")}</div>`:`<div class="card empty">${L.vazio}<h3>${e?"Nenhum lead neste filtro":"Ainda n\xE3o h\xE1 leads guardados"}</h3>
-        <p>${e?"Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro \u2014 os dados que existem est\xE3o todos aqui.":"Os leads entram pela pesquisa real do escrit\xF3rio: abre \u25C8 LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Sem chaves de pesquisa, podes acrescent\xE1-los \xE0 m\xE3o."}</p></div>`}
+        <p>${e?"Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro \u2014 os dados que existem est\xE3o todos aqui.":"Os leads entram pela pesquisa real do escrit\xF3rio: abre \u25C8 LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Se preferires, podes acrescent\xE1-los \xE0 m\xE3o."}</p></div>`}
   </div>`}function se(){let a={revisao:0,rascunho:1,ensaio:2,aprovada:3,enviada:4,falhou:5,bloqueada:6,rejeitada:7};return[...t.leadMessages].sort((e,r)=>(a[e.status]??9)-(a[r.status]??9))[0]||null}function oe(a){if(!a){let c=pa(t.lead?.score_reasons||"");return`<div class="card">
       <div class="sec-h"><h3>Sem mensagem ainda</h3><span class="count">${t.leadMessages.length?t.leadMessages.length+" j\xE1 escritas":"nenhuma escrita"}</span></div>
       <p class="hint" style="margin-top:0">Primeiro l\xEA o que o neg\xF3cio diz de si; depois escreve com esses factos. A mensagem nasce rascunho e n\xE3o sai sem o teu OK.</p>
