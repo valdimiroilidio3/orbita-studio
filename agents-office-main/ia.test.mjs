@@ -572,3 +572,13 @@ test('catálogo e agentes são coerentes: todas as ferramentas dos agentes exist
   assert.equal(Object.keys(AGENTES).length, 8);
   assert.ok(MODELOS.every((m) => FORNECEDORES[m.fornecedor]));
 });
+
+/* ---------- versão ---------- */
+test('a versão servida por /api/health vem do package.json (sem números à mão)', async () => {
+  const fs = await import('node:fs');
+  const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+  const { VERSAO } = await import('./api/_versao.mjs');
+  assert.equal(VERSAO, pkg.version);
+  const fonte = fs.readFileSync(new URL('./api/health.mjs', import.meta.url), 'utf8');
+  assert.ok(!/versao: '\d+\.\d+\.\d+'/.test(fonte), 'a versão voltou a estar escrita à mão no health');
+});
