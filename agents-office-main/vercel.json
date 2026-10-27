@@ -40,7 +40,7 @@
     }
   ],
   "functions": {
-    "api/_prova.mjs": {
+    "api/prova1.mjs": {
       "maxDuration": 60
     }
   }
