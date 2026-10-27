@@ -481,13 +481,15 @@
    "base": "https://api.llm7.io/v1",
    "dialeto": "openai",
    "tipo": "chat",
-   "keyless": false,
+   "keyless": true,
    "chave": [
     "LLM7_API_KEY"
    ],
    "ficheiro": "providers/index.ts",
    "usavel": true,
-   "porque": null
+   "porque": null,
+   "limites": "100 pedidos/h por IP (anónimo, modelos básicos)",
+   "nota": "Veio do freellmapi (providers/index.ts): «100 req/hr free; anonymous access also works for basic models». O freellmapi avisa que os pedidos anónimos podem ser registados pelo agregador — não usar com dados de clientes."
   },
   {
    "id": "llmtr",

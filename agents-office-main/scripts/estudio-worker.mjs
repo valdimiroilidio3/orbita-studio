@@ -47,9 +47,21 @@ function pythonDoProjecto() {
   return 'python3';
 }
 
-function git(campo) {
-  const r = spawnSync('git', ['-C', DIR, campo], { encoding: 'utf8' });
+function git(...args) {
+  /* Um argumento só com espaços não é dividido pelo spawnSync: `git -C dir
+     "rev-parse --short HEAD"` falha sempre. Era por isso que o `commit` vinha
+     `null` mesmo com o repositório limpo (visto a 27 out 2026). */
+  const r = spawnSync('git', ['-C', DIR, ...args], { encoding: 'utf8' });
   return r.status === 0 ? r.stdout.trim() : null;
+}
+
+/** Os pipelines de produção são ficheiros YAML em `pipeline_defs/`. Não são
+ *  demos: cada um precisa de modelos de vídeo/imagem/voz com chave própria. */
+function pipelinesInstalados() {
+  const dir = path.join(DIR, 'pipeline_defs');
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+    .map((f) => f.replace(/\.ya?ml$/, '')).sort();
 }
 
 function demos() {
@@ -65,8 +77,11 @@ function doutor() {
   const d = existe ? demos() : { ok: false, erro: `não encontrei o OpenMontage em ${DIR} (define OPENMONTAGE_DIR)`, lista: [] };
   return {
     versao: existe ? (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR, 'package.json'), 'utf8')).version || '0.1.0'; } catch { return '0.1.0'; } })() : null,
-    commit: existe ? git('rev-parse --short HEAD') : null,
-    pipelines: d.lista,
+    commit: existe ? git('rev-parse', '--short', 'HEAD') : null,
+    /* `demos` correm sem chave nenhuma; `pipelines` existem mas precisam de
+       fornecedores de vídeo/imagem/voz. A mesa mostra os dois separados. */
+    demos: d.lista,
+    pipelines: pipelinesInstalados(),
     ferramentas: { python: temComando(pythonDoProjecto()), ffmpeg: temComando('ffmpeg'), node: temComando('node'), git: temComando('git') },
     erroDemos: d.ok ? null : d.erro,
   };
@@ -91,8 +106,19 @@ function correrTrabalho(job) {
   if (!d.ok) return { ok: false, motivo: `o OpenMontage não respondeu: ${d.erro}` };
 
   const pedido = String(job.pipeline || '');
-  const demo = d.lista.includes(pedido) ? pedido : d.lista[0];
-  if (!demo) return { ok: false, motivo: 'o OpenMontage não tem demos instaladas' };
+  /* Nada de substituir o pedido por outra coisa: se o pipeline pedido não é
+     uma demo zero-chave, diz-se porquê e não se renderiza outra coisa. */
+  const demo = d.lista.includes(pedido) ? pedido : null;
+  if (!demo) {
+    const instalados = pipelinesInstalados();
+    const conhecido = instalados.includes(pedido);
+    return {
+      ok: false,
+      motivo: conhecido
+        ? `o pipeline «${pedido}» existe no OpenMontage mas não é uma demo zero-chave: precisa de fornecedores de vídeo/imagem/voz com chave (ver docs/OPENMONTAGE.md). Demos que este worker sabe correr: ${d.lista.join(', ')}.`
+        : `«${pedido || '(vazio)'}» não é um pipeline deste OpenMontage. Instalados: ${instalados.join(', ') || '(nenhum)'}. Demos zero-chave: ${d.lista.join(', ')}.`,
+    };
+  }
 
   const antes = new Set(listarRenders());
   log(`a renderizar demo «${demo}» (pedido: ${job.pedido.slice(0, 80)})`);

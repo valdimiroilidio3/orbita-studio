@@ -38,5 +38,10 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/_prova.mjs": {
+      "maxDuration": 60
+    }
+  }
 }
