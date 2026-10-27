@@ -53,6 +53,18 @@
     display: flex; flex-direction: column; gap: var(--s5);
     position: sticky; top: 0; height: 100vh;
   }
+  /* o X de sair: a mesa é uma página inteira, e sem isto só se sai pelo endereço.
+     Fica ao lado da marca, no canto, com 44 px de alvo (o mínimo para o dedo). */
+  .side-top { display: flex; align-items: center; gap: var(--s2); }
+  .side-top .brand { flex: 1; }
+  .side-x {
+    width: 34px; height: 34px; flex: none; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); border: 1px solid transparent;
+    transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease);
+  }
+  .side-x:hover { background: rgba(27,27,31,.06); color: var(--ink); border-color: var(--hair); }
+  .side-x svg { width: 15px; height: 15px; }
   .brand { display: flex; align-items: center; gap: var(--s2); padding: 0 var(--s2); font-size: 19px; font-weight: 650; letter-spacing: -.01em; }
   .brand .mark {
     width: 26px; height: 26px; border-radius: 50%; flex: none;
@@ -384,7 +396,12 @@
 <body>
 <div class="shell">
   <aside class="side">
-    <a class="brand" href="#/hoje"><span class="mark" aria-hidden="true"></span> Órbita</a>
+    <div class="side-top">
+      <a class="brand" href="#/hoje"><span class="mark" aria-hidden="true"></span> Órbita</a>
+      <a class="side-x" href="/" aria-label="Fechar a mesa e voltar ao escritório" title="Fechar a mesa e voltar ao escritório">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+      </a>
+    </div>
     <nav class="nav" id="nav" aria-label="secções"></nav>
     <div class="side-foot" id="sideFoot"></div>
   </aside>

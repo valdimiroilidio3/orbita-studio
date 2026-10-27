@@ -19,8 +19,21 @@ export function pararSeguimento() {
 }
 
 export async function carregarIA(api) {
-  const [estado, uso, runs, fila, gratuitos] = await Promise.all([
-    api.call('/ia/estado'),
+  /* 1.34.0 · esta vista nunca fica presa em «A carregar o Control Center…».
+     Se o servidor não tiver a rota (foi o que a 1.29 publicada fazia), o erro
+     fica escrito com a razão e a página oferece voltar a tentar; se já havia um
+     estado lido, continua à vista com um aviso em cima, em vez de desaparecer. */
+  let estado = null;
+  try {
+    const lido = await api.call('/ia/estado');
+    if (!lido || !Array.isArray(lido.fornecedores)) throw new Error('o servidor respondeu sem a lista de fornecedores');
+    estado = lido;
+    api.S.iaErro = null;
+  } catch (e) {
+    api.S.iaErro = e?.message || 'o servidor não respondeu';
+    estado = api.S.ia && Array.isArray(api.S.ia.fornecedores) ? api.S.ia : null;
+  }
+  const [uso, runs, fila, gratuitos] = await Promise.all([
     api.call('/ia/uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     api.call('/ia/runs').catch(() => ({ runs: [] })),
     api.call('/media/trabalhos').catch(() => ({ trabalhos: [] })),
@@ -28,7 +41,7 @@ export async function carregarIA(api) {
        fica como estava; não se inventa estado nenhum. */
     api.call('/ia/gratuitos').catch(() => null),
   ]);
-  api.S.ia = estado;
+  api.S.ia = estado || api.S.ia || null;
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
@@ -84,19 +97,37 @@ const ESTADO_RUN = {
 
 export function vistaIA(S, { esc, hhmm, when }) {
   const ia = S.ia;
-  if (!ia) return `<div class="wrap"><div class="card empty"><h3>A carregar o Control Center…</h3></div></div>`;
+  if (!ia) {
+    if (S.iaErro) {
+      return `<div class="wrap"><div class="card">
+        <h3 style="margin-top:0">Não consegui ler o estado da IA</h3>
+        <div class="ia-faixa bad">${esc(S.iaErro)}</div>
+        <p class="ia-sub" style="margin-top:0">O resto da mesa continua a funcionar — só esta página precisa do servidor.
+          Uma versão publicada anterior à 1.33 não tem a rota <code>/ia/estado</code>; nesse caso o que está aqui é o que o browser sabe, e provar modelos exige o servidor.</p>
+        <div class="ia-acts"><button class="btn primary small" data-act="ia-recarregar">Tentar outra vez</button></div>
+      </div></div>`;
+    }
+    return `<div class="wrap"><div class="card empty"><h3>A carregar o Control Center…</h3>
+      <p class="ia-sub">a pedir o estado ao servidor</p></div></div>`;
+  }
 
-  const prontos = ia.fornecedores.filter((f) => f.estado === 'funcional');
-  const comChave = ia.fornecedores.filter((f) => f.configurado);
+  const listaFornecedores = Array.isArray(ia.fornecedores) ? ia.fornecedores : [];
+  const prontos = listaFornecedores.filter((f) => f.estado === 'funcional');
+  const comChave = listaFornecedores.filter((f) => f.configurado);
   /* 1.19.0 · os fornecedores do freellmapi vêm em dois grupos: os que este
      cliente sabe falar e os que não (dialeto próprio, sem base). Não se
      esconde nenhum: os que não servem dizem porquê, numa linha. */
-  const nucleo = ia.fornecedores.filter((f) => (f.familia || 'nucleo') !== 'freellmapi');
-  const extra = ia.fornecedores.filter((f) => f.familia === 'freellmapi');
+  const nucleo = listaFornecedores.filter((f) => (f.familia || 'nucleo') !== 'freellmapi');
+  const extra = listaFornecedores.filter((f) => f.familia === 'freellmapi');
   const extraOk = extra.filter((f) => f.estado !== 'inutilizavel');
   const extraNao = extra.filter((f) => f.estado === 'inutilizavel');
   const semChave = comChave.filter((f) => f.semChave).length;
   const uso = S.iaUso || { resumo: [] };
+
+  const falhaAoLer = S.iaErro
+    ? `<div class="ia-faixa warn"><b>Não consegui actualizar agora.</b> ${esc(S.iaErro)} — o que está abaixo é a última leitura que deu certo.
+        <button class="btn quiet small" data-act="ia-recarregar" style="margin-left:8px">Tentar outra vez</button></div>`
+    : '';
 
   const aviso = ia.modo === 'local'
     ? `<div class="ia-faixa bad"><b>Modo local.</b> ${esc(ia.motivo || 'a IA corre no servidor')}.
@@ -141,7 +172,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
             <td class="ia-mono">${esc(m.modelo)}</td>
             <td>${esc(m.fornecedor || m.fornec)}${m.semChave ? ` <span class="ia-sub">sem chave</span>` : ''}${m.descoberto ? ` ${etiqueta('descoberto', '')}` : ''}</td>
             <td>${etiqueta('por provar', 'warn')}<div class="ia-sub">${esc(m.nota || (m.semChave ? 'não precisa de chave; falta a primeira resposta' : 'pronto, falta a primeira resposta'))}</div></td>
-            <td class="ia-acts"><button class="btn quiet small" data-act="ia-provar" data-fornec="${esc(m.fornec)}" data-modelo="${esc(m.modelo)}">Provar</button></td>
+            <td class="ia-acts">${gr.modo === 'local' ? '<span class="ia-sub">precisa do servidor</span>' : `<button class="btn quiet small" data-act="ia-provar" data-fornec="${esc(m.fornec)}" data-modelo="${esc(m.modelo)}">Provar</button>`}</td>
           </tr>`).join('')}</tbody>
         </table>
         <div class="ia-sub">Provar faz <b>um</b> pedido curto a este modelo e guarda o resultado em <code>/ia/uso</code>. Só depois de responder é que passa a provado.</div>
@@ -239,6 +270,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
     </tr>`).join('');
 
   return `<div class="wrap">
+    ${falhaAoLer}
     ${aviso}
 
     ${cartaoGratuitos}
@@ -351,6 +383,15 @@ export function vistaIA(S, { esc, hhmm, when }) {
 export async function accaoIA(nome, el, api) {
   const { call, S, paint, toast } = api;
   const id = el?.dataset?.id;
+
+  if (nome === 'ia-recarregar') {
+    try {
+      await carregarIA(api);
+      paint();
+      toast(S.iaErro ? `Ainda não: ${S.iaErro}` : 'Estado da IA lido agora.', !!S.iaErro);
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
 
   if (nome === 'ia-provar') {
     /* 1.33.0 · provar UM modelo «por provar»: um pedido curto, e só se ele

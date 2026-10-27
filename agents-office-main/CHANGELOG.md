@@ -1,3 +1,70 @@
+## 1.34.0 — 27 out 2026 · sair da mesa, a IA que não fica a carregar, leads e mensagens reais
+
+Pedido do dono, em quatro frases: um X para voltar, a IA que ficava em «A
+carregar o Control Center…», os leads a funcionar na mesa, e conversas que sejam
+mesmo reais.
+
+**1 · X para sair.** A mesa é uma página inteira e só se saía pelo endereço. Há
+agora um X ao lado da marca (34 px, com nome acessível «Fechar a mesa e voltar ao
+escritório») que leva a `/`. Fica no canto onde se procura, não no fim da página.
+
+**2 · A IA deixou de ficar presa.** O defeito não era o motor: era a leitura
+falhar e a vista não ter estado de erro. Duas causas, ambas corrigidas:
+- a mesa trata o `status` **dentro** do envelope do `/api/rpc` (a resposta HTTP é
+  200; o 404 viaja no JSON). Antes isso era um erro que abortava `carregarIA`, e
+  a vista ficava em «A carregar…» para sempre;
+- `carregarIA` guarda a razão em `S.iaErro`, continua a mostrar o último estado
+  bom com um aviso em cima, e a vista oferece **Tentar outra vez** em vez de um
+  esqueleto eterno.
+
+**3 · Todas as gratuitas à vista, também no modo local.** O modo local listava
+zero fornecedores. Agora lista os quatro motores sem chave — LLM7, OVH, OpenCode
+Zen e Pollinations — com o modelo e o limite reais (`GRATUITOS_LOCAIS`, espelho do
+catálogo do servidor, com teste que impede a divergência) e diz que provar exige
+o servidor, em vez de oferecer um botão que não pode funcionar.
+
+**4 · O canto da IA ganhou vida.** O rodapé do painel IA era uma frase fixa («Um
+CLI dá mãos…»). Passou a ler `/ia/gratuitos` (por `/api/ia/gratuitos`, com o
+`/api/rpc` como alternativa na Vercel) e a dizer: o que o **motor actual** faz
+(recebe ferramentas e mexe, ou só escreve), as gratuitas **provadas** com ✓, as
+**por provar** com ·, a frase do estado, e um atalho «ver todas na mesa». Sem
+servidor diz que não conseguiu ler — não inventa modelos.
+
+**5 · Leads na mesa, a sério.** A mesa tinha o funil e o lead, mas a pesquisa real
+só existia no escritório. Agora há um cartão «Procurar leads reais»: nicho, zona e
+quantos; chama `POST /pesquisa/leads` (Geoapify, com dedupe), guarda no funil e
+recarrega a lista. **Procurar mais** repete com mais 20 até 100 — o fornecedor não
+tem paginação, tem teto, e é isso que o botão diz. **↻ Actualizar** volta a ler a
+base. No modo local a procura responde 503 com a razão (a chave vive no servidor).
+
+**6 · Conversas reais: o envio que nunca chegava a existir.** A mesa chamava
+`/ops/messages/:id/approve`, `/send`, `/reject`, `/confirm`, `/promover` e
+`/sinal` — em inglês. A API só tinha `aprovar` e `rejeitar`; tudo o resto era
+**404**. O fluxo de mensagens estava partido desde a 1.21 e o sintoma era «não
+funciona». Agora:
+- os dois nomes valem (o português é o canónico, o inglês é o que está publicado);
+- `enviar` faz um pedido **real**: email pela **Resend** (`RESEND_API_KEY`,
+  `ORBITA_FROM_EMAIL`) e WhatsApp pela **Cloud API** (`WHATSAPP_TOKEN`,
+  `WHATSAPP_PHONE_ID`). Sem chave é 503/501 com o nome da variável — nunca «enviada»;
+- o estado só passa a `enviada` quando o fornecedor devolve um id; um erro deixa a
+  mensagem em `falhou` com o motivo e um botão «Tentar outra vez»; enviar duas
+  vezes é 409; aprovar antes de enviar é obrigatório;
+- `confirmar` continua a marcar enviada à mão, e diz que foi um humano; um sinal
+  «respondeu»/«recusou» move o lead no funil;
+- no email, o botão da mensagem aprovada passa a «Enviar agora»; no WhatsApp
+  continua «Abrir WhatsApp» + «Já enviei».
+
+**Testes:** 478/478 (8 novos em `mensagens-envio.test.mjs` e 6 em
+`ia-vista.test.mjs`), `mesa.smoke.mjs` a verificar o X, a vista IA sem «A
+carregar», os quatro motores sem chave e o cartão de procura de leads.
+`node check.mjs`: 94/95 (falta o Chromium, igual a antes).
+
+**O que ainda não está feito, sem rodeios:** entrada com conta **Google** não
+existe — precisa de `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` criados pelo dono e
+de um redirect `/auth/google` aprovado no projeto. O envio automático por
+WhatsApp também exige as credenciais da Cloud API; até lá, o WhatsApp abre na app
+e a confirmação é humana — e é isso que a interface diz.
+
 ## 1.33.1 — 27 out 2026 · provar um modelo gratuito, e o estado honesto na mesa
 
 Continuação do 1.33.0: a ligação existia, faltava a prova modelo a modelo.

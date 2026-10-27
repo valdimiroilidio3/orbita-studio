@@ -101,13 +101,20 @@ test('7 · tarefas: registadas e honestas sobre a falta de motor', async () => {
   await assert.rejects(() => chamar(api, '/ops/tarefas', 'POST', { kind: 'inventado' }), (e) => e.status === 400);
 });
 
-test('8 · mensagens: aprovar fica registado; enviar diz que não há canal', async () => {
+test('8 · mensagens: aprovar fica registado; enviar sem canal/contacto recusa e diz porquê', async () => {
   const api = createMemRepo({ mensagens: [{ id: 'm1', lead_id: null, channel: 'whatsapp', body: 'olá', status: 'rascunho', created_at: new Date().toISOString() }] });
   const hoje = (await chamar(api, '/ops/today')).corpo;
   assert.equal(hoje.decidir.length, 1);
-  const ok = await chamar(api, '/ops/messages/m1/aprovar', 'POST', {});
+  /* 1.34.0 · a mesa chama `approve` (inglês): os dois nomes têm de valer */
+  const ok = await chamar(api, '/ops/messages/m1/approve', 'POST', {});
   assert.equal(ok.corpo.message.status, 'aprovada');
-  await assert.rejects(() => chamar(api, '/ops/messages/m1/enviar', 'POST', {}), (e) => e.status === 501);
+  /* sem telefone nem email no lead, o envio não inventa um destinatário */
+  await assert.rejects(() => chamar(api, '/ops/messages/m1/enviar', 'POST', {}), (e) => e.status === 400 && /telefone/.test(e.message));
+  /* com destinatário mas sem token do WhatsApp: 501, e a mensagem não é dada como enviada */
+  const api2 = createMemRepo({ mensagens: [{ id: 'm2', lead_id: null, channel: 'whatsapp', to: '+351912345678', body: 'olá', status: 'aprovada', created_at: new Date().toISOString() }] });
+  await assert.rejects(() => chamar(api2, '/ops/messages/m2/send', 'POST', {}), (e) => e.status === 501 && /WHATSAPP_TOKEN/.test(e.message));
+  const lista = (await chamar(api2, '/ops/messages')).corpo.messages;
+  assert.equal(lista.find((x) => x.id === 'm2').status, 'aprovada', 'o que não saiu não pode ficar «enviada»');
 });
 
 test('9 · o vazio honesto e o 404 do que não existe', async () => {
