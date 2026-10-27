@@ -1,3 +1,25 @@
+## 1.19.1 — 27 out 2026 · o que a produção corrigiu no 1.19.0
+
+O 1.19.0 foi publicado e depois **testado contra a produção** (Vercel + Supabase
+reais). Três coisas que o código dizia e o mundo não confirmava:
+
+1. **Um keyless nunca entrava numa cadeia.** `fornecedorActivo()` exigia chave;
+   o OVH aparecia como «configurado» no estado e era descartado pelo router. Uma
+   execução respondia «todos os modelos falharam» com um fornecedor a responder.
+   Agora entra quem tem chave **ou** não precisa dela.
+2. **O Kilo já não é anónimo.** O pedido sem chave devolve `403 — You need to
+   sign in to use this model.` O catálogo passou a dizer isso (`keyless: false`,
+   limite e nota escritos com a medição) em vez de prometer acesso livre.
+3. **O OVH não tinha um único modelo no catálogo.** Respondia, mas o router não
+   tinha por onde o escolher. Entraram os **9 modelos de chat** da lista real de
+   `/v1/models` (medida em produção; janelas só onde são públicas).
+
+Confirmado com pedidos reais: OVH AI Endpoints responde **sem chave** (22
+modelos listados, resposta em ~0,8 s), e a rota `/ia/testar` marca-o «funcional»
+— os outros 76 fornecedores continuam «sem chave» até alguém os configurar.
+
+Ver também: `docs/IA.md` §15.
+
 ## 1.19.0 — 27 out 2026 · freellmapi, memória do Graft e estúdio OpenMontage
 
 Três pedidos, três camadas novas — e a mesma regra: nada se apresenta como
