@@ -66,10 +66,10 @@ e uma interface que «guarda chaves» seria mentira.
 
 ### Provas
 
-- `controlo.test.mjs` (novo, 15 provas): crescimento em filas inteiras, sala que não
+- `controlo.test.mjs` (novo, 16 provas): crescimento em filas inteiras, sala que não
   encolhe, lugar livre, cor inválida recusada, configuração estragada ignorada,
   rotas a guardar/devolder, e os três estados a nascerem de factos.
-- Suite completa: **327/327**. Build: `dist/mesa.html` 127 KB. `mesa.smoke` verde.
+- Suite completa: **328/328**. Build: `dist/mesa.html` 127 KB. `mesa.smoke` verde.
 
 ## 1.19.1 — 27 out 2026 · o que a produção corrigiu no 1.19.0
 
