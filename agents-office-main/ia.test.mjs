@@ -151,7 +151,9 @@ test('router: só fornecedores utilizáveis (chave ou keyless), e o tipo certo p
   assert.ok(comOpenRouter[0].etiquetas.includes('raciocinio'));
   const visao = cadeia('visao', { chaves: { openrouter: 'X' } });
   assert.ok(visao.every((m) => m.etiquetas.includes('visao')));
-  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh'] }).length, 0, 'groq não tem modelos de visão no catálogo');
+  /* visão é o único tipo que nunca se relaxa (um modelo sem olhos não lê imagem) */
+  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh', 'llm7'] }).length, 0, 'groq não tem modelos de visão no catálogo');
+  assert.equal(cadeia('visao', { chaves: {}, desligados: ['ovh'] }).length, 0, 'a visão foi relaxada para um modelo sem visão');
 });
 
 test('router: preferido do agente vai à frente, e desligado fica de fora', () => {
@@ -582,4 +584,16 @@ test('a versão servida por /api/health vem do package.json (sem números à mã
   assert.equal(VERSAO, pkg.version);
   const fonte = fs.readFileSync(new URL('./api/health.mjs', import.meta.url), 'utf8');
   assert.ok(!/versao: '\d+\.\d+\.\d+'/.test(fonte), 'a versão voltou a estar escrita à mão no health');
+});
+
+test('router: sem modelos com a etiqueta exigida, a cadeia relaxa e diz que relaxou', () => {
+  /* Só o LLM7 está pronto e nenhum modelo dele declara `rapido`: em vez de uma
+     cadeia vazia (que falhava sem chamar ninguém), entra com `relaxado`. */
+  const c = cadeia('rapido', { chaves: {}, desligados: ['ovh', 'kilo'] });
+  assert.ok(c.length > 0, 'a cadeia ficou vazia mesmo havendo fornecedor pronto');
+  assert.ok(c.every((m) => m.fornec === 'llm7'));
+  assert.equal(c.every((m) => m.relaxado), true);
+  /* quando há modelos com a etiqueta, não se relaxa nada */
+  const normal = cadeia('texto', { chaves: {}, desligados: ['ovh', 'kilo'] });
+  assert.equal(normal.some((m) => m.relaxado), false);
 });

@@ -2074,6 +2074,7 @@
    "migracao": "20260101_000000_legacy_baseline.ts",
    "etiquetas": [
     "texto",
+    "raciocinio",
     "contexto"
    ],
    "buraco": null
