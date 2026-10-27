@@ -38,8 +38,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  /* A cadeia de certificados do Supabase não valida com o CA do runtime; e o
+     `sslmode` que vem na URL sobrepõe-se às opções — tira-se da URL e diz-se
+     explicitamente para não verificar. (Só este bootstrap; o `/api` fala por
+     HTTPS com a chave secreta, não abre socket TLS para o Postgres.) */
+  let ligacaoLimpa = ligacao;
+  try {
+    const u = new URL(ligacao);
+    u.searchParams.delete('sslmode');
+    ligacaoLimpa = u.toString();
+  } catch { /* não é URL: fica como está */ }
+
   const saida = { ok: false };
-  const client = new Client({ connectionString: ligacao, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ connectionString: ligacaoLimpa, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
     await client.query(sql);
