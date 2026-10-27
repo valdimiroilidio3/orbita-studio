@@ -1,3 +1,25 @@
+## 1.26.0 — 27 out 2026 · Backups que se abrem, e o botão que testa uma integração
+
+O Centro de Controlo já tinha os botões e o código do cliente (1.21.0/1.22.0);
+faltava o servidor por trás deles. Agora está, e testado:
+
+- **`GET /backup`** — cópia com as nove tabelas, contagens, total e **marca**
+  (sha256 do conteúdo). Mudou o conteúdo, muda a marca.
+- **`POST /backup/teste`** — exporta, relê do JSON, confere a marca e **restaura
+  numa base em memória**, comparando as contagens linha a linha. Se uma tabela
+  não se lê, aparece nos problemas — nunca um «ok» com cópia incompleta.
+  `GET /backup/teste` faz o mesmo ensaio para diagnóstico, sem escrever no registo.
+- **`POST /platform/testar`** — um pedido real por integração (GitHub, Vercel,
+  Supabase, Resend, Geoapify, Tavily, e os fornecedores de IA que conversam).
+  Sem chave diz qual variável falta; um 401 diz «recusou». O resultado fica
+  guardado e a lista passa a distinguir «configurado» de «verificado».
+
+Limites declarados: o ensaio prova o restauro numa base em memória, não no
+Postgres de produção; e as tabelas `runs`/`uso`/`config` são copiadas mas não
+restauradas (não há escritor para elas no repo de memória).
+
+Prova: 11 testes em `backup.test.mjs`; suite completa verde.
+
 ## 1.25.2 — 27 out 2026 · Etiquetas do OpenStreetMap não são a atividade
 
 A verificação seguinte, no mesmo sítio, apanhou outra: a Clínica Delille saía com
