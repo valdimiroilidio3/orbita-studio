@@ -144,7 +144,10 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
   const topconn = document.getElementById('topconn');
   const topImgs = {};
   if (topconn) {
-    topconn.innerHTML = `<span class="tc-lab"><span class="dot"></span>LIGADO A</span>`;
+    // «LIGADO A» com nada ligado era o cartão de demonstração a falar. Sem servidor: «CONECTORES».
+    topconn.innerHTML = SEM_SERVIDOR
+      ? `<span class="tc-lab"><span class="dot"></span>CONECTORES</span>`
+      : `<span class="tc-lab"><span class="dot"></span>LIGADO A</span>`;
     uniqKeys.forEach((k, i) => {
       const img = document.createElement('img');
       img.src = LOGOS[k].img;

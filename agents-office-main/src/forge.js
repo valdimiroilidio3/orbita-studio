@@ -136,10 +136,18 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
     es.addEventListener('error', () => { /* o EventSource volta sozinho */ });
   }
 
+  /* 29 out 2026: o cabeçalho dizia «a ligar…» para sempre na vista publicada. Sem servidor não há
+     nada a ligar — e um «a ligar…» eterno é exactamente o tipo de mentira que este escritório não
+     faz. Passa a dizer o que é. */
+  function semServidor() {
+    if (statsEl) statsEl.textContent = 'sem servidor — abre com `npm start` para ver a oficina a trabalhar';
+    el.classList.add('tm-off');
+  }
   function refreshStats() {
     // sem servidor (ou a abrir o ficheiro com duplo clique) não há API: o terminal fica quieto
-    if (typeof fetch !== 'function') return Promise.resolve();
-    return fetch('/api/forge/events?n=1').then((r) => r.json()).then((d) => paintStats(d.stats)).catch(() => {});
+    if (typeof fetch !== 'function') { semServidor(); return Promise.resolve(); }
+    return fetch('/api/forge/events?n=1').then((r) => { if (r.status === 404) semServidor(); return r.ok ? r.json() : null; })
+      .then((d) => { if (d) paintStats(d.stats); }).catch(() => {});
   }
 
   function info(text) { addLine({ ts: Date.now(), phase: 'info', text }); }

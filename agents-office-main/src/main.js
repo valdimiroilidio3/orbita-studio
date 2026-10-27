@@ -678,7 +678,7 @@ for (const k of [...DEPT_KEYS, 'brain']) {
     <div class="b-metrics">${(BB_ROWS[k] || []).map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-m="${k}-${i}">${row[1]()}</span></div>`).join('')}
     </div>
-    <button type="button" class="b-appr" style="display:none" aria-label="decisões à tua espera — abrir a primeira">⚠ <span class="ap-n">1</span> À ESPERA DE APROVAÇÃO</button>`;
+    <button type="button" class="b-appr" style="display:none" aria-label="decisões à tua espera — abrir a primeira">⚠ <span class="ap-n">0</span> À ESPERA DE APROVAÇÃO</button>`;
   b.addEventListener('click', (e) => {
     if (e.target.closest('.b-appr')) { zoomToApproval(k); e.stopPropagation(); }
     else if (e.target.closest('.b-tasks') && tasks) { tasks.openFor(k); e.stopPropagation(); }
