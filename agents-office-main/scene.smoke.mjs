@@ -627,6 +627,120 @@ if (mIn && mSend) {
     'um vão é mais pequeno do que a porta que lá entra');
 }
 
+/* ---------- a planta das portas (28 out 2026, pedido 36) ----------
+   «melhore os lugares das portas e analisa bem». A análise vive em `src/circulation.js` e o teste
+   faz o que um desenho não faz: compara a CONTA com o que foi CONSTRUÍDO. Se alguém voltar a pôr a
+   porta no canto, a passadeira a passar encostada ao pod, ou o anteparo a tapar a sala, isto falha. */
+{
+  const office = win.CC.office;
+  const plates = office.plates || {};
+  const layout = office.layout || {};
+  const salas = Object.keys(office.depts).filter((k) => k !== 'brain');
+  const ent = office.entrances || [];
+  const corr = (office.circulation() || {}).corridors || [];
+  const ATRIO = 8;                                  // meio-lado do pod do Cérebro (16×16)
+
+  ok(Object.keys(plates).length === salas.length,
+    `devia haver uma planta de porta por sala: ${Object.keys(plates).join(',')}`);
+  ok(salas.every((k) => plates[k] && plates[k].key === k), 'uma sala ficou sem planta de porta');
+
+  // 1 · a porta assenta no BORDO da sala (não a 1 m da parede, não no meio do chão)
+  ok(salas.every((k) => {
+    const p = plates[k], L = layout[k];
+    if (!p || !L) return false;
+    const noX = Math.abs(Math.abs(p.local.x) - L.w / 2) < 0.02;
+    const noZ = Math.abs(Math.abs(p.local.z) - L.d / 2) < 0.02;
+    return (noX || noZ) && (p.side[1] === 'x' ? noX : noZ);
+  }), 'uma porta não está no bordo do pod da sua sala');
+
+  // 2 · a porta ABRE PARA O CÉREBRO: o eixo da porta aponta para o átrio
+  ok(salas.every((k) => {
+    const p = plates[k];
+    const face = { x: Math.max(-ATRIO, Math.min(ATRIO, p.at.x)), z: Math.max(-ATRIO, Math.min(ATRIO, p.at.z)) };
+    const d = { x: face.x - p.at.x, z: face.z - p.at.z };
+    return p.dir.x * d.x + p.dir.z * d.z > 0.5;
+  }), 'há uma porta a abrir para o lado contrário ao Cérebro');
+
+  // 3 · a ponte sai DA PORTA (no eixo dela, 0,9 m à frente) e ACABA NO POD do Cérebro
+  const proximo = (v) => Math.round(v * 100) / 100;
+  ok(salas.every((k) => {
+    const p = plates[k];
+    const dx = p.bridge.from.x - p.at.x, dz = p.bridge.from.z - p.at.z;
+    const alinhado = Math.abs(dx * p.dir.z - dz * p.dir.x) < 0.01;    // paralelo ao eixo da porta
+    return alinhado && Math.abs(Math.hypot(dx, dz) - 0.9) < 0.01;
+  }), 'uma ponte não nasce no eixo da porta, 0,9 m à frente dela');
+  ok(salas.every((k) => {
+    const t = plates[k].bridge.to;
+    return Math.abs(Math.max(Math.abs(t.x), Math.abs(t.z)) - ATRIO) < 0.001
+      && Math.abs(t.x) <= ATRIO + 0.001 && Math.abs(t.z) <= ATRIO + 0.001;
+  }), 'uma ponte não acaba no bordo do pod do Cérebro');
+  ok(salas.every((k) => plates[k].bridge.len > 3), 'uma ponte é curta demais para ser um corredor');
+
+  // 4 · o que se CONSTRUIU é o que a planta diz: a passadeira nasce e acaba nos pontos da ponte
+  ok(corr.length === salas.length, `deviam existir seis corredores: ${corr.length}`);
+  ok(salas.every((k) => {
+    const c = corr.find((x) => x.dept === k), p = plates[k];
+    if (!c || !c.gate || !c.brainGate) return false;
+    return proximo(c.gate[0]) === proximo(p.bridge.from.x)
+      && proximo(c.gate[2]) === proximo(p.bridge.from.z)
+      && proximo(c.brainGate[0]) === proximo(p.bridge.to.x)
+      && proximo(c.brainGate[2]) === proximo(p.bridge.to.z);
+  }), 'a passadeira construída não é a que a planta da porta manda');
+
+  /* 5 · a porta é a mesma coisa na cena: eixo, sítio e lado.
+     Sítio com uma nuance que é de propósito: com parede, a porta assenta na face INTERIOR dela
+     0,46 m para dentro (espessura da parede + meio aro); sem parede, assenta no bordo, 3 cm para
+     dentro para não haver duas faces coplanares. O eixo ao longo da parede é exacto. */
+  ok(ent.length === salas.length && salas.every((k) => {
+    const e = ent.find((x) => x.dept === k), p = plates[k], L = layout[k];
+    if (!e || e.side !== p.side) return false;
+    if (proximo(e.dir.x) !== proximo(p.dir.x) || proximo(e.dir.z) !== proximo(p.dir.z)) return false;
+    // (o `at` da entrada é LOCAL à sala: o grupo da porta está dentro do grupo do pod)
+    const lx = e.at.x, lz = e.at.z;
+    const noX = p.side === '+x' || p.side === '-x';
+    const dim = noX ? L.w : L.d;
+    const sinal = noX ? p.dir.x : p.dir.z;
+    const dentro = p.walled ? 0.46 : 0.03;             // WALL.t + DOOR.frameD/2 · folga anti-coplanar
+    const querido = sinal * (dim / 2 - dentro);
+    const perpendicular = noX ? lx : lz;
+    const aoLongo = noX ? lz : lx;
+    const dAlongo = noX ? p.local.z : p.local.x;
+    return Math.abs(perpendicular - querido) < 0.011 && Math.abs(aoLongo - dAlongo) < 0.011;
+  }), 'a porta construída não está onde a planta a manda');
+
+  // 6 · parede aberta quando há parede; anteparo quando o lado é o aberto
+  const paredes = office.walls || {};
+  ok(salas.every((k) => {
+    const p = plates[k], w = paredes[k];
+    if (!w) return false;
+    if (!p.walled) return !w.opening;                  // sem parede: nada para abrir
+    return w.opening && w.opening.side === p.openingSide
+      && Math.abs(w.opening.at - (p.openingSide === '-z' ? p.local.x : p.local.z)) < 0.01;
+  }), 'o vão na parede não corresponde à porta que lá entra');
+  const comAnteparo = salas.filter((k) => plates[k].screen);
+  ok(comAnteparo.length === 3, `três salas deviam ter a porta no lado aberto: ${comAnteparo.length}`);
+  ok(salas.every((k) => {
+    const e = ent.find((x) => x.dept === k), p = plates[k];
+    return e && !!e.screen === !!p.screen
+      && (!p.screen || (e.screenLen >= e.width + 1 && e.piazza > 0));
+  }), 'a porta no lado aberto ficou sem anteparo (ou o anteparo não chega para a fechar)');
+  ok(ent.every((e) => e.piazza >= 2), 'a praça do limiar é pequena demais para absorver a diagonal');
+
+  // 7 · seis portas, seis sítios diferentes — nada de duas salas a partilhar a mesma porta
+  const chaves = new Set(salas.map((k) => `${proximo(plates[k].at.x)}|${proximo(plates[k].at.z)}`));
+  ok(chaves.size === salas.length, 'duas salas ficaram com a porta no mesmo sítio');
+  console.log('  portas: ' + salas.map((k) => {
+    const p = plates[k];
+    return `${k} ${p.side} (${p.walled ? 'parede ' + p.openingSide : 'anteparo'}) → ponte ${p.bridge.len.toFixed(1)} m`;
+  }).join(' · '));
+  // o resumo da cena passa a dizer isto (o antigo não sabia onde estavam as portas)
+  win.CC.portas = {
+    comParede: salas.filter((k) => plates[k].walled).length,
+    comAnteparo: comAnteparo.length,
+    pontes: salas.map((k) => +plates[k].bridge.len.toFixed(1)),
+  };
+}
+
 if (falhas.length) {
   console.error(`✗ cena: ${falhas.length} falha(s)`);
   for (const f of falhas) console.error('  · ' + f);
@@ -662,6 +776,12 @@ const resumoCirculacao = (() => {
   const tapetes = Object.values(c.beltsByDept || {}).reduce((n, v) => n + v, 0);
   return `${c.led - tapetes} faixas de LED (${porSala} por sala) + ${tapetes} tapetes a rolar, corredores com guardas em ${c.corridors.length} salas, sala-mestre com ${h ? h.spots.length : 0} lugares de chefe e um aro de ${h ? h.ring.toFixed(1) : '?'} de raio`;
 })();
+const resumoPedido36 = (() => {
+  const p = (win.CC && win.CC.portas) || null;
+  if (!p) return 'sem planta de portas';
+  const lo = Math.min(...p.pontes), hi = Math.max(...p.pontes);
+  return `${p.comParede + p.comAnteparo} portas viradas ao Cérebro (${p.comParede} em vão de parede · ${p.comAnteparo} com anteparo) e pontes em linha recta de ${lo}–${hi} m`;
+})();
 const resumoPedido34 = (() => {
   const o = win.CC.office;
   const b = typeof o.belts === 'function' ? o.belts() : [];
@@ -669,6 +789,6 @@ const resumoPedido34 = (() => {
   const cores = [...new Set(e.map((x) => x.glass))].join(' · ');
   return `${b.length} passadeiras rolantes pretas nos corredores e ${e.length} entradas de sala na cor da sala (${cores})`;
 })();
-console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), marca ÓRBITA AGENTES e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

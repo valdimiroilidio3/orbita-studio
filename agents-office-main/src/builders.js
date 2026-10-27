@@ -1601,7 +1601,10 @@ function spillTexture() {
   return t;
 }
 
-export function makeRoomEntrance({ glass = '#AEB6AB', at = { x: 0, z: 0 }, dir = { x: 1, z: 0 }, label = '' } = {}) {
+export function makeRoomEntrance({
+  glass = '#AEB6AB', at = { x: 0, z: 0 }, dir = { x: 1, z: 0 }, label = '',
+  screen = false, screenLen = 5.6, piazza = true,
+} = {}) {
   const g = new THREE.Group();
   const brassMat = new THREE.MeshStandardMaterial({ color: brass(glass, 0.18), roughness: 0.24, metalness: 0.96 });
   const ledMat = new THREE.MeshStandardMaterial({
@@ -1624,10 +1627,12 @@ export function makeRoomEntrance({ glass = '#AEB6AB', at = { x: 0, z: 0 }, dir =
     blending: THREE.AdditiveBlending, depthWrite: false,
   });
 
-  const B = [], L = [], D = [], V = [];
+  const panelMat = new THREE.MeshStandardMaterial({ color: '#F5F4EE', roughness: 0.92, metalness: 0 });
+  const B = [], L = [], D = [], V = [], P = [];
   /* `place(geo, x, y, z)` com y = BASE: o `rboxGeo` cresce de 0 para cima. Foi este o erro da
      primeira versão — os montantes nasciam a meio do vão e a porta flutuava. */
   const OW = DOOR.clearW, OH = DOOR.clearH, FW = DOOR.frameW, FD = DOOR.frameD, HH = DOOR.headerH;
+  const PZ_R = 2.30;                                      // o raio da praça do limiar
   /* as duas folhas abrem AO MEIO (bi-parting, como uma porta automática): cada uma desliza para o
      seu lado e o vão fica livre no centro — é por ali que as pessoas entram e saem. Uma porta
      entreaberta de um lado só deixava o chefe a passar pelo vidro. */
@@ -1713,10 +1718,62 @@ export function makeRoomEntrance({ glass = '#AEB6AB', at = { x: 0, z: 0 }, dir =
   spill.position.set(0, 0.072, 1.0);
   spill.userData.part = 'entranceSpill';
 
+  /* ---- o ANTEPARO ----
+     Três das seis salas têm a porta virada para o lado ABERTO do pavilhão — o lado do Cérebro e da
+     câmara, o único onde não há parede. Uma porta ali ficava de pé no vazio, e uma porta sem parede
+     não é uma porta: é um arco. O anteparo é um pano próprio, feito com o MESMO vocabulário da
+     parede — base sólida de marfim, banda de vidro por cima, montantes e remate de latão, fio de luz
+     na cor da sala — para não parecer um biombo de escritório. E é de VIDRO por cima justamente para
+     não tapar a sala: de cima vê-se tudo, e a porta continua a ser o único caminho. */
+  const SH = Math.max(WALL.base, OH + FW + HH + 0.38);   // a placa da porta chega aos 2,64 m
+  if (screen) {
+    const half = Math.max(screenLen, OW + FW * 2 + 1.2) / 2;
+    const edge = OW / 2 + FW;                             // onde o aro da porta acaba
+    const BT = 0.22, DZ = 0.16;                           // remate de topo · espessura do pano
+    const top = SH - BT;
+    const BASE = 1.02;                                    // a base sólida: altura de um peitoril
+    for (const sgn of [-1, 1]) {
+      const a = sgn * (edge + 0.02), b = sgn * half;
+      const wp = Math.abs(b - a);
+      if (wp < 0.08) continue;
+      P.push(place(rboxGeo(wp, DZ, BASE - 0.18, 0.02), (a + b) / 2, 0.18, 0));           // a base
+      V.push(place(rboxGeo(wp, 0.04, top - BASE - 0.12, 0.01), (a + b) / 2, BASE + 0.10, 0)); // o vidro
+      B.push(place(rboxGeo(wp, DZ + 0.06, 0.10, 0.02), (a + b) / 2, BASE, 0));           // o corrimão
+      // montantes de latão: aos 1,6 m, como os da parede, para o vidro não ser um pano só
+      const n = Math.max(1, Math.round(wp / 1.6));
+      for (let i = 0; i <= n; i++) {
+        const x = a + (b - a) * (i / n);
+        B.push(place(rboxGeo(0.09, DZ + 0.04, top - 0.18, 0.02), x, 0.18, 0));
+      }
+      B.push(place(rboxGeo(0.16, DZ + 0.10, SH, 0.02), sgn * (half - 0.08), 0, 0));      // montante do canto
+      B.push(place(rboxGeo(0.20, DZ + 0.14, 0.16, 0.02), sgn * (half - 0.08), 0, 0));    // pé do canto
+    }
+    // a padieira do anteparo, por cima da placa da porta (do mesmo vidro, para deixar passar a luz)
+    V.push(place(rboxGeo(OW + FW * 2 + 0.04, 0.04, top - (OH + FW + HH) - 0.10, 0.01), 0, OH + FW + HH + 0.05, 0));
+    B.push(place(rboxGeo(OW + FW * 2 + 0.10, DZ + 0.06, 0.10, 0.02), 0, OH + FW + HH, 0));
+    B.push(place(rboxGeo(half * 2, DZ + 0.08, 0.18, 0.03), 0, 0, 0));                     // roda-pé
+    B.push(place(rboxGeo(half * 2 + 0.12, DZ + 0.14, BT, 0.04), 0, top, 0));              // remate
+    // o fio de luz na cor da sala: a mesma assinatura das paredes, aqui a fechar o pano por cima
+    L.push(place(rboxGeo(half * 2 - 0.26, 0.05, 0.03, 0.012), 0, top - 0.06, -DZ / 2 - 0.014));
+    L.push(place(rboxGeo(half * 2 - 0.26, 0.05, 0.03, 0.012), 0, top - 0.06, DZ / 2 + 0.014));
+  }
+
+  /* ---- a PRAÇA da porta ----
+     Cada porta tem uma praça redonda no limiar, de pedra clara com aro de latão e um fio de luz na
+     cor da sala. Não é enfeite: quatro das seis passadeiras chegam à porta em diagonal (o Cérebro
+     não está no eixo da sala), e um tapete de 3,2 m a entrar a 36° numa porta de 2,6 m deixava uma
+     cunha de chão à vista e um canto a raspar no pano da parede. A praça absorve o ângulo — o tapete
+     nasce debaixo dela — e dá às seis entradas o mesmo gesto: chega-se à praça, e entra-se. */
+  if (piazza) {
+    P.push(place(new THREE.CylinderGeometry(PZ_R, PZ_R, 0.07, 48), 0, 0, 0));
+    B.push(place(new THREE.TorusGeometry(PZ_R - 0.06, 0.045, 8, 64).rotateX(-Math.PI / 2), 0, 0.052, 0));
+    L.push(place(new THREE.TorusGeometry(PZ_R - 0.34, 0.022, 6, 64).rotateX(-Math.PI / 2), 0, 0.048, 0));
+  }
   const bm = meshOf(B, brassMat, { shadow: true }); if (bm) { bm.userData.part = 'entranceFrame'; g.add(bm); }
   const lm = meshOf(L, ledMat, { shadow: false }); if (lm) { lm.userData.part = 'entranceLed'; lm.castShadow = false; lm.receiveShadow = false; g.add(lm); }
   const dm = meshOf(D, darkMat, { shadow: true }); if (dm) { dm.userData.part = 'entranceSill'; g.add(dm); }
   const vm = meshOf(V, glassMat, { shadow: false }); if (vm) { vm.userData.part = 'entranceGlass'; vm.castShadow = false; vm.receiveShadow = false; g.add(vm); }
+  const pm = meshOf(P, panelMat, { shadow: true }); if (pm) { pm.userData.part = 'entrancePanel'; g.add(pm); }
 
   /* ---- a placa com o nome da sala: duas faces, para se ler dos dois lados ---- */
   if (label) {
@@ -1739,6 +1796,8 @@ export function makeRoomEntrance({ glass = '#AEB6AB', at = { x: 0, z: 0 }, dir =
     width: OW + FW * 2, height: OH + FW + HH,        // contorno exterior (com a banda do nome)
     clear: { w: OW, h: OH },
     leaves: 2, open, label: String(label || ''),
+    screen: !!screen, screenLen: screen ? Math.max(screenLen, OW + FW * 2 + 1.1) : 0,
+    piazza: piazza ? PZ_R : 0,
   };
   return g;
 }
@@ -1943,29 +2002,42 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
      buraco, não há passagem, e de fora não se vê nada. Aqui o pano de fundo (-z) parte-se em dois
      troços e fica uma verga por cima do vão, com a altura do `DOOR`. É a única parede que se abre:
      a outra (-x) nunca recebe porta, porque a circulação vai para o Cérebro pelo eixo do -z. */
-  const op = opts.opening || null;    // { x, w, h } em coordenadas locais da sala
-  const segX = op
-    ? [[-w / 2, op.x - op.w / 2], [op.x + op.w / 2, w / 2]].filter(([a, b]) => b - a > 0.05)
+  /* O vão pode abrir-se nos dois panos: o de FUNDO (-z, ao longo de x) ou o LATERAL (-x, ao longo
+     de z). Qual deles depende de onde é que a sala olha para o Cérebro — quem decide é o
+     `doorPlan` (src/circulation.js), que aqui só chega como `{ side, at, w, h }`. */
+  const op = opts.opening || null;    // { side:'-z'|'-x', at, w, h } em coordenadas locais
+  const opSide = op ? (op.side || '-z') : null;
+  const opAt = op ? (op.side ? op.at : op.x) : 0;      // compatível com a forma antiga { x, w, h }
+  const cutBack = opSide === '-z';                     // o vão está no pano de fundo?
+  const segX = (op && cutBack)
+    ? [[-w / 2, opAt - op.w / 2], [opAt + op.w / 2, w / 2]].filter(([a, b]) => b - a > 0.05)
     : [[-w / 2, w / 2]];
+  const segZ = (op && !cutBack)
+    ? [[-d / 2, opAt - op.w / 2], [opAt + op.w / 2, d / 2]].filter(([a, b]) => b - a > 0.05)
+    : [[-d / 2, d / 2]];
 
   // base das duas paredes + pilares de canto
   for (const [a, b] of segX) boxAt(wallG, b - a, t, base, 0.1, (a + b) / 2, 0, backZ);
-  if (op) boxAt(wallG, op.w, t, base - op.h, 0.1, op.x, op.h, backZ);   // a verga
-  boxAt(wallG, t, d, base, 0.1, sideX, 0, 0);
+  if (op && cutBack) boxAt(wallG, op.w, t, base - op.h, 0.1, opAt, op.h, backZ);   // a verga
+  for (const [a, b] of segZ) boxAt(wallG, t, b - a, base, 0.1, sideX, 0, (a + b) / 2);
+  if (op && !cutBack) boxAt(wallG, t, op.w, base - op.h, 0.1, sideX, op.h, opAt);  // a verga do lado
   for (const [px, pz] of [[w / 2 - 0.3, backZ], [sideX, d / 2 - 0.3], [-w / 2 + 0.3, backZ]]) {
     boxAt(wallG, 0.54, 0.54, H, 0.1, px, 0, pz);
     boxAt(capG, 0.62, 0.62, 0.14, 0.05, px, H - 0.14, pz);
   }
   // ripaado (só no pano acima do rodapé)
   for (let x = -w / 2 + 0.62; x < w / 2 - 0.5; x += 0.92) {
-    if (op && Math.abs(x - op.x) < op.w / 2 + 0.75) continue;   // a ripa não atravessa a porta nem as folhas deslizadas
+    if (op && cutBack && Math.abs(x - opAt) < op.w / 2 + 0.75) continue;   // a ripa não atravessa a porta
     boxAt(ribG, 0.17, 0.09, base - 1.05, 0.03, x, 0.42, backZ + t / 2 + 0.035);
   }
-  for (let z = -d / 2 + 0.62; z < d / 2 - 0.5; z += 0.92) boxAt(ribG, 0.09, 0.17, base - 1.05, 0.03, sideX + t / 2 + 0.035, 0.42, z);
+  for (let z = -d / 2 + 0.62; z < d / 2 - 0.5; z += 0.92) {
+    if (op && !cutBack && Math.abs(z - opAt) < op.w / 2 + 0.75) continue;
+    boxAt(ribG, 0.09, 0.17, base - 1.05, 0.03, sideX + t / 2 + 0.035, 0.42, z);
+  }
 
   // rodapé de latão (baixo e fino) — também parte em dois quando há porta
   for (const [a, b] of segX) boxAt(trimG, b - a, t + 0.10, 0.20, 0.04, (a + b) / 2, 0, backZ);
-  boxAt(trimG, t + 0.10, d, 0.20, 0.04, sideX, 0, 0);
+  for (const [a, b] of segZ) boxAt(trimG, t + 0.10, b - a, 0.20, 0.04, sideX, 0, (a + b) / 2);
 
   // banda de vidro + remate
   boxAt(glassG, w, 0.08, band, 0.03, 0, base, backZ);
@@ -2033,7 +2105,7 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   // a luz que passa: entra no grupo e fica anunciada para o main a animar
   for (const m of ledMeshes) { m.castShadow = false; m.receiveShadow = false; g.add(m); }
   // o vão fica anunciado para o teste poder provar que a parede foi mesmo aberta
-  g.userData.wall = { w, d, t, base, band, opening: op ? { ...op } : null };
+  g.userData.wall = { w, d, t, base, band, opening: op ? { side: opSide, at: opAt, w: op.w, h: op.h } : null };
   g.userData.led = {
     room,
     strips: ledMeshes.map((m) => m.material),

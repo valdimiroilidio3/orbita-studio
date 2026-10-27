@@ -24,9 +24,11 @@ A ideia, arrumada como uma equipa sénior a arrumaria: **um único circuito, dua
               └──────────── os seis corredores chegam aqui ────┘
 ```
 
-- **Cada sala tem uma porta** no MEIO do pano que dá para o Cérebro (1.13.1: era no canto, onde não
-  cabe uma porta). Três salas têm-na num vão aberto na parede; as outras três, no bordo aberto. É por
-  ali que se entra e se sai — não há paredes a atravessar.
+- **Cada sala tem uma porta virada ao Cérebro** (1.13.2). O sítio não é escolhido à mão: sai da linha
+  *centro da sala → átrio*, no ponto em que ela cruza o bordo do pod. Como as salas estão em diagonal,
+  esse ponto cai ora num pano de parede, ora no lado aberto — e é por isso que **três portas levam um
+  anteparo** (um pano próprio, de marfim e vidro) e **três abrem um vão** na parede. A ponte sai
+  sempre da porta, em linha recta, e chega ao pod do Cérebro.
 - **O corredor** tem piso ao nível das salas, guardas de latão dos dois lados e **uma linha de LED
   na cor da sala**, com a luz a correr sempre **para o Cérebro**. Lê-se a direcção do trabalho.
 - **O Cérebro é uma sala, não um objecto**: uma praça de latão, um aro de LED a fechar o perímetro,
@@ -88,8 +90,10 @@ porque outro está ocupado. É assim que duas equipas se cruzam no Cérebro.
    topo da sala  ──  o sítio de quem fala para o grupo (x = 0, 1,35 m à frente das secretárias)
         │
         ▼
-   porta (o meio do pano virado ao Cérebro: um vão na parede, ou o bordo aberto)
-        │  corredor: piso, guardas de latão, LED a correr
+   porta (virada ao Cérebro: um vão na parede, ou o anteparo no lado aberto)
+        │  0,9 m de praça de pedra — é ela que absorve o ângulo da ponte
+        ▼
+   passadeira: piso preto, guardas de latão, LED a correr para o Cérebro
         ▼
    chegada ao Cérebro  (aro de latão no fim do corredor)
         │
@@ -105,12 +109,16 @@ duas colunas ficam a ±4,3 m. O chefe nunca «passa por cima» de uma mesa.
 | ficheiro | o que faz |
 |---|---|
 | `src/crew.js` | a coreografia: sinais, percursos, fases, tempos, o grupo a ouvir |
+| `src/circulation.js` | **onde fica a porta e por onde vai a ponte** (geometria pura, provada sem three) |
 | `src/builders.js` → `makeMasterHall` | a praça, o aro de LED, as colunas e os seis púlpitos |
 | `src/builders.js` → `makeWalkway` | o corredor: **passadeira preta rolante**, guardas de latão, LED e aro de chegada |
 | `src/builders.js` → `makeRoomEntrance` | a porta de cada sala (aro, folhas, placa, luz), na cor daquele vidro |
 | `src/builders.js` → `makeRoomWalls` | a calha de LED e a luz que corre no vidro |
 | `src/main.js` | liga os sinais reais (`syncFromLive`) ao `crew`; anima as faixas de LED |
 | `src/avatar.js` | a pose `listen` (o grupo a ouvir) |
+
+O `crew` não decide sítios: lê `deptRT.gate`/`brainGate`, que o `main.js` preenche com
+`doorPlan(...).bridge`. Uma só verdade para o desenho e para a caminhada.
 
 O `crew` recebe os sinais **do main**, que é quem fala com a base de dados. A regra é essa: o `crew`
 não sabe o que é uma tarefa; sabe andar, parar, virar-se e explicar.

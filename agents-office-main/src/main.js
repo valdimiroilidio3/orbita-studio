@@ -18,6 +18,9 @@ import {
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
 import { makePerson, posePerson, poseWork } from './avatar.js';
 import { createCrew } from './crew.js'; // 28 out 2026: a circulação (chefes ao Cérebro)
+/* 28 out 2026 (pedido 36) — ONDE FICA A PORTA. A conta saiu do `main.js` para `src/circulation.js`:
+   uma regra só, para as seis salas, provada sem three por `circulation.test.mjs`. */
+import { doorPlan } from './circulation.js';
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -212,6 +215,12 @@ const screenSets = [];
 const dressingRT = [];     // 27 out 2026: o adereço de cada sala, para a inspecção e o teste
 const DECK = ['emails', 'sales', 'marketing', 'fin', 'ops', 'delivery'];
 
+/* 28 out 2026 (pedido 36) — a porta de cada sala, calculada UMA vez, antes de se construir o que ela
+   afecta: o vão na parede, a porta, o corredor e o percurso dos chefes têm todos de ler o mesmo
+   sítio, senão cada um inventa o seu. */
+const PLATES = {};
+for (const k of DEPT_KEYS) PLATES[k] = doorPlan(k, LAYOUT, { x: 8, z: 8 });
+
 for (const [key_, L] of Object.entries(LAYOUT)) {
   const dept = DEPTS[key_];
   const g = new THREE.Group();
@@ -227,10 +236,17 @@ for (const [key_, L] of Object.entries(LAYOUT)) {
   let walls = null;
   if (key_ !== 'brain') {
     try {
-      // o vão da porta: só no pano de fundo (-z), e só quando é ali que o corredor chega
-      const sz0 = Math.sign(L.pos[1]);
-      const opening = sz0 > 0
-        ? { x: 0, w: DOOR.clearW + DOOR.frameW * 2 + 0.04, h: DOOR.clearH + DOOR.frameW + 0.04 }
+      /* O vão da porta: no pano de parede que a porta ocupa — o de FUNDO (-z) ou o LATERAL (-x),
+         conforme a sala olhe para o Cérebro pelo eixo z ou pelo eixo x. Nas três salas cuja porta
+         cai no lado aberto não há parede para abrir: a porta leva o seu próprio anteparo. */
+      const pl = PLATES[key_];
+      const opening = pl && pl.walled
+        ? {
+          side: pl.openingSide,
+          at: pl.openingSide === '-z' ? pl.local.x : pl.local.z,
+          w: DOOR.clearW + DOOR.frameW * 2 + 0.04,
+          h: DOOR.clearH + DOOR.frameW + 0.04,
+        }
         : null;
       walls = makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass, opening });
       walls.traverse(o => { if (o.isMesh) { o.userData.dept = key_; clickTargets.push(o); } });
@@ -327,16 +343,26 @@ const crew = createCrew({
 
 // corredores dept -> Cérebro (28 out 2026: passadeira rolante preta, entrada na cor da sala)
 const ledRT = [];   // as faixas cujo offset se anima por frame (ver `tickLeds`)
-const entranceRT = [];   // 28 out 2026: o pórtico de cada sala (cor, sítio, direcção)
+const entranceRT = [];   // 28 out 2026: a porta de cada sala (cor, sítio, direcção, anteparo)
 for (const k of DEPT_KEYS) {
   const L = LAYOUT[k];
-  const sx = Math.sign(L.pos[0]), sz = Math.sign(L.pos[1]);
-  /* 28 out 2026 (1.13.1): a boca do corredor passou do canto para o MEIO do pano que dá para o
-     Cérebro. Era a raiz do problema das portas: no canto não cabe uma porta (a esquina fica a 1 m),
-     e por isso o pórtico ficava solto no ar, 1,1 m à frente da parede. Ao centro, a porta assenta
-     no vão e o corredor entra por ela. */
-  const from = [L.pos[0], L.pos[1] - sz * (L.d / 2 - 1)];
-  const to = [sx * 6.5, sz * 6.5];
+  const plan = PLATES[k];
+  /* 28 out 2026 (1.13.2, pedido 36 «melhore os lugares das portas e analisa bem») — a porta e a
+     passadeira nascem da MESMA conta (`doorPlan`, em `src/circulation.js`):
+
+       · a porta fica no lado da sala que olha para o Cérebro — o ponto onde a linha
+         «centro da sala → átrio» sai do pod, e não um canto nem o meio de um pano qualquer;
+       · a passadeira começa 0,9 m à frente dessa porta (`bridge.from`) e acaba no canto do pod do
+         Cérebro que lhe fica à frente (`bridge.to`), em linha recta. Antes corria encostada ao pod,
+         porque a boca do corredor estava no meio do pano e o Cérebro no eixo da sala;
+       · nas três salas em que a porta cai no lado ABERTO (emails e marketing a leste, delivery a
+         sul), a porta traz o seu anteparo — um biombo de parede na cor da sala — em vez de ficar de
+         pé no vazio.
+
+     A ponte dos chefes (`deptRT.gate`/`brainGate`) lê o mesmo `bridge`, por isso o percurso que o
+     `crew.js` desenha passa exactamente por cima da passadeira: uma só verdade. */
+  const from = [plan.bridge.from.x, plan.bridge.from.z];
+  const to = [plan.bridge.to.x, plan.bridge.to.z];
   const walk = makeWalkway(from, to, { glass: DEPTS[k].glass, chip: DEPTS[k].chip });
   walk.userData.dept = k; walk.userData.part = 'walkway';
   walk.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
@@ -347,24 +373,29 @@ for (const k of DEPT_KEYS) {
   deptRT[k].gate = new THREE.Vector3(from[0], 0, from[1]);
   deptRT[k].brainGate = new THREE.Vector3(to[0], 0, to[1]);
 
-  /* A ENTRADA da sala, na cor dela, virada ao corredor. A direcção vem do corredor (é ele que
-     define para onde é a saída) e a posição é 1,1 m para dentro da porta, para o pórtico ficar
-     assente no pod e não a cavalo na aresta. */
+  /* A ENTRADA da sala, na cor dela, virada ao Cérebro. O eixo do grupo (`+z`) é o lado do corredor:
+     `dir` faz a porta olhar para fora, e é o mesmo vector que a passadeira segue. */
   try {
-    const dl = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
-    const dir = { x: (to[0] - from[0]) / dl, z: (to[1] - from[1]) / dl };
-    /* Onde é que a porta cai? Se o corredor sai pelo pano de fundo (-z), a parede é de verdade e a
-       porta assenta na face INTERIOR dela, com o vão aberto pelo `makeRoomWalls`. Se sai pelo bordo
-       aberto (+z), não há parede: a porta fica de pé no bordo, como entrada do jardim. */
-    const walled = sz > 0;
+    const walled = plan.walled;
+    /* Com parede, a porta assenta na face INTERIOR dela (o vão foi aberto pelo `makeRoomWalls`); sem
+       parede, assenta no bordo do pod, e é o anteparo que lhe dá corpo. */
     const at = walled
-      ? { x: 0, z: -L.d / 2 + WALL.t + DOOR.frameD / 2 }
-      : { x: 0, z: L.d / 2 - 0.60 };
-    const ent = makeRoomEntrance({ glass: DEPTS[k].glass, at, dir, label: DEPTS[k].short });
+      ? (plan.side === '-z'
+        ? { x: plan.local.x, z: -L.d / 2 + WALL.t + DOOR.frameD / 2 }
+        : { x: -L.w / 2 + WALL.t + DOOR.frameD / 2, z: plan.local.z })
+      : (plan.side === '+z'
+        ? { x: plan.local.x, z: L.d / 2 - 0.03 }
+        : { x: L.w / 2 - 0.03, z: plan.local.z });
+    // o anteparo cobre o lado que a porta ocupa, mas nunca a sala toda: a câmara tem de ver dentro
+    const span = (plan.side === '+x' || plan.side === '-x') ? L.d : L.w;
+    const ent = makeRoomEntrance({
+      glass: DEPTS[k].glass, at, dir: plan.dir, label: DEPTS[k].short,
+      screen: plan.screen, screenLen: plan.screen ? Math.min(span - 0.6, 6.6) : 0,
+    });
     ent.traverse((o) => { if (o.isMesh) { o.userData.dept = k; clickTargets.push(o); } });
     deptRT[k].group.add(ent);
     deptRT[k].entrance = ent;
-    entranceRT.push({ dept: k, glass: DEPTS[k].glass, ...ent.userData.entrance });
+    entranceRT.push({ dept: k, glass: DEPTS[k].glass, ...ent.userData.entrance, side: plan.side });
   } catch (e) { console.warn('entrada: ' + k + ' — ' + e.message); }
 }
 // os LED das paredes entram no mesmo sítio (as faixas já nascem no builder)
@@ -1737,13 +1768,17 @@ function tickLeds(now, dt) {
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
   office: {
-    depts: DEPTS, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
+    depts: DEPTS, layout: LAYOUT, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
     // 28 out 2026: a sala-mestre e a circulação, para se poder olhar para elas sem adivinhar
     hall: hall && { ...hall.userData.hall },
     // 28 out 2026 (1.13.1): as paredes e o vão da porta — o teste lê daqui se a porta assenta num buraco
     walls: Object.fromEntries(Object.entries(deptRT).filter(([, r]) => r.walls).map(([k, r]) => [k, { ...r.walls.userData.wall }])),
     // 28 out 2026: os pórticos de entrada e as passadeiras (para o teste poder olhar para eles)
     entrances: entranceRT,
+    /* 28 out 2026 (1.13.2, pedido 36): a PLANTA das portas — onde cada porta cai, para que lado abre,
+       onde começa e acaba a ponte. É a mesma conta que constrói a cena; o teste compara-a com o que
+       foi construído, em vez de repetir os números à mão. */
+    plates: PLATES,
     // 28 out 2026: as passadeiras — a cor do tapete, para onde vai e quanto já rolou (o teste lê isto)
     belts: () => ledRT.filter((l) => l.mat.userData.belt).map((l) => ({
       dept: l.dept,

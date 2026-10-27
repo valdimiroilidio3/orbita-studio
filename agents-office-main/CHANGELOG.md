@@ -1,3 +1,61 @@
+## 1.13.2 — 28 out 2026 · As portas passaram a abrir para o Cérebro (e a ponte sai delas)
+
+Pedido: *«melhore os lugares das portas e analisa bem e muda isso com dev apple design 3D»*.
+
+### A análise, primeiro
+
+A 1.13.1 pôs a porta no **meio do pano de fundo** de cada sala. Era melhor do que o canto, mas partia
+de uma suposição falsa: **o Cérebro não está em frente desse pano**. As seis salas estão em diagonal
+no campus (`±30, ±23` e `0, ±48`, com o pod do Cérebro em `0,0`), e o vector «centro da sala →
+Cérebro» sai do pod por um canto, não pelo meio do pano. Resultado: a passadeira saía enviesada da
+porta e corria **encostada ao pod**; nas salas de canto a porta ficava **perpendicular ao pano que a
+recebia**; e nas três salas cuja porta caía no bordo aberto a porta estava de pé no vazio.
+
+O que a planta diz agora (conta em `src/circulation.js`, valores reais):
+
+| sala | porta no lado | vão | ponte |
+|---|---|---|---|
+| emails | `+x` | **anteparo** (lado aberto) | 13,8 m → canto `-8,-8` |
+| delivery | `+z` | **anteparo** | 22,1 m → `0,-8` |
+| sales | `-x` | vão na parede lateral | 13,8 m → canto `8,-8` |
+| marketing | `+x` | **anteparo** | 13,8 m → canto `-8,8` |
+| fin | `-x` | vão na parede lateral | 13,8 m → canto `8,8` |
+| ops | `-z` | vão na parede de fundo | 22,1 m → `0,8` |
+
+### O que mudou
+
+- **`src/circulation.js`** (novo): a regra num sítio só. A porta fica no lado da sala que olha para o
+  Cérebro, no ponto em que a linha *centro → átrio* sai do pod; a ponte vai desse ponto ao canto do
+  pod do Cérebro **em linha recta**, e nasce 0,9 m à frente da porta, no eixo dela.
+- **O vão passou a poder abrir nos dois panos.** `makeRoomWalls` aceita `opening: { side, at, w, h }`:
+  parte a parede de **fundo** (`-z`) ou a **lateral** (`-x`), com verga, rodapé partido e ripaado que
+  não atravessa. Antes só o pano de fundo sabia abrir-se.
+- **A porta passou a assentar na face interior do pano que a recebe** (0,46 m para dentro: espessura da
+  parede + meio aro) e, quando não há parede, no bordo do pod com 3 cm de folga.
+- **O ANTEPARO** — um pano próprio para as três salas cuja porta cai no lado aberto: base de marfim
+  até 1,02 m, **banda de vidro** até 2,80 m, montantes e remate de latão, fio de luz na cor da sala.
+  É de vidro por cima de propósito: fecha a porta sem tapar a sala à câmara.
+- **A PRAÇA do limiar** — um disco de pedra de 2,30 m de raio em cada porta, com aro de latão e anel
+  aceso. Não é enfeite: quatro das seis pontes chegam à porta em diagonal, e um tapete de 3,2 m a
+  entrar a 36° numa porta de 2,6 m deixava uma cunha à vista e um canto a raspar no pano. A praça
+  absorve o ângulo — o tapete nasce debaixo dela — e dá às seis entradas o mesmo gesto.
+- **A passadeira, o percurso dos chefes e a porta leem a MESMA conta**: `deptRT.gate`/`brainGate`
+  passam a sair de `bridge.from`/`bridge.to`, por isso o chefe anda por cima do tapete em vez de
+  atravessar o chão ao lado dele.
+
+### Provas
+
+- **`circulation.test.mjs`** (novo, 9 testes, sem three): porta no bordo do pod, eixo aponta ao
+  Cérebro, 2 m à frente da porta é fora do pod, ponte nasce a 0,9 m no eixo, acaba no bordo do pod,
+  não atravessa a sala nem o pod, 3 paredes / 3 anteparos, seis sítios distintos, átrio como
+  argumento (átrio maior → pontes mais curtas), sala inexistente dá erro.
+- **`scene.smoke.mjs`** (8 asserções novas, agora sobre o que foi CONSTRUÍDO): o vão na parede é o da
+  planta, o eixo da porta é o da planta, a passadeira começa e acaba onde a ponte manda, o anteparo
+  cobre a porta e a praça existe. Total: **130/130** (121 antes).
+- **`tools/portas.mjs`** (novo) desenha a planta inteira sem browser (o desenho está em
+  `docs/planta-portas.png`), e o **`tools/room.mjs`** passou a montar a sala **com** o vão e a porta —
+  antes desenhava uma sala fechada que já não existia.
+
 ## 1.13.1 — 28 out 2026 · As portas passaram a ser portas
 
 Pedido: *«melhore o design 3D das portas»*.

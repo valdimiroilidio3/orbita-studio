@@ -10,7 +10,9 @@ import * as THREE from 'three';
 import { renderPNG, writePNG } from './raster.mjs';
 import {
   makePlinth, makeRoomWalls, makeDesk, makeChair, makePlant, makeWalkway, makeRoomDressing,
+  makeRoomEntrance, DOOR, WALL,
 } from '../src/builders.js';
+import { doorPlan } from '../src/circulation.js';
 import { makePerson, poseWork } from '../src/avatar.js';
 import { lookFor } from '../src/looks.js';
 import { contact } from '../src/deskmap.js';
@@ -27,7 +29,30 @@ root.add(pod);
 const plinth = makePlinth(L.w, L.d, dept.glass);
 pod.add(plinth);
 if (deptKey !== 'brain') {
-  pod.add(makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass }));
+  /* a sala tal como o `main.js` a monta: o vão no pano que a porta ocupa, a porta e o seu anteparo.
+     Antes este revelador desenhava as paredes FECHADAS — mostrava uma sala que não existe. */
+  const pl = doorPlan(deptKey, LAYOUT, { x: 8, z: 8 });
+  const opening = pl.walled
+    ? {
+      side: pl.openingSide,
+      at: pl.openingSide === '-z' ? pl.local.x : pl.local.z,
+      w: DOOR.clearW + DOOR.frameW * 2 + 0.04,
+      h: DOOR.clearH + DOOR.frameW + 0.04,
+    }
+    : null;
+  pod.add(makeRoomWalls(L.w, L.d, dept.chip, dept.ink, dept.short, { glass: dept.glass, opening }));
+  const at = pl.walled
+    ? (pl.side === '-z'
+      ? { x: pl.local.x, z: -L.d / 2 + WALL.t + DOOR.frameD / 2 }
+      : { x: -L.w / 2 + WALL.t + DOOR.frameD / 2, z: pl.local.z })
+    : (pl.side === '+z'
+      ? { x: pl.local.x, z: L.d / 2 - 0.03 }
+      : { x: L.w / 2 - 0.03, z: pl.local.z });
+  const span = (pl.side === '+x' || pl.side === '-x') ? L.d : L.w;
+  pod.add(makeRoomEntrance({
+    glass: dept.glass, at, dir: pl.dir, label: dept.short,
+    screen: pl.screen, screenLen: pl.screen ? Math.min(span - 0.6, 6.6) : 0,
+  }));
   pod.add(makeRoomDressing(L.w, L.d, dept.glass, dept.chip, dept.ink, { front: deskFront(deptKey) }));
 }
 

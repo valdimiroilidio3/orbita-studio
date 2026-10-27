@@ -270,13 +270,14 @@ caseiro, sem browser). Sem emissão nem texturas: serve para julgar volumes e co
 saíram quando os cartões passaram a nomear as salas). Ficam no catálogo, não são chamadas, e o
 teste de cena prova que nada por lá rebenta. Nada disto está importado no `main.js`.
 
-## Passadeiras, entradas e a plataforma (1.13.0)
+## Passadeiras, entradas e a plataforma (1.13.0 · portas revistas em 1.13.2)
 
 | Peça | Construtor | Partes (`userData.part`) | Notas |
 |---|---|---|---|
 | passadeira | `makeWalkway(from, to, {glass})` | `walkwayFloor`, `walkwayKerb`, `walkwayLed`, `walkwayBelt` | tapete `#23252B` com `map` de ripas; `userData.walkway = {from,to,len,room,width:3.2,belt:true}` |
-| porta | `makeRoomEntrance({glass, at, dir, label})` | `entranceFrame`, `entranceLed`, `entranceSill`, `entranceGlass`, `entranceSign`, `entranceSpill` | `userData.entrance = {glass,at,dir,width:2.84,height:2.64,clear:{w:2.60,h:2.18},leaves:2,open:0.45,label}`; `rotation.y = atan2(dir.x, dir.z)` |
-| vão na parede | `makeRoomWalls(..., { opening: {x,w,h} })` | (o mesmo `wall`) | `userData.wall = {w,d,t,base,band,opening}`; sem `opening` a parede fica inteira |
+| porta | `makeRoomEntrance({glass, at, dir, label, screen, screenLen, piazza})` | `entranceFrame`, `entranceLed`, `entranceSill`, `entranceGlass`, `entranceSign`, `entranceSpill`, `entrancePanel` (`screen`) | `userData.entrance = {glass,at,dir,width:2.84,height:2.64,clear:{w:2.60,h:2.18},leaves:2,open:0.45,label,screen,screenLen,piazza}`; `rotation.y = atan2(dir.x, dir.z)`; `at` é **local à sala** |
+| vão na parede | `makeRoomWalls(..., { opening: {side,at,w,h} })` | (o mesmo `wall`) | `side` é `'-z'` (pano de fundo) ou `'-x'` (pano lateral); a forma antiga `{x,w,h}` continua aceite. `userData.wall = {w,d,t,base,band,opening}` |
+| planta das portas | `src/circulation.js` → `doorPlan(key, LAYOUT, {x:8,z:8})` | — (geometria pura, sem three) | devolve `{side, dir, at, local, atrium, bridge:{from,to,len}, angle, walled, screen, openingSide}`; é a única conta que decide a porta, o vão, a ponte e o percurso dos chefes |
 | medidas | `WALL` (0,34 / 2,8 / 1,9) e `DOOR` (2,60 × 2,18, perfil 0,12 × 0,24) | — | os dois ficheiros que assentam a porta e abrem o vão leem daqui |
 
 Regras que os testes guardam:
