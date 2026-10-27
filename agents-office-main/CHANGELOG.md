@@ -1,3 +1,17 @@
+## 1.25.1 — 27 out 2026 · Dois números no mesmo campo não viram um número inventado
+
+A primeira pesquisa real em produção (dentistas em Coimbra) mostrou dois defeitos
+que os testes de mentira não apanhavam:
+
+- um sítio do OpenStreetMap trazia `+351 239 923 125; +351 910 529 405` e o
+  telefone saía colado: `+351239923125+351910529405`. Passa a ficar o **primeiro**
+  número, que é o que existe;
+- a categoria vinha como `healthcare` (a raiz) em vez de `healthcare.dentist`.
+  Passa a usar a mais específica do caminho.
+
+Prova: 17 testes em `pesquisa.test.mjs`, incluindo os dois casos acima; suite
+371/371. Confirmado em produção com `GET /pesquisa/leads?oQue=dentistas&onde=Coimbra`.
+
 ## 1.25.0 — 27 out 2026 · A pesquisa passa a existir na aplicação publicada
 
 Até aqui, procurar leads só funcionava em `serve.mjs`, ou seja, na máquina de quem
