@@ -1370,6 +1370,29 @@
   .ld-form .go:active:not([disabled]) { transform: scale(.97); }
   .ld-form .go[disabled] { opacity: .45; filter: none; cursor: not-allowed; }
 
+  .ld-opcoes { display: flex; align-items: center; gap: 4px; padding: 8px 12px 0; }
+  .ld-opcoes[hidden] { display: none; }
+  .ld-op-lab { font-family: var(--ui); font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--grey); margin-right: 3px; }
+  .ld-op { font-family: var(--ui); font-size: 9px; letter-spacing: .06em; color: var(--grey); background: color-mix(in srgb, var(--ink) 4%, transparent);
+    border: 1px solid transparent; border-radius: 99px; padding: 4px 11px; cursor: pointer;
+    transition: color .2s var(--ease), background-color .2s var(--ease), transform .18s var(--ld-spring); }
+  .ld-op:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  .ld-op.on { background: var(--ink); color: var(--cream); }
+  .ld-op:active { transform: scale(.96); }
+  .ld-periodo { margin-left: auto; font-family: var(--ui); font-size: 9px; color: var(--ink); background: color-mix(in srgb, #fff 88%, transparent);
+    border: 1px solid var(--ld-edge); border-radius: 99px; padding: 4px 8px; cursor: pointer; }
+  .ld-periodo[hidden] { display: none; }
+  .ld-ler { margin-left: 6px; font-family: var(--ui); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700;
+    color: var(--grey); background: none; border: 1px solid var(--ld-edge); border-radius: 99px; padding: 2px 7px; cursor: pointer;
+    transition: color .2s var(--ease), border-color .2s var(--ease); }
+  .ld-ler:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 35%, transparent); }
+  .ld-ler[disabled] { opacity: .5; cursor: default; }
+  .ld-txt { margin-top: 7px; padding: 9px 10px; border-radius: 9px; background: color-mix(in srgb, var(--ink) 4%, transparent);
+    font-family: var(--ui); font-size: 9.5px; line-height: 1.65; color: var(--ink); white-space: pre-wrap; max-height: 210px; overflow: auto; }
+  body.dark .ld-txt { background: rgba(255,255,255,.06); }
+  body.dark .ld-op { background: rgba(255,255,255,.07); color: rgba(236,234,227,.7); }
+  body.dark .ld-op.on { background: #ECEAE3; color: #15161A; }
+  body.dark .ld-periodo { background: #15161A; color: #ECEAE3; border-color: rgba(236,234,227,.16); }
   .ld-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 8px 12px 0; }
   .ld-chips[hidden] { display: none; }
   .ld-chips-lab { font-family: var(--ui); font-size: 8px; letter-spacing: .14em; text-transform: uppercase; color: var(--grey); margin-right: 2px; }
@@ -2876,6 +2899,17 @@
     <input class="ld-what" placeholder="dentistas" autocomplete="off" spellcheck="false" aria-label="o que procurar" title="o que procurar — uma atividade, um setor, um tipo de negócio">
     <input class="ld-where" placeholder="Coimbra" autocomplete="off" spellcheck="false" aria-label="onde" title="onde — cidade, distrito ou país">
     <button class="go">Procurar</button>
+  </div>
+  <div class="ld-opcoes" data-opcoes hidden>
+    <span class="ld-op-lab">modo</span>
+    <button type="button" class="ld-op on" data-topico="general" aria-pressed="true">Geral</button>
+    <button type="button" class="ld-op" data-topico="news" aria-pressed="false">Notícias</button>
+    <select class="ld-periodo" data-periodo aria-label="janela de tempo das notícias" hidden>
+      <option value="0">sempre</option>
+      <option value="1">24 horas</option>
+      <option value="7">7 dias</option>
+      <option value="30">30 dias</option>
+    </select>
   </div>
   <div class="ld-chips" data-chips hidden></div>
   <div class="ld-row2"><span class="hint" role="status" aria-live="polite"></span></div>

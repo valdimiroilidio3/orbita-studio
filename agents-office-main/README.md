@@ -86,12 +86,9 @@ metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo
 Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
 e entregue aos agentes por `--mcp-config`; o estado real está em `GET /api/mcp`.
 
-Há um segundo servidor do projeto, `orbita_google`, com quatro ferramentas para os agentes
-procurarem por sua conta: `google_places_search` (empresas reais — o mesmo motor da gaveta LEADS),
-`google_web_search` (informação e contexto), `google_leads_saved` e `google_leads_save`. Sem chave,
-a resposta diz qual variável falta — `GOOGLE_MAPS_API_KEY` e/ou `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`
-(ver [PESQUISA.md](PESQUISA.md)). Os dois são arrancados e testados no arranque; `GET /api/mcp`
-mostra as 19 ferramentas.
+O servidor `orbita_google` saiu em 1.29.0, com o Google: a pesquisa do escritório é
+**Tavily** (contexto, notícias e leitura de páginas) mais **Geoapify** (empresas reais
+do OpenStreetMap). Uma chave para cada, sem cartão. Ver [PESQUISA.md](PESQUISA.md).
 
 As rotas HTTP equivalentes vivem em `/api/*` e exigem `Authorization: Bearer $ORBITA_API_TOKEN`
 com 32+ caracteres — **e esse token já não é um passo teu**: se não existir, o Órbita gera-o no
@@ -461,8 +458,8 @@ mostra as 24 horas do dia e a hora que o browser está a usar não muda isso.
 | GET | `/api/ai` | os motores de IA: o que está ligado, o que falta e porquê |
 | POST | `/api/ai/test` | um turno curto a um motor (`{"provider":"codex-cli"}`) |
 | POST | `/api/ai/switch` | trocar de motor a quente (`{"provider":"anthropic"}`) |
-| GET | `/api/google` | estado da pesquisa (Places + Programmable Search) |
-| POST | `/api/google/search` | procurar empresas ou web (`{"kind":"places","what":"ginásios","where":"Porto"}`) |
+| GET | `/api/pesquisa/estado` | o que está ligado na pesquisa (Tavily principal + Geoapify) |
+| POST | `/api/pesquisa/procurar` | procurar contexto na Tavily ou empresas no Geoapify (`{"kind":"places","what":"ginásios","where":"Porto"}`) |
 | GET | `/api/leads` | a lista de leads guardada, por nota |
 | POST | `/api/leads/status` | mudar o estado de um lead |
 | GET | `/api/ops/summary` | funil, conversão, custos e estado da fila |
@@ -520,7 +517,8 @@ A única verificação que falha numa máquina sem Chrome instalado é a do nave
 ```
 serve.mjs            servidor local + API
 providers.mjs        os motores de IA: CLIs e APIs (ver AI.md)
-google.mjs           a pesquisa real: Places (leads) e Programmable Search (ver PESQUISA.md)
+leads-store.mjs      a lista local de leads: ler, gravar sem duplicar, por estado (sem fornecedor nenhum)
+api/_pesquisa.mjs    a pesquisa do servidor: Tavily (principal) e Geoapify (empresas) — ver PESQUISA.md
 src/                 a página: cena 3D, painel, calendário, cérebro
 brain/               as tuas notas (o Cérebro)
 skills/              competências incluídas

@@ -153,8 +153,8 @@ Dizê-lo por palavras, porque é a diferença entre «não configurado» e «nã
 - **WhatsApp Business (envio)**: só existe o link `wa.me` revisto e enviado à mão (`/api/whatsapp/link`).
   Enviar mensagens pela API oficial exige conta Business, número verificado, token Meta e modelos
   aprovados — nada disso está implementado.
-- **Google Places dentro desta camada**: `integrations.mjs` não fala com a Google. A pesquisa é do
-  escritório (`/api/google` e `/api/leads`, chave `GOOGLE_MAPS_API_KEY`) e chega aos agentes pelo
-  servidor MCP `orbita_google` (ver `PESQUISA.md`) — são dois caminhos, com chaves próprias.
+- **Pesquisa dentro desta camada**: `integrations.mjs` não faz pesquisa. A pesquisa é do escritório
+  (`/api/pesquisa/*`, Tavily + Geoapify) e chega aos agentes pelo bloco de leads do `serve.mjs`
+  (ver `PESQUISA.md`). O Google e o servidor MCP `orbita_google` saíram em 1.29.0.
 - **UI de CRM**: os dados existem e as ferramentas MCP funcionam, mas a cena 3D não ganhou ecrãs
   novos de CRM. Vê-se por HTTP (`GET /api/crm/leads`) e pelos agentes.

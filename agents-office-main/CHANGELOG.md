@@ -1,3 +1,36 @@
+## 1.29.0 — 27 out 2026 · A pesquisa é Tavily; o Google saiu de vez
+
+Pedido do dono: «muda de Google para uma API de pesquisas grátis, usa a Tavily, que
+será a forma de pesquisa principal».
+
+**A Tavily passa a ser a pesquisa principal do escritório.** `/pesquisa/estado` abre
+com `principal: 'tavily'`; a gaveta diz «Tavily · pesquisa principal» ou
+«Tavily · notícias». Duas coisas novas, para ser principal a sério e não só de nome:
+
+- **notícias com recorte temporal** — `topico: news` + `dias` (1–365) e `publicado` em
+  cada resultado. Em modo `general` a janela não é enviada: pedir `days` a uma pesquisa
+  geral é um erro da API, não uma funcionalidade.
+- **ler a página** — `POST /pesquisa/pagina` (Tavily `extract`) devolve o texto limpo;
+  na gaveta é o botão «ler a página» em cada resultado, com o texto aberto ali mesmo e
+  o que já foi lido guardado na sessão para não gastar créditos duas vezes.
+
+**O Google saiu** — apagados `google.mjs`, `google.test.mjs` e o servidor MCP
+`mcp-servers/orbita-google`; saíram as rotas `/api/google*`, as duas entradas do
+catálogo (`google-places`, `google-search`) e os passos do `check.mjs`. Não foi por
+gosto: pedia duas APIs, duas contas de configuração e cartão ligado, e nunca esteve
+ligado nesta instalação — era código a prometer o que não existia.
+
+O que **não** mudou: os leads continuam a vir do **Geoapify** (OpenStreetMap). É a
+única fonte que dá telefone, morada estruturada e o sinal «não tem site» — e é esse
+sinal que faz um lead valer 80 em vez de 48. Uma página encontrada pela Tavily não é
+uma empresa: sem nome, telefone e morada verificáveis, não entra no funil.
+
+A lista local de leads (`data/leads.json`) vivia dentro de `google.mjs` por arrasto.
+Saiu para `leads-store.mjs` — armazenamento puro, sem chave, sem rede, sem fornecedor.
+
+Prova: 5 testes novos (estado sem Google, notícias com `days`/`days` recusado no modo
+geral, domínios, rotas, e dois de interface para o modo notícias e para «ler a página»).
+
 ## 1.28.1 — 27 out 2026 · A pesquisa global da mesa deixou de ser um placeholder
 
 `GET /ops/pesquisa` devolvia `{ query, grupos: [] }` — sempre. A caixa «Pesquisar
