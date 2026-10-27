@@ -1,3 +1,61 @@
+## 1.31.0 — 27 out 2026 · As salas passam a entregar: sites e digitalização
+
+Pedido do dono: *«já quero que as salas comecem a trabalhar e que sejam capazes de criar
+um site ou de digitalizar qualquer coisa»*.
+
+Até aqui a resposta honesta era «não conseguem»: o lançador desliga `Write`, `Edit` e
+`Bash` a todos os agentes (`providers.mjs`), e com razão. A solução não foi abrir o
+disco — foi dar-lhes duas ferramentas com contorno.
+
+**1 · Criar um site (sem lhes dar o disco).** `orbita_site_create` recebe o negócio em
+dados confirmados (nome, atividade, cidade, contactos, serviços) e devolve o
+`index.html`, o `estilo.css` e um `LEIA-ME.md`. O site nasce **rascunho**. Regras que
+ficaram em código:
+
+- telefone, email, morada e site só aparecem se vierem no brief — campo ausente fica
+  ausente, e a página diz que os contactos ainda não estão confirmados;
+- tudo o que vem do brief é escapado; não há scripts no HTML nem dependências externas;
+- o mesmo brief dá exactamente o mesmo site, e é por isso que se guarda **o brief, não
+  o HTML**: uma aprovação, uma verdade;
+- `inferido` diz o que a casa escreveu (título, chamada) e `real` o que veio do brief.
+
+Publicar é um acto humano: `orbita_site_publicar` (ou `POST /artefactos/:id/publicar`)
+exige `aprovado: true` **e** o nome de quem aprova, e recusa páginas sem um único
+contacto confirmado. Sem isso, 409 e nada muda.
+
+**2 · Digitalizar papel e imagem.** `orbita_digitalizar` / `POST /digitalizar` aceita
+uma imagem ou PDF em base64 (até 6 MB) ou um URL http(s), passa-o por um OCR
+configurado (`ORBITA_OCR_URL`, adaptador trocável) e extrai, por regras determinísticas:
+NIF **com dígito de controlo**, telefone português normalizado para `+351…`, email,
+código postal, IBAN **mascarado**, valor em euros e data. Cada campo diz a sua origem e
+confiança; o que não estiver no documento fica de fora e é listado em `faltam`.
+`POST /digitalizar/lead` devolve a proposta de lead — **não grava no funil**.
+
+Sem `ORBITA_OCR_URL` a resposta é 503 com o nome da variável que falta. Nada é
+adivinhado, e o texto do documento nunca entra no registo de actividade (só o número de
+campos e o estado).
+
+**3 · Onde ficam os rascunhos.** Sem migração nova: com base, em `orbita_ai_memoria`
+(`projeto: 'artefactos'`); sem base, em `data/artefactos/<id>.json` (fora do git), que é
+também o que o servidor MCP usa — a sala e o dono vêem o mesmo rascunho.
+
+**Rotas novas:** `GET/POST /artefactos`, `/artefactos/site`, `/artefactos/:id`,
+`/artefactos/:id/preview`, `/artefactos/:id/publicar`, `/digitalizar`,
+`/digitalizar/estado`, `/digitalizar/lead`. O `serve.mjs` local serve as mesmas
+(`/api/artefactos*`, `/api/digitalizar*`), por isso dá para experimentar sem publicar.
+
+**MCP: 18 → 22 ferramentas** (`orbita_site_create`, `orbita_site_list`,
+`orbita_site_publicar`, `orbita_digitalizar`).
+
+**O que ainda não faz:** não faz deploy do site (marca o artefacto como aprovado e
+entrega os ficheiros; publicar no alojamento é um passo à parte) e não tem OCR incluído
+— é preciso apontar `ORBITA_OCR_URL` a um Tesseract/PaddleOCR teu, e sem isso a
+digitalização diz que falta, em vez de fingir.
+
+**Testes:** `node --test` → **443/443** (424 antes; 19 novos em `artefactos.test.mjs`),
+incluindo um ciclo HTTP real (criar → preview → publicar com e sem OK) e o MCP a sério
+por stdio.
+
 ## 1.30.0 — 27 out 2026 · A pesquisa chega aos agentes, com travão e recibo
 
 A auditoria de 1.29.0 encontrou sete defeitos. Este trabalho fecha os quatro que o dono

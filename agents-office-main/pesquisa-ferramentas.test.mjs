@@ -414,7 +414,7 @@ test('agentes: o MCP expõe a pesquisa web, as empresas e o consumo', async () =
   assert.ok(nomes.includes('orbita_web_search'), 'a pesquisa web tem de estar nos agentes');
   assert.ok(nomes.includes('orbita_business_search'));
   assert.ok(nomes.includes('orbita_research_usage'));
-  assert.equal(nomes.length, 18);
+  assert.equal(nomes.length, 22);
   const web = lista.result.tools.find((t) => t.name === 'orbita_web_search');
   assert.deepEqual(web.inputSchema.required, ['query']);
 });
