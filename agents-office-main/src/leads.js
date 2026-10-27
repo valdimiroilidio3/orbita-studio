@@ -22,9 +22,13 @@
 //       dono, e nos registos do servidor.
 //
 //   3 · Leads são empresas reais do OpenStreetMap via Geoapify, com nota de
-//       oportunidade explicada. Contexto é Tavily: excertos, resposta curta e o
-//       endereço de cada fonte. Nada disto é inventado e nada disto contacta
-//       ninguém — procurar não é falar.
+//       oportunidade explicada. Contexto é Tavily — a PESQUISA PRINCIPAL: resposta
+//       curta, excertos, links, modo notícias com recorte temporal e leitura de uma
+//       página inteira (`/pesquisa/pagina`). Nada disto é inventado e nada disto
+//       contacta ninguém — procurar não é falar.
+//
+//   4 · O Google saiu (1.29.0): exigia chave com cartão e duas APIs. Não há uma
+//       linha de Google nesta gaveta nem no servidor da pesquisa.
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /* A ponte com o servidor. A Vercel só alcança a função no caminho exacto do
@@ -75,6 +79,9 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
     chips: panel.querySelector('[data-chips]'),
     fonte: panel.querySelector('[data-fonte]'),
     segs: [...panel.querySelectorAll('.ld-seg .ld-m')],
+    opcoes: panel.querySelector('[data-opcoes]'),          // notícias · período (só na Web)
+    topicos: [...panel.querySelectorAll('[data-topico]')],
+    periodo: panel.querySelector('[data-periodo]'),
   };
 
   const S = {
@@ -85,12 +92,15 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
     modo: 'places',
     ocupado: false,
     ms: null,
+    topico: 'general',   // general | news
+    dias: 0,             // 0 = sem recorte
+    lidos: {},           // url → { texto, titulo } já extraídos pela Tavily
     aviso: '',        // a notícia do último pedido ('' = nenhuma)
     avisoMau: false,
   };
 
-  const prontoEmpresas = () => !!S.estado?.fontes?.geoapify?.disponivel || !!S.estado?.fontes?.google?.places?.disponivel;
-  const prontoWeb = () => !!S.estado?.fontes?.tavily?.disponivel || !!S.estado?.fontes?.google?.web?.disponivel;
+  const prontoEmpresas = () => !!S.estado?.fontes?.geoapify?.disponivel;
+  const prontoWeb = () => !!S.estado?.fontes?.tavily?.disponivel;   // a pesquisa principal
   const pronto = () => (S.modo === 'web' ? prontoWeb() : prontoEmpresas());
 
   const open = () => { panel.hidden = false; btn.classList.add('on'); setModo(S.modo); carregar(true); P.what.focus(); };
@@ -121,10 +131,15 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
 
   function webHTML(r) {
     const host = String(r.url || '').replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+    const data = r.publicado ? new Date(r.publicado) : null;
+    const quando = data && !Number.isNaN(data.getTime()) ? data.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) : '';
+    const lido = S.lidos[r.url];
     return `<div class="ld-web">
       <div class="ld-n"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.titulo || host)}</a></div>
-      <div class="ld-m">${esc(host)}${r.relevancia != null ? ' · relevância ' + r.relevancia : ''}</div>
+      <div class="ld-m">${esc(host)}${quando ? ' · ' + esc(quando) : ''}${r.relevancia != null ? ' · relevância ' + r.relevancia : ''}
+        <button type="button" class="ld-ler" data-ler="${esc(r.url)}" aria-expanded="${lido ? 'true' : 'false'}">${lido ? 'fechar' : 'ler a página'}</button></div>
       ${r.excerto ? `<div class="ld-m ld-x">${esc(r.excerto)}</div>` : ''}
+      ${lido ? `<div class="ld-txt">${esc(lido.texto || 'a página não devolveu texto legível')}</div>` : ''}
     </div>`;
   }
 
@@ -154,7 +169,7 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
   function pintarEstado() {
     if (P.fonte) {
       P.fonte.textContent = S.modo === 'web'
-        ? (prontoWeb() ? 'Tavily · web' : 'web indisponível')
+        ? (prontoWeb() ? (S.topico === 'news' ? 'Tavily · notícias' : 'Tavily · pesquisa principal') : 'pesquisa indisponível')
         : (S.estado?.fontes?.geoapify?.disponivel ? 'Geoapify · OpenStreetMap' : 'empresas indisponível');
     }
     P.go.disabled = S.ocupado || !pronto();
@@ -229,7 +244,15 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
     const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     try {
       const r = S.modo === 'web'
-        ? await pedir('/pesquisa/web', { metodo: 'POST', corpo: { consulta: [oQue, onde].filter(Boolean).join(' '), limite: 10 } })
+        ? await pedir('/pesquisa/web', {
+          metodo: 'POST',
+          corpo: {
+            consulta: [oQue, onde].filter(Boolean).join(' '),
+            limite: 10,
+            topico: S.topico,
+            ...(S.dias ? { dias: S.dias } : {}),
+          },
+        })
         : await pedir('/pesquisa/leads', { metodo: 'POST', corpo: { oQue, onde, limite: 20 } });
       S.ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0);
       if (!r.ok || r.dados?.ok === false) throw new Error(r.dados?.erro || r.dados?.error || 'a pesquisa falhou');
@@ -260,6 +283,34 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
     }
   }
 
+  /* A Tavily lê a página inteira quando o excerto não chega (`/extract`).
+     Guarda-se por URL: ler duas vezes a mesma página é gastar créditos à toa. */
+  async function lerPagina(url, botao) {
+    if (S.lidos[url]) { delete S.lidos[url]; pintarLista(); return; }
+    if (botao) { botao.disabled = true; botao.textContent = 'a ler…'; }
+    try {
+      const r = await pedir('/pesquisa/pagina', { metodo: 'POST', corpo: { url } });
+      const d = r.dados || {};
+      if (!r.ok || d.ok === false) throw new Error(d.erro || 'não consegui ler a página');
+      S.lidos[url] = { titulo: d.titulo || '', texto: (d.texto || '').slice(0, 1400) };
+      pintarLista();
+    } catch (e) {
+      aviso(esc(legivel(e.message)), true);
+      if (botao) { botao.disabled = false; botao.textContent = 'ler a página'; }
+    }
+  }
+
+  const pintarOpcoes = () => {
+    if (!P.opcoes) return;
+    P.opcoes.hidden = S.modo !== 'web';
+    if (P.periodo) P.periodo.hidden = S.topico !== 'news';
+    for (const b of P.topicos) {
+      const on = b.getAttribute('data-topico') === S.topico;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  };
+
   function setModo(k) {
     S.modo = k === 'web' ? 'web' : 'places';
     S.resultados = [];
@@ -273,6 +324,8 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
     P.where.placeholder = S.modo === 'web' ? 'zona (opcional)' : 'Coimbra';
     P.where.hidden = false;
     if (P.task) P.task.hidden = S.modo === 'web';
+    S.lidos = {};
+    pintarOpcoes();
     pintarEstado(); pintarLista();
   }
 
@@ -284,6 +337,25 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
   P.go.addEventListener('click', procurar);
   P.what.addEventListener('keydown', (e) => { if (e.key === 'Enter') procurar(); });
   P.where.addEventListener('keydown', (e) => { if (e.key === 'Enter') procurar(); });
+  for (const b of P.topicos) {
+    b.addEventListener('click', () => {
+      S.topico = b.getAttribute('data-topico') === 'news' ? 'news' : 'general';
+      if (S.topico === 'general') S.dias = 0;
+      if (P.periodo) P.periodo.value = String(S.dias);
+      pintarOpcoes(); pintarEstado();
+    });
+  }
+  if (P.periodo) {
+    P.periodo.addEventListener('change', () => { S.dias = Number(P.periodo.value) || 0; });
+  }
+  if (P.list) {
+    P.list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ler]');
+      if (!b) return;
+      e.preventDefault();
+      lerPagina(b.getAttribute('data-ler'), b);
+    });
+  }
   if (P.chips) {
     P.chips.addEventListener('click', (e) => {
       const b = e.target.closest('[data-nome]');
@@ -312,6 +384,7 @@ export function initLeads({ api = '/api', onTask = null } = {}) {
   });
 
   /* o botão da barra fica apagado quando nenhuma fonte responde — discreto, sem manuais */
+  pintarOpcoes();
   carregar(true).then(() => btn.classList.toggle('off', !(prontoEmpresas() || prontoWeb()))).catch(() => {});
   return { open, close, toggle };
 }

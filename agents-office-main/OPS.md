@@ -535,9 +535,9 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | POST | `/api/ops/clientes/:id/entrar` | Passar a trabalhar no espaço desse cliente |
 | GET | `/api/ops/agencia` | O resumo de todos os espaços |
 
-A pesquisa da Google (`/api/google/search`) continua a guardar na gaveta e **passa a gravar
-também na base de dados**, já pontuado e sem duplicados. A resposta traz `baseDeDados` com
-`{ created, updated, refused }`.
+A pesquisa (`POST /api/pesquisa/procurar`) guarda na gaveta e **grava também na base de
+dados**, já pontuada e sem duplicados. Desde 1.29.0 a fonte é a Tavily (contexto) e o
+Geoapify (empresas); o Google saiu. Ver [PESQUISA.md](PESQUISA.md).
 
 ## O que ainda não está — dito por palavras
 

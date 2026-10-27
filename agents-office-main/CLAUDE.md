@@ -157,20 +157,29 @@ Regras que não se quebram:
 - **Um motor novo** é um preset em `providers.mjs` (com `kind`, `bin`/`baseUrl`, `model` e `hint`) e
   uma linha em `AI.md` — mais nada.
 
-## A pesquisa real (Google) e os leads
+## A pesquisa: Tavily (principal) e Geoapify (leads)
 
-`google.mjs` liga duas APIs: **Places API (New)** — `places:searchText`, que devolve empresas reais
-(nome, morada, telefone, site, avaliação, mapa) — e **Programmable Search** — resultados web com
-excertos. Chaves: `GOOGLE_MAPS_API_KEY`, `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`, só no ambiente. Guia em
-**[PESQUISA.md](PESQUISA.md)**.
+`api/_pesquisa.mjs` é o único sítio da pesquisa no servidor publicado. Duas fontes:
 
-- `scoreLead()` em `google.mjs` explica a nota de cada lead (sem site = +40). Não inventes números:
-  se mudares a pontuação, muda a tabela do PESQUISA.md e o teste em `check.mjs`.
-- `saveAll()` grava em `data/leads.json` sem duplicar — domínio → telefone → nome+morada — e preserva
-  o `status` e as notas do proprietário.
-- `leadBlock()` no `serve.mjs` injeta os oito melhores leads **só** na Prospeção e nas Vendas.
-- Rotas: `GET /api/google`, `POST /api/google/search`, `GET /api/leads`, `POST /api/leads/status`.
-- Sem chave, tudo diz que falta a chave. Nunca devolver resultados inventados, nem fingir sucesso.
+- **Tavily** (`TAVILY_API_KEY`) — a pesquisa principal: `POST /pesquisa/web` devolve
+  resposta curta, excertos, links e, em modo notícias (`topico: 'news'`), `publicado` e
+  recorte temporal (`dias`). `POST /pesquisa/pagina` lê uma página inteira.
+- **Geoapify** (`GEOAPIFY_API_KEY`) — as fichas de empresa (OpenStreetMap):
+  `POST /pesquisa/leads`. `notaDeLead()` explica a nota (sem site = +40). Se mudares a
+  pontuação, muda a explicação do `PESQUISA.md` e o teste em `pesquisa.test.mjs`.
+
+O **Google saiu em 1.29.0** (duas APIs, duas contas, cartão ligado, e nunca esteve
+ligado aqui). Não voltes a introduzir `google.mjs`, `/api/google*` nem
+`mcp-servers/orbita-google`: se for preciso, é a Tavily que cresce.
+
+- `leads-store.mjs` grava a lista local (`data/leads.json`) sem duplicar — domínio →
+  telefone → nome+zona — e preserva o `status` e as notas do proprietário. Não tem
+  chaves nem rede: só armazenamento.
+- `leadBlock()` no `serve.mjs` injeta os oito melhores leads **só** na Prospeção e nas
+  Vendas.
+- Rotas locais: `GET /api/pesquisa/estado`, `POST /api/pesquisa/procurar`,
+  `GET /api/leads`, `POST /api/leads/status`.
+- Sem chave, tudo diz que falta a chave. Nunca devolver resultados inventados.
 
 ## As horas são de 24 horas
 

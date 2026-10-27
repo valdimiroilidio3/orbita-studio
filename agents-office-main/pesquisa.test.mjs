@@ -368,3 +368,56 @@ test('rotas: /ops/pesquisa ignora acentos e maiúsculas e não devolve grupos va
   assert.equal(curto.corpo.total, 0);
   assert.match(curto.corpo.nota, /duas letras/);
 });
+
+/* ---------- 1.29.0 · a Tavily é a pesquisa principal, e o Google saiu ---------- */
+test('estado: a Tavily é a principal e o Google desapareceu do mapa', () => {
+  const e = estado({ TAVILY_API_KEY: 'x', GEOAPIFY_API_KEY: 'y' });
+  assert.equal(e.principal, 'tavily');
+  assert.equal(e.tavily.papel, 'principal');
+  assert.equal(e.geoapify.papel, 'leads');
+  assert.equal(e.google, undefined, 'o Google não pode continuar a aparecer no estado');
+  assert.equal(e.qualquer, true);
+  const vazio = estado({});
+  assert.equal(vazio.qualquer, false);
+  assert.match(vazio.tavily.motivo, /TAVILY_API_KEY/);
+  assert.match(vazio.geoapify.motivo, /GEOAPIFY_API_KEY/);
+});
+
+test('tavily: o modo notícias leva recorte temporal e domínios; o modo geral não leva dias', async () => {
+  const f = falso({ 'api.tavily.com/search': { json: { answer: 'resumo', results: [{ title: 'n', url: 'https://n.pt', content: 'c', score: 0.5, published_date: '2026-10-26T10:00:00Z' }] } } });
+  const noticias = await pesquisarWeb({ consulta: 'greve dos dentistas', topico: 'news', dias: 7, limite: 5 }, { env: ENV, fetchImpl: f });
+  const corpo = JSON.parse(f.pedidos[0].opcoes.body);
+  assert.equal(corpo.topic, 'news');
+  assert.equal(corpo.days, 7);
+  assert.equal(noticias.topico, 'news');
+  assert.equal(noticias.resultados[0].publicado, '2026-10-26T10:00:00Z');
+
+  const g = falso({ 'api.tavily.com/search': { json: { results: [] } } });
+  await pesquisarWeb({ consulta: 'clínicas em Coimbra', topico: 'general', dias: 7 }, { env: ENV, fetchImpl: g });
+  const geral = JSON.parse(g.pedidos[0].opcoes.body);
+  assert.equal(geral.topic, 'general');
+  assert.equal(geral.days, undefined, 'uma pesquisa geral não aceita `days`: não se envia');
+  assert.equal(geral.include_domains, undefined);
+
+  const d = falso({ 'api.tavily.com/search': { json: { results: [] } } });
+  await pesquisarWeb({ consulta: 'x', dominios: ['publico.pt', 'dn.pt'] }, { env: ENV, fetchImpl: d });
+  assert.deepEqual(JSON.parse(d.pedidos[0].opcoes.body).include_domains, ['publico.pt', 'dn.pt']);
+});
+
+test('rotas: /pesquisa/web aceita topico e dias, e /pesquisa/estado diz que a Tavily manda', async () => {
+  const repo = createMemRepo();
+  const f = falso({ 'api.tavily.com/search': { json: { results: [{ title: 'a', url: 'https://a.pt', content: 'x', score: 0.3 }] } } });
+  const r = await chamar(repo, '/pesquisa/web', 'POST', { consulta: 'mercado', topico: 'news', dias: 30 }, { fetchImpl: f });
+  assert.equal(r.status, 200);
+  const corpo = JSON.parse(f.pedidos[0].opcoes.body);
+  assert.equal(corpo.topic, 'news');
+  assert.equal(corpo.days, 30);
+
+  const e = await chamar(repo, '/pesquisa/estado');
+  assert.equal(e.corpo.fontes.principal, 'tavily');
+  assert.equal(e.corpo.fontes.google, undefined);
+
+  const saiu = await chamar(repo, '/pesquisa/teste?fonte=google-places');
+  assert.equal(saiu.corpo.codigo, 'saiu');
+  assert.match(saiu.corpo.erro, /Tavily/);
+});

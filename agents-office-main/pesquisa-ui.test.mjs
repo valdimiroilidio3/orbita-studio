@@ -25,6 +25,15 @@ const HTML = `<!doctype html><body>
     <div class="ld-form">
       <input class="ld-what"><input class="ld-where"><button class="go">Procurar</button>
     </div>
+    <div class="ld-opcoes" data-opcoes hidden>
+      <span class="ld-op-lab">modo</span>
+      <button type="button" class="ld-op on" data-topico="general" aria-pressed="true">Geral</button>
+      <button type="button" class="ld-op" data-topico="news" aria-pressed="false">Notícias</button>
+      <select class="ld-periodo" data-periodo hidden>
+        <option value="0">sempre</option><option value="1">24 horas</option>
+        <option value="7">7 dias</option><option value="30">30 dias</option>
+      </select>
+    </div>
     <div class="ld-chips" data-chips hidden></div>
     <div class="ld-row2"><span class="hint"></span></div>
     <div class="ld-list"></div>
@@ -37,10 +46,10 @@ const estadoOk = {
   status: 200,
   corpo: {
     ok: true,
+    principal: 'tavily',
     fontes: {
-      geoapify: { disponivel: true, oQue: 'empresas reais' },
-      tavily: { disponivel: true, oQue: 'web' },
-      google: { places: { disponivel: false }, web: { disponivel: false } },
+      tavily: { disponivel: true, papel: 'principal', oQue: 'pesquisa principal' },
+      geoapify: { disponivel: true, papel: 'leads', oQue: 'empresas reais' },
       qualquer: true,
     },
   },
@@ -57,6 +66,10 @@ const empresas = {
     ],
     guardados: { novos: 2, repetidos: 0, total: 2 },
   },
+};
+const pagina = {
+  status: 200,
+  corpo: { ok: true, fonte: 'tavily', url: 'https://exemplo.pt/estudo', titulo: 'Retrato do setor', texto: 'Há 1 200 clínicas registadas na região de Coimbra, segundo o estudo anual.' },
 };
 const web = {
   status: 200,
@@ -76,6 +89,7 @@ function montarFetch(pedidos) {
       : alvo.includes('/ops/leads') ? guardados
       : alvo.includes('/pesquisa/leads') ? empresas
       : alvo.includes('/pesquisa/web') ? web
+      : alvo.includes('/pesquisa/pagina') ? pagina
       : { status: 404, corpo: { erro: 'rota desconhecida' } };
     return { ok: true, status: 200, json: async () => corpo };
   };
@@ -157,7 +171,7 @@ test('pesquisa: quando a fonte cai, a frase é de gente — não é um nome de v
   globalThis.fetch = async (url, opt = {}) => {
     const alvo = String(url) + (typeof opt.body === 'string' ? ' ' + opt.body : '');
     if (decodeURIComponent(alvo).includes('/pesquisa/estado')) {
-      return { ok: true, status: 200, json: async () => ({ status: 200, corpo: { fontes: { geoapify: { disponivel: true }, tavily: { disponivel: false }, google: { places: { disponivel: false }, web: { disponivel: false } } } } }) };
+      return { ok: true, status: 200, json: async () => ({ status: 200, corpo: { principal: 'tavily', fontes: { tavily: { disponivel: false }, geoapify: { disponivel: true } } } }) };
     }
     if (decodeURIComponent(alvo).includes('/pesquisa/leads')) {
       return { ok: true, status: 200, json: async () => ({ status: 502, corpo: { ok: false, erro: 'falta GEOAPIFY_API_KEY no ambiente' } }) };
@@ -175,4 +189,51 @@ test('pesquisa: quando a fonte cai, a frase é de gente — não é um nome de v
   const dito = document.querySelector('.ld-row2 .hint').textContent;
   assert.match(dito, /não está disponível agora/);
   assert.ok(!dito.includes('GEOAPIFY'), 'o nome da variável não chega ao visitante');
+});
+
+/* ---------- 1.29.0 · a Tavily é a pesquisa principal ---------- */
+test('pesquisa: o modo notícias abre o recorte temporal e viaja no pedido', async () => {
+  const { document, pedidos } = await abrirGaveta();
+  const opcoes = document.querySelector('[data-opcoes]');
+  assert.equal(opcoes.hidden, true, 'as opções da web não aparecem no modo empresas');
+
+  document.querySelector('.ld-seg .ld-m[data-k="web"]').dispatchEvent(new document.defaultView.Event('click'));
+  assert.equal(opcoes.hidden, false, 'no modo web as opções aparecem');
+  const periodo = document.querySelector('[data-periodo]');
+  assert.equal(periodo.hidden, true, 'uma pesquisa geral não tem janela temporal');
+
+  const noticias = document.querySelector('[data-topico="news"]');
+  noticias.dispatchEvent(new document.defaultView.Event('click'));
+  assert.equal(periodo.hidden, false, 'notícias tem janela temporal');
+  assert.equal(document.querySelector('[data-fonte]').textContent, 'Tavily · notícias');
+
+  periodo.value = '7';
+  periodo.dispatchEvent(new document.defaultView.Event('change'));
+  document.querySelector('.ld-what').value = 'greve dos dentistas';
+  document.querySelector('.ld-form .go').dispatchEvent(new document.defaultView.Event('click'));
+  await new Promise((r) => setTimeout(r, 60));
+
+  const envio = pedidos.find((p) => p.includes('/pesquisa/web'));
+  assert.match(envio, /"topico":"news"/);
+  assert.match(envio, /"dias":7/);
+});
+
+test('pesquisa: «ler a página» pede o texto à Tavily e mostra-o ali mesmo', async () => {
+  const { document, pedidos } = await abrirGaveta();
+  document.querySelector('.ld-seg .ld-m[data-k="web"]').dispatchEvent(new document.defaultView.Event('click'));
+  document.querySelector('.ld-what').value = 'mercado de clínicas';
+  document.querySelector('.ld-form .go').dispatchEvent(new document.defaultView.Event('click'));
+  await new Promise((r) => setTimeout(r, 60));
+
+  const ler = document.querySelector('[data-ler]');
+  assert.ok(ler, 'cada resultado devia ter um «ler a página»');
+  assert.equal(ler.textContent, 'ler a página');
+  ler.dispatchEvent(new document.defaultView.Event('click', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 60));
+
+  assert.ok(pedidos.some((p) => p.includes('/pesquisa/pagina') && p.includes('exemplo.pt')));
+  const texto = document.querySelector('.ld-txt');
+  assert.ok(texto, 'o texto extraído devia aparecer na gaveta');
+  assert.match(texto.textContent, /1 200 clínicas/);
+  assert.equal(document.querySelector('[data-ler]').textContent, 'fechar', 'abrir passa a fechar');
 });

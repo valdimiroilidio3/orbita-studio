@@ -54,7 +54,7 @@ import { createPlatform, ensureApiToken } from './platform.mjs'; // 28 out 2026:
 import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
-import * as google from './google.mjs'; // 25 out 2026: pesquisa real — Places (leads) e Programmable Search (contexto)
+import * as leadsStore from './leads-store.mjs'; // 1.29.0: a lista local de leads, sem fornecedor nenhum agarrado
 import * as pesquisa from './api/_pesquisa.mjs'; // 27 out 2026 (1.25.0): Geoapify (leads) e Tavily (contexto), as mesmas do servidor
 import * as ops from './src/ops/index.mjs';
 import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
@@ -294,12 +294,12 @@ function vaultIndex() { // name → text (vault notes + live office notes)
   for (const n of readOfficeNotes(BRAIN)) m.set(n.name, n.text);
   return m;
 }
-// V4 (25 out 2026): os agentes de Prospeção e Vendas leem os leads reais encontrados no Google.
+// V4 (25 out 2026) · 1.29.0: os agentes de Prospeção e Vendas leem os leads guardados (a fonte mudou, o bloco não).
 // Só nesses dois departamentos — não faz sentido pôr uma lista de empresas à frente do designer.
 function leadBlock(a) {
   if (!['sales', 'ops'].includes(a.department)) return '';
   try {
-    const block = google.contextForAgent({ dir: DATA, limit: 8 });
+    const block = leadsStore.contextForAgent({ dir: DATA, limit: 8 });
     return block ? `\n\n${block}` : '';
   } catch (e) { return `\n\n(A lista de leads não pôde ser lida: ${e.message})`; }
 }
@@ -721,8 +721,8 @@ platform.start({ onChange: (r) => console.log(`  plataforma: .env mudou (${r.cha
 
 await rebuildGraph();
 {
-  const g = google.state(), ls = google.stats(DATA);
-  console.log(`  pesquisa google: ${g.places.available ? 'Places ligado' : 'Places sem chave (' + g.places.env + ')'} · ${g.web.available ? 'pesquisa web ligada' : 'pesquisa web sem chave'} · ${ls.total} leads guardados${ls.total ? ' (' + ls.noSite + ' sem site)' : ''}`);
+  const ls = leadsStore.stats(DATA), ps = pesquisa.estado();
+  console.log(`  pesquisa: Tavily ${ps.tavily.disponivel ? 'ligada' : 'sem chave (' + ps.tavily.env + ')'} (principal) · Geoapify ${ps.geoapify.disponivel ? 'ligado' : 'sem chave'} (leads) · ${ls.total} leads guardados${ls.total ? ' (' + ls.noSite + ' sem site)' : ''}`);
 }
 if (OPS) {
   globalThis.__orbitaDeliver = deliverOut; // a fila usa o mesmo caminho de envio do servidor
@@ -784,7 +784,7 @@ const server = http.createServer(async (req, res) => {
     // 5) o escritório 3D e as suas rotas de dados seguem a mesma guarda que a mesa. Em modo local
     //    (sem contas nem token) continuam abertas; com contas, o browser leva o cookie de sessão
     //    sozinho no mesmo domínio — e quem não entrou é convidado a entrar em /app.
-    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|google)(\/|$)/;
+    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|pesquisa)(\/|$)/;
     if (ESCritorio.test(url.pathname)) {
       const a = authenticate(req, { db: OPS?.db });
       if (!a.ok) return json(res, 401, { ok: false, ...a, entrar: '/app' });
@@ -879,7 +879,7 @@ const server = http.createServer(async (req, res) => {
       const probed = await platform.probeAll({ force: true });
       return json(res, 200, { ok: true, probed, apis: platform.status() });
     }
-    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, google: google.state(), leads: google.stats(DATA), context: { notes: graph.notes, docs: docsList().length }, docList: docsList().slice(0, 60), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
+    if (url.pathname === '/api/health') return json(res, 200, { ok: true, version, backend, ai: ai.summary(AI, cfg).active, pesquisa: pesquisa.estado(), leads: leadsStore.stats(DATA), context: { notes: graph.notes, docs: docsList().length }, docList: docsList().slice(0, 60), integrations: (i => ({ mode: i.mode, token: i.apiTokenConfigured, ready: i.providers.filter(p => p.ready).map(p => p.id), missing: i.providers.filter(p => !p.ready).map(p => p.id) }))(integrations.integrationStatus()), model: cfg.model, modelName: modelName(cfg.model), models: MODEL_KEYS, effort: cfg.effort || '', efforts: EFFORT_KEYS, name: cfg.name, brain: BRAIN, notes: graph.notes, depts: DEPT_KEYS,
       agents: agentsOut(), setup: setupMap(), routines: (l => ({ count: l.length, paused: l.filter(r => r.paused).length, depts: routines.ALLOWED }))(loadRoutines()), roster: { customised: roster.customised, briefed: roster.briefed, files: roster.files, problems: roster.problems }, skills: (({ count, shipped, brain, problems }) => ({ count, shipped, brain, problems }))(skills.summary()), tools: !!runner?.tools, mcp: mcp.summary(), teams: TEAMS, browser: mcp.summary().browser });
     if (url.pathname === '/api/agents') return json(res, 200, { agents: agentsOut(), problems: roster.problems, files: roster.files });
     if (url.pathname === '/api/skills') return json(res, 200, refreshSkills().summary()); // reloads from disk: edit a skill, hit this, see it
@@ -915,37 +915,38 @@ const server = http.createServer(async (req, res) => {
       const out = await switchProvider(String(b.provider));
       return json(res, out.error ? 400 : 200, { ...out, ai: ai.summary(AI, cfg) });
     }
-    // ---- pesquisa real da Google: empresas (Places) e web (Programmable Search) ----
-    if (url.pathname === '/api/google' && req.method === 'GET') {
-      return json(res, 200, { ...google.state(), leads: google.stats(DATA) });
+    // ---- 1.29.0: a pesquisa é Tavily (principal) + Geoapify (empresas) ----
+    // A rota antiga `/api/google` morreu com o Google. Esta é a mesma ideia com as
+    // fontes que não pedem cartão: `kind=web` → Tavily; `kind=places` → Geoapify.
+    if (url.pathname === '/api/pesquisa/estado' && req.method === 'GET') {
+      return json(res, 200, { ...pesquisa.estado(), leads: leadsStore.stats(DATA) });
     }
-    if (url.pathname === '/api/google/search' && req.method === 'POST') {
+    if (url.pathname === '/api/pesquisa/procurar' && req.method === 'POST') {
       const b = await body(req);
-      const kind = b.kind === 'web' ? 'web' : 'places';
+      const kind = b.kind === 'places' ? 'places' : 'web';
       const limit = Math.max(1, Math.min(20, +b.limit || 10));
       const t0 = Date.now();
       try {
-        const found = kind === 'places'
-          ? await google.searchPlaces({ what: b.what, where: b.where, limit, lang: b.lang || 'pt-PT', region: b.region || 'PT' })
-          : await google.searchWeb({ q: b.q || [b.what, b.where].filter(Boolean).join(' '), limit });
-        // 26 out 2026: a pesquisa web devolve informação, não empresas — só entra para os leads com save:true explícito.
-        const keep = b.save === true || (kind === 'places' && b.save !== false);
-        const saved = keep ? google.saveAll(found, DATA) : { added: 0, updated: 0, total: google.stats(DATA).total, leads: found };
-        // 26 out 2026: o que a pesquisa encontra entra também na base de dados a sério — pontuado,
-        // sem duplicados e pronto para o funil. A gaveta continua a ser a lista rápida; a verdade
-        // passa a viver em data/orbita.db.
-        let db = null;
-        if (OPS && keep && saved.leads?.length) {
-          try { db = OPS.leads.importLeads(OPS.db, saved.leads.map(l => ({ ...l, source: 'google' })), 'pesquisa', 'google'); }
-          catch (e) { console.warn('  operação: não consegui guardar os resultados na base de dados — ' + e.message); }
+        if (kind === 'web') {
+          const r = await pesquisa.pesquisarWeb({ consulta: b.q || [b.what, b.where].filter(Boolean).join(' '), limite: limit, topico: b.topico, dias: b.dias }, { env: process.env });
+          /* resultados da web são contexto: nunca entram no funil sem alguém os ler */
+          return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: r.encontrados, added: 0, updated: 0, total: leadsStore.stats(DATA).total, results: r.resultados, respostaCurta: r.respostaCurta, nota: 'a web dá contexto, não leads — nada foi escrito no funil' });
         }
-        console.log(`🔎 ${kind === 'places' ? 'Places' : 'Pesquisa web'}: "${[b.what, b.where].filter(Boolean).join(' em ') || b.q}" → ${found.length} resultados · +${saved.added} novos`);
-        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: found.length, added: saved.added, updated: saved.updated, total: saved.total, baseDeDados: db, results: found.slice(0, limit) });
+        const r = await pesquisa.procurarLeads({ oQue: b.what, onde: b.where, categoria: b.categoria || null, limite: limit }, { env: process.env });
+        const comoLead = r.leads.map((l) => ({
+          source: 'geoapify', name: l.nome, city: l.cidade, address: l.morada, phone: l.telefone,
+          website: l.website, email: l.email, rating: null, reviews: null, mapsUrl: '',
+          type: l.categoria, score: l.nota, why: l.porque,
+        }));
+        const guardar = b.save !== false;
+        const saved = guardar ? leadsStore.saveAll(comoLead, DATA) : { added: 0, updated: 0, total: leadsStore.stats(DATA).total, leads: comoLead };
+        console.log(`🔎 Empresas: "${b.what} em ${b.where}" → ${comoLead.length} encontradas · +${saved.added} novas`);
+        return json(res, 200, { ok: true, kind, ms: Date.now() - t0, found: comoLead.length, added: saved.added, updated: saved.updated, total: saved.total, results: comoLead });
       } catch (e) { return json(res, 502, { ok: false, kind, ms: Date.now() - t0, error: e.message }); }
     }
     // ---- 1.25.0: as fontes que não pedem cartão, iguais às da função publicada ----
     if (url.pathname === '/api/pesquisa' && req.method === 'GET') {
-      return json(res, 200, { ok: true, fontes: pesquisa.estado(), google: google.state(), leads: google.stats(DATA) });
+      return json(res, 200, { ok: true, fontes: pesquisa.estado(), leads: leadsStore.stats(DATA) });
     }
     if (url.pathname === '/api/pesquisa/leads' && req.method === 'POST') {
       const b = await body(req);
@@ -980,12 +981,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/leads' && req.method === 'GET') {
       const limit = Math.max(1, Math.min(200, +url.searchParams.get('limit') || 50));
       const status = url.searchParams.get('status') || null;
-      return json(res, 200, { ok: true, google: google.state(), stats: google.stats(DATA), ...google.list({ limit, status }, DATA) });
+      return json(res, 200, { ok: true, stats: leadsStore.stats(DATA), ...leadsStore.list({ limit, status }, DATA) });
     }
     if (url.pathname === '/api/leads/status' && req.method === 'POST') {
       const b = await body(req);
       if (!b.id || !b.status) return json(res, 400, { error: 'faltam id e status' });
-      const l = google.setStatus(String(b.id), String(b.status), DATA);
+      const l = leadsStore.setStatus(String(b.id), String(b.status), DATA);
       return l ? json(res, 200, { ok: true, lead: l }) : json(res, 404, { error: 'não há lead com esse id' });
     }
     if (url.pathname === '/api/brain') return json(res, 200, graph);
@@ -1317,8 +1318,8 @@ const server = http.createServer(async (req, res) => {
         }
         if (url.pathname === '/api/ops/leads/importar-gravados' && req.method === 'POST') {
           // traz para a base de dados o que a gaveta LEADS já tinha guardado (data/leads.json)
-          const saved = google.list({ limit: 500 }, DATA).leads || [];
-          const out = OPS.leads.importLeads(OPS.db, saved.map(l => ({ ...l, source: 'google' })), 'dono', 'google');
+          const saved = leadsStore.list({ limit: 500 }, DATA).leads || [];
+          const out = OPS.leads.importLeads(OPS.db, saved.map(l => ({ ...l, source: l.source || 'pesquisa' })), 'dono', 'pesquisa');
           if (out.total) OPS.audit({ actor: 'dono', action: 'ops.importou_gravados', entity: 'leads', detail: out });
           return json(res, 200, { ok: true, ...out });
         }

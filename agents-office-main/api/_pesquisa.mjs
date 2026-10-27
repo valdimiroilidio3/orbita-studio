@@ -6,15 +6,21 @@
    versão publicada (o que o dono usa) os agentes não conseguiam procurar nada.
    Aqui a pesquisa passa a ser servida pela função da Vercel, ao lado do resto.
 
-   Três fontes, cada uma com o seu trabalho — e nenhuma delas inventada:
+   Duas fontes, cada uma com o seu trabalho — e nenhuma delas inventada:
 
-     · Geoapify — geocodificação (`/v1/geocode/search`) e empresas reais
-       (`/v2/places`, dados do OpenStreetMap). É a fonte dos leads.
-     · Tavily — pesquisa web com excertos e resposta curta. É a fonte do
-       contexto: notícias, concorrência, o que a empresa diz de si.
-     · Google — Places (New) e Programmable Search. Continua a ser possível,
-       mas exige chave própria com facturação ligada; sem ela diz-se que falta,
-       não se finge que está lá.
+     · Tavily — A PESQUISA PRINCIPAL do escritório. Devolve resposta curta,
+       excertos e links, com modo notícias e recorte temporal; e `extract` lê
+       uma página inteira quando é preciso ir ao detalhe. É daqui que sai todo o
+       contexto: mercado, concorrência, notícias, o que a empresa diz de si.
+     · Geoapify — fichas de empresa reais (dados do OpenStreetMap) e
+       geocodificação. É a fonte dos LEADS, porque é a única que dá telefone,
+       morada estruturada e o sinal «não tem site» — e é esse sinal que faz um
+       lead valer 80 em vez de 48.
+
+   O Google saiu (1.29.0). Exigia chave com cartão ligado, duas APIs diferentes
+   e duas contas de configuração; a Tavily faz o mesmo trabalho sem cartão e
+   numa chave só. Manter o código do Google era manter uma promessa que ninguém
+   tinha ligado — e um caminho a mais para explicar a quem usa o escritório.
 
    Regras:
      · As chaves vivem SÓ no ambiente (variáveis da Vercel, cifradas em repouso
@@ -40,40 +46,29 @@ const tem = (env, ...nomes) => { for (const n of nomes) if (env?.[n]) return { v
 
 /** O que está ligado, e porquê — em português, sem prometer o que não há. */
 export function estado(env = process.env) {
-  const geo = tem(env, 'GEOAPIFY_API_KEY', 'GEOAPIFY_KEY');
   const tav = tem(env, 'TAVILY_API_KEY', 'TAVILY_KEY');
-  const places = tem(env, 'GOOGLE_MAPS_API_KEY', 'GOOGLE_PLACES_API_KEY');
-  const cse = tem(env, 'GOOGLE_API_KEY', 'GOOGLE_CSE_KEY');
-  const cseId = tem(env, 'GOOGLE_CSE_ID', 'GOOGLE_SEARCH_ENGINE_ID');
+  const geo = tem(env, 'GEOAPIFY_API_KEY', 'GEOAPIFY_KEY');
   return {
+    /* a ordem não é decorativa: a primeira linha é a pesquisa principal */
+    principal: 'tavily',
+    tavily: {
+      disponivel: !!tav,
+      papel: 'principal',
+      env: tav?.nome || 'TAVILY_API_KEY',
+      motivo: tav ? null : 'falta TAVILY_API_KEY no ambiente (cria a chave em app.tavily.com)',
+      oQue: 'pesquisa web com excertos e resposta curta, notícias e leitura de páginas — é a pesquisa principal',
+      docs: 'https://app.tavily.com',
+    },
     geoapify: {
       disponivel: !!geo,
+      papel: 'leads',
       env: geo?.nome || 'GEOAPIFY_API_KEY',
       motivo: geo ? null : 'falta GEOAPIFY_API_KEY no ambiente (cria a chave em myprojects.geoapify.com)',
       oQue: 'empresas reais por categoria e zona (OpenStreetMap) — é a fonte dos leads',
       docs: 'https://myprojects.geoapify.com',
     },
-    tavily: {
-      disponivel: !!tav,
-      env: tav?.nome || 'TAVILY_API_KEY',
-      motivo: tav ? null : 'falta TAVILY_API_KEY no ambiente (cria a chave em app.tavily.com)',
-      oQue: 'pesquisa web com excertos e resposta curta — é a fonte do contexto',
-      docs: 'https://app.tavily.com',
-    },
-    google: {
-      places: {
-        disponivel: !!places,
-        env: places?.nome || 'GOOGLE_MAPS_API_KEY',
-        motivo: places ? null : 'falta GOOGLE_MAPS_API_KEY (e a Places API (New) ligada, com facturação no projecto)',
-      },
-      web: {
-        disponivel: !!(cse && cseId),
-        env: `${cse?.nome || 'GOOGLE_API_KEY'} + ${cseId?.nome || 'GOOGLE_CSE_ID'}`,
-        motivo: !cse ? 'falta GOOGLE_API_KEY' : !cseId ? 'falta GOOGLE_CSE_ID (motor de pesquisa programável)' : null,
-      },
-    },
-    qualquer: !!(geo || tav || places || (cse && cseId)),
-    nota: 'o Geoapify dá leads, o Tavily dá contexto. Procurar não contacta ninguém: enviar continua a exigir o teu OK.',
+    qualquer: !!(tav || geo),
+    nota: 'a Tavily é a pesquisa principal (contexto, notícias, páginas); o Geoapify dá as fichas de empresa. Procurar não contacta ninguém: enviar continua a exigir o teu OK.',
   };
 }
 
@@ -258,18 +253,25 @@ export async function procurarLeads({ oQue, onde, categoria = null, limite = 20,
 }
 
 /* ---------- Tavily: a web ---------- */
-export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'basic', resposta = true } = {}, { env = process.env, fetchImpl = fetch } = {}) {
+export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'basic', resposta = true, topico = 'general', dias = null, dominios = null } = {}, { env = process.env, fetchImpl = fetch } = {}) {
   const k = tem(env, 'TAVILY_API_KEY', 'TAVILY_KEY');
   if (!k) throw new Error('falta TAVILY_API_KEY no ambiente');
   const texto = String(consulta || q || '').trim();
   if (!texto) throw new Error('diz o que pesquisar');
+  const noticias = String(topico || '').toLowerCase() === 'news' || String(topico || '').toLowerCase() === 'noticias';
   const corpo = {
     query: texto,
     max_results: Math.max(1, Math.min(20, Number(limite) || 8)),
     search_depth: profundidade === 'advanced' ? 'advanced' : 'basic',
     include_answer: !!resposta,
-    topic: 'general',
+    topic: noticias ? 'news' : 'general',
   };
+  /* Recorte temporal e domínios só existem no que a Tavily aceita: dias com notícias,
+     domínios em qualquer modo. O que não faz sentido não é enviado — pedir `days` a
+     uma pesquisa geral é um erro que a API devolve, não uma funcionalidade. */
+  const janela = Number(dias);
+  if (noticias && Number.isFinite(janela) && janela > 0) corpo.days = Math.max(1, Math.min(365, Math.round(janela)));
+  if (Array.isArray(dominios) && dominios.length) corpo.include_domains = dominios.slice(0, 10).map(String);
   const r = await pedirJson(`${TAVILY}/search`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${k.valor}` },
@@ -282,8 +284,9 @@ export async function pesquisarWeb({ consulta, q, limite = 8, profundidade = 'ba
     url: String(x.url || ''),
     excerto: String(x.content || '').slice(0, 1200),
     relevancia: typeof x.score === 'number' ? Math.round(x.score * 100) / 100 : null,
+    publicado: x.published_date || null,
   }));
-  return { fonte: 'tavily', consulta: texto, respostaCurta: j?.answer || null, resultados, encontrados: resultados.length };
+  return { fonte: 'tavily', consulta: texto, topico: noticias ? 'news' : 'general', respostaCurta: j?.answer || null, resultados, encontrados: resultados.length };
 }
 
 /** Extrai o texto limpo de um endereço já conhecido (Tavily /extract). */
@@ -317,6 +320,9 @@ export async function testarFonte(id, { env = process.env, fetchImpl = fetch } =
     const t0 = Date.now();
     const r = await pesquisarWeb({ consulta: 'Órbita Studio', limite: 2, resposta: false }, { env, fetchImpl });
     return { ok: true, ms: Date.now() - t0, status: 200, detalhe: `${r.encontrados} resultado(s) reais`, quando: new Date().toISOString() };
+  }
+  if (id === 'google-places' || id === 'google-search') {
+    return { ok: false, erro: 'o Google saiu nesta versão: a pesquisa é Tavily (contexto) e Geoapify (empresas)', codigo: 'saiu' };
   }
   return { ok: false, erro: 'fonte desconhecida', codigo: 'desconhecida' };
 }

@@ -24,7 +24,7 @@ const LIVE = process.env.CHECK_LIVE === '1';
 
 /* ---------- ORBITA API integrations (26 out 2026) ---------- */
 await step('integrações e Google: token, CRM, fila de conteúdo, Places e pesquisa web', async () => {
-  const out = await sh('node', ['--test', 'integrations.test.mjs', 'google.test.mjs']);
+  const out = await sh('node', ['--test', 'integrations.test.mjs']);
   const counts = [...out.matchAll(/# pass (\d+)/g)].map(m => +m[1]); // um ficheiro de testes por linha de resumo
   const passed = counts.reduce((a, b) => a + b, 0);
   const failed = [...out.matchAll(/# fail (\d+)/g)].reduce((a, m) => a + +m[1], 0);
@@ -626,20 +626,21 @@ else {
       if (!/antigravity\.google/.test(agy.reason || agy.hint || '')) throw new Error('não diz como instalar');
       return `antigravity · bin ${agy.bin} · ${agy.available ? 'ligado' : 'indisponível (explica porquê)'}`;
     });
-    await step('server: /api/google diz o que falta, sem inventar', async () => {
-      const g = await (await fetch(base + '/api/google')).json();
-      if (!g.places || !g.web) throw new Error('sem places/web');
-      for (const k of ['places', 'web']) if (!g[k].available && !g[k].reason) throw new Error(k + ' indisponível sem razão');
-      if (g.any && !(g.places.available || g.web.available)) throw new Error('any não bate com as chaves');
-      return `${g.places.available ? 'Places ligado' : 'Places sem chave'} · ${g.web.available ? 'web ligada' : 'web sem chave'} · ${g.leads?.total || 0} leads`;
+    await step('server: /api/pesquisa/estado diz o que falta, sem inventar', async () => {
+      const g = await (await fetch(base + '/api/pesquisa/estado')).json();
+      if (!g.tavily || !g.geoapify) throw new Error('sem tavily/geoapify');
+      if (g.principal !== 'tavily') throw new Error('a Tavily devia ser a pesquisa principal');
+      for (const k of ['tavily', 'geoapify']) if (!g[k].disponivel && !g[k].motivo) throw new Error(k + ' indisponível sem motivo');
+      if (g.any && !(g.tavily.disponivel || g.geoapify.disponivel)) throw new Error('any não bate com as chaves');
+      return `Tavily ${g.tavily.disponivel ? 'ligada' : 'sem chave'} (principal) · Geoapify ${g.geoapify.disponivel ? 'ligado' : 'sem chave'} · ${g.leads?.total || 0} leads`;
     });
-    await step('server: procurar sem chave da Google é recusado com a frase certa', async () => {
-      const g = await (await fetch(base + '/api/google')).json();
-      if (g.places.available) return 'há chave — nada a recusar';
-      const r = await fetch(base + '/api/google/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'places', what: 'clínicas dentárias', where: 'Lisboa' }) });
+    await step('server: procurar empresas sem chave do Geoapify é recusado com a frase certa', async () => {
+      const g = await (await fetch(base + '/api/pesquisa/estado')).json();
+      if (g.geoapify.disponivel) return 'há chave — nada a recusar';
+      const r = await fetch(base + '/api/pesquisa/procurar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'places', what: 'clínicas dentárias', where: 'Lisboa' }) });
       const j = await r.json();
       if (j.ok) throw new Error('disse que procurou sem chave');
-      if (!/chave/.test(j.error || '')) throw new Error('não falou de chave: ' + JSON.stringify(j).slice(0, 120));
+      if (!/GEOAPIFY/.test(j.error || '')) throw new Error('não falou da variável: ' + JSON.stringify(j).slice(0, 120));
       return String(j.error).slice(0, 70);
     });
     await step('server: /api/leads devolve a lista guardada (mesmo vazia)', async () => {
@@ -667,7 +668,7 @@ else {
       if (!Array.isArray(j.leads)) throw new Error('sem lista');
       return `${anon.status} sem token · 200 com token · ${j.leads.length} leads em ${j.storage}`;
     });
-    await step('server: os agentes recebem os dois servidores MCP do projeto', async () => {
+    await step('server: os agentes recebem o servidor MCP do projeto', async () => {
       const m = await (await fetch(base + '/api/mcp')).json();
       const get = id => {
         const s = m.servers.find(x => x.id === id);
@@ -675,11 +676,10 @@ else {
         if (s.status !== 'connected') throw new Error(`${id}: ${s.status}${s.error ? ' — ' + s.error : ''}`);
         return s;
       };
-      const integ = get('orbita_integrations'), goog = get('orbita_google');
+      const integ = get('orbita_integrations');
       if (!integ.tools.includes('orbita_leads_list')) throw new Error('integrações sem ferramentas');
-      if (!goog.tools.includes('google_places_search')) throw new Error('google sem google_places_search');
-      if (goog.tools.length !== 4) throw new Error('google: ' + goog.tools.length + ' ferramentas');
-      return `${integ.tools.length} + ${goog.tools.length} ferramentas · ${integ.name} · ${goog.name}`;
+      if (m.servers.some(x => x.id === 'orbita_google')) throw new Error('o servidor MCP do Google devia ter saído em 1.29.0');
+      return `${integ.tools.length} ferramentas · ${integ.name}`;
     });
     await step('server: serves the office', async () => { const r = await fetch(base + '/'); const t = await r.text(); if (!/ÓRBITA/.test(t)) throw new Error('html missing'); });
     await step('server: /api/brain has the live graph', async () => { const g = await (await fetch(base + '/api/brain')).json(); if (!g.nodes.length) throw new Error('empty'); return `${g.nodes.length} linked notes`; });

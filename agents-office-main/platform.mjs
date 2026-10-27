@@ -54,18 +54,13 @@ export const CATALOG = [
   { id: 'elevenlabs', name: 'ElevenLabs (voz)', kind: 'ia', env: ['ELEVENLABS_API_KEY'], docs: 'https://elevenlabs.io/docs',
     probe: { url: 'https://api.elevenlabs.io/v1/user', headers: (e) => ({ 'xi-api-key': e.ELEVENLABS_API_KEY }) } },
 
-  { id: 'google-places', name: 'Google Places / Geocoding', kind: 'dados', env: ['GOOGLE_MAPS_API_KEY'], docs: 'https://developers.google.com/maps/documentation/places',
-    probe: { url: (e) => `https://maps.googleapis.com/maps/api/geocode/json?address=Coimbra&key=${encodeURIComponent(e.GOOGLE_MAPS_API_KEY)}` },
-    ok: (r, body) => body && body.status === 'OK' },
-  { id: 'google-search', name: 'Google Programmable Search', kind: 'dados', env: ['GOOGLE_SEARCH_KEY', 'GOOGLE_SEARCH_CX'], docs: 'https://developers.google.com/custom-search/v1/overview',
-    probe: { url: (e) => `https://www.googleapis.com/customsearch/v1?q=orbita&num=1&key=${encodeURIComponent(e.GOOGLE_SEARCH_KEY)}&cx=${encodeURIComponent(e.GOOGLE_SEARCH_CX)}` } },
   /* 1.25.0: as fontes que não pedem cartão. O Geoapify responde a um GET barato;
      a Tavily só fala por POST, por isso não há sonda genérica — o teste real é o
      botão do Centro de Controlo (`/platform/testar`), que faz o POST. */
   { id: 'geoapify', name: 'Geoapify (empresas e geocodificação)', kind: 'dados', env: ['GEOAPIFY_API_KEY'], docs: 'https://apidocs.geoapify.com',
     probe: { url: (e) => `https://api.geoapify.com/v1/geocode/search?text=Coimbra&limit=1&apiKey=${encodeURIComponent(e.GEOAPIFY_API_KEY)}` } },
-  { id: 'tavily', name: 'Tavily (pesquisa web)', kind: 'dados', env: ['TAVILY_API_KEY'], docs: 'https://docs.tavily.com',
-    probe: null, note: 'Só responde a POST: confirma com «Testar ligação» no Centro de Controlo.' },
+  { id: 'tavily', name: 'Tavily (pesquisa principal)', kind: 'dados', env: ['TAVILY_API_KEY'], docs: 'https://docs.tavily.com',
+    probe: null, note: 'É a pesquisa principal do escritório (contexto, notícias, leitura de páginas). Só responde a POST: confirma com «Testar ligação».' },
 
   { id: 'supabase', name: 'Supabase', kind: 'base-de-dados', env: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'], docs: 'https://supabase.com/docs/guides/api',
     probe: { url: (e) => `${String(e.SUPABASE_URL).replace(/\/$/, '')}/rest/v1/`, headers: (e) => ({ apikey: e.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${e.SUPABASE_SERVICE_ROLE_KEY}` }) },

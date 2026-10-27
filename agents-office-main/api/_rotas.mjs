@@ -476,6 +476,12 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
         consulta: limpo(fonte?.consulta || fonte?.q || fonte?.query),
         limite: Number(fonte?.limite || fonte?.limit) || 8,
         profundidade: limpo(fonte?.profundidade) || 'basic',
+        /* 1.29.0: notícias com recorte temporal — a Tavily é a pesquisa principal */
+        topico: limpo(fonte?.topico || fonte?.topic) || 'general',
+        dias: Number(fonte?.dias || fonte?.days) || null,
+        dominios: limpo(fonte?.dominios || fonte?.domains)
+          ? String(fonte.dominios || fonte.domains).split(',').map((x) => x.trim()).filter(Boolean)
+          : null,
       }, { env, fetchImpl });
       /* resultados da web não são empresas: não entram no funil sem alguém os ler */
       return { status: 200, corpo: { ok: true, ...r, guardados: null, nota: 'a web dá contexto, não leads — nada foi escrito no funil' } };
