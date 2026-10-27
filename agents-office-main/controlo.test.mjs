@@ -231,3 +231,50 @@ test('estados: com motor, cada fornecedor diz configurado · ligado · a funcion
   assert.equal(r.ia.funcionais.join(','), 'ovh');
   assert.equal(r.ia.porTestar, 0);
 });
+
+/* ---------- 7 · a interface ---------- */
+test('interface: o painel desenha as seis salas, a cor e os três estados', async () => {
+  const { JSDOM } = await import('jsdom');
+  const dom = new JSDOM('<!doctype html><body><div id="cfgPanel" hidden><b id="cfgTitle"></b><span class="cfg-sum"></span><div class="cfg-body"></div></div></body>', { url: 'https://mesa.teste/' });
+  globalThis.document = dom.window.document;
+  globalThis.window = dom.window;
+  globalThis.localStorage = dom.window.localStorage;
+
+  const estado = {
+    status: 200,
+    corpo: {
+      versao: '1.20.0',
+      ajustes: { cores: { sales: '#EADC8F' }, agentes: [{ id: 'gestor', nome: 'Gestor de tráfego', dept: 'sales', funcao: 'anúncios' }] },
+      ia: { pronto: true, conhecido: true, comChave: 2, funcionais: ['llm7'], porTestar: 1, fornecedores: [] },
+      execucao: { runs24h: 2, chamadas24h: 9, a_funcionar: true, ultimaChamada: new Date().toISOString() },
+      seguranca: { autenticacao: false, chavesNoServidor: true, aprovacaoHumana: true, nota: 'A base responde sem login.' },
+    },
+  };
+  const apis = { status: 200, corpo: { list: [{ id: 'github', name: 'GitHub', kind: 'codigo', env: [], missing: ['GITHUB_TOKEN'], configured: false, verified: false }], summary: { total: 1, configuradas: 0, verificadas: 0 } } };
+
+  globalThis.fetch = async (url) => {
+    const u = decodeURIComponent(String(url));   // o caminho vai codificado em ?caminho=
+    const corpo = u.includes('/controlo/estado') ? estado : u.includes('/platform/apis') ? apis : { status: 404, corpo: {} };
+    return { ok: true, status: 200, json: async () => corpo };
+  };
+
+  const { createConfig } = await import('./src/config.js');
+  const cfg = createConfig({ panel: document.getElementById('cfgPanel'), theme: 'auto' });
+  cfg.open();
+  await new Promise((r) => setTimeout(r, 30));
+
+  const html = document.querySelector('.cfg-body').innerHTML;
+  assert.match(html, /Centro de Controlo/);
+  for (const sala of ['COMANDO', 'ENGENHARIA', 'PROSPEÇÃO', 'MEDIA', 'DESIGN LAB', 'VENDAS']) {
+    assert.ok(html.includes(sala), `a sala ${sala} não aparece no painel`);
+  }
+  /* os três estados, por palavras, e a execução a sério */
+  assert.match(html, /a funcionar/);
+  assert.match(html, /por testar/);
+  assert.match(html, /2 execuções em 24 h/);
+  assert.match(html, /login <b>não configurado<\/b>/);
+  /* o agente acrescentado tem botão para sair, e há um botão para acrescentar */
+  assert.match(html, /data-menos="gestor"/);
+  assert.match(html, /data-mais="sales"/);
+  cfg.close();
+});

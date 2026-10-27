@@ -76,7 +76,7 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
 
 ## 5 · Provas
 
-`controlo.test.mjs` — 15 provas que correm com `node --test`, sem rede:
+`controlo.test.mjs` — 16 provas que correm com `node --test`, sem rede (a última desenha o painel num DOM falso e confirma as seis salas e os três estados):
 
 - `filasNecessarias`, `profundidadePara`, `lugarLivre`, `plantaAjustada`;
 - a sala cresce com 11 agentes e **não encolhe** com zero;
@@ -87,4 +87,4 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
 - os três estados: `ligado` só com teste real, `a_funcionar` só com execuções nas
   últimas 24 h (uma execução com três dias já não conta).
 
-Suite completa: **327/327**.
+Suite completa: **328/328**.
