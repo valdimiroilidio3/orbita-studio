@@ -12,7 +12,8 @@
    =========================================================================== */
 import { FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './cliente.mjs';
-import { cadeia, diagnostico, falarComFallback, orcamento } from './router.mjs';
+import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
+import { PROVADOS, estadoCurto, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
   const mapa = {};
@@ -30,11 +31,37 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
 
   let cacheConfig = null;
   let cacheLat = null;
+  let foraRestaurado = false;
+  let foraGravado = '';
 
   async function config() {
     if (cacheConfig) return cacheConfig;
     try { cacheConfig = (await repo.ia.config.ler()) || {}; } catch { cacheConfig = {}; }
     return cacheConfig;
+  }
+
+  /* 1.32.0 · os modelos que o fornecedor disse não ter sobrevivem ao arranque a
+     frio. Sem isto, cada invocação voltava a tentar `gpt-oss-20b` no LLM7 e a
+     pagar o mesmo erro — foi o que se viu em produção a 27 out 2026. */
+  async function restaurarFora() {
+    if (foraRestaurado) return;
+    foraRestaurado = true;
+    try {
+      const cfg = await config();
+      const n = importarFora(cfg.fora || {});
+      if (n) foraGravado = JSON.stringify(cfg.fora || {});
+    } catch { /* sem base, a memória do processo serve */ }
+  }
+
+  async function guardarFora() {
+    const agora = exportarFora();
+    const json = JSON.stringify(agora);
+    if (json === foraGravado) return;
+    try {
+      await repo.ia.config.gravar('fora', agora);
+      foraGravado = json;
+      cacheConfig = { ...(cacheConfig || {}), fora: agora };
+    } catch { /* guardar é útil, não é bloqueante */ }
   }
 
   async function latencias() {
@@ -44,11 +71,15 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
   }
 
   /** Chamada crua a um fornecedor/modelo concreto (usada pelo router e pelos testes). */
-  async function chamar(entrada, mensagens, { ferramentas = [], maxTokens = 1200, temperatura = 0.3, timeoutMs = 45000 } = {}) {
+  async function chamar(entrada, mensagens, { ferramentas = [], maxTokens = 1200, temperatura = 0.3, timeoutMs = null } = {}) {
     const prov = FORNECEDORES[entrada.fornec];
     if (!prov) throw new ErroIA(`fornecedor desconhecido: ${entrada.fornec}`, { fornec: entrada.fornec });
     const chave = valorDaChave(entrada.fornec);
-    const r = await falar({ fornec: entrada.fornec, prov, chave, modelo: entrada.modelo, mensagens, ferramentas, maxTokens, temperatura, timeoutMs, fetchImpl });
+    /* 1.32.0 · o OVH responde em 13–45 s: com o tecto global de 45 s, metade dos
+       pedidos morria à espera de uma resposta que estava a chegar. O tecto do
+       fornecedor vale quando o chamador não impõe um. */
+    const espera = Number(timeoutMs) || Number(prov.timeoutMs) || 45000;
+    const r = await falar({ fornec: entrada.fornec, prov, chave, modelo: entrada.modelo, mensagens, ferramentas, maxTokens, temperatura, timeoutMs: espera, fetchImpl });
     return { ...r, ferramentasPedidas: r.chamadas };
   }
 
@@ -103,7 +134,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     /** Um pedido com fallback + registo de uso. */
     async pedir(tipo, mensagens, {
       ferramentas = [], agente = null, maxTokens = 1200, temperatura = 0.3,
-      orc = orcamento(), preferido = null, limite = 4, timeoutMs = 45000,
+      orc = orcamento(), preferido = null, limite = 4, timeoutMs = null,
     } = {}) {
       const cfg = await config();
       const desligados = cfg.desligados || [];
@@ -114,8 +145,11 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       for (const [fornec, t] of Object.entries(cfgAgora.testes || {})) {
         if (t?.ok && t?.usado) usados[`${fornec}/${t.usado}`] = true;
       }
+      await restaurarFora();
       const resultado = await falarComFallback(tipo, {
         chaves, desligados, preferido: pref, latencias: await latencias(), orc, limite, usados,
+        /* 1.32.0 · os gratuitos medidos entram à frente do catálogo */
+        provados: PROVADOS,
         executar: (entrada) => chamar(entrada, mensagens, { ferramentas, maxTokens, temperatura, timeoutMs }),
         registar: async (evento) => {
           try {
@@ -128,7 +162,15 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
           } catch { /* registar é útil, não é bloqueante */ }
         },
       });
+      await guardarFora();
       return resultado;
+    },
+
+    /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora. */
+    async gratuitos() {
+      const cfg = await config();
+      const r = resumoGratuitos({ chaves, desligados: cfg.desligados || [], latencias: await latencias() });
+      return { ...r, estado: estadoCurto({ chaves, desligados: cfg.desligados || [] }), medido: PROVADOS.map((p) => ({ fornec: p.fornec, modelo: p.modelo, ms: p.ms, ok: p.ok, erros: p.erros, medido: p.medido, fonte: p.fonte })) };
     },
 
     /** Cadeia que este motor usaria agora — para a interface poder explicar. */
@@ -136,7 +178,7 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const cfg = await config();
       return cadeia(tipo, {
         chaves, desligados: cfg.desligados || [], preferido: cfg.agentes?.[agente]?.modelo || null,
-        latencias: await latencias(),
+        latencias: await latencias(), provados: PROVADOS,
       });
     },
 

@@ -181,6 +181,8 @@ for (const f of extra.fornecedores) {
     familia: FAMILIA_FREELLMAPI,
     tipo: f.tipo,                       // chat | pesquisa | media
     usavel: !!f.usavel,
+    /* 1.32.0 · tecto próprio (ms) para fornecedores lentos; o global é 45 s */
+    timeoutMs: Number(f.timeoutMs) || null,
     gratuito: true,
     limites: f.limites || (f.keyless ? 'sem chave (anónimo) — limite por IP, declarado pelo freellmapi' : 'plano gratuito declarado pelo freellmapi'),
     /* `nota` no JSON permite corrigir o freellmapi com o que foi medido aqui —
@@ -193,7 +195,7 @@ for (const f of extra.fornecedores) {
 
 /* Etiquetas usadas pelo router e pelos agentes:
    raciocinio · codigo · texto · rapido · barato · visao · ferramentas · contexto */
-export const MODELOS = [
+const CATALOGO = [
   /* OpenRouter — os `:free` do README (abril 2026) */
   { fornecedor: 'openrouter', modelo: 'qwen/qwen3-coder:free', etiquetas: ['codigo', 'ferramentas', 'barato'], janela: 262000, preco: [0, 0], gratuito: true },
   { fornecedor: 'openrouter', modelo: 'openai/gpt-oss-120b:free', etiquetas: ['raciocinio', 'codigo', 'ferramentas'], janela: 131000, preco: [0, 0], gratuito: true },
@@ -243,13 +245,25 @@ export const MODELOS = [
     gratuito: true,
     familia: FAMILIA_FREELLMAPI,
     rotulo: m.rotulo,
+    indisponivel: m.indisponivel || null,
+    medido: m.medido || null,
     limites: {
       rpm: m.rpm, rpd: m.rpd, tpm: m.tpm, tpd: m.tpd,
       orcamento: m.orcamento, tamanho: m.tamanho,
       inteligencia: m.inteligencia, velocidade: m.velocidade,
     },
   })),
-];
+  ];
+
+/* 1.32.0 · um modelo que o fornecedor disse não ter sai do caminho, mas não
+   desaparece da vista: fica em `MODELOS_INDISPONIVEIS` para `/ia/estado` poder
+   explicar por que não é usado. Antes, cada pedido voltava a tentar os quatro
+   modelos mortos do LLM7 e a cadeia gastava-se em erros 400. */
+export const MODELOS_INDISPONIVEIS = CATALOGO
+  .filter((m) => m.indisponivel)
+  .map((m) => ({ fornecedor: m.fornecedor, modelo: m.modelo, desde: m.indisponivel.desde, motivo: m.indisponivel.motivo, fonte: m.indisponivel.fonte }));
+
+export const MODELOS = CATALOGO.filter((m) => !m.indisponivel);
 
 /** Todos os modelos de um fornecedor, do catálogo. */
 export function modelosDe(fornecedor) {

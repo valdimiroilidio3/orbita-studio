@@ -19,16 +19,20 @@ export function pararSeguimento() {
 }
 
 export async function carregarIA(api) {
-  const [estado, uso, runs, fila] = await Promise.all([
+  const [estado, uso, runs, fila, gratuitos] = await Promise.all([
     api.call('/ia/estado'),
     api.call('/ia/uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     api.call('/ia/runs').catch(() => ({ runs: [] })),
     api.call('/media/trabalhos').catch(() => ({ trabalhos: [] })),
+    /* 1.32.0: o que é gratuito e já respondeu — se a rota não existir, a faixa
+       fica como estava; não se inventa estado nenhum. */
+    api.call('/ia/gratuitos').catch(() => null),
   ]);
   api.S.ia = estado;
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
+  api.S.iaGratuitos = gratuitos;
   if (!api.S.iaRun && api.S.iaRuns.length) {
     const mais = api.S.iaRuns[0];
     try { api.S.iaRun = await api.call(`/ia/runs/${mais.id}`); } catch { api.S.iaRun = null; }
@@ -99,7 +103,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
         O resto da mesa funciona aqui; o Control Center só ganha vida quando a página estiver a falar com o \`/api\` (que é o caso do site publicado).</div>`
     : ia.pronto
     ? `<div class="ia-faixa ok"><b>Motor operacional.</b> ${comChave.length} fornecedor(es) prontos${semChave ? ` (${semChave} sem chave, por desenho)` : ''}; ${prontos.length} com teste real bem-sucedido.
-        ${prontos.length ? '' : ' Ainda nenhum foi testado — usa «Testar» na linha do fornecedor: só isso conta como prova.'}</div>`
+        ${prontos.length ? '' : ' Ainda nenhum foi testado — usa «Testar» na linha do fornecedor: só isso conta como prova.'}
+        ${S.iaGratuitos?.estado?.frase ? `<div class="ia-sub">${esc(S.iaGratuitos.estado.frase)}${S.iaGratuitos.medidoEm ? ` · medido em ${esc(S.iaGratuitos.medidoEm)}` : ''}</div>` : ''}</div>`
     : `<div class="ia-faixa bad"><b>Sem motor.</b> Nenhum fornecedor está ligado nesta instalação.
         Os agentes não correm e as tarefas dizem isso mesmo. As chaves vivem no servidor: quem as põe
         é o dono, em Configurações → Centro de Controlo, onde cada serviço diz o que falta — aqui não

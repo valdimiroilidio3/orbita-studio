@@ -47,6 +47,10 @@
     "api/setup.mjs": {
       "maxDuration": 60,
       "includeFiles": "supabase/**"
+    },
+    "api/rpc.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "supabase/**"
     }
   },
   "build": {}

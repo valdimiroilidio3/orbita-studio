@@ -587,9 +587,10 @@ test('a versão servida por /api/health vem do package.json (sem números à mã
 });
 
 test('router: sem modelos com a etiqueta exigida, a cadeia relaxa e diz que relaxou', () => {
-  /* Só o LLM7 está pronto e nenhum modelo dele declara `rapido`: em vez de uma
-     cadeia vazia (que falhava sem chamar ninguém), entra com `relaxado`. */
-  const c = cadeia('rapido', { chaves: {}, desligados: ['ovh', 'kilo'] });
+  /* Só o LLM7 está pronto e nenhum modelo dele declara `raciocinio` (o
+     gpt-oss-20b, que declarava, foi marcado indisponível a 27 out 2026 porque o
+     fornecedor o recusou): em vez de uma cadeia vazia, entra com `relaxado`. */
+  const c = cadeia('plano', { chaves: {}, desligados: ['ovh', 'kilo'] });
   assert.ok(c.length > 0, 'a cadeia ficou vazia mesmo havendo fornecedor pronto');
   assert.ok(c.every((m) => m.fornec === 'llm7'));
   assert.equal(c.every((m) => m.relaxado), true);

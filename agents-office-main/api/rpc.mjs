@@ -22,6 +22,11 @@
    dados.
    =========================================================================== */
 import { createSupabaseRepo, envBase } from './_repo.mjs';
+
+/* 1.32.0 · o OVH responde em 13–45 s. Sem isto, a função morria ao fim do tempo
+   por omissão do plano e a resposta chegava a meio — o tecto de 75 s do
+   fornecedor não serve de nada se a função é cortada antes. */
+export const config = { maxDuration: 60 };
 import { responder } from './_rotas.mjs';
 import { envDoPedido } from './_env.mjs';
 

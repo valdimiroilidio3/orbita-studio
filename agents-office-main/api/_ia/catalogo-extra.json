@@ -489,7 +489,8 @@
    "usavel": true,
    "porque": null,
    "limites": "100 pedidos/h por IP (anónimo, modelos básicos)",
-   "nota": "Veio do freellmapi (providers/index.ts): «100 req/hr free; anonymous access also works for basic models». O freellmapi avisa que os pedidos anónimos podem ser registados pelo agregador — não usar com dados de clientes."
+   "nota": "Veio do freellmapi (providers/index.ts): «100 req/hr free; anonymous access also works for basic models». O freellmapi avisa que os pedidos anónimos podem ser registados pelo agregador — não usar com dados de clientes. Medido a 27 out 2026: o `codestral-latest` responde em 0,9–3,4 s; os outros modelos declarados respondem «currently unavailable» e ficam marcados como indisponíveis.",
+   "timeoutMs": 25000
   },
   {
    "id": "llmtr",
@@ -721,7 +722,8 @@
    "usavel": true,
    "porque": null,
    "limites": "sem chave (anónimo) ~2 pedidos/min por IP",
-   "nota": "Veio do freellmapi (providers/index.ts). Testado em produção a 27 out 2026 sem chave: 22 modelos, resposta em 821 ms."
+   "nota": "Veio do freellmapi (providers/index.ts). Testado em produção a 27 out 2026 sem chave: 22 modelos, resposta em 821 ms. Medido a 27 out 2026: responde, mas em 13–45 s; por isso tem 75 s de tecto próprio em vez dos 45 s globais.",
+   "timeoutMs": 75000
   },
   {
    "id": "parallel",
@@ -2034,9 +2036,19 @@
    "migracao": "20260101_000000_legacy_baseline.ts",
    "etiquetas": [
     "texto",
-    "codigo"
+    "codigo",
+    "rapido",
+    "barato"
    ],
-   "buraco": null
+   "buraco": null,
+   "medido": {
+    "em": "2026-10-27",
+    "ok": 16,
+    "erros": 0,
+    "ms": 1500,
+    "fonte": "/ia/uso · produção",
+    "nota": "único modelo do LLM7 que respondeu; 0,9–3,4 s"
+   }
   },
   {
    "plataforma": "llm7",
@@ -2056,7 +2068,12 @@
     "texto",
     "contexto"
    ],
-   "buraco": null
+   "buraco": null,
+   "indisponivel": {
+    "desde": "2026-10-27",
+    "motivo": "LLM7 respondeu 400 «Model '…' is currently unavailable» em todos os pedidos",
+    "fonte": "/ia/uso · produção"
+   }
   },
   {
    "plataforma": "llm7",
@@ -2077,7 +2094,12 @@
     "raciocinio",
     "contexto"
    ],
-   "buraco": null
+   "buraco": null,
+   "indisponivel": {
+    "desde": "2026-10-27",
+    "motivo": "LLM7 respondeu 400 «Model '…' is currently unavailable» em todos os pedidos",
+    "fonte": "/ia/uso · produção"
+   }
   },
   {
    "plataforma": "llm7",
@@ -2097,7 +2119,12 @@
     "texto",
     "contexto"
    ],
-   "buraco": null
+   "buraco": null,
+   "indisponivel": {
+    "desde": "2026-10-27",
+    "motivo": "LLM7 respondeu 400 «Model '…' is currently unavailable» em todos os pedidos",
+    "fonte": "/ia/uso · produção"
+   }
   },
   {
    "plataforma": "llm7",
@@ -2117,7 +2144,12 @@
     "texto",
     "contexto"
    ],
-   "buraco": null
+   "buraco": null,
+   "indisponivel": {
+    "desde": "2026-10-27",
+    "motivo": "LLM7 respondeu 400 «Model '…' is currently unavailable» em todos os pedidos",
+    "fonte": "/ia/uso · produção"
+   }
   },
   {
    "plataforma": "mistral",

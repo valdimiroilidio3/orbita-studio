@@ -1,3 +1,59 @@
+## 1.32.0 — 27 out 2026 · A IA gratuita começa a trabalhar
+
+Pedido do dono: *«implementa uma IA para começar os trabalhos, implementa todas
+gratuitas»*.
+
+A auditoria de produção (27 out 2026, `/ia/uso`) explicou porque é que nada
+trabalhava: **62 pedidos ao LLM7, 16 respostas**; **55 pedidos à Vercel, 0
+respostas**; **52 ao OVH, 28 respostas** mas em 13–45 s, contra um tecto de 45 s.
+Os erros eram literais: `Model 'gpt-oss-20b' is currently unavailable`,
+`Model 'ministral-8b-2512' is currently unavailable`, `ovh não respondeu em 45 s`,
+`API rate limit exceeded`.
+
+**1 · A lista curada (`api/_ia/gratuitos.mjs`).** Três pares que responderam mesmo,
+com data, número de sucessos e latência: `llm7/codestral-latest` (16/16, 0,9–3,4 s),
+`ovh/Qwen3.5-397B-A17B` (13 s) e `ovh/gpt-oss-120b` (13–45 s). Não é uma promessa de
+quota: é uma vantagem de partida, medida em `/ia/uso`. Nenhum deles precisa de chave.
+
+**2 · O codestral deixou de ser ignorado.** O catálogo tinha-o, mas sem as etiquetas
+`rapido`/`barato` — por isso o router preferia modelos que o fornecedor dizia não ter.
+Agora as etiquetas do catálogo e da lista somam-se, e o par medido ganha +2000 menos a
+latência. Quem tiver uma chave paga continua à frente: os keyless recuam 900 pontos
+quando há pelo menos uma chave real no ambiente. Sem chave nenhuma — o estado deste
+escritório — os gratuitos mandam.
+
+**3 · Os modelos mortos saem do caminho.** Os quatro modelos do LLM7 que respondem
+400 «currently unavailable» ficam marcados `indisponivel` com a data e o motivo, e
+`MODELOS` deixa de os oferecer. Não desaparecem: `MODELOS_INDISPONIVEIS` explica em
+`/ia/estado` porque não são usados.
+
+**4 · Tecto próprio para quem é lento.** O OVH passa a ter 75 s (antes: os 45 s
+globais, que matavam metade das respostas a caminho) e o LLM7 25 s. O global
+continua a ser o último recurso.
+
+**5 · «Fora» sobrevive ao arranque a frio.** Em serverless, a memória do processo
+morre a cada invocação — a lista de «este modelo não existe» perdia-se e o mesmo erro
+era pago outra vez. Agora é gravada na config e relida no pedido seguinte.
+
+**6 · `GET /ia/gratuitos` (e `/api/ia/gratuitos` no servidor local).** Diz, sem
+revelar chaves, quantos modelos gratuitos estão activos, qual é o mais rápido, o que
+foi medido e a cadeia real de cada tipo de trabalho (`plano`, `codigo`, `texto`,
+`investigar`, `revisao`, `rapido`, `visao`). `visao` continua a não ser relaxada: um
+modelo sem olhos não lê uma imagem.
+
+**7 · A função deixa de morrer a meio.** `api/rpc.mjs` não declarava `maxDuration`
+e era cortada no tempo por omissão do plano. Um modelo que responde em 13–45 s — o
+caso do OVH — nunca chegaria ao fim. Passa a 60 s, como `prova1` e `setup`.
+
+**Testes:** 453/453, incluindo `ia-gratuitos.test.mjs` (10): a cadeia põe o medido à
+frente, o fallback salta o indisponível, a marca de «fora» sobrevive a um processo
+novo, o motor pede ao modelo certo sem chave e a rota não vaza chaves.
+
+**Limitação declarada:** a prova em rede (um pedido real ao LLM7/OVH a partir deste
+ambiente) não foi possível — o sandbox só alcança github/npm/pypi. A verificação
+real faz-se em produção com `POST /ia/chat`; até lá, o que está provado é o
+comportamento, não a resposta do fornecedor.
+
 ## 1.31.0 — 27 out 2026 · As salas passam a entregar: sites e digitalização
 
 Pedido do dono: *«já quero que as salas comecem a trabalhar e que sejam capazes de criar
