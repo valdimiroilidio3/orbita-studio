@@ -136,6 +136,35 @@ ok(/Barbearia do Largo/.test((w2.document.getElementById('main') || {}).textCont
   domB.window.close();
 }
 
+/* --- 1.17.0: com a base a responder (/api/rpc a devolver envelopes), a mesa diz que está na base --- */
+{
+  const corpos = {
+    '/auth/eu': { user: { id: 'base', name: 'Dono', role: 'owner', roleLabel: 'base de dados' }, modo: 'base', perms: { ver: true, escrever: true, aprovar: true, admin: true, write: true, approve: true } },
+    '/ops/summary': { leads: { total: 0, comContacto: 0 }, projetos: { total: 0 }, custos: { apiCentimos: 0 }, modo: 'base' },
+    '/ops/today': { decidir: [], presenca: { parado: false }, modo: 'base' },
+    '/ops/leads': { leads: [] },
+  };
+  const domC = new JSDOM(html, {
+    url: 'https://orbita-agentes.vercel.app/app', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(win) {
+      win.fetch = async (url, opt) => {
+        if (!String(url).startsWith('/api')) return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+        const pedido = JSON.parse((opt && opt.body) || '{}');
+        const corpo = corpos[pedido.caminho] ?? { ok: true };
+        return { ok: true, status: 200, json: async () => ({ status: 200, corpo }) };
+      };
+      Object.defineProperty(win, 'localStorage', { value: armazemFalso, configurable: true });
+      win.Element.prototype.scrollIntoView = () => {};
+    },
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const t = (domC.window.document.getElementById('main') || {}).textContent || '';
+  ok(/Base de dados ligada/i.test(t), 'com a base a responder, a mesa não diz que está na base');
+  ok(/anda contigo entre aparelhos/i.test(t), 'a barra da base não explica o que muda');
+  ok(/modo local/i.test(t) === false, 'fala de modo local quando a base está a responder');
+  domC.window.close();
+}
+
 /* --- o aviso tem de dizer onde os dados vivem, e ter a cópia à mão --- */
 const bar = w2.document.querySelector('.localbar');
 ok(!!bar, 'falta o aviso do modo local');

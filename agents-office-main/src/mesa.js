@@ -1091,7 +1091,8 @@ function avisoLocal() {
 function paint() {
   if (S.needLogin) { main().innerHTML = viewLogin(); return; }
   if (S.modoLocal) { main().innerHTML = avisoLocal(); }
-  const pintar = (html) => { main().innerHTML = (S.modoLocal ? avisoLocal() : '') + html; };
+  /* a barra de estado: verde quando a base responde, âmbar quando se trabalha neste browser */
+  const pintar = (html) => { main().innerHTML = ((S.modoLocal || S.baseLigada) ? avisoLocal() : '') + html; };
   // uma rota que o papel não permite não se mostra: volta a Hoje, sem drama
   if (S.route.name === 'contas' && !may('admin')) { S.route = { name: 'hoje', id: null }; }
   if (S.error && !S.summary) {
