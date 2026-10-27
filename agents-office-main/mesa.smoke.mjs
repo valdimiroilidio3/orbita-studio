@@ -131,7 +131,8 @@ ok(/Barbearia do Largo/.test((w2.document.getElementById('main') || {}).textCont
   const t = (domB.window.document.getElementById('main') || {}).textContent || '';
   ok(/modo local/i.test(t), 'com a base em baixo, a mesa não voltou ao modo local');
   ok(/não está a responder/i.test(t), 'a mesa não diz que a base não respondeu');
-  ok(/base de dados ligada/i.test(t) === false, 'diz «ligada» quando a base está em baixo');
+  // a frase do estado bom não pode aparecer (o motivo do 503 fala em «ligada», mas não é isto)
+  ok(/Base de dados ligada —/i.test(t) === false, 'diz «Base de dados ligada» quando a base está em baixo');
   domB.window.close();
 }
 

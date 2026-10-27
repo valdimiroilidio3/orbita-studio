@@ -92,14 +92,31 @@ function adminToken() {
   try { S.token = localStorage.getItem(TOKEN_KEY) || ''; } catch { S.token = ''; }
   return S.token;
 }
-async function call(path, method = 'GET', body) {
-  const opt = { method, headers: {} };
-  if (body !== undefined) { opt.headers['content-type'] = 'application/json'; opt.body = JSON.stringify(body); }
+/* O `/api` não é um encaminhador de caminhos na Vercel (a função só responde no
+   caminho exacto do ficheiro), por isso a mesa manda o caminho DENTRO do pedido
+   e abre o envelope `{ status, corpo }` aqui. Daqui para baixo nada muda: as
+   rotas, os erros e o modo local continuam a falar a mesma língua.
+   `GET /api/health` é a excepção: é um ficheiro próprio, plano. */
+async function pedirApi(path, method, body) {
+  const opt = { method: 'POST', headers: { 'content-type': 'application/json' } };
   const token = adminToken();
   if (token) opt.headers['x-orbita-admin'] = token;
+  opt.body = JSON.stringify({ caminho: path, metodo: method, corpo: body ?? null });
+  const r = await fetch(API + '/rpc', opt);
+  let j = {};
+  try { j = await r.json(); } catch { j = {}; }
+  if (!r.ok) {
+    // 503 sem base, 405, 500: a mesa trata igual — diz o motivo e cai no local
+    return { ok: false, status: r.status, json: async () => j };
+  }
+  const estado = Number(j.status) || 200;
+  return { ok: estado >= 200 && estado < 300, status: estado, json: async () => j.corpo || {} };
+}
+
+async function call(path, method = 'GET', body) {
   let r;
   try {
-    r = await fetch(API + path, opt);
+    r = await pedirApi(path, method, body);
   } catch {
     // sem rede nenhuma: o trabalho continua neste browser
     return usarLocal().call(path, method, body);
@@ -110,7 +127,7 @@ async function call(path, method = 'GET', body) {
   if (r.status === 404 || r.status === 405) return usarLocal().call(path, method, body);
   if (r.status === 503) {
     let motivo = '';
-    try { motivo = (await r.clone().json()).error || ''; } catch { /* sem corpo */ }
+    try { motivo = (await r.json()).error || ''; } catch { /* sem corpo */ }
     S.baseMotivo = motivo || 'a base de dados não respondeu';
     return usarLocal().call(path, method, body);
   }
@@ -1404,15 +1421,15 @@ async function act(name, el, ev) {
     if (name === 'importar-local') { $('#lbFile')?.click(); return; }
     if (name === 'para-a-base') {
       const copia = JSON.parse(usarLocal().exportar());
-      let r;
+      let j;
       try {
-        r = await fetch('/api/ops/importar', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ leads: copia.leads, projetos: copia.projetos, receitas: copia.receitas, tarefas: copia.tarefas }),
+        j = await call('/ops/importar', 'POST', {
+          leads: copia.leads, projetos: copia.projetos, receitas: copia.receitas,
         });
-      } catch { toast('Sem ligação à base. Nada saiu daqui.', true); return; }
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { toast(`A base recusou: ${j.error || 'HTTP ' + r.status}`, true); return; }
+      } catch (e) {
+        toast(`A base recusou: ${e.message}`, true);
+        return;
+      }
       toast(`Enviado: ${j.leadsNovos} leads novos (${j.leadsRepetidos} já estavam), ${j.projetos} projetos, ${j.receitas} entradas.`);
       S.modoLocal = false; S.baseLigada = true;
       await boot();

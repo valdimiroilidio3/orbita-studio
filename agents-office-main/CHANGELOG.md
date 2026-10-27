@@ -47,6 +47,26 @@ O resultado, em produção: `/api/health` → `{"ok":true,"faltam":[]}`, e um le
 mesmo cliente que o `/api` usa, relido e apagado (o `smoke` do bootstrap), sem deixar lixo
 na base. Depois disso o bootstrap foi removido do repositório e o token apagado da Vercel.
 
+### A rota que não existia (corrigido a 30 out, em produção)
+
+O primeiro `/api` foi escrito como catch-all (`api/[...rota].mjs`), a pensar em
+`/api/ops/summary`. Em produção provou-se o contrário: `/api/health` e `/api/ops`
+respondiam, `/api/ops/summary` dava **404 da Vercel** — na Vercel a função só é
+alcançada no caminho exacto do ficheiro; o catch-all apanha um segmento, não a árvore.
+
+Não se resolveu com reescritas que dependem de detalhes do construtor. A mesa passou a
+mandar o caminho **dentro do pedido**, e o envelope é aberto num sítio só (`src/mesa.js`):
+
+```
+POST /api/rpc  { "caminho": "/ops/leads", "metodo": "POST", "corpo": { … } }
+→ 200 { "status": <o do caminho>, "corpo": <a resposta do caminho> }
+```
+
+`api/_rotas.mjs` não mudou uma linha — o contrato é o mesmo, e os 171 testes continuam a
+prová-lo. `GET /api/rpc?caminho=/ops/summary` fica como porta de leitura para diagnóstico
+(nunca aceita escrita por GET); `GET /api/health` é um ficheiro próprio, plano, que responde
+no caminho exacto.
+
 ### Provas
 
 - **`api.test.mjs` (novo, 14 testes)**: contrato completo (leads com dedupe, projetos à mão e a
