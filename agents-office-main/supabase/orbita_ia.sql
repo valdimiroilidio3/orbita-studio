@@ -92,3 +92,47 @@ create index if not exists orbita_ai_uso_fornec_idx on public.orbita_ai_uso (for
 select count(*) as tabelas_ia
 from information_schema.tables
 where table_schema = 'public' and table_name like 'orbita_ai_%';
+
+
+-- ===========================================================================
+-- 1.19.0 · memória (plugins do Graft) e trabalhos de media (OpenMontage)
+-- Idempotente: pode correr outra vez sem estragar nada.
+-- ===========================================================================
+
+create table if not exists public.orbita_ai_memoria (
+  id uuid primary key default gen_random_uuid(),
+  projeto text not null default 'orbita',
+  titulo text not null,
+  texto text not null,
+  etiquetas text[] not null default '{}',
+  fonte text,
+  usos integer not null default 0,
+  ultimo_uso timestamptz,
+  criado timestamptz not null default now(),
+  actualizado timestamptz not null default now(),
+  constraint orbita_ai_memoria_titulo check (char_length(titulo) between 3 and 160),
+  constraint orbita_ai_memoria_texto check (char_length(texto) between 10 and 8000)
+);
+create index if not exists orbita_ai_memoria_projeto on public.orbita_ai_memoria (projeto, actualizado desc);
+
+create table if not exists public.orbita_media_jobs (
+  id uuid primary key default gen_random_uuid(),
+  pedido text not null,
+  tipo text not null default 'video',          -- video | imagem | audio | animacao | 3d
+  estado text not null default 'pedido',       -- pedido | enviado | a_correr | concluido | falhou | indisponivel
+  pipeline text,
+  fornecedor text,                              -- 'openmontage' quando o sidecar respondeu
+  url_resultado text,
+  resposta jsonb,
+  erro text,
+  criado timestamptz not null default now(),
+  actualizado timestamptz not null default now(),
+  constraint orbita_media_jobs_tipo check (tipo in ('video','imagem','audio','animacao','3d')),
+  constraint orbita_media_jobs_estado check (estado in ('pedido','enviado','a_correr','concluido','falhou','indisponivel'))
+);
+create index if not exists orbita_media_jobs_criado on public.orbita_media_jobs (criado desc);
+
+alter table public.orbita_ai_memoria enable row level security;
+alter table public.orbita_media_jobs enable row level security;
+revoke all on public.orbita_ai_memoria from anon, authenticated;
+revoke all on public.orbita_media_jobs from anon, authenticated;

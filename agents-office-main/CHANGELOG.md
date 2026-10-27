@@ -1,3 +1,97 @@
+## 1.19.0 — 27 out 2026 · freellmapi, memória do Graft e estúdio OpenMontage
+
+Três pedidos, três camadas novas — e a mesma regra: nada se apresenta como
+funcional sem um teste real, e nada é reconstruído sem necessidade.
+
+### 1 · Todos os fornecedores do `freellmapi`
+
+O repositório recebeu o `freellmapi-main.zip` (MIT, © Tashfeen Ahmed), com 49
+adaptadores de fornecedores e uma tabela de modelos com limites por minuto, por
+dia e contexto. Em vez de copiar o código dele, escrevi um extractor:
+
+- **`scripts/extrair-freellmapi.mjs`** lê o zip extraído e gera
+  **`api/_ia/catalogo-extra.json`**: **72 fornecedores** e **116 modelos** com
+  os números que ele declara (rpm/rpd/tpm/tpd, contexto, ranks de inteligência e
+  velocidade, orçamento mensal).
+- O catálogo da mesa passou de 11 fornecedores e 30 modelos para **76 e 146**.
+  Os 11 do núcleo mandam (não são substituídos); os do freellmapi entram com
+  `familia: 'freellmapi'` e dizem de onde vieram.
+- **Dois fornecedores não precisam de chave nenhuma**: **Kilo Gateway** e **OVH
+  AI Endpoints** (acesso anónimo, limite por IP). Entram no router como
+  «prontos», mas **continuam por testar** até um pedido real — é o `/ia/testar`
+  que decide, não o catálogo.
+- 21 adaptadores não são utilizáveis por este cliente (dialeto próprio — Cohere,
+  AI Horde, ACLIDE, Moondream, Sail, os seis de pesquisa — ou base que o código
+  dele não declara). Não desaparecem: aparecem na interface com a razão, num
+  `<details>`.
+
+### 2 · A memória dos plugins do Graft
+
+O `Graft-master.zip` (Apache-2.0, © AEndrix03) traz um plugin com seis skills:
+`graft-init`, `graft`, `recall`, `memoryze`, `learn`, `memory-audit`. Não compilei
+o CLI em C++: implementei o **comportamento** no servidor, com as mesmas ideias e
+a mesma honestidade.
+
+- **`api/_ia/memoria.mjs`** — `procurar` (pontuação lexical por título, texto e
+  etiquetas), `guardar` (recusa notas vazias, não duplica iguais), `aprender`
+  (plano primeiro, grava só com `confirmar`), `auditar` (duplicados, notas
+  curtas, sem fonte, paradas — **não apaga nada**), `estado`.
+- **Duas ferramentas novas** para os oito agentes: `memoria_procurar` e
+  `memoria_guardar`. O orquestrador **consulta a memória antes de planear** e
+  **escreve uma nota no fim** de cada execução concluída (memoryze), com a
+  decisão do Reviewer.
+- **`/ia/memoria`** (GET/POST), `/ia/memoria/procurar`, `/ia/memoria/aprender`,
+  `/ia/memoria/auditar`, `DELETE /ia/memoria/:id`.
+- A interface diz o que isto **não** é: procura por palavras, não embeddings;
+  sem grafo, sem daemon, sem o modelo de 600 MB.
+
+### 3 · Estúdio de media com o OpenMontage
+
+O **OpenMontage** (AGPL-3.0, © calesthio) faz vídeo, imagem, áudio, animação e
+3D com agentes — e precisa de Python, FFmpeg, Node e chaves pagas. Não cabe numa
+função da Vercel. Por isso a integração é uma **fila** e um **worker**:
+
+- **`supabase/orbita_ia.sql`** ganhou `orbita_media_jobs` (pedido, tipo, estado,
+  pipeline, resultado, erro) e `orbita_ai_memoria`, ambas com RLS fechado.
+- **`api/_ia/media.mjs`** — catálogo de 13 pipelines, validação do pedido,
+  fila, `assumir`/`concluir`/`falhar` com **token próprio do worker**
+  (`MEDIA_WORKER_TOKEN`) e `sinal` (heartbeat com versão, commit, demos e se há
+  FFmpeg).
+- **`scripts/estudio-worker.mjs`** — corre numa máquina com o OpenMontage
+  instalado: envia sinal, puxa um trabalho, corre `python render_demo.py <demo>`
+  (limite de 20 min) e devolve o ficheiro ou a **saída real** do comando.
+- **`scripts/instalar-openmontage.sh`** — clona o projecto oficial, cria a venv,
+  instala `requirements.txt`, verifica FFmpeg e mostra o diagnóstico.
+- **`docs/OPENMONTAGE.md`** — o desenho, o contrato, a licença e o que fica por
+  fazer.
+- Sem worker, o trabalho nasce **`indisponivel`** com a razão escrita. Nunca
+  «concluído».
+
+### Provas
+
+- `ia.test.mjs` **33/33** (com os fornecedores keyless e o teste de «nenhum
+  fornecedor ficou funcional sem teste»).
+- `estudio.test.mjs` **12/12**: procura lexical sem inventar achados, dedupe,
+  auditoria que não apaga, `aprender` com portão de confirmação, estúdio que
+  recusa pedidos vazios, fila conduzida pelo worker com token, heartbeat, e o
+  ciclo completo **execução → nota na memória** e **memória → plano**.
+- `localapi.test.mjs` **13/13** (memória e estúdio dizem que precisam do
+  servidor no modo local).
+- `node build.mjs` + `mesa.smoke` verdes.
+
+### Limitações (ditas, não escondidas)
+
+1. Os 72 fornecedores do freellmapi são **catálogo**, não promessa: sem chave
+   (ou sem ser keyless) não há pedido. Os limites vêm do código dele e mudam.
+2. **Kilo e OVH** dizem, na documentação dele, que os prompts podem ser usados
+   para treino — não servem para dados de clientes.
+3. A memória é lexical; não há embeddings nem grafo.
+4. O estúdio **não** faz render na nuvem: precisa de um worker com FFmpeg. Nesta
+   máquina de trabalho instalou-se o OpenMontage (venv + `requirements.txt`) e
+   `render_demo.py --list` devolveu três demos; **não há FFmpeg aqui**, por isso
+   nenhum `.mp4` foi produzido — e é isso que o worker reporta.
+5. O `/api` continua público (herdado de 1.17.0): falta login.
+
 ## 1.18.0 — 30 out 2026 · APIs multimodelo e orquestração de agentes
 
 O dono pediu uma infraestrutura de IA a sério: vários fornecedores, escolha de modelo por

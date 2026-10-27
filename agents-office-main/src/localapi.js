@@ -172,6 +172,8 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         pronto: false, modo: 'local',
         motivo: 'a IA corre no servidor: as chaves dos fornecedores vivem no ambiente da Vercel e nunca neste browser',
         fornecedores: [], agentes: [], ferramentas: [], indisponiveis: [],
+        memoria: { total: 0, usos: 0, etiquetas: [], recentes: [] },
+        estudio: { configurado: false, porque: 'o estúdio (OpenMontage) precisa do servidor e de um worker' },
         diagnostico: { fornecedoresActivos: [], pronto: false },
         versaoCatalogo: { fornecedores: 0, modelos: 0 },
         instalacao: 'modo local — sem motor de IA',
@@ -180,6 +182,14 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ia/uso') return { resumo: [], ultimos: [], errosRecentes: [], modo: 'local' };
     if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
     if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
+
+    /* --- 1.19.0 · memória e estúdio no modo local: dizem que precisam do servidor --- */
+    if (caminhoLimpo === '/media/trabalhos') return { trabalhos: [], modo: 'local' };
+    if (caminhoLimpo === '/media/estado') {
+      return { configurado: false, modo: 'local', pipelines: [], tipos: ['video', 'imagem', 'audio', 'animacao', '3d'],
+        porque: 'o estúdio vive no servidor: a fila fica na base e o worker corre numa máquina com OpenMontage' };
+    }
+    if (caminhoLimpo.startsWith('/media')) throw falha(404, 'o estúdio precisa do servidor (modo local não tem fila)');
 
     /* --- Hoje --- */
     if (caminhoLimpo === '/ops/summary') {
