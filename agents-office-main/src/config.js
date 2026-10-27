@@ -81,6 +81,7 @@ const SALAS = Object.keys(DEPTS).filter((k) => k !== 'brain');
 
 function stateOf(p) {
   if (p.verified) return { k: 'on', t: 'pronta' };
+  if (p.conector && p.via === 'conector') return { k: 'warn', t: 'ligada por conector' };
   if (p.configured) return { k: 'warn', t: p.note ? 'configurada' : 'com chave' };
   return { k: 'off', t: 'sem chave' };
 }
@@ -169,9 +170,11 @@ export function createConfig({
         <span class="cfg-chip k-${esc(p.kind)}">${esc(KIND_LABEL[p.kind] || p.kind || 'API')}</span>
         <b>${esc(p.name)}</b>
         <span class="cfg-st s-${st.k}"><i></i>${st.t}</span>
+        ${p.conector ? `<span class="cfg-chip" title="o assistente tem esta conta ligada por conector; a aplicação só a usa se houver chave no servidor">conector</span>` : ''}
         ${p.docs ? `<a class="cfg-doc" href="${esc(p.docs)}" target="_blank" rel="noopener" title="documentação de ${esc(p.name)}">docs ↗</a>` : ''}
       </div>
       ${p.note ? `<p class="cfg-note small">${esc(p.note)}</p>` : ''}
+      ${p.conector && p.via === 'conector' ? `<p class="cfg-note small">Ligada <b>por conector</b>: quem mexe é o assistente, não a aplicação. Para os agentes usarem esta integração em produção, ${esc((p.missing || []).join(' e '))} tem de ficar nas variáveis da Vercel.</p>` : ''}
       ${inputs}
       <div class="cfg-line">
         <button type="button" class="cfg-btn" data-act="save" ${p.missing.length === 0 && !p.configured ? 'disabled' : ''}>Guardar e testar</button>

@@ -1,3 +1,19 @@
+## 1.24.0 — 27 out 2026 · Ligações por conector, sem confundir com chaves
+
+- **Um conector não é uma chave.** O assistente pode ter o Vercel ligado por
+  conector (OAuth do lado da Arena) e isso **não** dá credencial à aplicação: a
+  app continua a precisar de `VERCEL_TOKEN` para falar com a API quando corre
+  sozinha. O Centro de Controlo passa a mostrar as duas coisas em separado:
+  selo «conector», estado «ligada por conector», `via` =
+  `conector` / `chave` / `conector+chave`, e a frase que falta para os agentes
+  usarem a integração em produção.
+- A lista vem de uma variável do servidor (`CONECTORES=vercel`), não de uma
+  suposição da interface: sem a variável, nada aparece como ligado.
+- Resumo do catálogo ganha `porConector`, ao lado de `configuradas` e
+  `verificadas`.
+- Provas: `controlo.test.mjs` passa de 25 para **26** (conector sem chave,
+  conector com chave, e o caso em que não há conector nenhum).
+
 ## 1.23.1 — 27 out 2026 · O router aprende com o que o fornecedor recusa
 
 - **Modelo indisponível deixa de ser tentado.** O LLM7 respondeu *«Model

@@ -294,13 +294,17 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
           note: f.nota || null,
         };
       });
+    const conectores = String(env.CONECTORES || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
     const servicos = SERVICOS.map((s) => {
       const tem = s.env.filter((v) => !!env[v]);
       const t = testes[s.id];
+      const porConector = conectores.includes(s.id);
       return {
         id: s.id, name: s.name, kind: s.kind, docs: s.docs,
         env: tem, missing: s.env.filter((v) => !env[v]),
-        configured: tem.length === s.env.length,
+        conector: porConector,
+        via: porConector && tem.length === s.env.length ? 'conector+chave' : porConector ? 'conector' : (tem.length ? 'chave' : null),
+        configured: tem.length === s.env.length || porConector,
         verified: !!t?.ok, status: t?.status ?? null, latencyMs: t?.ms ?? null,
         checkedAt: t?.quando || null, error: t?.ok ? null : (t?.erro || null),
         detalhe: t?.ok ? (t.detalhe || null) : null, note: null,
@@ -309,7 +313,12 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const list = [...servicos, ...ia];
     return { status: 200, corpo: {
       list,
-      summary: { total: list.length, configuradas: list.filter((x) => x.configured).length, verificadas: list.filter((x) => x.verified).length },
+      summary: {
+        total: list.length,
+        configuradas: list.filter((x) => x.configured).length,
+        verificadas: list.filter((x) => x.verified).length,
+        porConector: list.filter((x) => x.conector).length,
+      },
     } };
   }
 
