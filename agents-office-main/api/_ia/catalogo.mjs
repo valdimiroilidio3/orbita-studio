@@ -182,10 +182,12 @@ for (const f of extra.fornecedores) {
     tipo: f.tipo,                       // chat | pesquisa | media
     usavel: !!f.usavel,
     gratuito: true,
-    limites: f.keyless ? 'sem chave (anónimo) — limite por IP, declarado pelo freellmapi' : 'plano gratuito declarado pelo freellmapi',
-    nota: f.usavel
+    limites: f.limites || (f.keyless ? 'sem chave (anónimo) — limite por IP, declarado pelo freellmapi' : 'plano gratuito declarado pelo freellmapi'),
+    /* `nota` no JSON permite corrigir o freellmapi com o que foi medido aqui —
+       é o caso do Kilo, que já não responde a pedidos anónimos. */
+    nota: f.nota || (f.usavel
       ? `Veio do freellmapi (${f.ficheiro}).${f.keyless ? ' Não precisa de chave.' : ''}`
-      : `Veio do freellmapi mas não é utilizável aqui: ${f.porque}`,
+      : `Veio do freellmapi mas não é utilizável aqui: ${f.porque}`),
   };
 }
 

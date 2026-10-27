@@ -37,7 +37,9 @@ test('catálogo: comChave só vê variáveis com valor (mais os keyless), e a m�
      é isso que os torna utilizáveis já; os outros continuam a precisar dela. */
   const semNada = comChave({});
   assert.equal(semNada.every((x) => x.semChave), true, 'apareceu um fornecedor com chave sem haver chave');
-  assert.deepEqual(semNada.map((x) => x.id).sort(), ['kilo', 'ovh']);
+  /* 27 out 2026: o Kilo fechou o anónimo (medido em produção), por isso só o
+     OVH continua a estar «pronto» sem chave nenhuma. */
+  assert.deepEqual(semNada.map((x) => x.id).sort(), ['ovh']);
   assert.equal(comChave({ OPENROUTER_API_KEY: CHAVE }).some((x) => x.id === 'openrouter' && x.variavel === 'OPENROUTER_API_KEY'), true);
   const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' }).filter((x) => !x.semChave);
   assert.deepEqual(vistos, [{ id: 'groq', variavel: 'GROQ_API_KEY' }]);
@@ -159,7 +161,16 @@ test('router: preferido do agente vai à frente, e desligado fica de fora', () =
   assert.ok(semGoogle.every((m) => m.fornec !== 'google'));
   const diag = diagnostico({ chaves });
   assert.equal(diag.pronto, true);
-  assert.deepEqual(diagnostico({ chaves: {} }).pronto, false);
+  /* sem chave nenhuma o router ainda tem o OVH (anónimo); desligando os
+     keyless é que fica sem nada — antes ficava sem nada mesmo com eles vivos. */
+  assert.equal(diagnostico({ chaves: {} }).pronto, true);
+  assert.deepEqual(diagnostico({ chaves: {}, desligados: ['ovh'] }).pronto, false);
+});
+
+test('router: um fornecedor keyless entra na cadeia sem haver chave dele', () => {
+  const c = cadeia('texto', { chaves: {} });
+  assert.ok(c.some((m) => m.fornec === 'ovh'), 'o OVH não entrou na cadeia sem chave');
+  assert.ok(cadeia('texto', { chaves: {}, desligados: ['ovh'] }).every((m) => m.fornec !== 'ovh'), 'o desligado continuou a entrar');
 });
 
 test('fallback: o primeiro falha, o segundo responde, e o uso fica registado', async () => {
@@ -377,10 +388,10 @@ test('rota /ia/estado: só os keyless ficam prontos sem chave, e nunca devolve a
   const repo = createMemRepo();
   const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: {} });
   assert.equal(r.status, 200);
-  /* 1.19.0: Kilo e OVH funcionam sem chave → há motor, mas nada está «funcional»
-     até um teste real. O resto continua sem_chave. */
+  /* Só o OVH funciona sem chave (o Kilo passou a exigir conta — medido a
+     27 out 2026) → há motor, mas nada está «funcional» até um teste real. */
   const prontos = r.corpo.fornecedores.filter((f) => f.configurado).map((f) => f.id).sort();
-  assert.deepEqual(prontos, ['kilo', 'ovh']);
+  assert.deepEqual(prontos, ['ovh']);
   assert.equal(r.corpo.fornecedores.every((f) => f.estado !== 'funcional'), true, 'alguém ficou «funcional» sem teste');
   assert.ok(!JSON.stringify(r.corpo).includes(CHAVE));
 });
@@ -424,24 +435,24 @@ test('rota /ia/testar: falha real fica registada como erro (não como funciona)'
   assert.equal(estado.corpo.fornecedores.find((x) => x.id === 'openrouter').estado, 'erro');
 });
 
-test('motor.testar: um keyless (kilo) não é «falta chave» — testa anónimo, sem Bearer', async () => {
-  /* Encontrado em produção a 27 out 2026: /api/setup dizia «falta KILO_API_KEY»
+test('motor.testar: um keyless (ovh) não é «falta chave» — testa anónimo, sem Bearer', async () => {
+  /* Encontrado em produção a 27 out 2026: /api/setup dizia «falta OVH_API_KEY»
      para um fornecedor marcado como sem chave. A rota /ia/testar tem de o testar
      a sério (pedido anónimo), não recusar antes de tentar. */
   const repo = createMemRepo();
   const cabecalhos = [];
   const fetchImpl = async (url, opt = {}) => {
     cabecalhos.push(opt.headers || {});
-    if (String(url).endsWith('/models')) return json({ data: [{ id: 'kilo/auto' }] });
+    if (String(url).endsWith('/models')) return json({ data: [{ id: 'Qwen3-32B' }] });
     return json({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 2, completion_tokens: 1 } });
   };
   const motor = criarMotor({ repo, env: {}, fetchImpl });
-  const r = await motor.testar('kilo');
+  const r = await motor.testar('ovh');
   assert.equal(r.ok, true);
   assert.equal(cabecalhos.length, 2, 'não fez o teste real');
   assert.ok(cabecalhos.every((h) => !h.authorization), 'mandou um Bearer sem haver chave');
   const est = await motor.estado();
-  assert.equal(est.fornecedores.find((f) => f.id === 'kilo').estado, 'funcional');
+  assert.equal(est.fornecedores.find((f) => f.id === 'ovh').estado, 'funcional');
 });
 
 test('motor.testar: quem exige chave e não a tem continua a ser recusado', async () => {

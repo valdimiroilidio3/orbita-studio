@@ -435,13 +435,15 @@
    "base": "https://api.kilo.ai/api/gateway/v1",
    "dialeto": "openai",
    "tipo": "chat",
-   "keyless": true,
+   "keyless": false,
    "chave": [
     "KILO_API_KEY"
    ],
    "ficheiro": "providers/index.ts",
    "usavel": true,
-   "porque": null
+   "porque": null,
+   "limites": "com conta Kilo (chave); o acesso anónimo foi fechado",
+   "nota": "Veio do freellmapi (providers/index.ts), mas o pedido anónimo já é recusado: «You need to sign in to use this model» (medido em produção a 27 out 2026). Com KILO_API_KEY volta a funcionar; os prompts são registados para treino."
   },
   {
    "id": "kiosapi",
@@ -715,7 +717,9 @@
    ],
    "ficheiro": "providers/index.ts",
    "usavel": true,
-   "porque": null
+   "porque": null,
+   "limites": "sem chave (anónimo) ~2 pedidos/min por IP",
+   "nota": "Veio do freellmapi (providers/index.ts). Testado em produção a 27 out 2026 sem chave: 22 modelos, resposta em 821 ms."
   },
   {
    "id": "parallel",
