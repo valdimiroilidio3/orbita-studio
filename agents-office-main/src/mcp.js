@@ -40,6 +40,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
      caso não há `claude mcp list` nenhum para ler — a barra não pode mostrar Notion e Gmail como se
      estivessem ligados (o que a vista publicada fazia). Passa a dizer o que é. */
   const SEM_SERVIDOR = !!semServidor;
+  // o rótulo da barra: «LIGADO A» só se houver mesmo a que estar ligado
+  const ROTULO = SEM_SERVIDOR ? 'CONECTORES' : 'LIGADO A';
   const BY_DEPT = LIVE ? connectors.byDept : {};
   // Sem o servidor dos conectores (ou sem nenhum ligado) não há logotipos: a fila fica vazia e a
   // barra di-lo. Foi isto que rebentou a 26 out 2026 — `LOGOS[k].img` sobre um `{}` matava o
@@ -350,7 +352,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
           for (const [k, img] of Object.entries(topImgs)) img.style.display = BY_DEPT[f].includes(k) ? '' : 'none';
           topconn.classList.add('focus');
           topconn.querySelector('.tc-lab').innerHTML =
-            `<span class="dot" style="background:${DEPTS[f].chip}"></span>${DEPTS[f].short} · LIGADO A`;
+            `<span class="dot" style="background:${DEPTS[f].chip}"></span>${DEPTS[f].short} · ${ROTULO}`;
         }
       } else {
         topconn.style.opacity = wireA;
@@ -358,7 +360,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
         if (stripDept !== null) {
           for (const img of Object.values(topImgs)) img.style.display = '';
           topconn.classList.remove('focus');
-          topconn.querySelector('.tc-lab').innerHTML = `<span class="dot"></span>LIGADO A`;
+          topconn.querySelector('.tc-lab').innerHTML = `<span class="dot"></span>${ROTULO}`;
         }
       }
       stripDept = f;
