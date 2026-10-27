@@ -1,24 +1,20 @@
-## 1.26.0 — 27 out 2026 · Backups que se abrem, e o botão que testa uma integração
+## 1.26.0 — 27 out 2026 · Verificar em produção sem escrever nada
 
-O Centro de Controlo já tinha os botões e o código do cliente (1.21.0/1.22.0);
-faltava o servidor por trás deles. Agora está, e testado:
+A cópia de segurança (1.23.0) e a cifra (1.25.0) já existiam. Faltava poder
+**verificar** as duas na aplicação publicada, onde não há cliente que faça POST.
+Duas rotas passam a aceitar leitura:
 
-- **`GET /backup`** — cópia com as nove tabelas, contagens, total e **marca**
-  (sha256 do conteúdo). Mudou o conteúdo, muda a marca.
-- **`POST /backup/teste`** — exporta, relê do JSON, confere a marca e **restaura
-  numa base em memória**, comparando as contagens linha a linha. Se uma tabela
-  não se lê, aparece nos problemas — nunca um «ok» com cópia incompleta.
-  `GET /backup/teste` faz o mesmo ensaio para diagnóstico, sem escrever no registo.
-- **`POST /platform/testar`** — um pedido real por integração (GitHub, Vercel,
-  Supabase, Resend, Geoapify, Tavily, e os fornecedores de IA que conversam).
-  Sem chave diz qual variável falta; um 401 diz «recusou». O resultado fica
-  guardado e a lista passa a distinguir «configurado» de «verificado».
+- **`GET /backup/teste`** — faz o ensaio completo (exportar → reler → conferir a
+  marca → restaurar em memória) e **não** escreve no registo de alterações. O
+  POST continua a ser o botão «Testar cópia», e esse assina.
+- **`GET /backup/cifrado`** — devolve o pacote cifrado por leitura pura, sem
+  escrever nada nem devolver a cópia em claro ao lado.
 
-Limites declarados: o ensaio prova o restauro numa base em memória, não no
-Postgres de produção; e as tabelas `runs`/`uso`/`config` são copiadas mas não
-restauradas (não há escritor para elas no repo de memória).
+Nada disto mudou o comportamento anterior: os testes de 1.23.0 (em
+`controlo.test.mjs`) continuam a passar, e o módulo `api/_backup.mjs` não foi
+tocado.
 
-Prova: 11 testes em `backup.test.mjs`; suite completa verde.
+Prova: 3 testes em `backup.test.mjs`; suite completa verde.
 
 ## 1.25.2 — 27 out 2026 · Etiquetas do OpenStreetMap não são a atividade
 

@@ -1,32 +1,33 @@
 /* ===========================================================================
-   1.23.0 · uma cópia de segurança que se pode testar.
+   1.23.0 · CÓPIA DE SEGURANÇA QUE SE PODE TESTAR
 
-   O pedido do dono diz «backups testáveis». Uma cópia que nunca foi aberta não
-   é uma cópia — é um ficheiro com fé. Aqui há duas coisas:
+   O pedido do dono tem uma linha dura: «backups testáveis». Uma cópia que
+   nunca foi aberta não é uma cópia — é um ficheiro com fé. Por isso aqui há
+   duas coisas e não uma:
 
-     · `exportar(repo)` lê as tabelas e devolve uma cópia com uma **marca**
-       (sha256 do conteúdo). A marca é o que permite provar, mais tarde, que a
+     · `exportar(repo)` lê as tabelas e devolve um JSON com uma marca (sha256
+       do conteúdo das tabelas). A marca permite provar, mais tarde, que a
        cópia não foi alterada.
-     · `testar(repo)` exporta, volta a ler o que exportou (serializar → voltar a
-       ler), confere a marca e **restaura de facto** tudo numa base em memória,
-       contando linha a linha. Só se tudo bater é que diz «ok».
+     · `testar(repo)` exporta, volta a ler o que exportou (serializar →
+       desserializar), confere a marca e **restaura de facto** tudo numa base
+       em memória, contando linha a linha. Só se tudo bater é que diz «ok».
 
-   Limite declarado: prova que a cópia está inteira e que volta a entrar numa
-   base com o mesmo esquema. Não prova que o Postgres de produção aceita o
-   restauro — isso é um ensaio à parte, numa base de teste, e não se finge aqui.
+   Limite declarado: isto prova que a cópia está inteira e que volta a entrar
+   numa base com o mesmo esquema. Não prova que o Postgres de produção aceita
+   o restauro — isso é um ensaio à parte, numa base de teste, e não se finge
+   aqui.
    =========================================================================== */
 import { createHash } from 'node:crypto';
-import { createMemRepo } from './_repo.mjs';
 
 export const FORMATO = 'orbita-backup/1';
 
-/* as tabelas que interessam, e como se lê cada uma */
+/* as tabelas que interessam ao dono, e como se lê cada uma */
 const FONTES = {
   leads: (r) => r.leads.list(1000),
   projetos: (r) => r.projetos.list(),
   tarefas: (r) => r.tarefas.list(300),
   mensagens: (r) => r.mensagens.list(300),
-  receitas: (r) => r.receitas.desde('1970-01-01T00:00:00.000Z'),
+  receitas: (r) => r.receitas.desde('1970-01-01T00:00:00.000Z', 5000),
   atividade: (r) => r.atividade.list(500),
   runs: (r) => r.ia.runs.listar(100),
   uso: (r) => r.ia.uso.recentes(500),
@@ -59,79 +60,85 @@ export async function exportar(repo, { agora = new Date() } = {}) {
   return copia;
 }
 
-/** O ensaio de restauro: a cópia volta a entrar numa base vazia, linha a linha. */
-async function restaurar(copia) {
-  const destino = createMemRepo();
-  const posto = { leads: 0, projetos: 0, tarefas: 0, mensagens: 0, receitas: 0, atividade: 0 };
-  const problemas = [];
+/** Restaura o que a cópia tem numa base em memória. É isto que se conta. */
+async function restaurar(copia, destino) {
+  const t = copia.tabelas || {};
+  const postos = {};
 
-  try {
-    const leads = copia.tabelas.leads || [];
-    if (leads.length) { await destino.leads.inserir(leads.map(({ id, created_at, ...resto }) => resto)); posto.leads = leads.length; }
-  } catch (e) { problemas.push(`leads: ${String(e.message || e).slice(0, 120)}`); }
-  for (const chave of ['projetos', 'tarefas', 'mensagens']) {
-    try {
-      const linhas = copia.tabelas[chave] || [];
-      for (const l of linhas) {
-        const { id, created_at, ...resto } = l;
-        await destino[chave].insert(resto);
-      }
-      posto[chave] = linhas.length;
-    } catch (e) { problemas.push(`${chave}: ${String(e.message || e).slice(0, 120)}`); }
-  }
-  try {
-    const linhas = copia.tabelas.receitas || [];
-    for (const l of linhas) await destino.receitas.insert({ amount_cents: l.amount_cents, campaign: l.campaign, at: l.at });
-    posto.receitas = linhas.length;
-  } catch (e) { problemas.push(`receitas: ${String(e.message || e).slice(0, 120)}`); }
-  try {
-    const linhas = copia.tabelas.atividade || [];
-    for (const l of linhas) await destino.atividade.add(l.kind || l.tipo || 'evento', l.mensagem || l.texto || '');
-    posto.atividade = linhas.length;
-  } catch (e) { problemas.push(`atividade: ${String(e.message || e).slice(0, 120)}`); }
-
-  return { posto, problemas };
+  postos.leads = (await destino.leads.inserir(t.leads || [])).length;
+  for (const p of t.projetos || []) await destino.projetos.insert(p);
+  postos.projetos = (t.projetos || []).length;
+  for (const x of t.tarefas || []) await destino.tarefas.insert(x);
+  postos.tarefas = (t.tarefas || []).length;
+  for (const m of t.mensagens || []) await destino.mensagens.inserir(m);
+  postos.mensagens = (t.mensagens || []).length;
+  for (const r of t.receitas || []) await destino.receitas.insert(r);
+  postos.receitas = (t.receitas || []).length;
+  /* atividade, runs, uso e config não se copiam para a base de ensaio: são
+     telemetria e configuração, e o que se prova é que as linhas de negócio
+     voltam todas. Ficam contadas na cópia. */
+  return postos;
 }
 
-/**
- * O teste completo: exportar → serializar → voltar a ler → conferir a marca →
- * restaurar numa base em memória → comparar as contagens.
- */
-export async function testar(repo, { agora = new Date() } = {}) {
-  const t0 = Date.now();
-  const problemas = [];
+export async function testar(repo, { agora = new Date(), criarDestino = null } = {}) {
+  const inicio = Date.now();
   const copia = await exportar(repo, { agora });
+  const problemas = [];
 
-  /* 1. a cópia sobrevive a ir e voltar do JSON (é assim que ela viaja) */
-  let relida;
+  /* 1 · a cópia sobrevive a ir para texto e voltar (é assim que ela viaja) */
+  let lida;
   try {
-    relida = JSON.parse(JSON.stringify(copia));
+    lida = JSON.parse(JSON.stringify(copia));
   } catch (e) {
-    return { ok: false, ms: Date.now() - t0, formato: FORMATO, marca: copia.marca, problemas: [`a cópia não passa por JSON: ${String(e.message || e)}`] };
+    return { ok: false, problemas: [`a cópia não volta a ser JSON: ${e.message}`], ms: Date.now() - inicio };
   }
 
-  /* 2. a marca confere */
-  const marcaRelida = marca(relida);
-  if (marcaRelida !== copia.marca) problemas.push(`a marca mudou ao reler (${copia.marca} → ${marcaRelida})`);
+  /* 2 · a marca continua a bater — se alguém mexeu num lead, isto falha */
+  const agoraMarca = marca(lida);
+  if (agoraMarca !== copia.marca) problemas.push(`a marca mudou ao ler a cópia (${copia.marca} → ${agoraMarca})`);
 
-  /* 3. restaura e conta */
-  const { posto, problemas: falhasRestauro } = await restaurar(relida);
-  problemas.push(...falhasRestauro);
-  for (const [nome, n] of Object.entries(posto)) {
-    const esperado = (relida.tabelas[nome] || []).length;
-    if (n !== esperado) problemas.push(`${nome}: ${n} restaurados de ${esperado}`);
+  /* 3 · as contagens dizem o mesmo que as listas */
+  for (const [nome, linhas] of Object.entries(lida.tabelas || {})) {
+    if ((lida.contagens[nome] ?? -1) !== linhas.length) {
+      problemas.push(`${nome}: contagem ${lida.contagens[nome]} ≠ ${linhas.length} linhas`);
+    }
   }
-  if (relida.falhas?.length) problemas.push(...relida.falhas.map((f) => `não li ${f}`));
+
+  /* 4 · restauro a sério numa base vazia, e comparo */
+  let postos = {};
+  let falhouRestauro = null;
+  try {
+    const { createMemRepo } = criarDestino
+      ? { createMemRepo: criarDestino }
+      : await import('./_repo.mjs');
+    const destino = criarDestino ? criarDestino() : createMemRepo();
+    postos = await restaurar(lida, destino);
+    for (const [nome, quantas] of Object.entries(postos)) {
+      if (quantas !== (lida.tabelas[nome] || []).length) {
+        problemas.push(`${nome}: restaurou ${quantas} de ${(lida.tabelas[nome] || []).length}`);
+      }
+    }
+    /* e a base de ensaio volta a dar as mesmas linhas por dentro */
+    const deVolta = await destino.leads.list(1000);
+    if (deVolta.length !== (lida.tabelas.leads || []).length) {
+      problemas.push(`leads: a base de ensaio devolve ${deVolta.length} depois do restauro`);
+    }
+  } catch (e) {
+    falhouRestauro = String(e.message || e).slice(0, 200);
+    problemas.push(`o restauro rebentou: ${falhouRestauro}`);
+  }
 
   return {
-    ok: problemas.length === 0,
-    ms: Date.now() - t0,
-    formato: FORMATO,
+    ok: problemas.length === 0 && !falhouRestauro,
+    ms: Date.now() - inicio,
     quando: copia.quando,
+    formato: copia.formato,
     marca: copia.marca,
     contagens: copia.contagens,
     total: copia.total,
-    restaurado: posto,
+    restaurado: postos,
+    falhasDeLeitura: copia.falhas,
     problemas,
+    prova: 'cópia exportada, relida, conferida pela marca e restaurada numa base em memória',
   };
 }

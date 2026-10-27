@@ -432,7 +432,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   }
 
   /* ---- 1.25.0 · a cópia que sai do servidor pode sair cifrada ---- */
-  if (caminhoLimpo === '/backup/cifrado' && m === 'POST') {
+  if (caminhoLimpo === '/backup/cifrado' && (m === 'POST' || m === 'GET')) {
     const { exportar } = await import('./_backup.mjs');
     const c = await import('./_cripto.mjs');
     const k = c.chaveMestre(env);
