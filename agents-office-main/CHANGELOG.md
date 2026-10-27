@@ -1,3 +1,49 @@
+## 1.14.0 — 29 out 2026 · Lançamento: a marca, o sítio e a honestidade de estar sem servidor
+
+Pedido: *«faça as melhorias gerais finais, analisa coisa por coisa, passo por passo e depois faça o
+lançamento — um deploy para Vercel já oficial»*.
+
+### O que faltava para isto ser um lançamento
+
+- **A página não tinha cara.** Abria como um ficheiro; partilhada, aparecia sem ícone e sem cartão.
+  Agora tem **ícone** (`icon.svg` + `apple-touch-icon`), **manifesto** (guarda-se no ecrã inicial),
+  **description**, **Open Graph** e **Twitter card**, e uma **imagem de partilha 1200×630**.
+- **A marca desenha-se, não se escreve à mão.** `tools/brand.mjs` (novo) gera os quatro ficheiros a
+  partir da paleta das seis salas (`src/data.js`): o ícone é o circuito — seis pastilhas, uma por
+  sala, em volta do Cérebro — e a imagem de partilha é a **planta real** do escritório (salas, pontes,
+  Cérebro) com o nome por cima, desenhado numa fonte 5×7 feita à mão. Zero dependências: PNG escrito
+  com `node:zlib`.
+- **O `dist/` passou a ser um sítio.** `index.html` na raiz, a mesa em `/app` (e `/app.html`),
+  `icon.svg`, `og.png`, `manifest.webmanifest`, `robots.txt` e uma `404.html` que diz a verdade em vez
+  de um erro de servidor. `vercel.json` com `cleanUrls`, cabeçalhos de segurança e cache.
+
+### O que estava errado e agora está dito
+
+- **Sem servidor, o escritório mentia por omissão.** Na vista publicada (estática) a barra mostrava
+  **«LIGADO A Notion · Gmail»** e **«CORRE SEM INTERFACE EM Claude»** — herança do cartão de
+  demonstração. Não havia servidor nenhum a responder. Agora a barra diz **«sem servidor — os
+  conectores vêm do `claude mcp list` desta máquina»**, e o motor diz o mesmo. Continua a não haver
+  tarefa inventada: a barra de tarefas responde com o que falta, e o canto passou a dizer
+  **«SÓ VISUALIZAÇÃO»** (antes ficava em silêncio e parecia avariado).
+- **Duas frases para o mesmo silêncio.** O aviso do compositor distinguia mal «não há servidor» de
+  «há servidor e não há motor de IA»; agora distingue — e um `404` em `/api/health` conta como
+  «não há API aqui», que é o que é.
+- **Os nomes das salas estavam escritos em três sítios** (`forge.js`, `live.js`, `data.js`) e dois
+  deles já divergiam (`ENTREGA`/`ENGENHARIA`, `DESIGN`/`DESIGN LAB`). Passam a ler `DEPTS[k].short`.
+
+### Acessibilidade
+
+- **`prefers-reduced-motion` chegou à cena 3D.** O CSS já respeitava a preferência; a luz dos vidros e
+  o tapete das passadeiras continuavam a correr. Passam a andar a **um terço** da velocidade — a luz
+  continua viva (é a vida das salas), mas deixa de puxar pelo olho. Fica exposto em `CC.motion`.
+
+### Provas
+
+- `node tools/brand.mjs` → 4 ficheiros; `node build.mjs` → 14 ficheiros em `dist/`.
+- **130/130** testes (`node --test …`) e **cena verde** (`node scene.smoke.mjs`), sem regressões.
+- **Publicado e aberto**: https://orbita-agentes.vercel.app — ver `docs/LANCAMENTO.md` para o que está
+  publicado, o que é estático e o que é preciso para ter dados a sério.
+
 ## 1.13.2 — 28 out 2026 · As portas passaram a abrir para o Cérebro (e a ponte sai delas)
 
 Pedido: *«melhore os lugares das portas e analisa bem e muda isso com dev apple design 3D»*.

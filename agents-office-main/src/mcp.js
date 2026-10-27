@@ -34,8 +34,12 @@ const DOCKS = {
 
 function smooth(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 
-export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null }) {
+export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, semServidor = false }) {
   const LIVE = !!(connectors && connectors.live);
+  /* 29 out 2026 (lançamento): SEM SERVIDOR não é o mesmo que «servidor sem conectores». No primeiro
+     caso não há `claude mcp list` nenhum para ler — a barra não pode mostrar Notion e Gmail como se
+     estivessem ligados (o que a vista publicada fazia). Passa a dizer o que é. */
+  const SEM_SERVIDOR = !!semServidor;
   const BY_DEPT = LIVE ? connectors.byDept : {};
   // Sem o servidor dos conectores (ou sem nenhum ligado) não há logotipos: a fila fica vazia e a
   // barra di-lo. Foi isto que rebentou a 26 out 2026 — `LOGOS[k].img` sobre um `{}` matava o
@@ -133,8 +137,8 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   // at overview all connector traffic originates from the top bar instead.
   // SHARED connectors (gmail: five depts; notion: every dept, V3.1) sit at the far RIGHT end
   // of the strip and each runs its OWN loom (below) instead of joining any dept's cluster/fan
-  const SHARED = LIVE ? connectors.shared : { notion: '#151414', gmail: '#EA4335' };
-  const uniqKeys = [...new Set(Object.values(BY_DEPT).flat())].filter(k => !SHARED[k]);
+  const SHARED = SEM_SERVIDOR ? {} : (LIVE ? connectors.shared : { notion: '#151414', gmail: '#EA4335' });
+  const uniqKeys = SEM_SERVIDOR ? [] : [...new Set(Object.values(BY_DEPT).flat())].filter(k => !SHARED[k]);
   for (const k of ((LIVE && connectors.off) || [])) if (!uniqKeys.includes(k)) uniqKeys.push(k); // present but unusable: shown grey, never wired
   for (const k of Object.keys(SHARED)) uniqKeys.push(k);
   const topconn = document.getElementById('topconn');
@@ -156,7 +160,12 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
       topconn.appendChild(img);
       topImgs[k] = img;
     });
-    if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
+    if (SEM_SERVIDOR) {
+      const none = document.createElement('span');
+      none.className = 'tc-none';
+      none.textContent = 'sem servidor — os conectores vêm do `claude mcp list` desta máquina';
+      topconn.appendChild(none);
+    } else if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
       const none = document.createElement('span');
       none.className = 'tc-none';
       none.textContent = 'nada ainda — liga em claude.ai ou corre: claude mcp add';
@@ -259,8 +268,10 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null })
   const topmodels = document.getElementById('topmodels');
   const modelImgs = {};
   if (topmodels) {
-    topmodels.innerHTML = `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
-    Object.keys(MODELS).forEach((k, i) => {
+    topmodels.innerHTML = SEM_SERVIDOR
+      ? `<span class="tc-lab"><span class="dot"></span>MOTOR</span><span class="tc-none">sem servidor — o motor vive na tua máquina</span>`
+      : `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
+    if (!SEM_SERVIDOR) Object.keys(MODELS).forEach((k, i) => {
       const L = LOGOS[k];
       if (!L || !L.img) return; // sem azulejo para este motor: não se desenha um buraco
       const img = document.createElement('img');

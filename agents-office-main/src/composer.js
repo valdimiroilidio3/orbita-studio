@@ -191,6 +191,8 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   async function refreshHealth() {
     try {
       const r = await fetch('/api/health', { headers: { accept: 'application/json' } });
+      // 404 num sítio estático significa «não há API aqui», e não «a API está avariada»
+      if (r.status === 404) { setHealth(null, 'sem-servidor'); return; }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       setHealth(await r.json());
     } catch (e) {

@@ -6,6 +6,10 @@ Um escritório isométrico 3D onde agentes de IA fazem trabalho real no teu pró
 
 **Criado por Chelton Mahoze.**
 
+> **Publicado:** <https://orbita-agentes.vercel.app> — o escritório a cores, aberto no browser. Sem
+> servidor não há tarefas nem conectores, e a página di-lo em vez de os inventar: o trabalho real vive
+> na tua máquina (`npm start`). Ver [docs/LANCAMENTO.md](docs/LANCAMENTO.md).
+
 Seis salas, trinta e cinco agentes nas secretárias, uma barra de tarefas que encaminha o
 que escreves para a pessoa certa, e um Cérebro no centro que é a tua própria pasta de notas.
 Escreves uma tarefa, o escritório entrega-a a quem deve, essa pessoa lê as tuas notas, usa os

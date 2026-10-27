@@ -29,7 +29,10 @@ const PHASE_COLOR = {
   done: 't-done', run: 't-run', ok: 't-ok', sense: 't-sense', adopt: 't-adopt', deny: 't-fail',
   'tool-log': 't-muted', info: 't-muted', error: 't-fail',
 };
-const ROOM_LABEL = { marketing: 'MEDIA', emails: 'COMANDO', sales: 'PROSPECÇÃO', fin: 'DESIGN', ops: 'VENDAS', delivery: 'ENTREGA' };
+import { DEPTS } from './data.js';
+/* 29 out 2026: os nomes das salas vêm de `data.js` e de mais nenhum sítio. Este mapa tinha-os
+   escritos à mão — e já divergia em duas salas (ENTREGA/DESIGN em vez de ENGENHARIA/DESIGN LAB). */
+const ROOM_LABEL = Object.fromEntries(Object.entries(DEPTS).map(([k, d]) => [k, d.short]));
 
 const hhmmss = (ts) => {
   const d = new Date(ts || Date.now());

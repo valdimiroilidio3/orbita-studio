@@ -8,6 +8,9 @@ Uma aplicação, três camadas dentro da mesma pasta:
 | **`agents-office-main/integrations.mjs` + `docs/INTEGRATIONS.md`** | a ponte autenticada para fora: leads OSM, Gemini, Supabase, Resend, GitHub, Instagram, Vercel, fila de conteúdo, WhatsApp por link |
 | **`agents-office-main/mcp-servers/`** | dois servidores MCP locais: `orbita-integrations` (as integrações como ferramentas dos 35 agentes) e `view-image-mcp` (dá olhos aos agentes: qualquer URL pública) |
 
+**Publicado:** <https://orbita-agentes.vercel.app> (vista estática do escritório — sem servidor, sem
+tarefas inventadas; ver `agents-office-main/docs/LANCAMENTO.md`).
+
 Arranque, do zero:
 
 ```bash

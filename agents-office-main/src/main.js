@@ -508,7 +508,7 @@ const mcp = {
 };
 let mcpUsage = null;
 loadConnectors()
-  .then(c => { mcpImpl = initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors: c }); if (mcpDark) mcpImpl.setDark(true); if (mcpUsage) mcpImpl.setUsage(mcpUsage); })
+  .then(c => { mcpImpl = initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors: c, semServidor: !c }); if (mcpDark) mcpImpl.setDark(true); if (mcpUsage) mcpImpl.setUsage(mcpUsage); })
   // 26 out 2026: uma falha nos conectores nunca pode derrubar a cena — fica sem a barra e diz porquê
   .catch(e => console.warn('conectores indisponíveis: ' + e.message));
 
