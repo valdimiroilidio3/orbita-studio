@@ -1004,8 +1004,16 @@ function paint() {
   // uma rota que o papel não permite não se mostra: volta a Hoje, sem drama
   if (S.route.name === 'contas' && !may('admin')) { S.route = { name: 'hoje', id: null }; }
   if (S.error && !S.summary) {
-    main().innerHTML = `<div class="wrap"><div class="card empty"><h3>Não consegui falar com o Órbita</h3><p>${esc(S.error)}</p>
-      <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
+    /* 29 out 2026: a mesa também se publica (é /app no site). Um 404 não é uma avaria: é a
+       diferença entre «servidor estragado» e «não há servidor aqui». Diz-se qual é. */
+    const semServidor = /HTTP 404/.test(S.error);
+    main().innerHTML = semServidor
+      ? `<div class="wrap"><div class="card empty"><h3>A mesa precisa do Órbita a correr na tua máquina</h3>
+          <p>Esta é a vista publicada e é só o escritório: os leads, as aprovações e a fila vivem na base de dados local.
+          Arranca com <code>npm start</code> e abre a mesa em <code>localhost:4520/app</code> — aí tudo o que vês é trabalho registado.</p>
+          <div class="acts" style="justify-content:center"><a class="btn primary" href="/" style="max-width:220px">Voltar ao escritório</a></div></div></div>`
+      : `<div class="wrap"><div class="card empty"><h3>Não consegui falar com o Órbita</h3><p>${esc(S.error)}</p>
+          <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
     return;
   }
   main().innerHTML = S.route.name === 'hoje' ? viewHoje()
