@@ -1,3 +1,56 @@
+## 1.30.0 — 27 out 2026 · A pesquisa chega aos agentes, com travão e recibo
+
+A auditoria de 1.29.0 encontrou sete defeitos. Este trabalho fecha os quatro que o dono
+mandou tratar por ordem. O mais grave era uma regressão: **os agentes não tinham
+pesquisa web nenhuma** — a Tavily era principal no papel e ausente no servidor MCP.
+
+**1 · Pesquisa web para os agentes.** `orbita_web_search` entra no servidor MCP
+(`mcp-servers/orbita-integrations`): consulta, limite, `topic: news` com `days`,
+domínios, profundidade e um limiar de relevância próprio. Devolve título, URL, excerto,
+data de publicação e `score` de cada fonte, mais as fontes em lista e os avisos. E
+`orbita_business_search` põe as empresas do Geoapify nas mãos dos agentes — normalizadas,
+sem duplicados e **sem inventar telefone, email ou site**: campo vazio quer dizer
+desconhecido. `orbita_business_discover` continua a existir (ninguém parte por causa
+disto) e passa a usar o Geoapify quando há chave; sem ela, volta ao OSM de antes.
+
+**2 · Limiar de relevância e aviso de zona.** A Tavily devolvia seis resultados sobre o
+ETF QQQ para «zxqv inexistente qqq», com pontuações 0,06–0,13. Agora há um limiar
+(0,15 por omissão, `ORBITA_RELEVANCIA_MIN` ou `minRelevancia` na chamada): o que fica
+abaixo é contado em `descartados` e, se não sobrar nada, a resposta é `vazio` — «não há
+nada de relevante», não uma lista de ruído com URL. No Geoapify, `zonaDiverge` compara a
+zona pedida com o centro resolvido e avisa («pediste Lisboa e a zona resolvida é
+Alcorcón»); avisa também quando o país pedido não é o resolvido. **Avisa, não bloqueia** —
+o geocode tolerante continua a resolver, mas agora di-lo.
+
+**3 · Cache, tectos e `/pesquisa/uso`.** Uma camada nova, `api/_limites.mjs`:
+cache de 5 minutos (250 entradas), janela deslizante de um minuto, quota diária e mensal
+por fornecedor, e contagem de créditos. Os números reais em `PLANOS` — Tavily 1000/mês
+grátis, 60/dia e 20/minuto por defeito, $0,008 por crédito; Geoapify 3000/dia, 60/minuto.
+`GET /pesquisa/uso` mostra gasto, tecto, restante, cache e últimas execuções;
+`GET /pesquisa/ferramentas` mostra o catálogo. Nada disto devolve chaves.
+
+**4 · Registo por execução.** `api/_ferramentas.mjs` guarda, para cada chamada,
+ferramenta, fornecedor, estado, tempo, cache, fontes e erro. Com base ligada vai para
+`orbita_atividade` (`tipo: 'pesquisa'`); sem base, para `data/pesquisa-log.json`. O
+envelope distingue `real` (veio de um fornecedor, com URL) de `inferido` (o que o modelo
+deduz), e os testes garantem que nenhuma chave entra no registo.
+
+**O que mudou no comportamento.** As rotas `/pesquisa/{leads,web,pagina}` mantêm os
+campos que a interface já conhecia e ganham `ferramenta`, `ms`, `cache`, `codigo` e
+`avisos`; a tradução para HTTP passou a ser explícita — 400 para parâmetros, 429 para
+tecto/quota, 502 para avarias da fonte. A gaveta de leads diz no título do selo da fonte
+quanto já se gastou hoje e no mês. O servidor local (`serve.mjs`) deixou de ser a única
+porta sem travão: `/api/pesquisa/procurar` passou a usar a mesma camada, e ganhou
+`/api/pesquisa/uso` e `/api/pesquisa/ferramentas`.
+
+**Limitações que ficam ditas.** Os contadores são por instância da função (na Vercel,
+cada arranque a frio recomeça): são travão, não factura. O `pais` continua a filtrar só o
+geocode, não os lugares. O servidor local não serve `/api/rpc` — a gaveta que o usa
+funciona contra a base, não contra o `serve.mjs`.
+
+**Testes:** `node --test` → **423/423** (403 antes; 20 novos em
+`pesquisa-ferramentas.test.mjs`), incluindo dois que arrancam o MCP a sério por stdio.
+
 ## 1.29.0 — 27 out 2026 · A pesquisa é Tavily; o Google saiu de vez
 
 Pedido do dono: «muda de Google para uma API de pesquisas grátis, usa a Tavily, que

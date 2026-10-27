@@ -80,10 +80,11 @@ publicar, pagar, apagar ou alterar só quando tu pedires.
 ### As integrações do próprio Órbita
 
 Além do que estiver ligado no teu Claude Code, o escritório traz o seu próprio servidor MCP —
-`orbita_integrations`, em `mcp-servers/orbita-integrations/` — com 15 ferramentas: pesquisa de
-empresas no OpenStreetMap, CRM de leads, rascunhos com Gemini, email aprovado pelo Resend,
-metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo, publicação no
-Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
+`orbita_integrations`, em `mcp-servers/orbita-integrations/` — com **18 ferramentas**: pesquisa
+de empresas (Geoapify, sem duplicados), **pesquisa web em tempo real (Tavily, com fontes e datas)**,
+leitura de páginas, consumo da pesquisa, CRM de leads, rascunhos com Gemini, email aprovado pelo
+Resend, metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo,
+publicação no Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
 e entregue aos agentes por `--mcp-config`; o estado real está em `GET /api/mcp`.
 
 O servidor `orbita_google` saiu em 1.29.0, com o Google: a pesquisa do escritório é
