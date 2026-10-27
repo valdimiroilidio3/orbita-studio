@@ -5,10 +5,15 @@ import fs from 'node:fs';
 export const config = { maxDuration: 60 };
 
 async function ligar() {
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-  if (!url) throw new Error('falta DATABASE_URL/POSTGRES_URL');
+  const bruto = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!bruto) throw new Error('falta DATABASE_URL/POSTGRES_URL');
+  /* A URL da Vercel traz `sslmode=…`, que manda sobre o objecto `ssl` e exige
+     verificação da cadeia — foi isso que deu «self-signed certificate in
+     certificate chain». Tiram-se os parâmetros de SSL e decide-se aqui. */
+  const u = new URL(bruto);
+  for (const k of ['sslmode', 'ssl', 'sslrootcert', 'sslcert', 'sslkey']) u.searchParams.delete(k);
   const { default: pg } = await import('pg');
-  const cliente = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  const cliente = new pg.Client({ connectionString: u.toString(), ssl: { rejectUnauthorized: false } });
   await cliente.connect();
   return cliente;
 }
