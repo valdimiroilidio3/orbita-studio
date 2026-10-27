@@ -1778,7 +1778,8 @@
     opacity: 0; pointer-events: none; transition: opacity .4s var(--ease);
   }
   #brainOv.on { opacity: 1; pointer-events: auto; }
-  #bvCv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  /* 1.15.2: o dedo move o grafo, não a página — em qualquer ecrã com toque */
+  #bvCv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   .bv-top { position: absolute; left: 22px; top: 18px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 62vw; }
   #bvSearch {
     width: 300px; background: #181B24; border: 1px solid rgba(253,255,248,.14); border-radius: 99px; outline: none;
@@ -1796,7 +1797,8 @@
   .bv-chip.on i { opacity: 1; }
   .bv-chip.live { border-color: rgba(30,144,112,.5); color: #7FD3B4; }
   .bv-chip.live.on { background: rgba(30,144,112,.18); }
-  .bv-brand { position: absolute; right: 22px; top: 18px; font-family: var(--serif); font-size: 20px; letter-spacing: .04em; }
+  /* 1.15.2: a marca deixa de estar debaixo do ✕ — ele é que manda no canto */
+  .bv-brand { position: absolute; right: 68px; top: 18px; text-align: right; max-width: 46vw; font-family: var(--serif); font-size: 20px; letter-spacing: .04em; }
   .bv-brand small { font-family: var(--ui); font-size: 9px; letter-spacing: .16em; color: #8E8C85; margin-left: 10px; vertical-align: 3px; }
   .bv-pane {
     position: absolute; right: 22px; top: 64px; bottom: 22px; width: 340px; overflow-y: auto; scrollbar-width: none;
@@ -1815,10 +1817,24 @@
   .bv-more { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8E8C85; padding-top: 6px; }
   .bv-empty { font-family: var(--serif); font-style: italic; font-size: 16px; color: #8E8C85; padding: 10px 0; }
   .bv-foot { position: absolute; left: 22px; bottom: 18px; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: #8E8C85; }
+  /* ---------------------------------------------------------------------------
+     1.15.2 · O ✕ DO CÉREBRO (pedido do dono: «implementa um botão X para sair»).
+     Antes: `display: none` e, ainda por cima, `#brainOv.on #bvClose { display:none }` —
+     o botão existia no HTML e nunca se via. Com `Esc` fechava-se; num telemóvel não há
+     `Esc`, e o grafo era uma armadilha. Agora é um botão a sério: sempre visível com
+     o Cérebro aberto, 34 px no ecrã grande e 44 px no telemóvel (polegar, não rato).
+     --------------------------------------------------------------------------- */
   #bvClose {
-    position: absolute; right: 22px; top: 18px; transform: translate(0, -2px); margin-right: -6px; display: none;
+    position: absolute; right: 20px; top: 16px; z-index: 3;
+    width: 34px; height: 34px; min-width: 34px; display: none; place-items: center;
+    background: rgba(24,27,36,.92); color: #E8E6DF; border: 1px solid rgba(253,255,248,.28);
+    border-radius: 50%; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+    transition: background .25s var(--ease), border-color .25s var(--ease);
   }
-  #brainOv.on #bvClose { display: none; } /* Esc and the pod both close; the brand stays clean */
+  #brainOv.on #bvClose { display: grid; }
+  #bvClose:hover, #bvClose:focus-visible { background: #E8E6DF; color: #0F1117; border-color: #E8E6DF; }
+  /* o painel da nota ganha o seu próprio ✕: no telemóvel é uma folha, e uma folha fecha-se */
+  .bv-x { display: none; }
 
 
   /* ---------- DARK MODE (6 Sep 2026) — tokens first, then the surfaces that were hard-coded white ---------- */
@@ -2515,12 +2531,82 @@
     .badge.brainTag .b-name b { font-size: 11.5px; margin: 0 2px 0 3px; }
     .badge.brainTag::before { left: 10px; right: 10px; }
   }
-  /* telemóveis estreitos (iPhone SE, 360 px): mais um passo, sem tocar no tipo */
+  /* telemóveis estreitos (iPhone SE, 360 px): mais um passo nos cartões, sem tocar no tipo */
   @media (max-width: 400px) {
     .badge { min-width: 80px; max-width: 108px; padding: 5px 6px 4px; }
     .badge .b-num { font-size: 18px; }
     .badge .m-val { font-size: 11.5px; }
     .badge .m-lab::after { font-size: 5.6px; }
+  }
+
+  /* ===========================================================================
+     1.15.2 · O CÉREBRO NO TELEMÓVEL (pedido do dono: «deixa responsivo a parte do
+     cérebro, deixando a tela capaz de fazer qualquer actividade»).
+
+     Aqui o grafo não é um anexo: é a única coisa visível, e tem de poder ser usada
+     só com o dedo — abrir uma nota, arrastar o grafo, ampliar com dois dedos e,
+     sobretudo, SAIR. A estrutura de secretária (pesquisa de 300 px, painel de 340 px
+     fixo à direita, marca e ✕ no mesmo canto) passava por cima dela própria.
+
+       · topo em duas filas: pesquisa a 100% e, por baixo, os filtros num carrossel;
+       · a nota passa a FOLHA inferior com o seu ✕ (fecha a nota, não o Cérebro);
+       · o grafo desenha-se na área que sobra — nunca por baixo da folha;
+       · o ✕ do Cérebro é o último a morrer: 44 px, sempre no mesmo sítio;
+       · 16 px na pesquisa, senão o iOS faz zoom ao tocar e o ecrã «salta».
+     =========================================================================== */
+  @media (max-width: 640px) {
+    .bv-top {
+      left: 12px; right: 66px; top: 12px; max-width: none;
+      display: grid; grid-template-columns: 1fr; gap: 8px;
+    }
+    #bvSearch {
+      width: 100%; font-size: 16px; padding: 10px 14px; /* 16 px: o iOS não amplia */
+    }
+    /* os filtros rolam na horizontal — numa fila só, sem partir o cabeçalho em três */
+    #bvChips {
+      display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+      gap: 6px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      mask-image: linear-gradient(90deg, #000 88%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+    }
+    #bvChips::-webkit-scrollbar { display: none; }
+    .bv-chip { flex: 0 0 auto; font-size: 9px; padding: 6px 11px; }
+    .bv-brand {
+      left: 12px; right: 66px; top: auto; bottom: 12px; text-align: left; max-width: none;
+      font-size: 15px; opacity: .8;
+    }
+    .bv-brand small { display: block; margin: 2px 0 0; font-size: 8px; }
+    #bvClose { right: 12px; top: 10px; width: 44px; height: 44px; min-width: 44px; font-size: 16px; }
+    /* o vidro do grafo: o dedo move o grafo, não a página */
+    #bvCv { touch-action: none; }
+    .bv-foot {
+      left: 12px; right: 12px; bottom: 46px; font-size: 8.5px; letter-spacing: .1em; text-align: left;
+    }
+    body.brainOpen .bv-foot { bottom: 46px; } /* a placa da licença já não manda no rodapé */
+    /* nada de painel fixo à direita: a nota é uma folha que sobe */
+    .bv-pane {
+      left: 8px; right: 8px; top: auto; bottom: 8px; width: auto;
+      max-height: 46vh; padding: 16px 16px 20px; border-radius: 18px;
+      box-shadow: 0 -18px 50px rgba(0,0,0,.55); overscroll-behavior: contain;
+      display: none; /* só existe quando há nota escolhida */
+    }
+    body.bv-note .bv-pane { display: block; }
+    .bv-pane h3 { font-size: 21px; padding-right: 40px; } /* lugar para o ✕ da folha */
+    .bv-pane .bv-lk { padding: 9px 0; }                 /* alvo de dedo, não de rato */
+    .bv-x {
+      display: grid; place-items: center; position: absolute; right: 12px; top: 12px;
+      width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+      background: rgba(253,255,248,.08); color: #E8E6DF;
+      border: 1px solid rgba(253,255,248,.24); font: inherit; font-size: 13px; line-height: 1;
+    }
+    .bv-x:hover, .bv-x:focus-visible { background: #E8E6DF; color: #0F1117; }
+    /* com a folha aberta, a placa da licença e o rodapé saem da frente (o dedo precisa do espaço) */
+    body.bv-note #corner, body.bv-note .bv-foot { display: none; }
+  }
+  /* telemóveis muito estreitos: a folha sobe menos e o rodapé encolhe */
+  @media (max-width: 380px) {
+    .bv-pane { max-height: 52vh; }
+    .bv-foot { display: none; } /* a instrução já está no cabeçalho e no aria-label */
   }
 </style>
 </head>
@@ -2762,13 +2848,13 @@
 </div>
 <button id="overviewBtn">◂ VISÃO GERAL</button>
 <!-- V3.6: the full-screen Brain graph (G · click the pod · the panel strip) -->
-<div id="brainOv">
-  <canvas id="bvCv"></canvas>
-  <div class="bv-top"><input id="bvSearch" placeholder="Pesquisar no Cérebro…" autocomplete="off" spellcheck="false"><div id="bvChips"></div></div>
+<div id="brainOv" role="dialog" aria-modal="true" aria-label="O Cérebro — o grafo das notas">
+  <canvas id="bvCv" aria-label="grafo das notas do Cérebro — arrasta para mover, dois dedos para ampliar, toca numa nota para a ler"></canvas>
+  <div class="bv-top"><input id="bvSearch" placeholder="Pesquisar no Cérebro…" autocomplete="off" spellcheck="false" aria-label="pesquisar no Cérebro"><div id="bvChips" role="group" aria-label="filtrar por grupo"></div></div>
   <div class="bv-brand">O CÉREBRO <small id="bvMeta"></small></div>
-  <div class="bv-pane" id="bvPane"></div>
-  <div class="bv-foot">Esc fecha · roda para ampliar · arrasta para mover · clica numa nota para a ler</div>
-  <button id="bvClose" title="fechar (Esc)">✕</button>
+  <div class="bv-pane" id="bvPane"><button class="bv-x" type="button" aria-label="fechar a nota (volta ao grafo)" title="fechar a nota">✕</button></div>
+  <div class="bv-foot">Esc ou ✕ fecha · roda ou dois dedos ampliam · arrasta para mover · clica numa nota para a ler</div>
+  <button id="bvClose" type="button" aria-label="fechar o Cérebro (Esc)" title="fechar o Cérebro (Esc)">✕</button>
 </div>
 <!-- V3.2.1 (16 Sep 2026): the CALENDAR — P. Tasks and routines on the days they belong to; click a day to schedule -->
 <div id="calOv">

@@ -741,11 +741,6 @@ if (mIn && mSend) {
   };
 }
 
-if (falhas.length) {
-  console.error(`✗ cena: ${falhas.length} falha(s)`);
-  for (const f of falhas) console.error('  · ' + f);
-  process.exit(1);
-}
 const mapaCores = [...familiaDaSala.entries()].map(([cor, sala]) => `${sala} ${cor}`).join(' · ');
 const resumoAdereco = (() => {
   const ds = (office.dressing || []);
@@ -856,6 +851,66 @@ const resumoCirculacao = (() => {
   ok(belts.length === 6, `esperava seis tapetes a rolar, há ${belts.length}`);
 }
 
+/* ---------- o Cérebro responsivo e o ✕ para sair (30 out 2026) ----------
+   Pedido do dono: «deixa responsivo a parte do cérebro deixando a tela capaz de fazer qualquer
+   actividade e implementa um botão X para sair». O que se prova aqui é o que se pode provar sem
+   um ecrã: o ✕ EXISTE e está visível com o grafo aberto (antes o CSS escondia-o sempre), fecha de
+   verdade, a nota tem o seu próprio ✕, o grafo amplia por conta (o pinhole usa a mesma conta) e
+   ao sair não fica dedo preso nem nota pendurada. O resto — a folha, os gestos — é CSS e dedo. */
+{
+  const brain = win.CC && win.CC.brain;
+  ok(!!brain, 'CC.brain não está exposto');
+  const ov = doc.getElementById('brainOv');
+  const x = doc.getElementById('bvClose');
+  ok(!!ov && !!x, 'falta o #brainOv ou o ✕ (#bvClose)');
+  ok(x && x.getAttribute('aria-label') && /fechar/i.test(x.getAttribute('aria-label')), 'o ✕ não diz o que faz (aria-label)');
+  ok(ov && ov.getAttribute('role') === 'dialog', 'o Cérebro não é um diálogo para quem usa leitor de ecrã');
+  if (brain && ov && x) {
+    brain.open();
+    ok(brain.isOpen() === true, 'o Cérebro não abriu');
+    ok(ov.classList.contains('on'), 'o #brainOv não ficou visível');
+    // o CSS do ✕: com o grafo aberto TEM de estar desenhado (era display:none em todos os estados)
+    const css = [...doc.querySelectorAll('style')].map((s) => s.textContent).join('\n');
+    ok(/#brainOv\.on #bvClose\s*\{[^}]*display:\s*grid/.test(css), 'o ✕ continua escondido com o Cérebro aberto');
+    // o ✕ nasce escondido e aparece com o grafo aberto — é o desenho; o que não pode é ficar
+    // escondido com o Cérebro aberto (o defeito antigo era exactamente esse)
+    ok(/#bvClose\s*\{[^}]*display:\s*none/.test(css) && /#brainOv\.on #bvClose\s*\{[^}]*display:\s*grid/.test(css),
+      'o ✕ não alterna entre escondido e visível como devia');
+    ok(/#bvClose[^}]*width:\s*44px/.test(css) && css.includes('#bvClose { right: 12px; top: 10px; width: 44px'),
+      'o ✕ não é um alvo de 44 px no telemóvel');
+    // a folha da nota: painel com o seu ✕, e a marca sai da frente dele
+    ok(!!doc.querySelector('#bvPane .bv-x'), 'a folha da nota não tem ✕ próprio');
+    ok(css.includes('body.bv-note .bv-pane'), 'falta a folha da nota no telemóvel (body.bv-note)');
+    ok(css.includes('touch-action: none'), 'o vidro do grafo não pára o scroll da página (touch-action)');
+    // a nota: abrir pelo toque, e fechar a nota sem fechar o Cérebro
+    if (typeof brain.tocar === 'function') {
+      const abriu = brain.tocar(0, 0);
+      ok(abriu, 'tocar num nó não abriu nota nenhuma');
+      ok(!!brain.nota(), 'a nota aberta não sabe o seu nome');
+      ok(doc.body.classList.contains('bv-note'), 'a folha da nota não subiu (body.bv-note)');
+      brain.fecharNota();
+      ok(brain.nota() === null, 'o ✕ da nota não a fechou');
+      ok(!doc.body.classList.contains('bv-note'), 'a folha da nota não desceu');
+      ok(brain.isOpen() === true, 'fechar a NOTA fechou o Cérebro inteiro');
+    }
+    // o pinhole: a conta da escala é a mesma do rato, só muda quem a pede
+    if (typeof brain.ampliar === 'function') {
+      const antes = brain.escala();
+      brain.ampliar(antes * 1.8);
+      ok(brain.escala() > antes, 'o grafo não ampliou');
+      brain.ampliar(99); // o tecto é 7 — e não rebenta
+      ok(brain.escala() <= 7.0001, `a escala passou do tecto (${brain.escala()})`);
+    }
+    // SAIR: o ✕ faz o mesmo que o Esc, e não deixa nada a meio
+    x.click();
+    ok(brain.isOpen() === false, 'o ✕ não fechou o Cérebro');
+    ok(!ov.classList.contains('on'), 'o #brainOv ficou por cima do escritório');
+    ok(!doc.body.classList.contains('brainOpen'), 'o body ficou em modo Cérebro');
+    ok(!doc.body.classList.contains('bv-note'), 'a folha da nota ficou aberta depois de sair');
+    ok(brain.nota() === null, 'a nota lida ficou pendurada para a próxima visita');
+  }
+}
+
 /* ---------- os cartões das salas no telemóvel (30 out 2026) ----------
    Pedido do dono: «diminui o tamanho dos quadrados de indicação da sala … deixa bem responsivo na
    versão mobile». O harness não tem layout (offsetWidth é 0), por isso prova-se o que decide o
@@ -876,7 +931,7 @@ const resumoCirculacao = (() => {
     ok(salas.every((c) => c.querySelectorAll('.b-metrics .m-row').length === 3), 'um cartão de sala perdeu uma métrica');
     ok(salas.every((c) => [...c.querySelectorAll('.m-lab')].every((l) => (l.dataset.short || '').length > 0)),
       'falta o rótulo curto que o telemóvel mostra (data-short)');
-    ok(cartoes.every((c) => c.querySelector('.b-appr .ap-t')), 'o «À ESPERA DE APROVAÇÃO» desapareceu do cartão (só o telemóvel o esconde por CSS)');
+    ok(salas.every((c) => c.querySelector('.b-appr .ap-t')), 'o «À ESPERA DE APROVAÇÃO» desapareceu do cartão de sala (só o telemóvel o esconde por CSS)');
     // a arrumação: três cartões no mesmo sítio — nenhum fica por baixo de outro
     const caixas = [
       { left: 20, top: 100, bw: 90, bh: 70 },
@@ -911,6 +966,14 @@ const resumoPedido34 = (() => {
   const cores = [...new Set(e.map((x) => x.glass))].join(' · ');
   return `${b.length} passadeiras rolantes pretas nos corredores e ${e.length} entradas de sala na cor da sala (${cores})`;
 })();
-console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis), cartões de sala que encolhem e se arrumam no telemóvel e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+/* 30 out 2026 — o relatório de falhas estava a meio do ficheiro: as provas escritas depois dele
+   (o pé da escada, os cartões do telemóvel, o Cérebro) corriam e ninguém as contava. Agora é o
+   último bloco antes do resumo: se qualquer `ok()` falhar, o teste falha. */
+if (falhas.length) {
+  console.error(`✗ cena: ${falhas.length} falha(s)`);
+  for (const f of falhas) console.error('  · ' + f);
+  process.exit(1);
+}
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis), cartões de sala que encolhem e se arrumam no telemóvel, Cérebro responsivo com ✕ que fecha a sério e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);
