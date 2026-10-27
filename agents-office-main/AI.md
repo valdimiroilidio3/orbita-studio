@@ -8,7 +8,16 @@ ficheiros), **uma API dá-lhe voz** (escreve, não mexe em nada).
 Nada é instalado por ti. Se falta o binário ou a chave, o motor aparece como indisponível e a razão
 está escrita em português, na gaveta **IA** do painel de tarefas.
 
-## Sem chave nenhuma: os motores gratuitos (1.32.0)
+## Sem chave nenhuma: os motores gratuitos (1.32.0 · 1.35.0)
+
+Desde a 1.35.0 há um **fornecedor do escritório** que usa esta cadeia:
+`gratis` (`style: 'orbita'`), com o rótulo «Gratuitas (sem chave)». É ele que
+assume quando não há mais nenhum motor — numa máquina nova ou num ambiente sem
+chaves, as salas começam a trabalhar em vez de dizer que não têm IA. O runner
+declara `tools: false` (responde texto; não mexe) e a cadeia é a mesma do
+`api/_ia`: LLM7 → OVH → OpenCode Zen → Pollinations, com fallback e o nome do
+fornecedor que respondeu no `modelId`. Quando há um motor com chave, esse fica à
+frente: o gratuito é o chão, não o teto.
 
 Há três pares que **responderam de verdade** em produção a 27 out 2026, sem chave e
 sem cartão. Estão em `api/_ia/gratuitos.mjs`, com a data, o número de sucessos e a
