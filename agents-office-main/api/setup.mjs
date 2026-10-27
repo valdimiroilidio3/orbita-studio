@@ -38,19 +38,28 @@ export default async function handler(req, res) {
     return;
   }
 
-  /* A cadeia de certificados do Supabase não valida com o CA do runtime; e o
-     `sslmode` que vem na URL sobrepõe-se às opções — tira-se da URL e diz-se
-     explicitamente para não verificar. (Só este bootstrap; o `/api` fala por
-     HTTPS com a chave secreta, não abre socket TLS para o Postgres.) */
-  let ligacaoLimpa = ligacao;
+  /* O `pg` deixa a URL sobrepor-se às opções (`Object.assign({}, config, parse(url))`),
+     e a cadeia de certificados do pooler do Supabase não valida com o CA do runtime.
+     Por isso não se passa `connectionString`: montam-se os campos à mão e diz-se
+     explicitamente para não verificar — só neste bootstrap temporário. O `/api`
+     não abre socket para o Postgres: fala por HTTPS com a chave secreta. */
+  let campos;
   try {
     const u = new URL(ligacao);
-    u.searchParams.delete('sslmode');
-    ligacaoLimpa = u.toString();
-  } catch { /* não é URL: fica como está */ }
+    campos = {
+      host: u.hostname,
+      port: Number(u.port) || 5432,
+      user: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
+      database: (u.pathname || '/postgres').replace(/^\//, '') || 'postgres',
+    };
+  } catch (e) {
+    res.status(500).json({ ok: false, error: `URL de base inválida: ${e.message}` });
+    return;
+  }
 
   const saida = { ok: false };
-  const client = new Client({ connectionString: ligacaoLimpa, ssl: { rejectUnauthorized: false } });
+  const client = new Client({ ...campos, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
     await client.query(sql);
@@ -85,6 +94,8 @@ export default async function handler(req, res) {
     }
   } catch (e) {
     saida.error = e.message;
+    saida.codigo = e.code || null;
+    saida.onde = campos ? `${campos.host}:${campos.port}` : null;
     res.status(500).json(saida);
     return;
   } finally {
