@@ -25,14 +25,23 @@ export default async function handler(req, res) {
     const est = await motor.estado();
     saida.fornecedoresProntos = est.fornecedores.filter((f) => f.configurado).map((f) => `${f.id}${f.variavel ? '' : ' (sem chave)'}`);
 
+    const fase = q.get('fase') || 'tudo';
     const testes = {};
-    for (const id of ['llm7', 'ovh'].filter((x) => saida.fornecedoresProntos.some((y) => y.startsWith(x)))) {
-      try { testes[id] = await motor.testar(id); } catch (e) { testes[id] = { ok: false, erro: String(e.message).slice(0, 160) }; }
-      if (testes[id].ok) break;
+    if (fase !== 'correr') {
+      for (const id of ['llm7', 'ovh'].filter((x) => saida.fornecedoresProntos.some((y) => y.startsWith(x)))) {
+        try { testes[id] = await motor.testar(id); } catch (e) { testes[id] = { ok: false, erro: String(e.message).slice(0, 160) }; }
+        if (testes[id].ok) break;
+      }
+      saida.testes = testes;
     }
-    saida.testes = testes;
+    if (fase === 'teste') { res.status(200).json(saida); return; }
 
-    if (Object.values(testes).some((t) => t.ok)) {
+    /* A Vercel AI Gateway está configurada por OIDC mas recusa sem cartão: cada
+       chamada gastava duas tentativas antes de chegar ao LLM7. Desliga-se para
+       esta prova — e o registo diz isso mesmo. */
+    await repo.ia.config.gravar('desligados', ['vercel']);
+
+    if (fase === 'correr' || Object.values(testes).some((t) => t.ok)) {
       const run = await correr({
         repo, motor,
         objetivo: 'Dizer ao dono quantos leads existem agora, com o número real da base, e registar o resultado numa nota de memória.',
