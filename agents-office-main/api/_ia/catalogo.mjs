@@ -33,6 +33,11 @@ export const FAMILIA_FREELLMAPI = 'freellmapi';
    router contar o fornecedor como configurado sem inventar uma chave. */
 export const SEM_CHAVE = '\u0000sem-chave';
 
+/* 1.33.0 · «pronto sem conta»: o serviço publica a chave (OpenCode Zen: `public`).
+   Também não é variável de ambiente — serve para o router contar o fornecedor
+   como utilizável sem inventar um segredo. */
+export const CHAVE_PUBLICA = '\u0000chave-publica';
+
 export const FORNECEDORES = {
   openrouter: {
     nome: 'OpenRouter',
@@ -174,7 +179,9 @@ for (const f of extra.fornecedores) {
     nome: f.nome,
     site: f.base ? new URL(f.base).origin : '',
     docs: '',
-    estilo: f.dialeto === 'google' ? 'google' : 'openai',
+    /* 1.33.0 · o dialeto já não é só google/openai: o Pollinations anónimo
+       responde a um GET com o prompt no caminho, que não é OpenAI. */
+    estilo: ['google', 'anthropic', 'pollinations'].includes(f.dialeto) ? f.dialeto : 'openai',
     base: f.base,
     chave: f.chave,
     keyless: !!f.keyless,
@@ -183,6 +190,9 @@ for (const f of extra.fornecedores) {
     usavel: !!f.usavel,
     /* 1.32.0 · tecto próprio (ms) para fornecedores lentos; o global é 45 s */
     timeoutMs: Number(f.timeoutMs) || null,
+    /* 1.33.0 · chave que o próprio serviço publica (OpenCode Zen usa `public`
+       para os modelos gratuitos): não é segredo, e permite trabalhar sem conta. */
+    chavePublica: f.chavePublica || null,
     gratuito: true,
     limites: f.limites || (f.keyless ? 'sem chave (anónimo) — limite por IP, declarado pelo freellmapi' : 'plano gratuito declarado pelo freellmapi'),
     /* `nota` no JSON permite corrigir o freellmapi com o que foi medido aqui —
@@ -278,6 +288,9 @@ export function comChave(env = process.env) {
     const nome = (f.chave || []).find((k) => env[k] && String(env[k]).trim().length >= 8);
     if (nome) out.push({ id, variavel: nome });
     else if (f.keyless && f.usavel !== false) out.push({ id, variavel: SEM_CHAVE, semChave: true });
+    /* 1.33.0 · chave pública do próprio serviço: pronto sem conta. Vai marcada
+       para a interface poder dizer «não precisa» em vez de fingir uma variável. */
+    else if (f.chavePublica && f.usavel !== false) out.push({ id, variavel: CHAVE_PUBLICA, semChave: true, publica: true });
   }
   return out;
 }

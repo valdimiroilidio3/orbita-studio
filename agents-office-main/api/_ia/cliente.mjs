@@ -37,7 +37,9 @@ function classificar(status, corpao, { fornec, modelo }) {
   const detalhe = corpao?.error?.message || corpao?.message || corpao?.error?.type || '';
   const base = SEM_APELIDO(detalhe);
   if (status === 401 || status === 403) return new ErroIA(`chave recusada por ${fornec}${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'chave', detalhe: corpao });
-  if (status === 402) return new ErroIA(`sem crédito em ${fornec}${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'credito', detalhe: corpao });
+  /* 402 é «este fornecedor não dá mais hoje» — o Pollinations usa-o para o
+     limite por IP. Retentável, mas noutro fornecedor: o router passa ao seguinte. */
+  if (status === 402) return new ErroIA(`sem crédito em ${fornec}${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'credito', retentavel: true, detalhe: corpao });
   if (status === 404) return new ErroIA(`modelo «${modelo}» não existe em ${fornec}${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'modelo', detalhe: corpao });
   if (status === 429) return new ErroIA(`limite de utilização em ${fornec}${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'limite', retentavel: true, detalhe: corpao });
   if (status >= 500) return new ErroIA(`${fornec} avariou (HTTP ${status})${base ? `: ${base}` : ''}`, { status, fornec, modelo, codigo: 'avaria', retentavel: true, detalhe: corpao });
@@ -158,6 +160,18 @@ export async function falar({
       ...(ferramentas.length ? { tools: [{ functionDeclarations: esquemaFerramentas(ferramentas) }] } : {}),
       generationConfig: { maxOutputTokens: maxTokens, temperature: temperatura },
     };
+  } else if (prov.estilo === 'pollinations') {
+    /* 1.33.0 · o tier anónimo do Pollinations não fala OpenAI: é um GET com o
+       prompt no caminho — `GET /<prompt>?model=…&system=…` — e a resposta vem
+       em texto simples (confirmado a 27 out 2026). Serve para desempatar
+       quando o OVH está em rate limit; não aceita ferramentas, e é lento por
+       desenho (1 pedido/15 s). */
+    const sistema = mensagens.filter((m) => m.role === 'system').map((m) => String(m.content || '')).join('\n').trim();
+    const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
+    const params = new URLSearchParams({ model: modelo, referrer: 'orbita-studio' });
+    if (sistema) params.set('system', sistema.slice(0, 3000));
+    url = `${prov.base}/${encodeURIComponent(String(ultima?.content || '').slice(0, 6000))}?${params}`;
+    corpo = null;
   } else {
     url = `${prov.base}/chat/completions`;
     corpo = {
@@ -171,7 +185,12 @@ export async function falar({
 
   let r;
   try {
-    r = await fetchImpl(url, { method: 'POST', headers: cabecalhos(prov, chave), body: JSON.stringify(corpo), signal: ctl.signal });
+    r = await fetchImpl(url, {
+      method: corpo ? 'POST' : 'GET',
+      headers: cabecalhos(prov, chave),
+      ...(corpo ? { body: JSON.stringify(corpo) } : {}),
+      signal: ctl.signal,
+    });
   } catch (e) {
     clearTimeout(relogio);
     const abortado = e?.name === 'AbortError';
@@ -187,6 +206,13 @@ export async function falar({
   if (!r.ok) throw classificar(r.status, j || { message: SEM_APELIDO(texto) }, { fornec, modelo });
 
   const ms = Date.now() - inicio;
+  /* o Pollinations responde texto simples; um JSON sem `choices` também não é
+     um envelope OpenAI — nos dois casos o texto é a resposta. */
+  if (prov.estilo === 'pollinations' && (!j || !j.choices)) {
+    const limpo = String(j?.text || j?.content || texto || '').trim();
+    if (!limpo) throw new ErroIA(`${fornec} devolveu uma resposta vazia`, { fornec, modelo, codigo: 'vazio', retentavel: true });
+    return { texto: limpo, chamadas: [], uso: { entrada: 0, saida: 0 }, fornec, modelo, ms, bruto: j || { texto: limpo } };
+  }
   if (!j) throw new ErroIA(`${fornec} devolveu algo que não é JSON`, { fornec, modelo, codigo: 'resposta' });
 
   /* --- desembrulhar, por dialeto --- */
@@ -224,7 +250,9 @@ export async function listarModelos({ fornec, prov, chave, timeoutMs = 15000, fe
     let j = null;
     try { j = texto ? JSON.parse(texto) : null; } catch { j = null; }
     if (!r.ok) throw classificar(r.status, j || {}, { fornec, modelo: '(lista)' });
-    const lista = (j?.data || j?.models || []).map((m) => String(m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
+    /* 1.33.0 · o Pollinations devolve um array na raiz ([{name, description…}]) */
+    const cru = Array.isArray(j) ? j : (j?.data || j?.models || []);
+    const lista = cru.map((m) => String(m?.id || m?.name || '').replace(/^models\//, '')).filter(Boolean);
     return lista.slice(0, 200);
   } catch (e) {
     if (e instanceof ErroIA) throw e;

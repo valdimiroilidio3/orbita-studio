@@ -1,3 +1,52 @@
+## 1.33.0 — 27 out 2026 · OpenCode Zen e Pollinations, sem chave do dono
+
+Pedido do dono: *«liga»* — as duas IA gratuitas que não precisam de nenhuma chave
+sua, depois da lista do 1.32.0.
+
+**1 · OpenCode Zen (`opencode.ai/zen/v1`).** O serviço publica a chave dos modelos
+gratuitos (`Authorization: Bearer public`), por isso passa a trabalhar sem conta:
+`chavePublica` no catálogo, tratada em `comChave`, no router e no motor — a chave
+é a que o serviço indica, não uma inventada. Nove modelos `-free`, lidos de
+`GET /models` a 27 out 2026: `big-pickle`, `beam-free`, `flint-40b-free`,
+`mimo-v2.6-flash-free`, `nemotron-3.5-lightning-free`,
+`nemotron-3.5-super-vl-free` (**visão** — a segunda fonte com olhos, a par do OVH),
+`jev-1.13-free`, `deepseek-v4.1-flash-free`, `glm-5.3-flash-free`.
+
+**2 · Pollinations (`text.pollinations.ai`).** O tier anónimo é um **GET** com o
+prompt no caminho, não um `POST` OpenAI: novo dialeto `pollinations` no cliente
+(`GET /<prompt>?model=…&system=…`, texto simples de volta, sem cabeçalho de chave).
+Provado a 27 out 2026: devolveu a palavra pedida. É lento por desenho (1 pedido a
+cada 15 s), serve para desempatar quando o OVH responde 429 — o mesmo GPT-OSS 20B
+por outra estrada.
+
+**3 · A descoberta alimenta a cadeia.** `GET /models` guarda a lista real no teste
+(`testes[x].lista`) e `catalogoDaCadeia()` junta-a ao catálogo — só para
+fornecedores sem custo. Num gateway misto (OpenRouter, Requesty…) só entram ids
+que dizem `free`. Isto resolve o problema que apanhámos hoje: **os quatro nomes do
+OpenCode do catálogo já não existiam** (mudaram todos em dois meses); escrevê-los
+à mão era garantir que ficavam velhos.
+
+**4 · Honestidade no `/ia/gratuitos`.** Passa a separar **provados** (com resposta
+registada na app: `llm7/codestral`, `ovh/Qwen3.5`, `ovh/gpt-oss-120b`) de **por
+provar** (existem e estão prontos, mas ainda não responderam — é ali que ficam o
+OpenCode, o Pollinations e os modelos do OVH nunca medidos). O Pollinations foi
+provado por HTTP directo, mas ainda não pela app, por isso **não** entra na
+primeira lista até o `/ia/testar` o registar. A frase do Control Center diz as
+duas contas.
+
+**5 · 402 com retry.** O `402` (Pollinations usa-o para o limite por IP) passa a
+ser explicitamente retentável noutro fornecedor, em vez de morrer ali.
+
+**Testes:** 460/460, com 7 novos em `ia-gratuitos.test.mjs`: o GET do Pollinations
+sem chave, o `Bearer public` do OpenCode a responder quando os outros falham, o
+teste real do Pollinations a guardar a lista, a descoberta a alimentar a cadeia (e
+a recusar modelos pagos num gateway), e a separação provados/por provar.
+
+**Limitação declarada:** o sandbox desta sessão só alcança github/npm/pypi, por
+isso o POST ao OpenCode e o GET ao Pollinations a partir da app ficam por testar
+aqui — o endpoint do Pollinations foi provado por HTTP directo e o OpenCode por
+`GET /models`. A prova final é `/ia/testar` em produção depois do deploy.
+
 ## 1.32.0 — 27 out 2026 · A IA gratuita começa a trabalhar
 
 Pedido do dono: *«implementa uma IA para começar os trabalhos, implementa todas

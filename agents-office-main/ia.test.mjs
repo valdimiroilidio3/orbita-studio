@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createMemRepo } from './api/_repo.mjs';
-import { FORNECEDORES, comChave, mascarar, MODELOS } from './api/_ia/catalogo.mjs';
+import { FORNECEDORES, comChave, mascarar, MODELOS, SEM_CHAVE } from './api/_ia/catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './api/_ia/cliente.mjs';
 import { cadeia, diagnostico, falarComFallback, limparFora, orcamento, marcarFora, foraDoAr, eModeloIndisponivel } from './api/_ia/router.mjs';
 import { FERRAMENTAS, INDISPONIVEIS, executar, validar } from './api/_ia/ferramentas.mjs';
@@ -40,7 +40,11 @@ test('catálogo: comChave só vê variáveis com valor (mais os keyless), e a m�
   /* 27 out 2026: o Kilo fechou o anónimo (medido em produção); sobram o OVH
      (anónimo, ~2 pedidos/min) e o LLM7 (anónimo, 100/h — o freellmapi diz que
      os modelos básicos respondem sem chave). */
-  assert.deepEqual(semNada.map((x) => x.id).sort(), ['llm7', 'ovh']);
+  /* 1.33.0: além dos keyless, o OpenCode Zen publica a sua própria chave
+     (`public`) para os modelos gratuitos — pronto sem conta do dono. */
+  assert.deepEqual(semNada.map((x) => x.id).sort(), ['llm7', 'opencode', 'ovh', 'pollinations']);
+  assert.deepEqual(semNada.filter((x) => x.variavel === SEM_CHAVE).map((x) => x.id).sort(), ['llm7', 'ovh', 'pollinations']);
+  assert.deepEqual(semNada.filter((x) => x.publica).map((x) => x.id), ['opencode']);
   assert.equal(comChave({ OPENROUTER_API_KEY: CHAVE }).some((x) => x.id === 'openrouter' && x.variavel === 'OPENROUTER_API_KEY'), true);
   const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' }).filter((x) => !x.semChave);
   assert.deepEqual(vistos, [{ id: 'groq', variavel: 'GROQ_API_KEY' }]);
@@ -144,16 +148,19 @@ test('router: só fornecedores utilizáveis (chave ou keyless), e o tipo certo p
   /* sem chave nenhuma só entram os keyless — e o OVH, que responde anónimo,
      agora traz modelos reais ao catálogo (antes não trazia nenhum). */
   assert.ok(semChave.length > 0);
-  assert.ok(semChave.every((m) => FORNECEDORES[m.fornec].keyless), 'entrou um fornecedor com chave obrigatória sem chave');
-  const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' }, desligados: ['ovh'] });
+  assert.ok(
+    semChave.every((m) => FORNECEDORES[m.fornec].keyless || FORNECEDORES[m.fornec].chavePublica),
+    'entrou um fornecedor com chave obrigatória sem chave',
+  );
+  const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' }, desligados: ['ovh', 'opencode', 'llm7', 'pollinations'] });
   assert.ok(comOpenRouter.length > 0);
   assert.ok(comOpenRouter.every((m) => m.fornec === 'openrouter'));
   assert.ok(comOpenRouter[0].etiquetas.includes('raciocinio'));
   const visao = cadeia('visao', { chaves: { openrouter: 'X' } });
   assert.ok(visao.every((m) => m.etiquetas.includes('visao')));
   /* visão é o único tipo que nunca se relaxa (um modelo sem olhos não lê imagem) */
-  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh', 'llm7'] }).length, 0, 'groq não tem modelos de visão no catálogo');
-  assert.equal(cadeia('visao', { chaves: {}, desligados: ['ovh'] }).length, 0, 'a visão foi relaxada para um modelo sem visão');
+  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh', 'llm7', 'opencode'] }).length, 0, 'groq não tem modelos de visão no catálogo');
+  assert.equal(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode'] }).length, 0, 'a visão foi relaxada para um modelo sem visão');
 });
 
 test('router: preferido do agente vai à frente, e desligado fica de fora', () => {
@@ -170,7 +177,7 @@ test('router: preferido do agente vai à frente, e desligado fica de fora', () =
   /* sem chave nenhuma o router ainda tem o OVH (anónimo); desligando os
      keyless é que fica sem nada — antes ficava sem nada mesmo com eles vivos. */
   assert.equal(diagnostico({ chaves: {} }).pronto, true);
-  assert.deepEqual(diagnostico({ chaves: {}, desligados: ['ovh', 'llm7', 'kilo'] }).pronto, false);
+  assert.deepEqual(diagnostico({ chaves: {}, desligados: ['ovh', 'llm7', 'kilo', 'opencode', 'pollinations'] }).pronto, false);
 });
 
 test('router: um fornecedor keyless entra na cadeia sem haver chave dele', () => {
@@ -306,7 +313,7 @@ test('orquestrador: plano → passos → ferramenta → revisão, tudo gravado n
   const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'lead_criar', args: { nome: 'Café Central', cidade: 'Coimbra' } } });
   /* o teste fixa o fornecedor: o OVH (keyless) seria candidato e este falso só
      fala o dialeto que o teste preparou. Desligar é uma função real do motor. */
-  await repo.ia.config.gravar('desligados', ['ovh', 'kilo', 'llm7']);
+  await repo.ia.config.gravar('desligados', ['ovh', 'kilo', 'llm7', 'opencode', 'pollinations']);
   const motor = criarMotor({ repo, env: envFalso, fetchImpl });
   const run = await correr({ repo, motor, objetivo: 'Encontrar um cliente para o site do Café Central', env: envFalso });
 
@@ -331,7 +338,7 @@ test('orquestrador: sem fornecedor pronto (keyless desligados), falha com a raz�
   const repo = createMemRepo();
   /* 1.19.0: por omissão há dois keyless prontos; para provar a falha honesta,
      desligam-se os dois — é o mesmo caminho de quem não tem nada configurado. */
-  await repo.ia.config.gravar('desligados', ['kilo', 'ovh', 'llm7']);
+  await repo.ia.config.gravar('desligados', ['kilo', 'ovh', 'llm7', 'opencode', 'pollinations']);
   const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
   const run = await correr({ repo, motor, objetivo: 'qualquer coisa', env: {} });
   assert.equal(run.estado, 'falhou');
@@ -400,7 +407,11 @@ test('rota /ia/estado: só os keyless ficam prontos sem chave, e nunca devolve a
   /* Só o OVH funciona sem chave (o Kilo passou a exigir conta — medido a
      27 out 2026) → há motor, mas nada está «funcional» até um teste real. */
   const prontos = r.corpo.fornecedores.filter((f) => f.configurado).map((f) => f.id).sort();
-  assert.deepEqual(prontos, ['llm7', 'ovh']);
+  assert.deepEqual(prontos, ['llm7', 'opencode', 'ovh', 'pollinations']);
+  /* o OpenCode não mostra uma variável de ambiente: mostra que não precisa */
+  const oc = r.corpo.fornecedores.find((f) => f.id === 'opencode');
+  assert.equal(oc.semChave, true);
+  assert.equal(JSON.stringify(r.corpo).includes('chave-publica'), false, 'a marca interna não deve sair na resposta');
   assert.equal(r.corpo.fornecedores.every((f) => f.estado !== 'funcional'), true, 'alguém ficou «funcional» sem teste');
   assert.ok(!JSON.stringify(r.corpo).includes(CHAVE));
 });
@@ -590,12 +601,12 @@ test('router: sem modelos com a etiqueta exigida, a cadeia relaxa e diz que rela
   /* Só o LLM7 está pronto e nenhum modelo dele declara `raciocinio` (o
      gpt-oss-20b, que declarava, foi marcado indisponível a 27 out 2026 porque o
      fornecedor o recusou): em vez de uma cadeia vazia, entra com `relaxado`. */
-  const c = cadeia('plano', { chaves: {}, desligados: ['ovh', 'kilo'] });
+  const c = cadeia('plano', { chaves: {}, desligados: ['ovh', 'kilo', 'opencode', 'pollinations'] });
   assert.ok(c.length > 0, 'a cadeia ficou vazia mesmo havendo fornecedor pronto');
   assert.ok(c.every((m) => m.fornec === 'llm7'));
   assert.equal(c.every((m) => m.relaxado), true);
   /* quando há modelos com a etiqueta, não se relaxa nada */
-  const normal = cadeia('texto', { chaves: {}, desligados: ['ovh', 'kilo'] });
+  const normal = cadeia('texto', { chaves: {}, desligados: ['ovh', 'kilo', 'opencode', 'pollinations'] });
   assert.equal(normal.some((m) => m.relaxado), false);
 });
 
