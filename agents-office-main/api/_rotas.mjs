@@ -309,6 +309,20 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     } };
   }
 
+  /* ---- 1.23.0 · cópia de segurança que se pode testar ---- */
+  if (caminhoLimpo === '/backup' && m === 'GET') {
+    const { exportar } = await import('./_backup.mjs');
+    const copia = await exportar(repo);
+    return { status: 200, corpo: { ok: true, copia } };
+  }
+
+  if (caminhoLimpo === '/backup/teste' && m === 'POST') {
+    const { testar } = await import('./_backup.mjs');
+    const r = await testar(repo);
+    await repo.atividade.add('config', `cópia de segurança testada: ${r.ok ? `ok, ${r.total} linhas` : `falhou (${r.problemas[0] || 'sem razão'})`}`).catch(() => {});
+    return { status: 200, corpo: r };
+  }
+
   /* ---- 1.22.0 · testar uma integração, uma de cada vez, a sério ----
      É o botão que faltava: sem ele, «testar» só existia ao guardar a chave. */
   if (caminhoLimpo === '/platform/testar' && m === 'POST') {
