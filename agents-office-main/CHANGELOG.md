@@ -1,3 +1,45 @@
+## 1.17.0 — 30 out 2026 · A base de dados a sério (Supabase atrás do `/api`)
+
+O dono entregou as chaves do Supabase e disse «podes aplicar». Até aqui a mesa trabalhava no
+armazém do browser; agora tem uma base de dados, e o `/api` que a mesa sempre chamou passou a
+existir em produção.
+
+### O que foi feito
+
+- **`api/[...rota].mjs`** — o `/api` que faltava na Vercel. Uma função só, com o **mesmo contrato**
+  que a mesa já chamava (`/auth/eu`, `/ops/summary`, `/ops/leads`, `/ops/projetos`, `/ops/tarefas`,
+  `/ops/saldo`, `/ops/receita`, `/ops/today`, `/ops/pipeline`, `/ops/atividade`, `/ops/importar`).
+- **`api/_repo.mjs`** — a única porta para o Postgres, por REST (PostgREST) com a chave secreta, que
+  vive **só** no ambiente da Vercel. Duas implementações da mesma interface: Supabase (produção) e
+  memória (testes) — por isso as rotas provam-se sem rede.
+- **`api/_rotas.mjs`** — as rotas, uma vez só: não sabem (nem querem saber) onde está a base.
+- **`supabase/orbita_mesa.sql`** — as seis tabelas da mesa (`orbita_leads`, `orbita_projects`,
+  `orbita_tasks`, `orbita_messages`, `orbita_receitas`, `orbita_atividade`), idempotente, RLS ligado
+  em todas e **nenhuma política para `anon`/`authenticated`**: o browser não fala com a base, fala
+  com `/api`. (O `orbita_schema.sql` antigo continua a ser o desenho da migração do SQLite, e
+  continua marcado como não executado.)
+- **`/api/health`** — a prova: diz se a base responde e, se faltar o esquema, quais as tabelas em
+  falta. Não se diz «ligado» sem isto responder.
+- **A mesa acompanha**: 503 com `modo: 'local'` (base sem chaves ou sem esquema) faz a mesa voltar
+  ao armazém do browser **e dizer porquê**; quando a base responde, a barra passa a uma linha
+  verde «Base de dados ligada». E há **«Enviar para a base»**: o que já esteve no modo local sobe
+  para o Postgres sem duplicar leads (dedupe por nome+cidade).
+- **Dedupe real na base**: `dedupe_key` único + `on_conflict=dedupe_key` no upsert; a contagem de
+  novos vs. repetidos é feita antes da escrita, para não mentir nos números.
+- **Honestidade mantida**: uma tarefa criada sem motor continua a terminar «falhou — sem motor»; os
+  custos de API aparecem a 0; enviar mensagem responde 501 (não há canal).
+
+### Provas
+
+- **`api.test.mjs` (novo, 14 testes)**: contrato completo (leads com dedupe, projetos à mão e a
+  partir de um lead, dinheiro, tarefas honestas, mensagens, importação), e o cliente PostgREST —
+  cabeçalhos, `on_conflict`, chave **nunca** na URL, e a distinção entre «tabela em falta» (503,
+  com a instrução de correr o SQL) e «rede em baixo».
+- **171 testes** no total; `mesa.smoke` ganhou o caso 503 (base em baixo → modo local, com o motivo
+  escrito) e continua a provar o 404 (sem `/api`).
+- **O que NÃO se prova aqui**: a ligação real ao Supabase. O ambiente onde este código foi escrito
+  não tem saída para `supabase.co`. Isso prova-se em produção, em `/api/health`.
+
 ## 1.16.0 — 30 out 2026 · A mesa deixa de ser uma demonstração
 
 Pedido do dono, com uma fotografia do telemóvel à frente: *«todas estas páginas já deram aceitar e

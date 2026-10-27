@@ -104,8 +104,17 @@ async function call(path, method = 'GET', body) {
     // sem rede nenhuma: o trabalho continua neste browser
     return usarLocal().call(path, method, body);
   }
-  // 404 em /api = não há servidor publicado. Não é um erro da mesa: é uma instalação sem API.
+  /* 404/405 = não há função nesse caminho. 503 com `modo: 'local'` = há função, mas a base não
+     está ligada (sem chaves, ou sem o esquema aplicado). Nos dois casos a mesa não fica em
+     branco: continua neste browser, e o aviso diz porquê. */
   if (r.status === 404 || r.status === 405) return usarLocal().call(path, method, body);
+  if (r.status === 503) {
+    let motivo = '';
+    try { motivo = (await r.clone().json()).error || ''; } catch { /* sem corpo */ }
+    S.baseMotivo = motivo || 'a base de dados não respondeu';
+    return usarLocal().call(path, method, body);
+  }
+  S.baseLigada = true;
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
   if (r.status === 401) {
@@ -1045,13 +1054,18 @@ function viewSaldo() {
 /* ---------------- pintar ---------------- */
 /* o aviso de que os dados são deste browser — curto, sempre à vista, com a cópia à mão */
 function avisoLocal() {
+  if (S.baseLigada && !S.modoLocal) {
+    return `<div class="basebar" role="status"><span class="dot"></span>Base de dados ligada — o que escreves aqui fica guardado e anda contigo entre aparelhos.</div>`;
+  }
   if (!S.modoLocal) return '';
   const e = (local && local.estado()) || { leads: 0, projetos: 0 };
   return `<div class="localbar" role="status">
-    <span><b>Modo local</b> — os teus dados ficam neste browser (${e.leads} leads · ${e.projetos} projetos). Não há servidor publicado: nada é enviado para fora.</span>
+    <span><b>Modo local</b> — os teus dados ficam neste browser (${e.leads} leads · ${e.projetos} projetos).
+      A base de dados não está a responder${S.baseMotivo ? `: ${esc(S.baseMotivo)}` : ' (sem servidor publicado)'}.</span>
     <span class="lb-act">
       <button class="btn quiet small" data-act="exportar-local" title="descarregar uma cópia de tudo">Guardar cópia</button>
       <button class="btn quiet small" data-act="importar-local" title="ler uma cópia que guardaste">Ler cópia</button>
+      <button class="btn quiet small" data-act="para-a-base" title="enviar o que está aqui para a base de dados">Enviar para a base</button>
       <input type="file" id="lbFile" accept="application/json,.json" hidden>
     </span>
   </div>`;
@@ -1388,6 +1402,22 @@ async function act(name, el, ev) {
       return;
     }
     if (name === 'importar-local') { $('#lbFile')?.click(); return; }
+    if (name === 'para-a-base') {
+      const copia = JSON.parse(usarLocal().exportar());
+      let r;
+      try {
+        r = await fetch('/api/ops/importar', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ leads: copia.leads, projetos: copia.projetos, receitas: copia.receitas, tarefas: copia.tarefas }),
+        });
+      } catch { toast('Sem ligação à base. Nada saiu daqui.', true); return; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(`A base recusou: ${j.error || 'HTTP ' + r.status}`, true); return; }
+      toast(`Enviado: ${j.leadsNovos} leads novos (${j.leadsRepetidos} já estavam), ${j.projetos} projetos, ${j.receitas} entradas.`);
+      S.modoLocal = false; S.baseLigada = true;
+      await boot();
+      return;
+    }
 
     if (name === 'receita') {
       const valor = Number(String($('#valor')?.value || '').replace(',', '.'));
