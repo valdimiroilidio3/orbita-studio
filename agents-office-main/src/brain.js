@@ -453,6 +453,13 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   const search = document.getElementById('bvSearch'); const chipsEl = document.getElementById('bvChips');
   const pane = document.getElementById('bvPane'); const meta = document.getElementById('bvMeta');
   let openNow = false, k = 1.2, tx = 0, ty = 0, hover = null, sel = null, drag = null, match = null, freshOnly = false;
+  /* 1.15.2 — o grafo deixou de ser de rato. Um dedo faz agora tudo o que o rato fazia, e mais:
+     arrastar move, dois dedos ampliam (pinhole), tocar abre a nota. O caminho é o mesmo para os
+     dois (Pointer Events): não há duas verdades sobre onde está o dedo. */
+  const toques = new Map();   // pointerId → {x, y}  — os dedos em cima do vidro, agora
+  let pinch = null;           // { d, k } — a fotografia do pinhole (distância entre dedos e escala) quando ele começou
+  const notaAberta = () => !!(sel && pane.querySelector('h3'));
+  function mostrarNota(aberta) { document.body.classList.toggle('bv-note', !!aberta); }
   const groups = [...new Set(nodes.map(n => n.g))].sort();
   const on = new Set(groups);
   function chips() {
@@ -470,25 +477,84 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   function S() { return Math.min(bcv.clientWidth, bcv.clientHeight) * 0.44 * k; }
   function sx(n) { return bcv.clientWidth * 0.42 + n.x * S() + tx; }
   function sy(n) { return bcv.clientHeight * 0.5 + n.y * S() + ty; }
-  bcv.addEventListener('mousemove', e => {
-    if (drag) { tx += e.clientX - drag.x; ty += e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY }; drag.moved = true; return; }
-    let best = null, bd = 12;
-    for (const n of nodes) { if (!visible(n)) continue; const d = Math.hypot(sx(n) - e.clientX, sy(n) - e.clientY); if (d < bd) { bd = d; best = n; } }
-    hover = best; bcv.style.cursor = best ? 'pointer' : 'grab';
+  /* 1.15.2 · o toque e o rato, num caminho só (pointer events) */
+  function ponto(e) { return { x: e.clientX, y: e.clientY }; }
+  function centroDaEscala() {
+    // no telemóvel a nota é uma folha em baixo: o grafo centra-se no que fica VISÍVEL, não no
+    // centro do vidro (senão trabalha-se sempre debaixo da folha)
+    const folha = mobile() && notaAberta() ? (pane.offsetHeight || 0) : 0;
+    return { cx: bcv.clientWidth * (mobile() ? 0.5 : 0.42), cy: Math.max(80, (bcv.clientHeight - folha) * 0.5) };
+  }
+  function mobile() { return innerWidth <= 640; }
+  function ampliar(nk, px, py) {
+    nk = Math.max(0.5, Math.min(7, nk));
+    const r = nk / k, { cx, cy } = centroDaEscala();
+    tx = (tx + cx - px) * r + px - cx; ty = (ty + cy - py) * r + py - cy; k = nk;
+  }
+  function maisPerto(x, y, raio) {
+    let best = null, bd = raio || (mobile() ? 22 : 12); // o dedo é mais gordo do que a seta
+    for (const n of nodes) { if (!visible(n)) continue; const d = Math.hypot(sx(n) - x, sy(n) - y); if (d < bd) { bd = d; best = n; } }
+    return best;
+  }
+  const idsDe = () => [...toques.keys()];
+  const meio = () => { const [a, b] = idsDe().map((id) => toques.get(id)); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
+  const dist = () => { const [a, b] = idsDe().map((id) => toques.get(id)); return Math.hypot(a.x - b.x, a.y - b.y); };
+
+  bcv.addEventListener('pointerdown', (e) => {
+    if (!openNow) return;
+    bcv.setPointerCapture && bcv.setPointerCapture(e.pointerId);
+    toques.set(e.pointerId, ponto(e));
+    if (toques.size === 1) { const p = ponto(e); drag = { x: p.x, y: p.y, ox: p.x, oy: p.y, moved: false }; }
+    else if (toques.size === 2) { drag = null; pinch = { d: dist() || 1, k }; } // o segundo dedo cancela o arrasto
+    bcv.style.cursor = 'grabbing';
   });
-  bcv.addEventListener('mousedown', e => { drag = { x: e.clientX, y: e.clientY, moved: false }; });
-  addEventListener('mouseup', e => { if (!drag) return; const moved = drag.moved; drag = null; if (!moved && hover && openNow) select(hover); });
+  bcv.addEventListener('pointermove', (e) => {
+    if (!openNow) return;
+    const p = ponto(e);
+    if (toques.has(e.pointerId)) toques.set(e.pointerId, p);
+    if (pinch && toques.size >= 2) {
+      const m = meio();
+      ampliar(pinch.k * (dist() / pinch.d), m.x, m.y);
+      return;
+    }
+    if (drag && toques.size === 1) {
+      tx += p.x - drag.x; ty += p.y - drag.y;
+      // um dedo treme sempre: só se chama arrasto depois de andar 6 px (ou 3, com rato)
+      if (Math.hypot(p.x - drag.ox, p.y - drag.oy) > (e.pointerType === 'mouse' ? 3 : 6)) drag.moved = true;
+      drag.x = p.x; drag.y = p.y;
+      return;
+    }
+    if (e.pointerType === 'mouse') { // o rato continua a mostrar o que está debaixo dele
+      hover = maisPerto(p.x, p.y);
+      bcv.style.cursor = hover ? 'pointer' : 'grab';
+    }
+  });
+  function largar(e) {
+    if (!openNow) return;
+    const eraUm = toques.size === 1;
+    toques.delete(e.pointerId);
+    if (pinch && toques.size < 2) pinch = null;
+    if (eraUm && drag) {
+      const moved = drag.moved; drag = null;
+      if (!moved) { // um toque simples: abre a nota que estiver debaixo do dedo
+        const alvo = maisPerto(e.clientX, e.clientY);
+        if (alvo) select(alvo);
+      }
+    } else if (toques.size === 0) drag = null;
+    bcv.style.cursor = 'grab';
+  }
+  bcv.addEventListener('pointerup', largar);
+  bcv.addEventListener('pointercancel', largar);
   bcv.addEventListener('wheel', e => {
     e.preventDefault(); e.stopPropagation();
-    const f = Math.exp(-e.deltaY * 0.0025); const nk = Math.max(0.5, Math.min(7, k * f)); const r = nk / k;
-    const cx = bcv.clientWidth * 0.42, cy = bcv.clientHeight * 0.5;
-    tx = (tx + cx - e.clientX) * r + e.clientX - cx; ty = (ty + cy - e.clientY) * r + e.clientY - cy; k = nk;
+    ampliar(k * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
   }, { passive: false });
   function select(n) {
     sel = n;
+    mostrarNota(true); // a folha sobe (no telemóvel); no ecrã grande o painel já lá estava
     const out = [...adj[n.i]].map(i => nodes[i]).sort((a, b) => b.d - a.d);
     const rd = state.reads.get(n.id), wr = state.written.get(n.id);
-    pane.innerHTML = `<h3>${esc(n.id)}</h3><div class="bv-path"><i style="background:${GROUP_COL[n.g] || '#B0ADA3'}"></i>${esc(GROUP_NAME(n.g))} · ${n.d} link${n.d === 1 ? '' : 's'}${n.fresh ? ' · <span class="bv-g">novo hoje</span>' : ''}</div>` +
+    pane.innerHTML = X_NOTA + `<h3>${esc(n.id)}</h3><div class="bv-path"><i style="background:${GROUP_COL[n.g] || '#B0ADA3'}"></i>${esc(GROUP_NAME(n.g))} · ${n.d} link${n.d === 1 ? '' : 's'}${n.fresh ? ' · <span class="bv-g">novo hoje</span>' : ''}</div>` +
       (wr ? `<div class="bv-lab">Escrito por</div><p>${esc(wr.agent)} · ${timeStr(wr.ts)} · da tarefa «${esc(wr.task)}»</p>` : '') +
       (rd ? `<div class="bv-lab">Lido por último por</div><p>${esc(rd.agent)} · ${timeStr(rd.ts)}</p>` : '') +
       `<div class="bv-lab">Links · ${out.length}</div>` + out.slice(0, 18).map(o => `<div class="bv-lk" data-i="${o.i}">${esc(o.id)}</div>`).join('') +
@@ -528,14 +594,38 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   function setOwner(name) { owner = String(name || 'AS TUAS NOTAS').toUpperCase(); if (openNow) meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`; }
   function open() {
     if (openNow) return;
+    antesDoCerebro = document.activeElement;
     openNow = true; ov.classList.add('on'); document.body.classList.add('brainOpen');
+    ov.setAttribute('aria-hidden', 'false');
     meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`;
-    chips(); if (!sel) pane.innerHTML = '<div class="bv-empty">Clica numa nota para a ler. Passa o rato para ver as vizinhas.</div>';
+    chips(); if (!sel) fecharNota(); // estado de repouso: sem nota escolhida
     requestAnimationFrame(draw);
   }
-  function close() { if (!openNow) return; openNow = false; ov.classList.remove('on'); document.body.classList.remove('brainOpen'); }
+  /* 1.15.2 — o ✕ pequeno da folha: fecha a NOTA, não o Cérebro. Um só dono do nó: o botão é
+     redesenhado com a nota (senão o innerHTML do select levava-o à frente). */
+  const X_NOTA = '<button class="bv-x" type="button" aria-label="fechar a nota (volta ao grafo)" title="fechar a nota">✕</button>';
+  function fecharNota() {
+    sel = null; hover = null;
+    pane.innerHTML = X_NOTA + '<div class="bv-empty">Toca numa nota para a ler. Arrasta para mover, dois dedos para ampliar.</div>';
+    mostrarNota(false);
+  }
+  function close() {
+    if (!openNow) return;
+    openNow = false;
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('brainOpen');
+    // 1.15.2: o que ficou a meio não passa para a próxima visita (nem um dedo «preso»)
+    hover = null; drag = null; pinch = null; toques.clear();
+    bcv.style.cursor = 'grab';
+    sel = null; // a nota lida não volta sozinha na próxima abertura
+    mostrarNota(false);
+    if (antesDoCerebro && antesDoCerebro.focus) { try { antesDoCerebro.focus({ preventScroll: true }); } catch { /* sem foco */ } }
+  }
+  let antesDoCerebro = null; // quem tinha o foco antes de abrir (o ✕ devolve-o)
   function toggle() { openNow ? close() : open(); }
   document.getElementById('bvClose').addEventListener('click', close);
+  pane.addEventListener('click', (e) => { if (e.target.closest('.bv-x')) { e.stopPropagation(); fecharNota(); } });
   addEventListener('resize', () => { if (openNow) draw(); });
 
   function setTheme(dark) {
@@ -553,5 +643,13 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     shellMat.uniforms.uRim.value.set(dark ? '#B9CBB4' : '#9FB79E');
     etch();
   }
-  return { read, readNote, write, setGraph, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow, state, get nodes() { return nodes; }, get links() { return links; } };
+  return { read, readNote, write, setGraph, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow,
+    /* 1.15.2: o grafo em ecrã pequeno, ao alcance do teste — a nota aberta, o que a folha mostra
+       e a escala alcançável (o pinhole não se simula num jsdom; a conta sim) */
+    nota: () => (sel ? sel.id : null),
+    fecharNota,
+    ampliar: (nk, px, py) => ampliar(nk, px ?? bcv.clientWidth / 2, py ?? bcv.clientHeight / 2),
+    escala: () => k,
+    tocar: (x, y) => { const n = maisPerto(x, y); if (n) select(n); return !!(sel && sel === n); },
+    state, get nodes() { return nodes; }, get links() { return links; } };
 }

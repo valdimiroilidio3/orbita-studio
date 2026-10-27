@@ -1,3 +1,49 @@
+## 1.15.2 — 30 out 2026 · O Cérebro responsivo — e um ✕ para sair
+
+Pedido do dono: *«deixa responsivo a parte do cérebro, deixando a tela capaz de fazer qualquer
+actividade, e implementa um botão X para sair»*.
+
+### O defeito que estava lá
+
+O ✕ do Cérebro **existia no HTML e nunca se viu**: o CSS escondia-o em todos os estados
+(`#bvClose { display: none }` **e** `#brainOv.on #bvClose { display: none }`, com o comentário
+«Esc e o pod fecham»). No computador fechava-se com `Esc`; **num telemóvel não há `Esc`** — o grafo
+era uma armadilha. E o grafo era só de rato: `mousemove`/`mousedown`/`wheel`, zero toque, zero
+pinhole. Num dedo não se movia, não se ampliava e nem se abria uma nota.
+
+### O que mudou
+
+- **✕ a sério**: sempre visível com o grafo aberto (34 px no ecrã grande, **44 px no telemóvel**),
+  com `aria-label`, a fechar pelo mesmo caminho do `Esc`, e a devolver o foco a quem o tinha antes.
+  A marca «O CÉREBRO» saiu da frente dele.
+- **A nota é uma folha, não uma coluna**: em ≤ 640 px o painel de 340 px (mais largo do que um
+  telemóvel de 320) passa a folha inferior de 46 vh, com **✕ próprio** — que fecha a **nota** e
+  deixa o grafo aberto. Com a folha aberta, a placa da licença sai da frente.
+- **Barra de topo em duas filas**: pesquisa a 100% com **16 px** (o iOS deixa de ampliar ao tocar) e
+  os filtros num carrossel horizontal com `-webkit-overflow-scrolling`.
+- **O grafo trabalha com o dedo**: `pointerdown/move/up` com captura do ponteiro (rato e dedo no
+  mesmo caminho), **pinhole** para ampliar, toque simples abre a nota, arrasto move (só passa a
+  arrasto depois de 6 px — um dedo treme sempre), `touch-action: none` no vidro. O centro da
+  escala passa a ser o **centro do que se vê**, já descontada a folha.
+- **Sair deixa tudo limpo**: dedos, arrasto, pinhole e nota são esquecidos no `close()`; a nota lida
+  não reaparece na visita seguinte; `role="dialog"` + `aria-label` no overlay e no canvas.
+
+### Um defeito no próprio teste
+
+O relatório de falhas do `scene.smoke.mjs` estava **a meio do ficheiro**: as provas escritas depois
+dele (o pé da escada, os cartões do telemóvel, o Cérebro) corriam e **ninguém as contava**. Passou
+para o fim. Na primeira execução apanhou logo três coisas — uma delas real: ao inserir o CSS do
+Cérebro, o passo dos 400 px dos cartões tinha sido apagado sem querer. Restaurado.
+
+### Provas
+
+- `scene.smoke.mjs` ✓ com as provas todas a contar: o ✕ alterna entre escondido e visível, fecha de
+  verdade (`#brainOv` perde `.on`, `body` perde `brainOpen`), a nota tem ✕ próprio, `body.bv-note`
+  sobe e desce sem fechar o Cérebro, a escala amplia e respeita o tecto de 7, e sair não deixa nota
+  nem dedo pendurados.
+- **144/144** testes. Nota honesta: os gestos não se simulam em jsdom — provam-se a conta da escala
+  e os estados; o pinhole e a folha julgam-se com o dedo no telemóvel.
+
 ## 1.15.1 — 30 out 2026 · Os cartões das salas no telemóvel
 
 Pedido do dono: *«na versão mobile eu quero que diminuas o tamanho dos quadrados de indicação da sala
