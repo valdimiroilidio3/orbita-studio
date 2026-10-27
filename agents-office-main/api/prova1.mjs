@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       const run = await correr({
         repo, motor,
         objetivo: 'Dizer ao dono quantos leads existem agora, com o número real da base, e registar o resultado numa nota de memória.',
-        limites: { maxChamadas: 10, maxTokens: 120000 },
+        limites: { maxChamadas: 6, maxTokens: 60000 },
         env,
       });
       const passos = await repo.ia.steps.porRun(run.id);
