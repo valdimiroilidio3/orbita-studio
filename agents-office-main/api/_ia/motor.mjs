@@ -156,14 +156,28 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
           avisoLista = e.message;
           modelos = modelosDe(fornecedor).map((m) => m.modelo);
         }
-        const preferido = modelosDe(fornecedor)[0]?.modelo;
-        const alvo = modelos.find((m) => m === preferido) || modelos[0];
-        if (!alvo) throw new ErroIA(`${fornecedor} não devolveu modelos (${avisoLista || 'lista vazia'})`, { fornec: fornecedor, codigo: 'vazio' });
-        const r = await falar({
-          fornec: fornecedor, prov, chave, modelo: alvo,
-          mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
-          maxTokens: 16, temperatura: 0, timeoutMs: 30000, fetchImpl,
-        });
+        /* Ordem: o preferido do catálogo, depois os primeiros da lista do
+           fornecedor. Tentamos até três: um modelo de raciocínio pode gastar
+           todo o orçamento de saída a «pensar» e devolver texto vazio — isso
+           não é um teste bem-sucedido (visto no OVH a 27 out 2026). */
+        const doCatalogo = modelosDe(fornecedor).map((m) => m.modelo);
+        const ordem = [...new Set([...doCatalogo.filter((m) => modelos.includes(m)), ...modelos])].slice(0, 3);
+        if (!ordem.length) throw new ErroIA(`${fornecedor} não devolveu modelos (${avisoLista || 'lista vazia'})`, { fornec: fornecedor, codigo: 'vazio' });
+        let alvo = null;
+        let r = null;
+        let ultimoErro = null;
+        for (const candidato of ordem) {
+          try {
+            r = await falar({
+              fornec: fornecedor, prov, chave, modelo: candidato,
+              mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
+              maxTokens: 64, temperatura: 0, timeoutMs: 30000, fetchImpl,
+            });
+            if (String(r.texto || '').trim()) { alvo = candidato; break; }
+            ultimoErro = new ErroIA(`${fornecedor}/${candidato} respondeu vazio (modelo de raciocínio com pouco espaço de saída?)`, { fornec: fornecedor, modelo: candidato, codigo: 'vazio' });
+          } catch (e) { ultimoErro = e; }
+        }
+        if (!alvo) throw ultimoErro || new ErroIA(`${fornecedor} não respondeu`, { fornec: fornecedor, codigo: 'vazio' });
         const ms = Date.now() - inicio;
         testes[fornecedor] = { ok: true, ms, quando: agora(), modelos: modelos.length || null, usado: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };
         await repo.ia.config.gravar('testes', testes);
