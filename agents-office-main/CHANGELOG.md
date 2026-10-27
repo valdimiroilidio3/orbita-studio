@@ -1,3 +1,25 @@
+## 1.28.1 — 27 out 2026 · A pesquisa global da mesa deixou de ser um placeholder
+
+`GET /ops/pesquisa` devolvia `{ query, grupos: [] }` — sempre. A caixa «Pesquisar
+leads, projetos e tarefas…» da mesa escrevia, esperava 280 ms e não encontrava
+nada, mesmo com o nome à frente. Era a última pesquisa do produto que não
+pesquisava. Agora:
+
+- procura em **leads, projetos, tarefas e mensagens**, sem acentos e sem
+  distinguir maiúsculas («optica» encontra «Óptica»; «ÓPTICA» também);
+- cada resultado leva a algum lado (`#/lead/:id`, `#/projeto/:id`, `#/tarefas`,
+  `#/conversas`) — um resultado que não se pode abrir não é resultado;
+- devolve só os grupos com itens e uma nota honesta: «nada corresponde — nem
+  leads, nem projetos, nem tarefas, nem mensagens»;
+- abaixo de duas letras não procura: diz isso em vez de varrer a base inteira.
+
+Também saíram as últimas frases que prometiam a Google na mesa: o formulário de
+lead à mão e o estado vazio dos leads passam a apontar para a gaveta ◈ LEADS,
+que procura a sério.
+
+Prova: 2 testes novos em `pesquisa.test.mjs` (resultados nas quatro tabelas e
+insensibilidade a acentos/maiúsculas); suite 403/403.
+
 ## 1.28.0 — 27 out 2026 · A pesquisa passou a acontecer (e o manual saiu do site)
 
 Duas frases do dono, e o que cada uma obrigou a fazer:

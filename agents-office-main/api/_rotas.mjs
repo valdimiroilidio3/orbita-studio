@@ -751,7 +751,52 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   if (caminhoLimpo === '/ops/utilizadores') return { status: 200, corpo: { utilizadores: [], papeis: [] } };
   if (caminhoLimpo === '/ops/sessoes') return { status: 200, corpo: { sessoes: [] } };
   if (caminhoLimpo === '/ops/stop') return { status: 200, corpo: { ok: true, parado: !!corpo?.stop } };
-  if (caminhoLimpo === '/ops/pesquisa') return { status: 200, corpo: { query: qs.get('q') || '', grupos: [] } };
+  /* ---- 1.29.0 · a pesquisa global da mesa, a sério ----
+     Antes esta rota devolvia sempre `{ query, grupos: [] }`: a caixa «Pesquisar
+     leads, projetos e tarefas…» escrevia e não encontrava nada, nem quando o
+     nome estava à frente. Agora procura nas quatro tabelas que a mesa mostra,
+     sem acentos e sem maiúsculas, e devolve só os grupos com resultados. */
+  if (caminhoLimpo === '/ops/pesquisa') {
+    const bruto = limpo(qs.get('q'));
+    const semAcentos = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const q = semAcentos(bruto).trim();
+    if (q.length < 2) return { status: 200, corpo: { query: bruto, total: 0, grupos: [], nota: 'escreve pelo menos duas letras' } };
+    const contem = (...campos) => semAcentos(campos.filter(Boolean).join(' ')).includes(q);
+    const [leads, projetos, tarefas, mensagens] = await Promise.all([
+      repo.leads.list(500).catch(() => []),
+      repo.projetos.list().catch(() => []),
+      repo.tarefas.list(500).catch(() => []),
+      repo.mensagens.list(300).catch(() => []),
+    ]);
+    const grupos = [
+      {
+        label: 'Leads', rota: '#/lead',
+        itens: leads.filter((l) => contem(l.name, l.city, l.category, l.email, l.phone, l.website, l.notes))
+          .slice(0, 8)
+          .map((l) => ({ id: l.id, name: l.name, city: [l.category, l.city].filter(Boolean).join(' · '), route: `#/lead/${encodeURIComponent(l.id)}` })),
+      },
+      {
+        label: 'Projetos', rota: '#/projeto',
+        itens: projetos.filter((p2) => contem(p2.name, p2.client, p2.niche, p2.city, p2.status))
+          .slice(0, 8)
+          .map((p2) => ({ id: p2.id, name: p2.name, client: [p2.client, p2.kindLabel || p2.kind].filter(Boolean).join(' · '), route: `#/projeto/${encodeURIComponent(p2.id)}` })),
+      },
+      {
+        label: 'Tarefas', rota: '#/tarefas',
+        itens: tarefas.filter((t) => contem(t.title, t.text, t.status, t.dept, t.agent))
+          .slice(0, 8)
+          .map((t) => ({ id: t.id, title: t.title || String(t.text || '').slice(0, 80), kindLabel: [t.dept, t.status].filter(Boolean).join(' · '), route: '#/tarefas' })),
+      },
+      {
+        label: 'Mensagens', rota: '#/conversas',
+        itens: mensagens.filter((m) => contem(m.subject, m.body, m.to, m.lead_name, m.status))
+          .slice(0, 8)
+          .map((m) => ({ id: m.id, title: m.subject || String(m.body || '').slice(0, 80), kindLabel: m.status || '', route: '#/conversas' })),
+      },
+    ].filter((g) => g.itens.length);
+    const total = grupos.reduce((n, g) => n + g.itens.length, 0);
+    return { status: 200, corpo: { query: bruto, total, grupos, nota: total ? 'resultados reais, sem estimativas' : 'nada corresponde — nem leads, nem projetos, nem tarefas, nem mensagens' } };
+  }
 
   /* ---- trazer para a base uma cópia do modo local ---- */
   if (caminhoLimpo === '/ops/importar' && m === 'POST') {

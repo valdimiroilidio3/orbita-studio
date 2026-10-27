@@ -327,3 +327,44 @@ test('rotas: por GET a pesquisa é só leitura — nada entra no funil', async (
   const x = await chamar(repo, '/pesquisa/teste?fonte=naoexiste', 'GET', null, { fetchImpl: f });
   assert.equal(x.status, 404);
 });
+
+/* ---------- 1.29.0 · a pesquisa global da mesa ----------
+   Esta rota devolvia `{ grupos: [] }` sempre: a caixa de pesquisa da mesa
+   escrevia e nunca encontrava nada. Estes testes provam que agora encontra,
+   que ignora acentos e maiúsculas, e que não inventa grupos vazios. */
+test('rotas: /ops/pesquisa encontra leads, projetos, tarefas e mensagens', async () => {
+  const repo = createMemRepo();
+  await repo.leads.inserir([{ dedupe_key: 'k1', name: 'Clínica do Mondego', city: 'Coimbra', category: 'dentista', status: 'novo' }]);
+  await repo.projetos.insert({ name: 'Site da Clínica do Mondego', client: 'Clínica do Mondego', kind: 'landing', status: 'rascunho' });
+  await repo.tarefas.insert({ title: 'Ligar à clínica do Mondego', dept: 'sales', status: 'a_fazer' });
+  await repo.mensagens.inserir({ lead_id: null, channel: 'email', status: 'rascunho', subject: 'Proposta para o Mondego', body: 'olá' });
+
+  const r = await chamar(repo, '/ops/pesquisa?q=mondego');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.query, 'mondego');
+  assert.ok(r.corpo.total >= 4, `esperava pelo menos 4 resultados, vieram ${r.corpo.total}`);
+  const labels = r.corpo.grupos.map((g) => g.label);
+  for (const l of ['Leads', 'Projetos', 'Tarefas', 'Mensagens']) assert.ok(labels.includes(l), `falta o grupo ${l}`);
+  const lead = r.corpo.grupos.find((g) => g.label === 'Leads').itens[0];
+  assert.equal(lead.name, 'Clínica do Mondego');
+  assert.equal(lead.route.startsWith('#/lead/'), true, 'o resultado tem de levar a algum lado');
+});
+
+test('rotas: /ops/pesquisa ignora acentos e maiúsculas e não devolve grupos vazios', async () => {
+  const repo = createMemRepo();
+  await repo.leads.inserir([{ dedupe_key: 'k2', name: 'Óptica Central', city: 'Évora', status: 'novo' }]);
+
+  const semAcento = await chamar(repo, '/ops/pesquisa?q=optica');
+  assert.equal(semAcento.corpo.total, 1, 'procurar «optica» tem de encontrar «Óptica»');
+  const comAcento = await chamar(repo, '/ops/pesquisa?q=%C3%93PTICA');
+  assert.equal(comAcento.corpo.total, 1, 'procurar «ÓPTICA» tem de encontrar o mesmo');
+
+  const nada = await chamar(repo, '/ops/pesquisa?q=zzz-inexistente');
+  assert.equal(nada.corpo.total, 0);
+  assert.deepEqual(nada.corpo.grupos, [], 'sem resultados não se inventam grupos');
+  assert.match(nada.corpo.nota, /nada corresponde/);
+
+  const curto = await chamar(repo, '/ops/pesquisa?q=o');
+  assert.equal(curto.corpo.total, 0);
+  assert.match(curto.corpo.nota, /duas letras/);
+});
