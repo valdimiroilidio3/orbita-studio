@@ -33,6 +33,19 @@ export default async function handler(req, res) {
     saida.ok = true;
     saida.tabelas = rows.map((r) => r.table_name);
 
+    if (q.get('modelos')) {
+      /* lista REAL de modelos de um fornecedor keyless (para o catálogo não inventar ids) */
+      const { FORNECEDORES } = await import('./_ia/catalogo.mjs');
+      const { listarModelos } = await import('./_ia/cliente.mjs');
+      const id = q.get('modelos');
+      const prov = FORNECEDORES[id];
+      if (!prov) { saida.modelos = { erro: 'desconhecido' }; }
+      else {
+        try { saida.modelos = { fornecedor: id, lista: await listarModelos({ fornec: id, prov, chave: '' }) }; }
+        catch (e) { saida.modelos = { fornecedor: id, erro: String(e.message).slice(0, 300) }; }
+      }
+    }
+
     if (q.get('ia') === '1') {
       const { createSupabaseRepo, envBase } = await import('./_repo.mjs');
       const { criarMotor } = await import('./_ia/motor.mjs');

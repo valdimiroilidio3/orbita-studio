@@ -42,11 +42,19 @@ export const TIPOS = {
 const temEtiqueta = (m, r) => Array.isArray(m.etiquetas) && m.etiquetas.includes(r);
 const precoDe = (m) => (Array.isArray(m.preco) ? (m.preco[0] + m.preco[1]) : 999);
 
-/** Um modelo só entra se o fornecedor tiver chave e não estiver desligado. */
+/** Um modelo só entra se o fornecedor estiver utilizável e não desligado.
+ *
+ * «Utilizável» = tem chave no ambiente **ou** não precisa dela (keyless).
+ * Esta segunda metade faltava: o Kilo e o OVH apareciam como configurados no
+ * estado e nunca entravam numa cadeia — o orquestrador dizia «todos os modelos
+ * falharam» tendo um fornecedor a responder. Visto em produção a 27 out 2026.
+ */
 export function fornecedorActivo(id, { chaves = {}, desligados = [] } = {}) {
-  if (!FORNECEDORES[id]) return false;
+  const prov = FORNECEDORES[id];
+  if (!prov) return false;
   if (desligados.includes(id)) return false;
-  return !!chaves[id];
+  if (chaves[id]) return true;
+  return !!prov.keyless && prov.usavel !== false;
 }
 
 /**
