@@ -119,6 +119,60 @@ if (abrir) {
   ok(false, 'não encontrei o botão de criar lead na barra');
 }
 
+/* --- 1.36.0 · editar o lead na mesa (pedido 57e: «actualizar» inclui corrigir) ---
+   O caminho do dono: abrir o lead, carregar em «Editar», escrever o email e um
+   telefone com espaços, guardar, e ver o cartão a mudar. O que se prova é o
+   armazém do browser — não a mensagem de sucesso. */
+{
+  const guardado = JSON.parse(memoria.get('orbita.mesa.v1') || '{}');
+  const leadId = guardado.leads?.[0]?.id;
+  ok(!!leadId, 'o lead não tem id para se poder editar');
+  if (leadId) {
+    nav(`#/lead/${encodeURIComponent(leadId)}`);
+    await new Promise((r) => setTimeout(r, 900));
+    const btnEditar = [...doc.querySelectorAll('[data-act="editar-lead"]')][0];
+    ok(!!btnEditar, 'a página do lead não tem o botão «Editar»');
+    if (btnEditar) {
+      btnEditar.click();
+      await new Promise((r) => setTimeout(r, 400));
+      const tel = doc.querySelector('#elTelefone');
+      const mail = doc.querySelector('#elEmail');
+      const site = doc.querySelector('#elSite');
+      ok(!!tel && !!mail && !!site, 'o formulário de edição não trouxe telefone, email e site');
+      if (tel && mail && site) {
+        tel.value = '239 111 222';
+        mail.value = 'geral@barbearia.pt';
+        site.value = 'barbearia.pt';   // sem protocolo: a mesa normaliza
+        const guardar = doc.querySelector('[data-act="guardar-edicao-lead"]');
+        ok(!!guardar, 'o formulário de edição não tem como guardar');
+        if (guardar) {
+          guardar.click();
+          await new Promise((r) => setTimeout(r, 900));
+          const depois = JSON.parse(memoria.get('orbita.mesa.v1') || '{}');
+          const l = (depois.leads || []).find((x) => x.id === leadId) || {};
+          ok(l.phone === '239 111 222', `o telefone não ficou guardado (ficou «${l.phone || ''}»)`);
+          ok(l.email === 'geral@barbearia.pt', 'o email não ficou guardado');
+          ok(l.website === 'https://barbearia.pt', `o site devia ficar normalizado para https:// (ficou «${l.website || ''}»)`);
+          ok(doc.querySelector('#elTelefone') === null, 'o formulário continuou aberto depois de guardar');
+          ok(/239 111 222/.test(texto()), 'a página do lead não mostra o telefone novo');
+
+          /* e o contrário: um email torto não entra. A mesa tem de recusar antes de
+             escrever — não guardar e dizer que guardou. */
+          doc.querySelector('[data-act="editar-lead"]').click();
+          await new Promise((r) => setTimeout(r, 400));
+          doc.querySelector('#elEmail').value = 'sem-arroba.nem-dominio';
+          doc.querySelector('[data-act="guardar-edicao-lead"]').click();
+          await new Promise((r) => setTimeout(r, 500));
+          const travado = JSON.parse(memoria.get('orbita.mesa.v1') || '{}');
+          const ll = (travado.leads || []).find((x) => x.id === leadId) || {};
+          ok(ll.email === 'geral@barbearia.pt', `um email inválido foi guardado («${ll.email || ''}»)`);
+          ok(!!doc.querySelector('#elEmail'), 'a mesa fechou o formulário apesar de o email estar errado');
+        }
+      }
+    }
+  }
+}
+
 /* --- e o que foi escrito sobrevive a fechar e reabrir a página --- */
 const dom2 = carregar();
 await new Promise((r) => setTimeout(r, 2500));

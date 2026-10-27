@@ -172,3 +172,29 @@ test('13 · o armazém é um só: cada escrita atualiza a atividade', async () =
   assert.match(at[1].texto, /lead/);
   assert.ok(at.every((e) => e.at), 'cada evento tem de ter data');
 });
+
+test('23 · editar um lead no modo local: corrige o campo e não mexe no resto (1.36.0)', async () => {
+  const storage = armazem();
+  const api = createLocalApi({ storage });
+  await api.call('/ops/leads', 'POST', { leads: [{ name: 'Padaria do Bairro', city: 'Coimbra', phone: '911111111', notes: 'falar com a dona' }] });
+  const id = (await api.call('/ops/leads')).leads[0].id;
+
+  const r = await api.call(`/ops/leads/${id}`, 'PATCH', { phone: ' 239 000 111 ', email: 'geral@padaria.pt', city: 'Coimbra' });
+  assert.equal(r.ok, true);
+  assert.equal(r.lead.id, id);
+  assert.equal(r.lead.phone, '239 000 111', 'o telefone tem de ficar sem espaços nas pontas');
+  assert.equal(r.lead.email, 'geral@padaria.pt');
+  assert.equal(r.lead.notes, 'falar com a dona', 'o que não veio no PATCH não pode ser apagado');
+
+  /* apagar um campo é enviar vazio, e o silêncio também se guarda */
+  const limpo = await api.call(`/ops/leads/${id}`, 'PATCH', { phone: '' });
+  assert.equal(limpo.lead.phone, '');
+  assert.equal(limpo.lead.email, 'geral@padaria.pt');
+
+  /* e sobrevive a outra instância: ficou no armazém, não só na memória */
+  const relido = await createLocalApi({ storage }).call(`/ops/leads/${id}`);
+  assert.equal(relido.lead.email, 'geral@padaria.pt');
+
+  await assert.rejects(() => api.call(`/ops/leads/${id}`, 'PATCH', {}), /nada para alterar/);
+  await assert.rejects(() => api.call('/ops/leads/l_nao_existe', 'PATCH', { city: 'Porto' }), (e) => e.status === 404);
+});

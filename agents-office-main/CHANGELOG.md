@@ -1,3 +1,32 @@
+## 1.36.0 — 27 out 2026 · editar o lead sem sair da mesa
+
+Faltava o «actualizar» do pedido 57e: a API já aceitava `PATCH /ops/leads/:id`,
+mas a mesa não tinha por onde. Quem via um telefone errado tinha de o apagar e
+criar outro — e com ele ia o histórico.
+
+**1 · «✎ Editar» na página do lead.** Abre um formulário com os campos que a API
+aceita — telefone, email, site, nicho, cidade e notas. O funil (novo →
+contactado → …) continua a ser decidido pelos botões do funil: dois caminhos para
+a mesma decisão davam duas verdades.
+
+**2 · Validação antes de escrever.** Um email sem `@` ou um telefone com dois
+dígitos não vão para a base para voltarem como erro genérico: a mesa recusa e diz
+porquê, e o formulário fica aberto com o que estava escrito. O site aceita-se à
+mão (`empresa.pt`) e é guardado como `https://empresa.pt`.
+
+**3 · Campo vazio apaga.** «Não sei» é melhor do que um telefone errado: deixar
+um campo vazio remove o que lá estava. O que não é tocado não se perde — e as
+notas, o histórico de mensagens e a data de contacto ficam como estavam.
+
+**4 · Igual no browser e na base.** O modo local (`src/localapi.js`) ganhou o
+mesmo `PATCH`, com a mesma regra de «só os campos que vêm»: quem está sem base
+consegue editar exactamente como quem está ligado, e a cópia de segurança leva a
+alteração.
+
+**Testes:** 486/486; o fumo da mesa passa a abrir um lead, carregar em Editar,
+gravar telefone/email/site e confirmar no armazém do browser — e ainda que um
+email torto **não** é guardado.
+
 ## 1.35.0 — 27 out 2026 · a IA gratuita que começa os trabalhos
 
 Pedido: *«implementa uma IA para começar os trabalhos, implementa todas

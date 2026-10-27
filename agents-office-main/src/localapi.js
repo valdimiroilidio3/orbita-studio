@@ -287,6 +287,26 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       gravar(d);
       return { created, updated, leads: d.leads };
     }
+    /* 1.36.0 · editar um lead a partir da mesa. É o mesmo contrato da API
+       (PATCH /ops/leads/:id), por isso o formulário não precisa de saber se está
+       a falar com a base ou com este browser. Só os campos que vêm são tocados;
+       o `updated_at` muda sempre, para se ver que foi editado. */
+    if (/^\/ops\/leads\/[^/]+$/.test(caminhoLimpo) && metodo === 'PATCH') {
+      const lead = d.leads.find((l) => l.id === seg[1]);
+      if (!lead) throw falha(404, 'lead não encontrado');
+      const aceites = ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score'];
+      let tocados = 0;
+      for (const k of aceites) {
+        if (corpo?.[k] === undefined) continue;
+        lead[k] = k === 'score' ? (corpo[k] === '' || corpo[k] == null ? null : Number(corpo[k])) : limpo(corpo[k]);
+        tocados++;
+      }
+      if (!tocados) throw falha(400, 'nada para alterar');
+      lead.updated_at = new Date(agora()).toISOString();
+      escrever(d, 'lead', `lead «${lead.name}» editado`);
+      gravar(d);
+      return { ok: true, lead };
+    }
     if (/^\/ops\/leads\/[^/]+$/.test(caminhoLimpo) && metodo === 'GET') {
       const lead = d.leads.find((l) => l.id === seg[1]);
       if (!lead) throw falha(404, 'lead não encontrado');
