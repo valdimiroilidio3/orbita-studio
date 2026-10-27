@@ -1,3 +1,28 @@
+## 1.27.0 — 27 out 2026 · Vercel Connect: credenciais ao minuto em vez de chaves em repouso
+
+O dono pediu `getToken('opencode/orbita-agentes', { subject: { type: 'user', id } })`.
+Está implementado no servidor, com o conector `scl_qldewGbrB7mPvtjEQXyVQ`:
+
+- `api/_conect.mjs` — pede o token com `getTokenResponse` (validade e conector na
+  resposta), autentica com o OIDC da função, guarda em cache até 30 s antes de
+  expirar e revalida quando se força.
+- **O token nunca sai da função.** As rotas devolvem só o retrato: conector,
+  sujeito, validade e `4…4` caracteres.
+- Erros da SDK traduzidos para acções: falta autorização, falta instalação,
+  conector não ligado ao projecto, ambiente não autorizado, credencial recusada.
+- Centro de Controlo: «Vercel Connect» no grupo **Credenciais**, com «Testar
+  ligação» a pedir um token a sério e a guardar o resultado.
+- `POST /conectar/consentimento` gera o link de autorização, desligado por
+  omissão (`ORBITA_PERMITIR_CONSENTIMENTO=1`) enquanto a aplicação não tiver
+  autenticação.
+
+Limites declarados: o sujeito por omissão é `app` (a app não tem login, logo não
+se inventa um `usr_…`); o conector tem de estar ligado ao projecto/ambiente na
+Vercel; e ainda nenhum agente usa o token — a função existe e está testada, mas
+ligá-la a uma tarefa concreta é o passo seguinte, só com teste real a passar.
+
+Prova: 15 testes em `conectar.test.mjs`; suite 389/389.
+
 ## 1.26.0 — 27 out 2026 · Verificar em produção sem escrever nada
 
 A cópia de segurança (1.23.0) e a cifra (1.25.0) já existiam. Faltava poder

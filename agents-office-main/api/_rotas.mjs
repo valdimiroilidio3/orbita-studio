@@ -154,10 +154,17 @@ const SERVICOS = [
     id: 'tavily', name: 'Tavily (pesquisa web)', kind: 'pesquisa', env: ['TAVILY_API_KEY'], docs: 'https://app.tavily.com',
     sondar: async ({ env, fetchImpl }) => (await import('./_pesquisa.mjs')).testarFonte('tavily', { env, fetchImpl }),
   },
+  /* 1.27.0: credenciais ao minuto. Não há chave para listar: o que existe (ou
+     não) é o token OIDC que a Vercel injecta na função. */
+  {
+    id: 'vercel-connect', name: 'Vercel Connect', kind: 'credenciais', env: [], docs: 'https://vercel.com/docs/connect',
+    configurado: (env) => !!(env.VERCEL_OIDC_TOKEN || env.AI_GATEWAY_API_KEY || env.VERCEL_TOKEN),
+    sondar: async ({ env, importarConect }) => (await import('./_conect.mjs')).testar({}, { env, importar: importarConect }),
+  },
 ];
 
 /** Faz o pedido de sonda a um serviço. Não inventa: sem chave, devolve o que falta. */
-export async function sondarServico(id, { env = process.env, fetchImpl = fetch } = {}) {
+export async function sondarServico(id, { env = process.env, fetchImpl = fetch, importarConect = null } = {}) {
   const s = SERVICOS.find((x) => x.id === id);
   if (!s) return { ok: false, erro: 'integração desconhecida', codigo: 'desconhecida' };
   const faltam = s.env.filter((v) => !env[v]);
@@ -168,7 +175,7 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch }
   if (typeof s.sondar === 'function') {
     const inicio = Date.now();
     try {
-      const r = await s.sondar({ env, fetchImpl });
+      const r = await s.sondar({ env, fetchImpl, importarConect });
       return { ...r, quando: r.quando || new Date().toISOString(), ms: r.ms ?? (Date.now() - inicio) };
     } catch (e) {
       return { ok: false, ms: Date.now() - inicio, erro: String(e.message || e).slice(0, 200), codigo: e.codigo || 'erro' };
@@ -201,7 +208,7 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch }
    build da Vercel reutiliza cache e continua a servir código antigo. */
 const MARCA_FUNCOES = 'rpc-1.23.0';
 export const marcaDasFuncoes = () => MARCA_FUNCOES;
-export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch }) {
+export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch, importarConect = null }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
 
   /* ---- 1.18.0 · tudo o que é IA vive em api/_ia (fornecedores, router, agentes)
@@ -326,7 +333,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
         env: tem, missing: s.env.filter((v) => !env[v]),
         conector: porConector,
         via: porConector && tem.length === s.env.length ? 'conector+chave' : porConector ? 'conector' : (tem.length ? 'chave' : null),
-        configured: tem.length === s.env.length || porConector,
+        configured: s.configurado ? !!s.configurado(env) : (tem.length === s.env.length || porConector),
         verified: !!t?.ok, status: t?.status ?? null, latencyMs: t?.ms ?? null,
         checkedAt: t?.quando || null, error: t?.ok ? null : (t?.erro || null),
         detalhe: t?.ok ? (t.detalhe || null) : null, note: null,
@@ -342,6 +349,45 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
         porConector: list.filter((x) => x.conector).length,
       },
     } };
+  }
+
+  /* ---- 1.27.0 · Vercel Connect: pedir credenciais em vez de as guardar ----
+     O token em claro nunca sai daqui. O que sai é o retrato: conector, sujeito,
+     validade e um valor mascarado. */
+  if (caminhoLimpo === '/conectar/estado' && m === 'GET') {
+    const c = await import('./_conect.mjs');
+    return { status: 200, corpo: await c.estado(env, { importar: importarConect }) };
+  }
+
+  if (caminhoLimpo === '/conectar/teste' && (m === 'POST' || m === 'GET')) {
+    const c = await import('./_conect.mjs');
+    const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
+    const pedido = limpo(fonte?.sujeito || fonte?.subject || fonte?.id) || null;
+    const escopos = limpo(fonte?.escopos || fonte?.scopes);
+    const r = await c.testar(
+      { pedido: pedido ? { id: pedido } : null, escopos: escopos ? escopos.split(',').map((x) => x.trim()).filter(Boolean) : null, forcar: m === 'GET' ? true : fonte?.forcar !== false },
+      { env, importar: importarConect },
+    );
+    /* o botão do Centro de Controlo grava o resultado; um GET de diagnóstico não */
+    if (m === 'POST') {
+      const cfg = await repo.ia.config.ler().catch(() => ({}));
+      await repo.ia.config.gravar('testes', { ...(cfg.testes || {}), 'vercel-connect': { ok: r.ok, ms: r.ms, erro: r.ok ? null : r.erro, quando: r.quando, detalhe: r.ok ? `${r.conector} · expira ${r.expiraEm}` : null } }).catch(() => {});
+      await repo.atividade.add('config', `teste de vercel-connect: ${r.ok ? 'token recebido' : `falhou (${String(r.erro).slice(0, 80)})`}`).catch(() => {});
+    }
+    return { status: 200, corpo: { id: 'vercel-connect', ...r } };
+  }
+
+  if (caminhoLimpo === '/conectar/consentimento' && m === 'POST') {
+    const c = await import('./_conect.mjs');
+    try {
+      const r = await c.consentimento(
+        { pedido: corpo?.sujeito ? { id: limpo(corpo.sujeito) } : null, escopos: corpo?.escopos || null, voltarPara: corpo?.voltarPara || null },
+        { env, importar: importarConect },
+      );
+      return { status: 200, corpo: r };
+    } catch (e) {
+      throw falha(e.codigo === 'consentimento-desligado' ? 409 : 503, String(e.message || e));
+    }
   }
 
   /* ---- 1.25.0 · a pesquisa, servida pela função e não só pela máquina do dono ----
@@ -498,7 +544,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
       }
     }
 
-    const r = await sondarServico(id, { env, fetchImpl });
+    const r = await sondarServico(id, { env, fetchImpl, importarConect });
     if (r.codigo === 'desconhecida') throw falha(404, r.erro);
     testes[id] = { ...r, quando: r.quando || new Date().toISOString() };
     await repo.ia.config.gravar('testes', testes).catch(() => {});
