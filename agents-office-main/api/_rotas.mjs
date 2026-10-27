@@ -124,6 +124,102 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   const qs = new URLSearchParams(String(caminho).split('?')[1] || '');
   const m = String(metodo || 'GET').toUpperCase();
 
+  /* ---- 1.20.0 · o Centro de Controlo: salas, estados, segurança ----
+     As três marcas de cada linha (configurado / ligado / a funcionar) vêm todas
+     daqui — a interface não as inventa. */
+  if (caminhoLimpo === '/controlo/estado' && m === 'GET') {
+    const { retrato } = await import('./_controlo.mjs');
+    let motor = null;
+    try {
+      const { criarMotor } = await import('./_ia/motor.mjs');
+      motor = criarMotor({ repo, env, fetchImpl });
+    } catch { motor = null; }
+    return { status: 200, corpo: await retrato({ repo, motor, env }) };
+  }
+
+  if (caminhoLimpo === '/controlo/salas' && m === 'POST') {
+    const { limparAjustes } = await import('./_controlo.mjs');
+    const ajustes = limparAjustes(corpo);
+    await repo.ia.config.gravar('salas', ajustes);
+    return { status: 200, corpo: { ok: true, ajustes } };
+  }
+
+  if (seg[0] === 'controlo' && seg[1] === 'salas' && seg[3] === 'cor' && m === 'POST') {
+    const { limparAjustes, comCor } = await import('./_controlo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const r = comCor(limparAjustes(cfg.salas), seg[2], corpo?.cor);
+    if (r.erro) throw falha(400, r.erro);
+    await repo.ia.config.gravar('salas', r.ajustes);
+    return { status: 200, corpo: { ok: true, ajustes: r.ajustes } };
+  }
+
+  if (caminhoLimpo === '/controlo/agentes' && m === 'POST') {
+    const { limparAjustes, comAgente } = await import('./_controlo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const ajustes = limparAjustes(cfg.salas);
+    /* quantos já existem na sala: os acrescentados por nós + os que a cena tem
+       (o cliente diz quantos são — é ele que conhece os agentes de origem) */
+    const porSala = ajustes.agentes.filter((a) => a.dept === corpo?.dept).length + (Number(corpo?.existentesNaSala) || 0);
+    const r = comAgente(ajustes, corpo, porSala);
+    if (r.erro) throw falha(400, r.erro);
+    await repo.ia.config.gravar('salas', r.ajustes);
+    return { status: 201, corpo: { ok: true, agente: r.agente, ajustes: r.ajustes } };
+  }
+
+  if (seg[0] === 'controlo' && seg[1] === 'agentes' && seg.length === 3 && m === 'DELETE') {
+    const { limparAjustes, semAgente } = await import('./_controlo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const r = semAgente(limparAjustes(cfg.salas), seg[2]);
+    if (r.erro) throw falha(404, r.erro);
+    await repo.ia.config.gravar('salas', r.ajustes);
+    return { status: 200, corpo: { ok: true, ajustes: r.ajustes } };
+  }
+
+  /* ---- o catálogo de integrações que a aba de Configurações mostra ----
+     Antes esta rota não existia no modo base: o painel pedia e recebia 404, e o
+     dono ficava sem saber o que faltava. Agora responde com o que é verdade:
+     que variáveis existem, quais faltam, e o último teste REAL de cada uma. */
+  if (caminhoLimpo === '/platform/apis' && m === 'GET') {
+    const { FORNECEDORES } = await import('./_ia/catalogo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const testes = cfg.testes || {};
+    const ia = Object.entries(FORNECEDORES)
+      .filter(([, f]) => f.tipo === 'chat')
+      .map(([id, f]) => {
+        const vars = f.chave || [];
+        const env2 = vars.filter((v) => !!env[v]);
+        const t = testes[id];
+        return {
+          id, name: f.nome, kind: 'ia', docs: f.docs || f.site || null,
+          env: env2, missing: vars.filter((v) => !env[v]),
+          configured: env2.length > 0 || !!f.keyless,
+          verified: !!t?.ok, status: t?.ok ? 200 : null, latencyMs: t?.ms ?? null,
+          checkedAt: t?.quando || null, error: t?.ok ? null : (t?.erro || null),
+          note: f.nota || null,
+        };
+      });
+    const servicos = [
+      { id: 'github', name: 'GitHub', kind: 'codigo', env: ['GITHUB_TOKEN'], docs: 'https://github.com/settings/tokens' },
+      { id: 'vercel', name: 'Vercel', kind: 'deploy', env: ['VERCEL_TOKEN'], docs: 'https://vercel.com/account/tokens' },
+      { id: 'supabase', name: 'Supabase', kind: 'base-de-dados', env: ['SUPABASE_URL', 'SUPABASE_SECRET_KEY'], docs: 'https://supabase.com/dashboard' },
+      { id: 'resend', name: 'Resend (email)', kind: 'correio', env: ['RESEND_API_KEY'], docs: 'https://resend.com/api-keys' },
+    ].map((s) => {
+      const tem = s.env.filter((v) => !!env[v]);
+      return { ...s, env: tem, missing: s.env.filter((v) => !env[v]), configured: tem.length === s.env.length, verified: false, status: null, latencyMs: null, checkedAt: null, error: null, note: null };
+    });
+    const list = [...servicos, ...ia];
+    return { status: 200, corpo: {
+      list,
+      summary: { total: list.length, configuradas: list.filter((x) => x.configured).length, verificadas: list.filter((x) => x.verified).length },
+    } };
+  }
+
+  if (caminhoLimpo === '/platform/key' && m === 'POST') {
+    /* Em produção as variáveis de ambiente são só de leitura: escrever chaves
+       pela interface é a mentira mais fácil de contar aqui. Diz-se em vez disso. */
+    throw falha(501, 'as chaves vivem nas variáveis de ambiente da Vercel (Settings → Environment Variables): esta instalação não as pode escrever pela interface');
+  }
+
   /* ---- quem és tu ---- */
   if (caminhoLimpo === '/auth/eu') {
     return { status: 200, corpo: {

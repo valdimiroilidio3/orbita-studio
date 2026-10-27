@@ -1,3 +1,69 @@
+## 1.20.0 — 27 out 2026 · Configurações passam a Centro de Controlo
+
+Pedido do dono: «a aba de Configurações deve ser um Centro de Controlo Inteligente…
+controlar as seis salas, mudar o tamanho das salas, acrescentar agentes onde aumentar
+o tamanho da sala automaticamente, mudança de funções, cores… modelos de IA, APIs,
+execução de tarefas, segurança e tema». E a regra que ficou por cima de tudo:
+
+> «A aba deve distinguir claramente três estados: Configurado, Ligado e A funcionar.
+> Ter uma API configurada não significa que esteja ligada; estar ligada não significa
+> que um agente esteja a executar uma tarefa.»
+
+### Os três estados, provados e não pintados
+
+`GET /api/controlo/estado` (novo) devolve, por fornecedor de IA, três marcas
+independentes:
+
+| marca | de onde vem | quando é `null` |
+|---|---|---|
+| `configurado` | existe chave no ambiente, ou o fornecedor é keyless | nunca |
+| `ligado` | o **último teste real** (`/ia/testar`) respondeu | sem teste — a interface diz «por provar» |
+| `a_funcionar` | houve execuções registadas nas últimas 24 h | sem execuções |
+
+E o mesmo para a execução (`runs24h`, `chamadas24h`, última chamada, último modelo) e
+para a segurança (login, chaves no servidor, aprovação humana). Nada é estimado.
+
+### As salas crescem com os agentes — e a conta é uma só
+
+`src/salas.js` (novo, puro, testado) calcula:
+
+- `filasNecessarias(n)` = filas de duas secretárias que a lotação pede;
+- `profundidadePara(filas)` = parede de fundo + filas + faixa da frente (a **mesma**
+  fórmula de `data.js`, com o `SEAT_GRID`);
+- `lugarLivre()` = primeiro lugar vago, sem pôr ninguém em cima de outro.
+
+`src/escritorio.js` aplica isto **antes de a cena assentar** (`main.js` importa-o
+primeiro): cores escolhidas, agentes acrescentados e a sala mais funda. Uma sala
+**nunca encolhe** abaixo da planta original, e a faixa da frente fica sempre livre —
+há provas para as duas coisas.
+
+### O que se pode fazer na aba
+
+- **cor de cada sala** (chip + vidro derivado), guardada no servidor e no browser;
+- **acrescentar/tirar agentes** por sala (limite de 12 por sala), com função escrita;
+- ver **as filas, os lugares livres e se a sala foi ampliada**;
+- ver **Inteligência** (motor pronto, configurados, ligados, por testar), **Execução**
+  (execuções e chamadas em 24 h) e **Segurança** (login, chaves, aprovação);
+- o tema (claro/escuro/automático) que já existia.
+
+Aviso honesto na própria aba: a cena aplica as mudanças **no próximo arranque** — o
+painel não finge que já mudaram.
+
+### APIs no modo base
+
+`GET /api/platform/apis` **não existia** no modo base: o painel pedia e recebia 404.
+Agora responde com o catálogo real (serviços + os 76 fornecedores de IA), dizendo por
+cada um que variáveis existem e quais faltam. `POST /api/platform/key` passa a
+responder **501 com a razão** — em produção as variáveis de ambiente são só de leitura
+e uma interface que «guarda chaves» seria mentira.
+
+### Provas
+
+- `controlo.test.mjs` (novo, 15 provas): crescimento em filas inteiras, sala que não
+  encolhe, lugar livre, cor inválida recusada, configuração estragada ignorada,
+  rotas a guardar/devolder, e os três estados a nascerem de factos.
+- Suite completa: **327/327**. Build: `dist/mesa.html` 127 KB. `mesa.smoke` verde.
+
 ## 1.19.1 — 27 out 2026 · o que a produção corrigiu no 1.19.0
 
 O 1.19.0 foi publicado e depois **testado contra a produção** (Vercel + Supabase

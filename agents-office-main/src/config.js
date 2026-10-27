@@ -17,6 +17,8 @@
 // Órbita corre, e deixa funcionar o que é do browser (tema, painéis, avisos).
 
 import { THEMES, THEME_LABEL, readTheme, safeStore } from './theme.js';
+import { DEPTS, AGENTS } from './data.js';
+import { contarAgentes, corValida, filasNecessarias, gravarAjustes, lerAjustes } from './salas.js';
 
 /* ---------- o que fica lembrado entre visitas ----------
    Só preferências do browser: o tema (em theme.js), os avisos (em notify.js) e os dois painéis. */
@@ -40,6 +42,18 @@ const KIND_LABEL = {
   pagamentos: 'Pagamentos', correio: 'Correio', mensagens: 'Mensagens', voz: 'Voz', api: 'API',
 };
 
+/* ---------- 1.20.0 · o Centro de Controlo ----------
+   Três marcas por linha, e nenhuma inventada: `configurado` (existe chave),
+   `ligado` (o último teste real passou) e `a_funcionar` (houve execuções nas
+   últimas 24 h). Vêm do servidor em `/api/controlo/estado`. */
+const SELO = {
+  sim: { k: 'on', t: 'sim' },
+  nao: { k: 'off', t: 'não' },
+  prova: { k: 'warn', t: 'por provar' },
+};
+const selo = (v) => (v === true ? SELO.sim : v === false ? SELO.nao : SELO.prova);
+const SALAS = Object.keys(DEPTS).filter((k) => k !== 'brain');
+
 function stateOf(p) {
   if (p.verified) return { k: 'on', t: 'pronta' };
   if (p.configured) return { k: 'warn', t: p.note ? 'configurada' : 'com chave' };
@@ -61,6 +75,10 @@ export function createConfig({
   let apis = null;              // { list, summary } do servidor
   let semServidor = false;
   let lastError = '';
+  let centro = null;            // /api/controlo/estado
+  let ajustes = null;           // o que este browser guardou (cores e agentes)
+  let formSala = null;          // sala com o formulário de agente aberto
+  let avisoSala = '';           // «recarrega para a cena assentar»
 
   /* ---------- o tema ---------- */
   function themeRow() {
@@ -140,6 +158,85 @@ export function createConfig({
     </div>`;
   }
 
+  /* ---------- as seis salas ---------- */
+  function salaCard(dept) {
+    const d = DEPTS[dept];
+    const base = AGENTS.filter((a) => a.dept === dept && !a.acrescentado);
+    const extras = (ajustes?.agentes || []).filter((a) => a.dept === dept);
+    const total = contarAgentes(AGENTS, dept);
+    const filas = filasNecessarias(total);
+    const capacidade = filas * 2;
+    const livres = Math.max(0, capacidade - total);
+    const ia = centro?.ia;
+    return `<div class="cfg-api" data-sala="${esc(dept)}">
+      <div class="cfg-api-h">
+        <span class="cfg-swatch" style="background:${esc(d.chip)}" aria-hidden="true"></span>
+        <b>${esc(d.name)}</b>
+        <span class="cfg-st s-on"><i></i>${total} ${total === 1 ? 'agente' : 'agentes'}</span>
+      </div>
+      <p class="cfg-note small">${filas} ${filas === 1 ? 'fila' : 'filas'} · ${livres} ${livres === 1 ? 'lugar livre' : 'lugares livres'} · ${extras.length ? 'sala ampliada pelos agentes novos' : 'na planta original'}</p>
+      <div class="cfg-line">
+        <label class="cfg-fld cfg-cor">
+          <span class="cfg-k">cor da sala</span>
+          <input type="color" value="${esc(d.chip)}" data-cor="${esc(dept)}" aria-label="cor da sala ${esc(d.name)}">
+        </label>
+        <button type="button" class="cfg-btn quiet" data-mais="${esc(dept)}">+ agente</button>
+        ${extras.map((a) => `<button type="button" class="cfg-btn quiet" data-menos="${esc(a.id)}" data-dept="${esc(dept)}" title="tirar ${esc(a.nome)}">× ${esc(a.nome)}</button>`).join('')}
+      </div>
+      ${formSala === dept ? `<div class="cfg-line">
+        <label class="cfg-fld"><span class="cfg-k">nome do agente</span>
+          <input type="text" data-novo-nome placeholder="ex.: Gestor de tráfego" maxlength="28" autocomplete="off"></label>
+        <label class="cfg-fld"><span class="cfg-k">função</span>
+          <input type="text" data-novo-funcao placeholder="o que ele faz" maxlength="120" autocomplete="off"></label>
+        <button type="button" class="cfg-btn" data-criar="${esc(dept)}">Acrescentar</button>
+        <button type="button" class="cfg-btn quiet" data-cancelar="1">Cancelar</button>
+      </div>` : ''}
+      ${base.length ? '' : `<p class="cfg-honest">Esta sala está sem agentes de origem — só tem os que acrescentares.</p>`}
+      ${ia ? '' : ''}
+    </div>`;
+  }
+
+  function centroSection() {
+    if (semServidor) return '';
+    const ia = centro?.ia;
+    const ex = centro?.execucao;
+    const seg = centro?.seguranca;
+    const salas = SALAS.map(salaCard).join('');
+    const ligados = ia ? (ia.funcionais || []) : [];
+    return `<div class="cfg-sec">
+      <div class="cfg-h"><b>Centro de Controlo</b><span class="cfg-note">${centro ? `estado real · ${esc(centro.versao || '')}` : 'a ler o estado…'}</span></div>
+      <p class="cfg-honest">Cada serviço tem três marcas separadas: <b>configurado</b> (existe chave), <b>ligado</b>
+      (o último teste real passou) e <b>a funcionar</b> (houve trabalho nas últimas 24 h). Nada disto é estimado.</p>
+
+      <div class="cfg-group"><h4>As seis salas</h4><div class="cfg-salas">${salas}</div></div>
+
+      ${avisoSala ? `<p class="cfg-honest">${esc(avisoSala)} <button type="button" class="cfg-btn" data-act="recarregar">Recarregar a cena</button></p>` : ''}
+
+      <div class="cfg-group"><h4>Inteligência</h4>
+        <p class="cfg-note small">
+          <span class="cfg-st s-${ia?.pronto ? 'on' : 'off'}"><i></i>motor ${ia?.pronto ? 'pronto' : 'sem fornecedor'}</span>
+          · ${ia?.comChave || 0} configurados · ${ligados.length} ligados ${ligados.length ? `(${esc(ligados.slice(0, 6).join(', '))}${ligados.length > 6 ? '…' : ''})` : ''} · ${ia?.porTestar || 0} por testar
+        </p>
+      </div>
+
+      <div class="cfg-group"><h4>Execução</h4>
+        <p class="cfg-note small">
+          <span class="cfg-st s-${ex?.a_funcionar ? 'on' : 'warn'}"><i></i>${ex?.a_funcionar ? 'a funcionar' : 'parado'}</span>
+          · ${ex?.runs24h || 0} execuções em 24 h · ${ex?.chamadas24h || 0} chamadas a modelos
+          ${ex?.ultimaChamada ? `· última ${esc(new Date(ex.ultimaChamada).toLocaleString())}` : '· sem chamadas registadas'}
+        </p>
+      </div>
+
+      <div class="cfg-group"><h4>Segurança</h4>
+        <p class="cfg-note small">
+          login <b>${seg?.autenticacao ? 'activo' : 'não configurado'}</b> · chaves no servidor <b>${seg?.chavesNoServidor ? 'sim' : 'não'}</b>
+          · aprovação humana <b>${seg?.aprovacaoHumana ? 'sim' : 'não'}</b>
+        </p>
+        ${seg?.nota ? `<p class="cfg-honest">${esc(seg.nota)}</p>` : ''}
+      </div>
+    </div>`;
+  }
+
   function apisSection() {
     if (semServidor) {
       return `<div class="cfg-sec">
@@ -169,7 +266,7 @@ export function createConfig({
 
   function render() {
     if (!body) return;
-    body.innerHTML = themeRow() + apisSection() + notifyRow() + prefsRow();
+    body.innerHTML = themeRow() + centroSection() + apisSection() + notifyRow() + prefsRow();
     if (title) title.textContent = semServidor ? 'sem servidor · configurações do browser' : 'esta máquina';
     wire();
   }
@@ -185,6 +282,43 @@ export function createConfig({
       semServidor = true; apis = null; lastError = '';
     }
     busy = false;
+    render();
+  }
+
+  async function loadCentro() {
+    try {
+      const r = await fetch('/api/controlo/estado', { headers: { accept: 'application/json' } });
+      if (r.status === 404) { semServidor = true; centro = null; }
+      else if (!r.ok) { centro = null; lastError = `o Centro de Controlo respondeu HTTP ${r.status}`; }
+      else {
+        centro = await r.json();
+        semServidor = false;
+        if (centro.ajustes) ajustes = centro.ajustes;
+      }
+    } catch { centro = null; }
+    render();
+  }
+
+  /** Guarda no servidor e neste browser. A cena só muda no próximo arranque —
+   *  e é isso que o aviso diz, em vez de fingir que já mudou. */
+  async function guardarSalas(pedido, { metodo = 'POST', caminho = '/controlo/salas' } = {}) {
+    let servidorOk = false, erro = '';
+    try {
+      const r = await fetch(`/api${caminho}`, {
+        method: metodo, headers: { 'content-type': 'application/json' }, body: JSON.stringify(pedido || {}),
+      });
+      const j = await r.json().catch(() => ({}));
+      servidorOk = r.ok && j.ok !== false;
+      if (!servidorOk) erro = j.error || `HTTP ${r.status}`;
+      if (servidorOk && j.ajustes) ajustes = j.ajustes;
+    } catch (e) { erro = 'sem resposta do servidor: ' + e.message; }
+
+    /* a cópia local é o que a cena consegue ler sem esperar por rede */
+    if (ajustes) gravarAjustes(safeStore(), ajustes);
+    avisoSala = servidorOk
+      ? 'Guardado. A cena aplica isto no próximo arranque.'
+      : `Guardado só neste browser (${erro}). A cena aplica no próximo arranque.`;
+    formSala = null;
     render();
   }
 
@@ -278,6 +412,40 @@ export function createConfig({
     if (nt) nt.addEventListener('click', () => {
       if (notify) notify.show({ id: 'teste', state: 'waiting', task: 'teste das configurações' });
     });
+    /* --- Centro de Controlo --- */
+    body.querySelectorAll('[data-cor]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const dept = inp.getAttribute('data-cor');
+        const cor = String(inp.value || '').trim();
+        if (!corValida(cor)) { avisoSala = 'essa cor não é válida (#rrggbb)'; render(); return; }
+        if (DEPTS[dept]) DEPTS[dept].chip = cor;      // a interface mostra já; a cena, no arranque
+        guardarSalas({ cor }, { caminho: `/controlo/salas/${encodeURIComponent(dept)}/cor` });
+      });
+    });
+    body.querySelectorAll('[data-mais]').forEach((b) => {
+      b.addEventListener('click', () => { formSala = b.getAttribute('data-mais'); render(); });
+    });
+    const cancelar = body.querySelector('[data-cancelar]');
+    if (cancelar) cancelar.addEventListener('click', () => { formSala = null; render(); });
+    body.querySelectorAll('[data-criar]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const dept = b.getAttribute('data-criar');
+        const nome = body.querySelector('[data-novo-nome]')?.value || '';
+        const funcao = body.querySelector('[data-novo-funcao]')?.value || '';
+        const existentesNaSala = contarAgentes(AGENTS, dept) - (ajustes?.agentes || []).filter((a) => a.dept === dept).length;
+        guardarSalas({ nome, dept, funcao, existentesNaSala }, { caminho: '/controlo/agentes' });
+      });
+    });
+    body.querySelectorAll('[data-menos]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-menos');
+        if (ajustes) ajustes = { ...ajustes, agentes: (ajustes.agentes || []).filter((a) => a.id !== id) };
+        guardarSalas({}, { metodo: 'DELETE', caminho: `/controlo/agentes/${encodeURIComponent(id)}` });
+      });
+    });
+    const recarregar = body.querySelector('[data-act="recarregar"]');
+    if (recarregar) recarregar.addEventListener('click', () => location.reload());
+
     body.querySelectorAll('.cfg-api').forEach((row) => {
       const sv = row.querySelector('[data-act="save"]');
       if (sv) sv.addEventListener('click', () => saveKey(row));
@@ -298,8 +466,10 @@ export function createConfig({
     const btn = document.getElementById('topCfg');
     if (btn) btn.setAttribute('aria-expanded', String(isOpen));
     if (isOpen) {
+      ajustes = lerAjustes(safeStore());
       render();
       loadApis();
+      loadCentro();
       const first = panel.querySelector('button, input');
       if (first) setTimeout(() => first.focus(), 30);
     }
