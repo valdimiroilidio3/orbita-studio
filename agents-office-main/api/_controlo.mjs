@@ -26,16 +26,28 @@
 export const MAX_POR_SALA = 12;
 export const MAX_AGENTES_EXTRA = 60;
 
+export const CRESCER_MAX = 20;
+export const FUNDO_MAX = 60;
+
 const corValida = (c) => typeof c === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(c.trim());
 const texto = (v, max = 60) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
 
 /** Normaliza o que o cliente guardou. Nunca lança: configuração estragada é ignorada. */
 export function limparAjustes(bruto) {
-  const base = { cores: {}, agentes: [] };
+  const base = { cores: {}, agentes: [], tamanhos: {} };
   if (!bruto || typeof bruto !== 'object') return base;
 
   for (const [dept, cor] of Object.entries(bruto.cores || {})) {
     if (/^[a-z0-9-]{1,20}$/i.test(dept) && corValida(cor)) base.cores[dept] = cor.trim();
+  }
+
+  for (const [dept, t] of Object.entries(bruto.tamanhos || {})) {
+    if (!/^[a-z0-9-]{1,20}$/i.test(dept) || !t || typeof t !== 'object') continue;
+    const limpo = {};
+    const w = Number(t.w), d = Number(t.d);
+    if (Number.isFinite(w) && w > 0) limpo.w = Math.round(Math.min(Math.max(w, 8), 60) * 10) / 10;
+    if (Number.isFinite(d) && d > 0) limpo.d = Math.round(Math.min(Math.max(d, 8), FUNDO_MAX) * 10) / 10;
+    if (Object.keys(limpo).length) base.tamanhos[dept] = limpo;
   }
 
   const vistos = new Set();
@@ -79,6 +91,21 @@ export function comAgente(ajustes, { nome, dept, funcao } = {}, porSala = 0) {
   }
   const agente = { id: idDe(n, existentes), nome: n, dept: d, funcao: texto(funcao, 120) || 'Agente acrescentado pelo dono' };
   return { ajustes: { ...ajustes, agentes: [...ajustes.agentes, agente] }, agente };
+}
+
+/** Tamanho pedido à mão. Nunca abaixo do que a lotação exige (`minimo`). */
+export function comTamanho(ajustes, dept, { w, d } = {}, { minimo = 8, base = 8 } = {}) {
+  if (!/^[a-z0-9-]{1,20}$/i.test(String(dept || ''))) return { erro: 'sala inválida' };
+  const min = Math.max(Number(minimo) || 0, Number(base) || 0, 8);
+  const max = Math.min(min + CRESCER_MAX, Math.max(FUNDO_MAX, min));
+  const saida = { ...ajustes, tamanhos: { ...ajustes.tamanhos } };
+  const actual = { ...(saida.tamanhos[dept] || {}) };
+  const nW = Number(w), nD = Number(d);
+  if (Number.isFinite(nW) && nW > 0) actual.w = Math.round(Math.min(Math.max(nW, 8), 60) * 10) / 10;
+  if (Number.isFinite(nD) && nD > 0) actual.d = Math.round(Math.min(Math.max(nD, min), max) * 10) / 10;
+  if (!Object.keys(actual).length) return { erro: 'indica a largura ou a profundidade' };
+  saida.tamanhos[dept] = actual;
+  return { ajustes: saida, tamanho: actual };
 }
 
 export function semAgente(ajustes, id) {
@@ -154,5 +181,12 @@ export async function retrato({ repo, motor = null, env = process.env, agora = D
     nota: 'A base responde sem login: quem souber o endereço entra. Chaves ficam no servidor; acções destrutivas exigem aprovação.',
   };
 
-  return { versao: '1.20.0', ajustes, ia, execucao, seguranca, quando: new Date(agora).toISOString(), env: { temChaves: Object.keys(env || {}).length > 3 } };
+  /* O REGISTO: quem mudou o quê e quando. Não há utilizadores nesta instalação,
+     por isso quem assina é `dono` — é o que a base sabe, e não se inventa outro. */
+  const registo = (await repo.atividade.list(60).catch(() => []))
+    .filter((a) => a.tipo === 'config')
+    .slice(0, 20)
+    .map((a) => ({ quando: a.at, quem: 'dono', o_que: a.texto }));
+
+  return { versao: '1.21.0', ajustes, ia, execucao, seguranca, registo, quando: new Date(agora).toISOString(), env: { temChaves: Object.keys(env || {}).length > 3 } };
 }

@@ -112,9 +112,10 @@ test('agentes: a mesma configuração aplicada duas vezes não duplica o agente'
 /* ---------- 4 · o que é guardado ---------- */
 test('guardar: lixo no armazenamento não parte a cena (é ignorado)', () => {
   const store = (v) => ({ getItem: () => v, setItem: () => {} });
-  assert.deepEqual(lerAjustes(store('{isto não é json')), { cores: {}, agentes: [] });
-  assert.deepEqual(lerAjustes(store('null')), { cores: {}, agentes: [] });
-  assert.deepEqual(lerAjustes(store(JSON.stringify({ cores: { sales: 'verde' }, agentes: [{ nome: '' }] }))), { cores: {}, agentes: [] });
+  const vazio = { cores: {}, agentes: [], tamanhos: {} };
+  assert.deepEqual(lerAjustes(store('{isto não é json')), vazio);
+  assert.deepEqual(lerAjustes(store('null')), vazio);
+  assert.deepEqual(lerAjustes(store(JSON.stringify({ cores: { sales: 'verde' }, agentes: [{ nome: '' }] }))), vazio);
   const bom = lerAjustes(store(JSON.stringify({ cores: { sales: '#EADC8F' }, agentes: [{ id: 'x', nome: 'Novo agente', dept: 'sales', funcao: 'faz coisas' }] })));
   assert.equal(bom.cores.sales, '#EADC8F');
   assert.equal(bom.agentes.length, 1);
@@ -244,7 +245,8 @@ test('interface: o painel desenha as seis salas, a cor e os três estados', asyn
     status: 200,
     corpo: {
       versao: '1.20.0',
-      ajustes: { cores: { sales: '#EADC8F' }, agentes: [{ id: 'gestor', nome: 'Gestor de tráfego', dept: 'sales', funcao: 'anúncios' }] },
+      ajustes: { cores: { sales: '#EADC8F' }, agentes: [{ id: 'gestor', nome: 'Gestor de tráfego', dept: 'sales', funcao: 'anúncios' }], tamanhos: {} },
+      registo: [{ quando: new Date('2026-10-27T09:30:00Z').toISOString(), quem: 'dono', o_que: 'sala sales: fundo 44 m' }],
       ia: { pronto: true, conhecido: true, comChave: 2, funcionais: ['llm7'], porTestar: 1, fornecedores: [] },
       execucao: { runs24h: 2, chamadas24h: 9, a_funcionar: true, ultimaChamada: new Date().toISOString() },
       seguranca: { autenticacao: false, chavesNoServidor: true, aprovacaoHumana: true, nota: 'A base responde sem login.' },
@@ -276,5 +278,78 @@ test('interface: o painel desenha as seis salas, a cor e os três estados', asyn
   /* o agente acrescentado tem botão para sair, e há um botão para acrescentar */
   assert.match(html, /data-menos="gestor"/);
   assert.match(html, /data-mais="sales"/);
+  /* 1.21.0: tamanho à mão, com a lotação a mandar no mínimo */
+  assert.match(html, /data-tamanho="sales"/);
+  assert.match(html, /data-minimo="/);
+  /* e o registo de quem mudou o quê, com hora e autor */
+  assert.match(html, /Registo de alterações/);
+  assert.match(html, /fundo 44 m/);
+  assert.match(html, /<i>dono<\/i>/);
   cfg.close();
+});
+
+/* ---------- 8 · tamanho à mão e registo ---------- */
+test('tamanho: cabe entre o que a lotação exige e o limite, e nunca abaixo do mínimo', async () => {
+  const { tamanhoValido, CRESCER_MAX } = await import('./src/salas.js');
+  assert.equal(tamanhoValido(40, { minimo: 31.7, base: 31.7 }), 40);
+  assert.equal(tamanhoValido(10, { minimo: 31.7, base: 31.7 }), 31.7, 'abaixo do mínimo tem de subir ao mínimo');
+  assert.equal(tamanhoValido(999, { minimo: 31.7, base: 31.7 }), 51.7, `o máximo é mínimo + ${CRESCER_MAX}`);
+  assert.equal(tamanhoValido('nada', { minimo: 20, base: 20 }), null);
+});
+
+test('tamanho: a sala cresce à mão mas não encolhe abaixo do que os agentes pedem', () => {
+  const DEPTS = { sales: { chip: '#111111', ink: '#222222', glass: '#333333' } };
+  const LAYOUT = { sales: { pos: [0, 0], w: 20, d: 34 } };
+  const AGENTS = [];
+  const maior = aplicarNaCena({ DEPTS, LAYOUT, AGENTS }, { cores: {}, agentes: [], tamanhos: { sales: { d: 46 } } });
+  assert.equal(maior.salas.sales.profundidade, 46);
+  assert.equal(LAYOUT.sales.d, 46);
+
+  const LAYOUT2 = { sales: { pos: [0, 0], w: 20, d: 34 } };
+  const menor = aplicarNaCena({ DEPTS, LAYOUT: LAYOUT2, AGENTS: [] }, { cores: {}, agentes: [], tamanhos: { sales: { d: 12 } } });
+  assert.equal(menor.salas.sales.profundidade, 34, 'pedir 12 m não pode encolher a sala abaixo da planta');
+});
+
+test('servidor: o tamanho é guardado com limites, e o registo diz quem mudou o quê', async () => {
+  const api = createMemRepo();
+  const r = await chamar(api, '/controlo/salas/sales/tamanho', 'POST', { d: 999, minimo: 31.7, base: 31.7 });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.tamanho.d, 51.7);
+
+  await chamar(api, '/controlo/salas/sales/cor', 'POST', { cor: '#EADC8F' });
+  await chamar(api, '/controlo/agentes', 'POST', { nome: 'Gestor de tráfego', dept: 'sales', existentesNaSala: 6 });
+
+  const reg = await chamar(api, '/controlo/registo');
+
+  assert.equal(reg.status, 200);
+  assert.ok(reg.corpo.registo.length >= 3, 'as três alterações tinham de ficar registadas');
+  assert.ok(reg.corpo.registo.every((x) => x.quem === 'dono' && x.quando && x.o_que));
+  assert.ok(reg.corpo.registo.some((x) => x.o_que.includes('tamanho 51.7 m de fundo')), 'o registo diz o tamanho novo');
+  assert.ok(reg.corpo.registo.some((x) => /entrou Gestor de tráfego/.test(x.o_que)));
+
+  const estado = await chamar(api, '/controlo/estado');
+  assert.equal(estado.corpo.ajustes.tamanhos.sales.d, 51.7);
+  assert.ok(estado.corpo.registo.length >= 3, 'o estado também traz o registo');
+});
+
+/* ---------- 9 · repintar sem recarregar: que peças, com que tom ---------- */
+test('cor ao vivo: só as peças seguras mudam, e cada uma recebe o tom certo', async () => {
+  const { tomDaParte, PARTES_VIVAS } = await import('./src/salas.js');
+  const { glassLayers } = await import('./src/palette.js');
+  const camadas = glassLayers('#8FD3F4');
+  const cor = '#E69393';
+
+  assert.equal(tomDaParte('floorGlass', camadas, cor), camadas.glass);
+  assert.equal(tomDaParte('floorBase', camadas, cor), camadas.base);
+  assert.equal(tomDaParte('floorEdge', camadas, cor), camadas.edge);
+  assert.equal(tomDaParte('floorPool', camadas, cor), camadas.pool);
+  assert.equal(tomDaParte('deskLed', camadas, cor), cor);
+  assert.equal(tomDaParte('entranceSpill', camadas, cor), cor);
+
+  // a planta não se pinta a meio do voo — isso é construir outra sala
+  for (const parte of ['plinth', 'desk', 'deskMatte', 'walkway', 'wall', 'plant', ''])
+    assert.equal(tomDaParte(parte, camadas, cor), null, `${parte || '(vazio)'} não devia ser repintado`);
+
+  assert.equal(tomDaParte('floorGlass', camadas, 'vermelho'), null, 'cor inválida não pinta nada');
+  assert.ok(Object.keys(PARTES_VIVAS).length >= 8);
 });

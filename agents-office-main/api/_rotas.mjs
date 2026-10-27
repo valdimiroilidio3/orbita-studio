@@ -141,6 +141,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const { limparAjustes } = await import('./_controlo.mjs');
     const ajustes = limparAjustes(corpo);
     await repo.ia.config.gravar('salas', ajustes);
+    await repo.atividade.add('config', `configuração das salas substituída (${Object.keys(ajustes.cores).length} cores, ${ajustes.agentes.length} agentes novos)`).catch(() => {});
     return { status: 200, corpo: { ok: true, ajustes } };
   }
 
@@ -150,7 +151,28 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const r = comCor(limparAjustes(cfg.salas), seg[2], corpo?.cor);
     if (r.erro) throw falha(400, r.erro);
     await repo.ia.config.gravar('salas', r.ajustes);
+    await repo.atividade.add('config', `sala ${seg[2]}: cor ${corpo?.cor}`).catch(() => {});
     return { status: 200, corpo: { ok: true, ajustes: r.ajustes } };
+  }
+
+  if (seg[0] === 'controlo' && seg[1] === 'salas' && seg[3] === 'tamanho' && m === 'POST') {
+    const { limparAjustes, comTamanho } = await import('./_controlo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const r = comTamanho(limparAjustes(cfg.salas), seg[2], corpo || {}, {
+      minimo: Number(corpo?.minimo) || 8, base: Number(corpo?.base) || 8,
+    });
+    if (r.erro) throw falha(400, r.erro);
+    await repo.ia.config.gravar('salas', r.ajustes);
+    await repo.atividade.add('config', `sala ${seg[2]}: tamanho ${r.tamanho.w ? `${r.tamanho.w} m × ${r.tamanho.d} m` : `${r.tamanho.d} m de fundo`}`).catch(() => {});
+    return { status: 200, corpo: { ok: true, tamanho: r.tamanho, ajustes: r.ajustes } };
+  }
+
+  if (caminhoLimpo === '/controlo/registo' && m === 'GET') {
+    const linhas = await repo.atividade.list(Number(qs.get('limit')) || 60);
+    return { status: 200, corpo: {
+      /* quem mudou o quê: não há login nesta instalação, o autor é o dono */
+      registo: linhas.filter((a) => a.tipo === 'config').slice(0, 40).map((a) => ({ quando: a.at, quem: 'dono', o_que: a.texto })),
+    } };
   }
 
   if (caminhoLimpo === '/controlo/agentes' && m === 'POST') {
@@ -163,6 +185,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const r = comAgente(ajustes, corpo, porSala);
     if (r.erro) throw falha(400, r.erro);
     await repo.ia.config.gravar('salas', r.ajustes);
+    await repo.atividade.add('config', `sala ${r.agente.dept}: entrou ${r.agente.nome} (${r.agente.funcao})`).catch(() => {});
     return { status: 201, corpo: { ok: true, agente: r.agente, ajustes: r.ajustes } };
   }
 
@@ -172,6 +195,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const r = semAgente(limparAjustes(cfg.salas), seg[2]);
     if (r.erro) throw falha(404, r.erro);
     await repo.ia.config.gravar('salas', r.ajustes);
+    await repo.atividade.add('config', `saiu o agente ${seg[2]}`).catch(() => {});
     return { status: 200, corpo: { ok: true, ajustes: r.ajustes } };
   }
 

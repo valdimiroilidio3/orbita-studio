@@ -17,6 +17,8 @@ import {
   makePlant, makeWalkway, makeWarnSprite, makeRoomWalls, makeRoomDressing, makeMasterHall,
   makeRoomEntrance, DOOR, WALL,
 } from './builders.js';
+import { glassLayers } from './palette.js';
+import { corValida, tomDaParte } from './salas.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
 import { makePerson, posePerson, poseWork } from './avatar.js';
@@ -1984,6 +1986,42 @@ liveUi.onChange(() => {
 });
 liveUi.start();
 window.CC.live = liveUi; // para inspeção: CC.live.status(), CC.live.all()
+
+/* ===========================================================================
+   1.21.0 · APLICAR UMA COR SEM RECARREGAR (27 out 2026)
+
+   O painel de Configurações muda a cor de uma sala e pede isto. Só se toca no
+   que é seguro pintar à mão — o LED das secretárias, as passadeiras, a entrada e
+   o vidro do chão. Paredes, adereço e geometria continuam a vir do arranque: uma
+   sala nova (mais agentes, outra profundidade) precisa de ser construída, e isso
+   não se finge a meio do voo.
+
+   Devolve quantas peças mudaram — a interface mostra o número em vez de dizer
+   «feito» sem saber se tocou em alguma coisa.
+   =========================================================================== */
+function recolor(dept, cor) {
+  const d = DEPTS[dept];
+  if (!d || !corValida(cor)) return 0;
+  let camadas;
+  try { camadas = glassLayers(cor); } catch { return 0; }
+  let n = 0;
+  scene.traverse((o) => {
+    if (!o.isMesh || o.userData.dept !== dept) return;
+    const tom = tomDaParte(o.userData.part, camadas, cor);
+    if (!tom) return;                       // paredes, mobiliário, adereço: não se toca
+    const m = o.material;
+    if (!m || !m.color) return;
+    m.color.set(tom);                       // materiais são por sala, não partilhados
+    n += 1;
+  });
+  d.chip = cor;
+  d.glass = camadas.glass;
+  d.ink = camadas.base;
+  return n;
+}
+
+/* Porta pública para o painel de Configurações (e para a consola, ao inspeccionar). */
+window.ORBITA = Object.assign(window.ORBITA || {}, { recolor });
 
 let last = performance.now();
 function loop(now) {
