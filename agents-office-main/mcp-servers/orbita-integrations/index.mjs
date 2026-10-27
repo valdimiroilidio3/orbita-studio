@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as api from '../../integrations.mjs';
 import * as ferramentas from '../../api/_ferramentas.mjs';
+import * as artefactos from '../../api/_artefactos.mjs';
+import * as digitalizar from '../../api/_digitalizar.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -55,6 +57,14 @@ const TOOLS = [
   { name: 'orbita_web_search', description: 'Pesquisa a web em tempo real (Tavily) e devolve título, URL, excerto e data de cada fonte, mais uma resposta curta opcional. Usa para factos atuais, notícias, concorrência e contexto de mercado. Diz sempre a fonte e a data; o que não vier da resposta é inferência tua, não facto. Só para notícias usa topic=news com days.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 2, maxLength: 400 }, limit: { type: 'integer', minimum: 1, maximum: 20 }, topic: { type: 'string', enum: ['general', 'news'] }, days: { type: 'integer', minimum: 1, maximum: 365 }, domains: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 10 }, depth: { type: 'string', enum: ['basic', 'advanced'] }, minScore: { type: 'number', minimum: 0, maximum: 1 } }, required: ['query'], additionalProperties: false } },
   { name: 'orbita_business_search', description: 'Procura empresas reais por atividade e cidade (Geoapify: nome, morada, telefone, site e email quando existem nos dados). Aceita atividade em português ou a categoria do Geoapify. Remove duplicados. Nunca inventa telefone, email ou site: campo vazio quer dizer desconhecido, não inexistente. Resultados públicos a confirmar antes de qualquer contacto.', inputSchema: { type: 'object', properties: { location: { type: 'string', minLength: 2, maxLength: 120 }, activity: { type: 'string', minLength: 2, maxLength: 120 }, category: { type: 'string', maxLength: 120 }, countryCode: { type: 'string', minLength: 2, maxLength: 2 }, radiusMeters: { type: 'integer', minimum: 100, maximum: 50000 }, limit: { type: 'integer', minimum: 1, maximum: 50 } }, required: ['location'], additionalProperties: false } },
   { name: 'orbita_research_usage', description: 'Mostra quanto da pesquisa já foi gasto (por fornecedor, dia e mês, com tecto e o que resta) e as últimas execuções com estado, tempo e fontes. Não revela chaves. Usa antes de pedir muitas pesquisas seguidas.', inputSchema: { type: 'object', properties: { executions: { type: 'integer', minimum: 1, maximum: 200 } }, additionalProperties: false } },
+  /* ---- 1.31.0 · o que a sala entrega ----
+     Um site a sério, mas sem disco nem shell: o agente descreve o negócio com os
+     dados que alguém confirmou, a ferramenta valida, gera e devolve os ficheiros.
+     Nasce rascunho; publicar exige o OK do dono, dito e assinado. */
+  { name: 'orbita_site_create', description: 'Cria um site de uma página para um negócio, a partir de dados confirmados (nome, atividade, cidade, contactos, serviços). Devolve o HTML, o CSS e um LEIA-ME, e guarda um RASCUNHO — não publica. Nunca inventes telefone, email, morada ou site: o que não souberes, deixa vazio e diz ao dono o que falta. Para publicar é preciso o OK explícito dele e a ferramenta orbita_site_publicar.', inputSchema: { type: 'object', properties: { nome: { type: 'string', minLength: 2, maxLength: 80 }, atividade: { type: 'string', maxLength: 80 }, cidade: { type: 'string', maxLength: 80 }, telefone: { type: 'string', maxLength: 30 }, email: { type: 'string', maxLength: 120 }, website: { type: 'string', maxLength: 300 }, morada: { type: 'string', maxLength: 200 }, horario: { type: 'string', maxLength: 120 }, sobre: { type: 'string', maxLength: 900 }, servicos: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 80 } }, paleta: { type: 'string', enum: ['grafite', 'oceano', 'oliva', 'vinho', 'areia'] }, por: { type: 'string', maxLength: 40 } }, required: ['nome'], additionalProperties: false } },
+  { name: 'orbita_site_list', description: 'Lista os artefactos (sites) desta instalação com estado — rascunho ou aprovado — e quem aprovou. Só leitura.', inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 200 } }, additionalProperties: false } },
+  { name: 'orbita_site_publicar', description: 'PUBLICA (aprova) um site já criado. Só chamar quando o dono, nesta tarefa, disser explicitamente para publicar ESTE site. Requer approved=true e aprovadoPor com o nome de quem autorizou. Recusa sites sem um único contacto confirmado. Não faz deploy: marca o artefacto como aprovado e pronto a publicar.', inputSchema: { type: 'object', properties: { id: { type: 'string', minLength: 2, maxLength: 80 }, approved: { type: 'boolean' }, aprovadoPor: { type: 'string', minLength: 2, maxLength: 60 } }, required: ['id', 'approved', 'aprovadoPor'], additionalProperties: false } },
+  { name: 'orbita_digitalizar', description: 'Digitaliza um documento (imagem ou PDF em base64, ou um URL http(s)): passa por OCR e devolve o texto e campos extraídos por regras — NIF com dígito de controlo, telefone, email, código postal, IBAN mascarado, valor e data. Campo que não esteja no documento fica ausente: não inventes o que falta, diz ao dono. Nada é gravado no funil.', inputSchema: { type: 'object', properties: { imagem: { type: 'string', maxLength: 8400000 }, url: { type: 'string', maxLength: 2000 }, mime: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp', 'image/tiff', 'application/pdf'] } }, additionalProperties: false } },
 ];
 
 function resultText(value, isError = false) {
@@ -157,6 +167,34 @@ async function invokeTool(name, args = {}) {
         real: !!r.ok, inferred: false,
         note: 'Telefone, email e site só aparecem se estiverem nos dados públicos. Vazio = desconhecido.',
       };
+    }
+    case 'orbita_site_create': {
+      const r = await artefactos.criarSite(args, { repo: null });
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        artefacto: r.artefacto,
+        ficheiros: r.ficheiros,
+        real: r.real,
+        inferido: r.inferido,
+        guardado: r.guardado,
+        onde: artefactos.ondeGuarda(),
+        note: r.nota,
+      };
+    }
+    case 'orbita_site_list': {
+      const lista = await artefactos.listar({ repo: null, limite: args.limit || 50 });
+      return { ok: true, total: lista.length, artefactos: lista };
+    }
+    case 'orbita_site_publicar': {
+      const r = await artefactos.publicar(args.id, { repo: null, aprovado: args.approved === true, por: args.aprovadoPor });
+      return r;
+    }
+    case 'orbita_digitalizar': {
+      const r = await digitalizar.digitalizar({ imagem: args.imagem, url: args.url, mime: args.mime }, { env: process.env });
+      if (!r.ok) return r;
+      const proposta = digitalizar.paraLead(r.campos);
+      return { ...r, propostaDeLead: proposta };
     }
     case 'orbita_research_usage': {
       const lim = await import('../../api/_limites.mjs');

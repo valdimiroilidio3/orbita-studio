@@ -31,7 +31,7 @@ O projeto original foi concebido como uma aplicação local. Antes de o expor pu
 | GET | `/api/integrations` | Estado de configuração dos providers (sem segredos) | Público, só metadados |
 | GET | `/api/github/repo?owner=OWNER&repo=REPO` | Metadados de repositório GitHub | Bearer obrigatório; `GITHUB_TOKEN` opcional no servidor |
 | PUT | `/api/github/file` | Cria/atualiza um ficheiro num branch e faz commit | Bearer, `approved:true`, `GITHUB_TOKEN` com Contents: write; bloqueia segredos e workflows |
-| MCP | `orbita_business_search`, `orbita_business_discover`, `orbita_web_search`, `orbita_research_usage`, `orbita_leads_*`, `orbita_ai_assist`, `orbita_content_*` | Ferramentas usadas pelos agentes de trabalho | Via `orbita_integrations` no `.mcp.json`; providers externos continuam sujeitos a chaves/quota |
+| MCP | `orbita_site_*`, `orbita_digitalizar`, `orbita_business_search`, `orbita_business_discover`, `orbita_web_search`, `orbita_research_usage`, `orbita_leads_*`, `orbita_ai_assist`, `orbita_content_*` | Ferramentas usadas pelos agentes de trabalho | Via `orbita_integrations` no `.mcp.json`; providers externos continuam sujeitos a chaves/quota |
 | POST | `/api/whatsapp/link` | Gera um link `wa.me` com texto pré-preenchido | Bearer obrigatório; não envia a mensagem |
 | POST | `/api/crm/leads/discover` | Pesquisa manual por zona/categoria via Nominatim + Overpass | Bearer obrigatório para evitar abuso do serviço público; `save:true` grava no CRM |
 | GET | `/api/crm/leads?limit=100` | Lista CRM | Bearer obrigatório |

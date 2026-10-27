@@ -894,5 +894,73 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { ok: true, leadsNovos, leadsRepetidos, projetos: projetos.length, receitas: receitas.length } };
   }
 
+  /* ---- 1.31.0 · artefactos: o que uma sala entrega ----
+     Um site nasce como rascunho, é revisto por uma pessoa e só fica aprovado com
+     `aprovado: true` e o nome de quem aprovou. O HTML não é guardado: guarda-se
+     o brief e o site é regenerado — uma aprovação, uma verdade. */
+  if (caminhoLimpo === '/artefactos' && m === 'GET') {
+    const a = await import('./_artefactos.mjs');
+    const lista = await a.listar({ repo, limite: Number(qs.get('limite')) || 50 });
+    return { status: 200, corpo: { ok: true, total: lista.length, artefactos: lista } };
+  }
+
+  if (caminhoLimpo === '/artefactos/site' && m === 'POST') {
+    const a = await import('./_artefactos.mjs');
+    const r = await a.criarSite(corpo || {}, { repo });
+    if (!r.ok) return { status: r.codigo === 'parametros' ? 400 : 502, corpo: r };
+    return { status: 201, corpo: r };
+  }
+
+  if (seg[0] === 'artefactos' && seg[1] && seg[2] === 'preview' && m === 'GET') {
+    const a = await import('./_artefactos.mjs');
+    const p = await a.preview(seg[1], { repo });
+    if (!p) return { status: 404, corpo: { ok: false, erro: `não há artefacto «${seg[1]}»` } };
+    return { status: 200, corpo: { ok: true, ...p } };
+  }
+
+  if (seg[0] === 'artefactos' && seg[1] && seg[2] === 'publicar' && m === 'POST') {
+    const a = await import('./_artefactos.mjs');
+    const r = await a.publicar(seg[1], { repo, aprovado: corpo?.aprovado === true, por: corpo?.por || null });
+    const status = r.ok ? 200 : r.codigo === 'nao-existe' ? 404 : r.codigo === 'aprovacao' ? 409 : 400;
+    return { status, corpo: r };
+  }
+
+  if (seg[0] === 'artefactos' && seg[1] && !seg[2] && m === 'GET') {
+    const a = await import('./_artefactos.mjs');
+    const art = await a.obter(seg[1], { repo });
+    if (!art) return { status: 404, corpo: { ok: false, erro: `não há artefacto «${seg[1]}»` } };
+    return { status: 200, corpo: { ok: true, artefacto: art, url: `/artefactos/${art.id}/preview` } };
+  }
+
+  /* ---- 1.31.0 · digitalizar papel e imagem ----
+     A imagem entra, o texto sai de um OCR configurado, os campos saem de regras
+     determinísticas. Nada é gravado no funil aqui: `/digitalizar/lead` devolve a
+     proposta, e quem a aceitar guarda-a pelas rotas normais de leads. */
+  if (caminhoLimpo === '/digitalizar/estado' && m === 'GET') {
+    const d = await import('./_digitalizar.mjs');
+    return { status: 200, corpo: { ok: true, ...d.estado(env) } };
+  }
+
+  if (caminhoLimpo === '/digitalizar' && (m === 'POST' || m === 'GET')) {
+    const d = await import('./_digitalizar.mjs');
+    const fonte = m === 'POST' ? (corpo || {}) : Object.fromEntries(qs.entries());
+    const r = await d.digitalizar(fonte, { env, fetchImpl, repo });
+    const status = r.ok ? 200
+      : r.codigo === 'parametros' ? 400
+        : r.codigo === 'semchave' ? 503
+          : r.codigo === 'limite-fornecedor' ? 429
+            : r.codigo === 'vazio' ? 200 : 502;
+    return { status, corpo: r };
+  }
+
+  if (caminhoLimpo === '/digitalizar/lead' && m === 'POST') {
+    const d = await import('./_digitalizar.mjs');
+    const campos = Array.isArray(corpo?.campos) ? corpo.campos : null;
+    if (!campos) return { status: 400, corpo: { ok: false, erro: 'envia `campos` como vieram do /digitalizar' } };
+    const proposta = d.paraLead(campos, { nome: corpo?.nome || null });
+    /* guardar continua a ser um gesto separado: aqui só se prepara */
+    return { status: 200, corpo: { ok: true, ...proposta, nota: 'proposta — para entrar no funil, confirma o nome e grava com POST /ops/leads' } };
+  }
+
   throw falha(404, `a base ainda não serve «${caminhoLimpo}»`);
 }

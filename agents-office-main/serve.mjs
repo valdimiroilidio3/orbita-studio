@@ -58,6 +58,8 @@ import * as leadsStore from './leads-store.mjs'; // 1.29.0: a lista local de lea
 import * as pesquisa from './api/_pesquisa.mjs'; // 27 out 2026 (1.25.0): Geoapify (leads) e Tavily (contexto), as mesmas do servidor
 import * as ferramentas from './api/_ferramentas.mjs'; // 1.30.0: a mesma camada de ferramentas que os agentes usam
 import * as limites from './api/_limites.mjs';
+import * as artefactos from './api/_artefactos.mjs'; // 1.31.0: criar sites e digitalizar, também no local
+import * as digitalizar from './api/_digitalizar.mjs';
 import * as ops from './src/ops/index.mjs';
 import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
 import { createBus } from './forge/bus.mjs';
@@ -970,6 +972,44 @@ const server = http.createServer(async (req, res) => {
         avisos: r.avisos, avisoZona: r.avisos.find((a) => /resolveu|pediste/.test(a)) || null, cache: r.cache,
       });
     }
+    /* ---- 1.31.0 · artefactos e digitalização, também no servidor local ----
+       Sem base, o rascunho fica em `data/artefactos/` — a mesma pasta que o
+       servidor MCP usa, por isso a sala e o dono vêem o mesmo rascunho. */
+    if (url.pathname === '/api/artefactos' && req.method === 'GET') {
+      const lista = await artefactos.listar({ repo: null, limite: Number(url.searchParams.get('limite')) || 50 });
+      return json(res, 200, { ok: true, total: lista.length, artefactos: lista });
+    }
+    if (url.pathname === '/api/artefactos/site' && req.method === 'POST') {
+      const b = await body(req);
+      const r = await artefactos.criarSite(b || {}, { repo: null });
+      return json(res, r.ok ? 201 : 400, r);
+    }
+    const artefactoRota = /^\/api\/artefactos\/([^/]+)(\/(preview|publicar))?$/.exec(url.pathname);
+    if (artefactoRota) {
+      const [, id, , acao] = artefactoRota;
+      if (!acao && req.method === 'GET') {
+        const art = await artefactos.obter(id, { repo: null });
+        return art ? json(res, 200, { ok: true, artefacto: art, url: `/artefactos/${id}/preview` }) : json(res, 404, { ok: false, erro: 'não há artefacto com esse id' });
+      }
+      if (acao === 'preview' && req.method === 'GET') {
+        const p = await artefactos.preview(id, { repo: null });
+        return p ? json(res, 200, { ok: true, ...p }) : json(res, 404, { ok: false, erro: 'não há artefacto com esse id' });
+      }
+      if (acao === 'publicar' && req.method === 'POST') {
+        const b = await body(req);
+        const r = await artefactos.publicar(id, { repo: null, aprovado: b?.aprovado === true, por: b?.por || null });
+        return json(res, r.ok ? 200 : r.codigo === 'nao-existe' ? 404 : 409, r);
+      }
+    }
+    if (url.pathname === '/api/digitalizar/estado' && req.method === 'GET') {
+      return json(res, 200, { ok: true, ...digitalizar.estado(process.env) });
+    }
+    if (url.pathname === '/api/digitalizar' && req.method === 'POST') {
+      const b = await body(req);
+      const r = await digitalizar.digitalizar(b || {}, { env: process.env });
+      return json(res, r.ok ? 200 : r.codigo === 'parametros' ? 400 : r.codigo === 'semchave' ? 503 : 502, r);
+    }
+
     /* 1.30.0: o consumo e o catálogo, também no servidor local */
     if (url.pathname === '/api/pesquisa/uso' && req.method === 'GET') {
       return json(res, 200, { ok: true, ...limites.uso(process.env), execucoes: ferramentas.execucoes(20) });
