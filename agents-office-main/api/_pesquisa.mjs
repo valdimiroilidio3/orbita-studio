@@ -111,7 +111,13 @@ export const CATEGORIAS = [
 ];
 
 const semAcentos = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-const soDigitos = (s) => String(s || '').replace(/[^\d+]/g, '');
+/* Um sítio do OSM pode trazer dois números no mesmo campo («239…; 910…»).
+   Ficamos com o primeiro: juntá-los dava um número que não existe. */
+const primeiroTelefone = (s) => {
+  const primeiro = String(s || '').split(/[;,/]|\bou\b/i)[0].trim();
+  const so = primeiro.replace(/[^\d+]/g, '');
+  return (so.startsWith('+') ? '+' : '') + so.replace(/\+/g, '');
+};
 
 /** Traduz uma atividade escrita à mão para a categoria do Geoapify. */
 export function acharCategoria(texto) {
@@ -184,17 +190,19 @@ function leadDeSitio(f, alvo) {
   const cru = p.datasource?.raw || {};
   const nome = String(p.name || cru.name || '').trim();
   if (!nome) return null;
-  const telefone = soDigitos(p.phone || cru.phone || cru['contact:phone'] || cru.mobile || '');
+  const telefone = primeiroTelefone(p.phone || cru.phone || cru['contact:phone'] || cru.mobile || '');
   const website = String(p.website || cru.website || cru['contact:website'] || '').trim();
   const email = String(p.email || cru.email || cru['contact:email'] || '').trim();
   const cidade = String(p.city || p.town || p.village || p.county || alvo?.cidade || '').trim();
   const morada = String(p.formatted || [p.street, p.housenumber, p.postcode, cidade].filter(Boolean).join(', ')).trim();
   const categorias = Array.isArray(p.categories) ? p.categories : [];
-  const { nota, porque } = notaDeLead({ website, telefone, email, categorias });
+  /* a categoria mais específica é a última do caminho (`healthcare` → `healthcare.dentist`) */
+  const especifica = [...categorias].reverse().find((c) => String(c).includes('.')) || p.category || '';
+  const { nota, porque } = notaDeLead({ website, telefone, email, categorias: categorias.slice(-1) });
   return {
     fonte: 'geoapify',
     nome,
-    categoria: p.category || categorias[0] || alvo?.categoria || '',
+    categoria: especifica || alvo?.categoria || '',
     cidade,
     morada,
     telefone,

@@ -37,7 +37,7 @@ const PLACES = {
         name: 'Clínica Dentária do Mondego', city: 'Coimbra', formatted: 'Rua Larga 3, 3000-123 Coimbra',
         lat: 40.208, lon: -8.426, distance: 320, place_id: 'p1',
         categories: ['healthcare', 'healthcare.dentist'],
-        datasource: { raw: { phone: '+351 239 000 000', website: 'https://dentaria.pt', 'contact:email': 'ola@dentaria.pt' } },
+        datasource: { raw: { phone: '+351 239 000 000; +351 910 000 000', website: 'https://dentaria.pt', 'contact:email': 'ola@dentaria.pt' } },
       },
     },
     {
@@ -141,6 +141,9 @@ test('pesquisa: os leads vêm da zona pedida, com telefone, site e nota', async 
   assert.equal(com.website, 'https://dentaria.pt');
   assert.equal(com.email, 'ola@dentaria.pt');
   assert.equal(com.nota, 54);
+  /* dois números no mesmo campo: fica o primeiro, não uma colagem dos dois */
+  assert.equal(com.telefone.includes('910'), false);
+  assert.equal(com.categoria, 'healthcare.dentist', 'a categoria mais específica, não a raiz');
   assert.match(com.porque, /já tem site/);
   assert.equal(sem.nota, 80);
   assert.match(sem.porque, /sem site/);
