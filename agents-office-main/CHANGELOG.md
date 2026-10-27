@@ -1,3 +1,63 @@
+## 1.15.0 — 29 out 2026 · Configurações a sério: APIs, tema, avisos, painéis — e o pé da escada
+
+Pedido do dono: *«cria um campo para implementação de APIs, configurações reais, até mudança de tema
+(claro para escuro) e notificações reais, e depois atualiza no deploy. versão mobile possibilidade de
+fechar as janelas, possibilidade de afastar o campo de IA e estado de tarefas, e por último dar mais
+um toque de melhoria na escada, só no canto que toca a sala em baixo»*.
+
+### Um painel, quatro coisas que funcionam
+
+Tecla **`,`** ou o botão **Config** na barra. Tudo o que aqui se guarda é a sério; nada é decorativo.
+
+- **APIs.** O catálogo real do servidor (`/api/platform/apis`): 24 serviços, o que cada um é, e o que
+  lhe falta. Um campo por variável de ambiente e **«Guardar e testar»**: a chave é escrita no `.env`
+  da máquina, o ficheiro é relido sem reiniciar nada (o vigia já existia desde 1.12) e o serviço é
+  **sondado logo a seguir** — o que aparece é o HTTP e a latência reais, ou o erro real
+  (`fetch failed: ECONNRESET`, por exemplo). «Apagar chave» remove-a do ficheiro.
+  A rota `POST /api/platform/key` só aceita pedidos **de loopback** (ou com o token da API): escrever
+  chaves é um acto local. Ela valida que a variável pertence mesmo ao serviço, recusa valores com
+  mudança de linha, e **nunca devolve o valor da chave** — só o nome.
+- **Tema.** Claro · Escuro · Automático (o que o sistema disser), aplicado no arranque, guardado no
+  browser (`orbita.tema`) e a acompanhar a cena 3D. A tecla `D` continua, mas agora escolhe e guarda.
+- **Avisos.** Notificações do browser pedidas **num clique teu** (nunca no arranque) e disparadas só
+  por trabalho real: um posto que fica à espera do teu OK, um posto que falha. O primeiro retrato do
+  servidor é o ponto de partida — não chovem janelas por trabalho que já estava parado; o mesmo aviso
+  não se repete ao segundo; no máximo três de cada vez. Sem servidor, o interruptor aparece desligado
+  e diz porquê.
+- **Painéis.** Afastar o **campo de IA** (a conversa fica, a caixa recolhe a uma linha) e o **estado
+  das tarefas** (fica um botão no canto). A escolha fica guardada num browser e no telemóvel a coluna
+  das tarefas nasce recolhida.
+
+### Telemóvel: fechar as janelas
+
+- O painel do posto ganhou um **✕** (`#railClose`) — o telemóvel não tem `Esc`.
+- Leads, Operação e Configurações passam a **ocupar o ecrã** em ecrãs estreitos, e todos os fechar
+  passam a ter **44 px** de alvo. O campo das chaves usa 16 px de letra (o iOS deixa de fazer zoom
+  sozinho ao tocar).
+
+### O pé da escada
+
+Só a ponta que **assenta na sala** mudou; a ponta do Cérebro ficou exactamente como estava. A
+passadeira deixou de acabar num corte direito: agora há um **platô** com o mesmo tapete escuro (mas
+parado — é um patamar), nove dentes de latão no pente de entrada, dois cantos arredondados a fechar a
+guarda, e a linha de LED da sala a atravessá-lo até uma barra de entrada em frente à porta. Ao todo,
+três malhas a mais por corredor.
+
+### Dois defeitos que isto destapou
+
+- **O modo escuro rebentava a cena.** `brain.js` mexia em `eqMat`, uma variável que já não existe
+  desde que o equalizador da nebulosa saiu. Só se abria escuro pela tecla `D` ou por `/dark`; com o
+  tema a aplicar-se no arranque, era o escritório inteiro a desaparecer. Corrigido.
+- **Aplicar o tema cedo demais** (antes de existirem materiais e luzes) também dava cena em branco —
+  o tema passa a ser aplicado no arranque, depois de a cena estar montada.
+
+### Provas
+
+- **144/144** testes (`settings.test.mjs` é novo: 14 testes do tema, dos avisos, dos painéis e do
+  `.env`), cena verde, e o `POST /api/platform/key` provado contra o servidor real: escreveu a chave,
+  releu o `.env`, sondou, devolveu o erro da sonda, e apagou-a quando pedido — sem devolver o valor.
+- `node build.mjs` → `dist/` com o sítio completo.
+
 ## 1.14.1 — 29 out 2026 · o que só se vê com o site aberto
 
 A página estava publicada; estas quatro coisas só apareceram ao lê-la **em produção**, com os olhos de

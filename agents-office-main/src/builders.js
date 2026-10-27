@@ -1497,6 +1497,40 @@ export function makeWalkway(from, to, opts = {}) {
     kerb.push(place(rboxGeo(len - 3.1, 0.10, 0.16, 0.04), 0, 0.02, s * 1.42));
     kerb.push(place(rboxGeo(len - 3.1, 0.06, 0.06, 0.02), 0, 0.11, s * 1.45));
   }
+  /* ---------- O PÉ DA ESCADA (29 out 2026) ----------
+     Pedido do dono: «mais um toque de melhoria na escada, mas só no canto que toca a sala em baixo».
+     É exactamente isso que muda aqui — a ponta que assenta na sala (local −len/2). A ponta do
+     Cérebro fica como estava.
+
+     Antes: a passadeira acabava num corte direito, com as guardas a começar 1,55 m para dentro — quem
+     descia do tapete dava com a boca do corredor sem nada a receber o pé. Agora há um PLATÔ:
+
+       · o mesmo tapete escuro, mas PARADO — um patamar, não uma passadeira (é assim que uma escada
+         rolante entrega as pessoas ao piso);
+       · nove dentes de latão no pente de entrada, onde o pé encontra a sala;
+       · a guarda dobra dois cantos arredondados e fecha o vão até ao piso;
+       · a linha de LED da sala atravessa o platô e fecha numa barra de entrada, em frente à porta —
+         o mesmo gesto do LED da porta, para o corredor e a sala lerem como uma coisa só.
+
+     Três malhas a mais por corredor (o corpo, o tampo escuro e a luz), todas fundidas por material. */
+  const L0 = -len / 2;          // a ponta que assenta na sala
+  const LAND = 1.5;             // comprimento do platô (m)
+  const landW = 3.62;           // um pouco mais largo que o tapete (3,2) — lê-se como recepção
+  const darkMat = new THREE.MeshStandardMaterial({ color: '#23252B', roughness: 0.88, metalness: 0.1 });
+  const dark = [], land = [];
+  dark.push(place(rboxGeo(LAND, landW, 0.12, 0.16), L0 + LAND / 2, 0, 0));                  // o corpo
+  dark.push(place(rboxGeo(LAND - 0.36, 2.74, 0.02, 0.10), L0 + LAND / 2, 0.12, 0));        // o tampo parado
+  kerb.push(place(rboxGeo(LAND - 0.34, 0.10, 0.14, 0.04), L0 + LAND / 2 - 0.11, 0.02, 1.44));   // guarda esq.
+  kerb.push(place(rboxGeo(LAND - 0.34, 0.10, 0.14, 0.04), L0 + LAND / 2 - 0.11, 0.02, -1.44));  // guarda dir.
+  for (const s of [-1, 1]) {                                                                     // os cantos
+    kerb.push(place(rboxGeo(0.62, 0.62, 0.14, 0.26), L0 + 0.31, 0.02, s * 1.44));
+  }
+  kerb.push(place(rboxGeo(0.10, landW - 0.1, 0.12, 0.05), L0 + 0.05, 0.0, 0));              // a testa de latão
+  for (let i = 0; i < 9; i++) {                                                              // o pente
+    kerb.push(place(rboxGeo(0.30, 0.12, 0.024, 0.012), L0 + 0.46, 0.132, -1.28 + i * 0.32));
+  }
+  land.push(place(rboxGeo(LAND - 0.52, 0.09, 0.022, 0.02), L0 + LAND / 2 - 0.1, 0.133, 0));  // o LED do canal
+  land.push(place(rboxGeo(0.10, 2.46, 0.022, 0.02), L0 + 0.20, 0.133, 0));                    // a barra de entrada
   // a linha de LED ao centro (o canal) e o aro de chegada (dentro do latão)
   line.push(place(rboxGeo(len - 1.6, 0.09, 0.04, 0.02), 0, 0.015, 0));
   {
@@ -1511,6 +1545,13 @@ export function makeWalkway(from, to, opts = {}) {
   const lMesh = meshOf(line, ledMat, { shadow: false });
   lMesh.receiveShadow = false; lMesh.userData.part = 'walkwayLed';
   g.add(lMesh);
+  // o pé da escada: o platô (escuro, parado) e a luz que o atravessa
+  const dkMesh = meshOf(dark, darkMat, { shadow: true });
+  dkMesh.userData.part = 'walkwayLanding';
+  g.add(dkMesh);
+  const landMesh = meshOf(land, ledMat, { shadow: false });
+  landMesh.receiveShadow = false; landMesh.userData.part = 'walkwayLed';
+  g.add(landMesh);
   // a luz a correr — sempre para o Cérebro (o `to`)
   const comet = ledComet(room, Math.max(2, len - 2), { speed: 0.16, opacity: 0.75, width: 0.30 });
   const runner = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(2, len - 2), comet.width), comet.material);
@@ -1526,7 +1567,7 @@ export function makeWalkway(from, to, opts = {}) {
 
   g.position.set((from[0] + to[0]) / 2, 0, (from[1] + to[1]) / 2);
   g.rotation.y = -Math.atan2(dz, dx);
-  g.userData.walkway = { from, to, len, room, width: 3.2, belt: true };
+  g.userData.walkway = { from, to, len, room, width: 3.2, belt: true, landing: { at: L0, len: LAND, width: landW, station: true } };
   g.userData.led = { room, strips: [comet.material], belts: [beltMat], count: 2 };
   return g;
 }
