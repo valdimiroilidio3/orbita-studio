@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const r = await responder(repo, { caminho, metodo, corpo });
+    const r = await responder(repo, { caminho, metodo, corpo });   // env/fetch reais por omissão
     res.status(200).json({ status: r.status, corpo: r.corpo });
   } catch (e) {
     const estado = e.status || 500;

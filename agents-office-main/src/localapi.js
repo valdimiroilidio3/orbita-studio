@@ -163,6 +163,24 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/auth/entrar' || caminhoLimpo === '/auth/primeiro-dono') return { ok: true, modo: 'local' };
     if (caminhoLimpo === '/auth/sair') return { ok: true };
 
+    /* --- 1.18.0 · a IA no modo local: não há motor, e isso é dito com clareza ---
+       As chaves vivem no servidor; neste browser não há como falar com fornecedores
+       sem as expor. Por isso a vista mostra o Control Center vazio e a razão, em vez
+       de fingir um motor ou rebentar com 404. */
+    if (caminhoLimpo === '/ia/estado') {
+      return {
+        pronto: false, modo: 'local',
+        motivo: 'a IA corre no servidor: as chaves dos fornecedores vivem no ambiente da Vercel e nunca neste browser',
+        fornecedores: [], agentes: [], ferramentas: [], indisponiveis: [],
+        diagnostico: { fornecedoresActivos: [], pronto: false },
+        versaoCatalogo: { fornecedores: 0, modelos: 0 },
+        instalacao: 'modo local — sem motor de IA',
+      };
+    }
+    if (caminhoLimpo === '/ia/uso') return { resumo: [], ultimos: [], errosRecentes: [], modo: 'local' };
+    if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
+    if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
+
     /* --- Hoje --- */
     if (caminhoLimpo === '/ops/summary') {
       return {

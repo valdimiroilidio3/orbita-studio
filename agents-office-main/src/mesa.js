@@ -8,6 +8,7 @@
 // aberto à mão e confirmado depois; o email só sai com token e consentimento, e a recusa é
 // mostrada por palavras; e nenhum número aparece sem vir da base de dados.
 import { createLocalApi } from './localapi.js';
+import { vistaIA, accaoIA, carregarIA, pararSeguimento, abrirRun } from './ia.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -57,6 +58,7 @@ const IC = {
   lupa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
   pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
   tarefa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 5.6 8 8.5 5"/><path d="M4 12.5 5.6 14l2.9-3"/><path d="M4 18.5 5.6 20l2.9-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/></svg>',
+  ia: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M9.5 15.5h5"/></svg>',
   agentes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.6"/><circle cx="17" cy="9.5" r="2.2"/><path d="M3 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6"/><path d="M14.8 14.7c2.6-.4 5.2 1.2 5.2 4.3"/></svg>',
   contas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.4 3-5.6 7-5.6s7 2.2 7 5.6"/></svg>',
   vazio: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1-1.3 2.2-2 3.5-2s2.5.7 3.5 2"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>',
@@ -68,6 +70,7 @@ const NAV = [
   { k: 'projetos', label: 'Projetos', ic: 'pastas' },
   { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
   { k: 'agentes', label: 'Agentes', ic: 'agentes' },
+  { k: 'ia', label: 'IA', ic: 'ia' },
   { k: 'contas', label: 'Contas', ic: 'contas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
@@ -82,6 +85,8 @@ const S = {
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, contas: null, sessoes: [],
+  /* 1.18.0 · Control Center da IA */
+  ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -112,6 +117,10 @@ async function pedirApi(path, method, body) {
   const estado = Number(j.status) || 200;
   return { ok: estado >= 200 && estado < 300, status: estado, json: async () => j.corpo || {} };
 }
+
+/* 1.18.0 · a vista da IA usa o MESMO `call` da mesa: assim continua a passar pelo
+   modo base e pelo modo local, sem um segundo caminho para a rede. */
+const apiMesa = { call, S, paint, toast };
 
 async function call(path, method = 'GET', body) {
   let r;
@@ -188,7 +197,7 @@ function toast(msg, bad = false) {
 function parseHash() {
   const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas'];
+  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -330,6 +339,7 @@ async function boot(full = true) {
     if (S.route.name === 'tarefas') await loadTarefas();
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
+    if (S.route.name === 'ia') await carregarIA(apiMesa);
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
     S.error = '';
   } catch (e) { S.error = e.message; }
@@ -1113,6 +1123,7 @@ function paint() {
             : S.route.name === 'tarefas' ? viewTarefas()
               : S.route.name === 'agentes' ? viewAgentes()
               : S.route.name === 'contas' ? viewContas()
+              : S.route.name === 'ia' ? vistaIA(S, { esc, hhmm, when })
             : S.route.name === 'conversas' ? viewConversas()
               : viewSaldo());
 }
@@ -1126,6 +1137,8 @@ function waLink(phone, body) {
 
 async function act(name, el, ev) {
   const id = el?.dataset.id;
+  // 1.18.0 · o Control Center da IA trata das suas próprias acções
+  if (String(name).startsWith('ia-')) { await accaoIA(name, el, apiMesa); return; }
   const note = () => $('#leadNote');
   const setNote = (msg, bad) => { const n = note(); if (n) { n.textContent = msg; n.classList.toggle('bad', !!bad); } else toast(msg, bad); };
   try {
@@ -1467,6 +1480,8 @@ function start() {
     act(b.dataset.act, b, e);
   });
   document.addEventListener('change', async e => {
+    const daIA = e.target.closest('[data-act="ia-preferido"]');
+    if (daIA) { await accaoIA('ia-preferido', daIA, apiMesa); return; }
     const sel = e.target.closest('[data-act="papel"]');
     if (!sel) return;
     try {
@@ -1488,6 +1503,7 @@ function start() {
       }, 280);
       return;
     }
+    if (e.target.id === 'iaObjetivo') { S.iaObjetivo = e.target.value; return; }
     if (e.target.id !== 'q') return;
     S.q = e.target.value;
     const at = e.target.selectionStart;
@@ -1501,6 +1517,7 @@ function start() {
   window.addEventListener('hashchange', async () => {
     S.route = parseHash();
     S.pick = null;
+    if (S.route.name !== 'ia') pararSeguimento();
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
