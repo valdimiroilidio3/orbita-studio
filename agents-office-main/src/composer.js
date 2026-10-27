@@ -181,7 +181,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       el.pro.hidden = !missing;
       const t = el.pro.querySelector('.mc-pro-t');
       if (t) t.textContent = state.semServidor
-        ? 'Vista publicada — sem servidor. Esta cena é o escritório, mas as tarefas vivem na base de dados local: arranca o Órbita na tua máquina (npm start) para trabalhar a sério.'
+        ? 'Vista publicada — aqui não há motor de IA. A mesa de trabalho (Mesa, na barra) funciona já neste browser: escreve um lead, um projeto ou uma entrada de dinheiro e fica guardado no teu aparelho.'
         : missing
           ? 'Sem motor de IA ligado — este posto não inventa uma resposta. Vê o que falta.'
           : '';
