@@ -893,6 +893,10 @@ function setDark(on) {
     } else if (o.userData.part === 'entranceSpill') {
       if (m.userData.baseOpacity == null) m.userData.baseOpacity = m.opacity;
       m.opacity = darkOn ? m.userData.baseOpacity * 1.25 : m.userData.baseOpacity;
+    /* 28 out 2026 (1.13.2): o ANTEPARO e a PRAÇA. O painel do anteparo é marfim — de noite desce
+       como a parede; a praça é pedra, e fica um tom abaixo do chão para o latão do aro saltar. */
+    } else if (o.userData.part === 'entrancePanel') {
+      m.color.set(darkOn ? '#6F6C63' : m.userData.base);
     }
     // 26 out 2026: uma mesa preta sobre um fundo escuro desaparecia. No escuro, o corpo sobe um
     // tom (grafite) e o LED fica mais intenso — é assim que uma secretária com luz se comporta.
