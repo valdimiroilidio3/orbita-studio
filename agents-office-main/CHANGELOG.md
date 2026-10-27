@@ -1,3 +1,16 @@
+## 1.25.2 — 27 out 2026 · Etiquetas do OpenStreetMap não são a atividade
+
+A verificação seguinte, no mesmo sítio, apanhou outra: a Clínica Delille saía com
+`categoria: "wheelchair.yes"`. A lista de categorias do OSM mistura a atividade
+(`healthcare.dentist`) com etiquetas de acesso (`wheelchair.yes`, `payment.cards`).
+
+- A categoria passa a ser a atividade **mais específica**, depois de tirar as
+  etiquetas; se não sobrar nenhuma, vale a que foi pedida.
+- A nota e a razão do lead usam a mesma categoria — deixam de citar `wheelchair.yes`.
+
+Prova: 17 testes em `pesquisa.test.mjs` (fixture com etiquetas); suite 371/371;
+confirmado em produção com `GET /pesquisa/leads?oQue=dentistas&onde=Coimbra`.
+
 ## 1.25.1 — 27 out 2026 · Dois números no mesmo campo não viram um número inventado
 
 A primeira pesquisa real em produção (dentistas em Coimbra) mostrou dois defeitos
