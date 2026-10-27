@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 
 import {
   CONECTOR_PADRAO, ID_PADRAO, assuntoDe, consentimento, credencialDe, estado,
-  limparCache, mascarar, testar, tokenPara,
+  limparCache, mascarar, metadataDoConector, testar, tokenPara,
 } from './api/_conect.mjs';
 import { responder } from './api/_rotas.mjs';
 import { createMemRepo } from './api/_repo.mjs';
@@ -173,6 +173,23 @@ test('connect: o link de consentimento está desligado por omissão', async () =
   const com = await consentimento({}, { env: { VERCEL_OIDC_TOKEN: OIDC, ORBITA_PERMITIR_CONSENTIMENTO: '1' }, importar: importarCom(sdkFalso()) });
   assert.match(com.url, /^https:\/\//);
   assert.equal(com.servico, 'OpenCode');
+});
+
+/* ---------- 4b · o conector existe? ---------- */
+test('connect: a metadata do conector separa «não existe/ligado» de «credencial má»', async () => {
+  const sdk = {
+    getTokenResponse: async () => ({ token: 'x', expiresAt: Date.now() + 1000, connector: { uid: CONECTOR_PADRAO } }),
+    getConnectorMetadata: async (conector, opcoes) => ({ uid: conector, type: 'oauth', supportedSubjectTypes: ['user'], ligado: opcoes?.vercelToken ? 'com-token' : 'sem-token' }),
+  };
+  const bom = await metadataDoConector({}, { env: { AI_GATEWAY_API_KEY: 'oidc' }, importar: importarCom(sdk) });
+  assert.equal(bom.ok, true);
+  assert.equal(bom.metadata.uid, CONECTOR_PADRAO);
+  assert.deepEqual(bom.metadata.supportedSubjectTypes, ['user']);
+  assert.equal(bom.metadata.ligado, 'com-token');
+
+  const sem = await metadataDoConector({}, { env: {}, importar: importarCom(sdk) });
+  assert.equal(sem.ok, false);
+  assert.equal(sem.codigo, 'semcredencial');
 });
 
 /* ---------- 5 · as rotas ---------- */

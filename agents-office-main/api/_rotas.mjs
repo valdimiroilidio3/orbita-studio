@@ -359,6 +359,12 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: await c.estado(env, { importar: importarConect }) };
   }
 
+  if (caminhoLimpo === '/conectar/conector' && m === 'GET') {
+    const c = await import('./_conect.mjs');
+    const r = await c.metadataDoConector({ modoCredencial: limpo(qs.get('credencial')) || 'auto' }, { env, importar: importarConect });
+    return { status: 200, corpo: r };
+  }
+
   if (caminhoLimpo === '/conectar/teste' && (m === 'POST' || m === 'GET')) {
     const c = await import('./_conect.mjs');
     const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
