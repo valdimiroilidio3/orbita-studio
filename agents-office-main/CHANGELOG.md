@@ -1,3 +1,44 @@
+## 1.35.0 — 27 out 2026 · a IA gratuita que começa os trabalhos
+
+Pedido: *«implementa uma IA para começar os trabalhos, implementa todas
+gratuitas»*. O escritório (`providers.mjs`) só sabia falar com motores que exigem
+chave ou um CLI instalado — numa instalação limpa não havia motor nenhum e as
+salas não arrancavam. As gratuitas existiam no `api/_ia`, mas não na camada que
+executa o trabalho.
+
+**1 · Um motor «Gratuitas (sem chave)» no escritório.** Novo fornecedor `gratis`
+(`style: 'orbita'`) que usa a cadeia do `api/_ia`: **LLM7 → OVH → OpenCode Zen →
+Pollinations**, pela ordem que foi medida em produção. Sem chave, sem conta, sem
+CLI. Quando há um motor com chave, esse continua à frente; sem nada, é este que
+assume — por isso um ambiente novo já trabalha.
+
+**2 · Fallback a sério.** Um pedido que falha num fornecedor passa ao seguinte e
+diz qual respondeu (`modelId` = `fornecedor/modelo`). Quando todos falham, o erro
+nomeia cada um e o que disse — não se inventa uma resposta. O runner continua a
+declarar `tools: false`: esta cadeia escreve, não mexe.
+
+**3 · Provado com uma corrida completa.** Um teste novo corre o orquestrador do
+princípio ao fim — plano, dois passos, revisor — com o `fetch` a responder como o
+LLM7 e o OVH responderiam, sem uma única chave, e verifica que os passos ficam
+gravados com saída, estado `concluido` e o fornecedor certo. Outro teste desliga
+todos os gratuitos e confirma que a execução **falha com a razão escrita**, em vez
+de ficar a correr para sempre.
+
+**4 · Todas as gratuitas, e as que faltam por chave.** Sem chave funcionam hoje
+quatro fornecedores (LLM7, OVH, OpenCode Zen e Pollinations). Os que têm nível
+gratuito mas exigem chave — Groq, Google AI Studio, Mistral, NVIDIA NIM,
+OpenRouter `:free` — já estão no catálogo e entram na cadeia **sozinhos** no
+momento em que a chave aparecer no ambiente; não foi preciso código novo para
+eles, e a interface diz qual falta.
+
+**Testes:** 485/485 (5 do motor gratuitos, 2 da corrida), `node check.mjs` 94/95
+(falta o Chromium, como antes).
+
+**Limitação declarada:** este sandbox só alcança github/npm/pypi, por isso a
+prova foi feita com respostas HTTP simuladas no contrato dos fornecedores; a
+prova de rede é o primeiro trabalho real depois do deploy. E o envio por
+WhatsApp/Google continua a depender de credenciais que só o dono cria.
+
 ## 1.34.0 — 27 out 2026 · sair da mesa, a IA que não fica a carregar, leads e mensagens reais
 
 Pedido do dono, em quatro frases: um X para voltar, a IA que ficava em «A

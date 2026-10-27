@@ -119,6 +119,18 @@ export const PRESETS = {
     keyEnv: '', model: 'local-model', noKey: true,
     hint: 'abre o LM Studio e liga o servidor local (porta 1234)',
   },
+  /* 1.35.0 · «Gratuitas»: a cadeia do api/_ia, sem chave nenhuma.
+     O escritório só sabia falar com motores que exigem chave (ou um CLI
+     instalado). Num ambiente novo — a Vercel, uma máquina limpa — não havia
+     motor, e as salas não começavam trabalho nenhum. Este fornecedor usa o que
+     já existe e não precisa de conta: LLM7, OVH, OpenCode Zen (chave publicada
+     pelo serviço) e Pollinations, pela ordem medida em produção. Não recebe
+     ferramentas: devolve texto — e diz isso, em vez de prometer mãos. */
+  'gratis': {
+    label: 'Gratuitas (sem chave)', kind: 'api', style: 'orbita', tools: false,
+    keyless: true, model: 'auto',
+    hint: 'LLM7 · OVH · OpenCode Zen · Pollinations — não precisa de chave nem de conta',
+  },
   'openai-compatible': {
     label: 'API compatível com OpenAI', kind: 'api', style: 'openai', baseUrl: '',
     keyEnv: 'AO_AI_KEY', model: '',
@@ -166,6 +178,9 @@ export function define(id, cfg = {}) {
 /** Porque é que este fornecedor não pode correr agora — ou null se pode. */
 export function why(d) {
   if (d.probed === false) return d.probeReason || `${d.label}: nada a responder em ${d.baseUrl}`;
+  /* a cadeia gratuita não tem endereço único nem chave: está disponível por
+     construção (os modelos é que podem falhar, e o router passa ao seguinte) */
+  if (d.style === 'orbita') return null;
   if (d.kind === 'cli') {
     if (!d.bin) return `${d.label}: falta o binário (define ai.providers.${d.id}.bin)`;
     if (!onPath(d.bin)) return `${d.label}: \`${d.bin}\` não está no PATH — ${d.hint || 'instala-o'}`;
@@ -202,7 +217,7 @@ export function resolve(cfg = {}, dataDir = null) {
     const d = define(id, cfg);
     // um servidor local (Ollama/LM Studio) não tem chave: só uma sonda prova que está lá. Até lá
     // não conta como disponível — não se promete um motor que talvez não responda.
-    const pending = d.kind === 'api' && d.noKey;
+    const pending = d.kind === 'api' && d.noKey && d.style !== 'orbita';
     const problem = pending ? `${d.label}: por confirmar em ${d.baseUrl}` : why(d);
     return { ...d, pending, available: pending ? false : !problem, reason: problem, tools: d.kind === 'cli' && !!d.tools };
   });
@@ -252,11 +267,47 @@ export function pick(res) {
 /* ---------- os runners ---------- */
 function timeoutError(ms) { return new Error(`O modelo demorou mais de ${Math.round(ms / 1000)} s`); }
 
-async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, model }) {
+async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, model, fetchImpl = fetch }) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeout);
   const want = model || d.model;
   try {
+    /* 1.35.0 · a cadeia gratuita: sem chave, com fallback entre fornecedores.
+       O `falar()` do api/_ia é que fala com cada um (dialetos diferentes); o
+       router decide a ordem e marca de parte o que falhar. */
+    if (d.style === 'orbita') {
+      const [{ falar }, { comChave, FORNECEDORES, CHAVE_PUBLICA }, { falarComFallback }, { PROVADOS, catalogoDaCadeia }] = await Promise.all([
+        import('./api/_ia/cliente.mjs'),
+        import('./api/_ia/catalogo.mjs'),
+        import('./api/_ia/router.mjs'),
+        import('./api/_ia/gratuitos.mjs'),
+      ]);
+      const mapa = Object.fromEntries(comChave(process.env).map((c) => [c.id, c.variavel]));
+      const valor = (id) => {
+        const v = mapa[id];
+        if (!v) return null;
+        if (v === CHAVE_PUBLICA) return FORNECEDORES[id]?.chavePublica || null;
+        if (String(v).startsWith('\u0000')) return null;   // SEM_CHAVE: não é chave
+        return process.env[v] || null;
+      };
+      const mensagens = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }];
+      const catalogo = catalogoDaCadeia({});
+      const r = await falarComFallback('texto', {
+        chaves: mapa, provados: PROVADOS, catalogo, limite: 4,
+        executar: async (entrada) => falar({
+          fornec: entrada.fornec, prov: FORNECEDORES[entrada.fornec], chave: valor(entrada.fornec),
+          modelo: entrada.modelo, mensagens, maxTokens,
+          temperatura: 0.4, timeoutMs: Math.min(timeout, Number(FORNECEDORES[entrada.fornec]?.timeoutMs) || 60000),
+          fetchImpl,
+        }),
+      });
+      return {
+        text: String(r.texto || '').trim(),
+        tools: [],
+        modelId: `${r.entrada.fornec}/${r.entrada.modelo}`,
+        usage: { input_tokens: r.uso?.entrada || 0, output_tokens: r.uso?.saida || 0 },
+      };
+    }
     if (d.style === 'anthropic') {
       const res = await fetch(`${d.baseUrl.replace(/\/$/, '')}/v1/messages`, {
         method: 'POST', signal: ac.signal,
