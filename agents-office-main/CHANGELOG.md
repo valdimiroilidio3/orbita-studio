@@ -18,6 +18,11 @@ Confirmado com pedidos reais: OVH AI Endpoints responde **sem chave** (22
 modelos listados, resposta em ~0,8 s), e a rota `/ia/testar` marca-o «funcional»
 — os outros 76 fornecedores continuam «sem chave» até alguém os configurar.
 
+O **bootstrap temporário foi removido** depois de usado: o endpoint
+`/api/setup` (protegido por token), a entrada em `vercel.json`, a dependência
+`pg` e a variável `SETUP_TOKEN` já não existem nesta versão. O esquema vive em
+`supabase/*.sql`; a base de produção ficou com as tabelas criadas.
+
 Ver também: `docs/IA.md` §15.
 
 ## 1.19.0 — 27 out 2026 · freellmapi, memória do Graft e estúdio OpenMontage
