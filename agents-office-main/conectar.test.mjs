@@ -12,8 +12,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CONECTOR_PADRAO, ID_PADRAO, assuntoDe, consentimento, estado, limparCache,
-  mascarar, testar, tokenPara,
+  CONECTOR_PADRAO, ID_PADRAO, assuntoDe, consentimento, credencialDe, estado,
+  limparCache, mascarar, testar, tokenPara,
 } from './api/_conect.mjs';
 import { responder } from './api/_rotas.mjs';
 import { createMemRepo } from './api/_repo.mjs';
@@ -70,7 +70,26 @@ test('connect: pede o token ao conector certo, com o sujeito e a credencial cert
   assert.equal(traco[0].conector, CONECTOR_PADRAO);
   assert.deepEqual(traco[0].params.subject, { type: 'user', id: 'usr_123' });
   assert.deepEqual(traco[0].params.scopes, ['repo:read']);
-  assert.equal(traco[0].opcoes.vercelToken, OIDC);
+  /* com o OIDC do processo deixa-se a SDK ler o ambiente (é o caminho documentado) */
+  assert.equal(traco[0].opcoes.vercelToken, undefined);
+  assert.equal(t.credencial, undefined); // tokenPara não devolve credencial; testar() devolve
+});
+
+test('connect: o OIDC que chega no pedido é passado à SDK como token de chamada', async () => {
+  limparCache();
+  const traco = [];
+  await tokenPara({}, { env: { AI_GATEWAY_API_KEY: 'oidc-do-cabecalho' }, importar: importarCom(sdkFalso({ traco })) });
+  assert.equal(traco[0].opcoes.vercelToken, 'oidc-do-cabecalho');
+});
+
+test('connect: os quatro modos de credencial são distinguidos, e cada um sabe o que falta', () => {
+  assert.equal(credencialDe({ VERCEL_OIDC_TOKEN: 'a' }).tipo, 'oidc-env');
+  assert.equal(credencialDe({ AI_GATEWAY_API_KEY: 'b' }).tipo, 'oidc-pedido');
+  assert.equal(credencialDe({ VERCEL_TOKEN: 'c' }).tipo, 'chave');
+  assert.equal(credencialDe({ VERCEL_OIDC_TOKEN: 'a' }, 'chave').valor, null);
+  assert.match(credencialDe({}, 'oidc-env').motivo, /VERCEL_OIDC_TOKEN/);
+  assert.match(credencialDe({}, 'oidc-pedido').motivo, /x-vercel-oidc-token/);
+  assert.match(credencialDe({}, 'chave').motivo, /VERCEL_TOKEN/);
 });
 
 test('connect: o segundo pedido vem da cache; forçar pede outro', async () => {

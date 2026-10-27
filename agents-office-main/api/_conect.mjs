@@ -36,11 +36,27 @@ export const mascarar = (s) => {
 const conectorDe = (env) => String(env?.VERCEL_CONECTOR || CONECTOR_PADRAO);
 const idDe = (env) => String(env?.VERCEL_CONECTOR_ID || ID_PADRAO);
 
-/** A credencial da chamada à Vercel (o SDK lê o OIDC do ambiente; aqui aceitamos o do pedido). */
-function credencialDe(env) {
-  const oidc = env?.VERCEL_OIDC_TOKEN || env?.AI_GATEWAY_API_KEY || null;
-  if (oidc) return { valor: oidc, tipo: 'oidc', motivo: null };
-  if (env?.VERCEL_TOKEN) return { valor: env.VERCEL_TOKEN, tipo: 'chave', motivo: null };
+/**
+ * A credencial da chamada à Vercel.
+ *
+ * Modos (o diagnóstico em produção precisa deles, porque o erro 401 pode vir de
+ * qualquer um):
+ *   · `auto`        — OIDC do ambiente, senão o OIDC do pedido, senão VERCEL_TOKEN
+ *   · `oidc-env`    — só o `VERCEL_OIDC_TOKEN` que a Vercel põe no processo
+ *   · `oidc-pedido` — só o token OIDC que chegou no cabeçalho do pedido
+ *   · `chave`       — só `VERCEL_TOKEN`
+ */
+export function credencialDe(env, modo = 'auto') {
+  const doAmbiente = env?.VERCEL_OIDC_TOKEN || null;
+  const doPedido = env?.AI_GATEWAY_API_KEY || null;
+  const chave = env?.VERCEL_TOKEN || null;
+  const m = String(modo || 'auto');
+  if (m === 'oidc-env') return doAmbiente ? { valor: doAmbiente, tipo: 'oidc-env', motivo: null } : { valor: null, tipo: null, motivo: 'não há VERCEL_OIDC_TOKEN no processo desta função' };
+  if (m === 'oidc-pedido') return doPedido ? { valor: doPedido, tipo: 'oidc-pedido', motivo: null } : { valor: null, tipo: null, motivo: 'o pedido não trouxe x-vercel-oidc-token' };
+  if (m === 'chave') return chave ? { valor: chave, tipo: 'chave', motivo: null } : { valor: null, tipo: null, motivo: 'não há VERCEL_TOKEN no ambiente' };
+  if (doAmbiente) return { valor: doAmbiente, tipo: 'oidc-env', motivo: null };
+  if (doPedido) return { valor: doPedido, tipo: 'oidc-pedido', motivo: null };
+  if (chave) return { valor: chave, tipo: 'chave', motivo: null };
   return { valor: null, tipo: null, motivo: 'a função não recebeu token OIDC da Vercel (e não há VERCEL_TOKEN no ambiente)' };
 }
 
@@ -67,8 +83,8 @@ async function carregarSdk(importar) {
 const CACHE = new Map();
 const MARGEM_MS = 30 * 1000;
 
-const chaveCache = (conector, assunto, escopos) =>
-  `${conector}|${assunto.type}:${assunto.id || ''}|${(escopos || []).slice().sort().join(',')}`;
+const chaveCache = (conector, assunto, escopos, modo = 'auto') =>
+  `${conector}|${assunto.type}:${assunto.id || ''}|${(escopos || []).slice().sort().join(',')}|${modo}`;
 
 export function limparCache() { CACHE.clear(); }
 
@@ -76,16 +92,16 @@ export function limparCache() { CACHE.clear(); }
  * Pede um token ao Vercel Connect. Devolve o token EM CLARO — é para uso interno
  * (chamar o fornecedor), nunca para uma resposta HTTP.
  */
-export async function tokenPara({ pedido = null, escopos = null, instalacao = null, audiencia = null, forcar = false } = {}, { env = process.env, importar = null, agora = Date.now() } = {}) {
+export async function tokenPara({ pedido = null, escopos = null, instalacao = null, audiencia = null, forcar = false, modoCredencial = 'auto' } = {}, { env = process.env, importar = null, agora = Date.now() } = {}) {
   const conector = conectorDe(env);
   const assunto = assuntoDe(env, pedido);
-  const cred = credencialDe(env);
+  const cred = credencialDe(env, modoCredencial);
   if (!cred.valor) {
     const e = new Error(cred.motivo);
     e.codigo = 'semcredencial';
     throw e;
   }
-  const chave = chaveCache(conector, assunto, escopos);
+  const chave = chaveCache(conector, assunto, escopos, modoCredencial);
   const guardado = CACHE.get(chave);
   if (!forcar && guardado && guardado.expiresAt - MARGEM_MS > agora) {
     return { ...guardado, cache: true };
@@ -99,7 +115,13 @@ export async function tokenPara({ pedido = null, escopos = null, instalacao = nu
 
   let r;
   try {
-    r = await sdk.getTokenResponse(conector, params, { vercelToken: cred.tipo === 'oidc' ? cred.valor : undefined, forceRefresh: !!forcar });
+    /* a chave explícita passa sempre; o OIDC deixa a SDK ler o ambiente quando é
+       o do processo (é o caminho que a Vercel documenta) */
+    r = await sdk.getTokenResponse(conector, params, {
+      ...(cred.tipo === 'chave' ? { vercelToken: cred.valor } : {}),
+      ...(cred.tipo === 'oidc-pedido' ? { vercelToken: cred.valor } : {}),
+      forceRefresh: !!forcar,
+    });
   } catch (e) {
     throw traduzirErro(e, conector);
   }
@@ -169,7 +191,11 @@ export async function estado(env = process.env, { importar = null } = {}) {
     conector,
     id,
     sdk,
-    credencial: { tipo: cred.tipo, presente: !!cred.valor, motivo: cred.motivo },
+    credencial: {
+      tipo: cred.tipo, presente: !!cred.valor, motivo: cred.motivo,
+      /** o que existe, sem mostrar nenhum dos valores */
+      fontes: { oidcNoProcesso: !!env?.VERCEL_OIDC_TOKEN, oidcNoPedido: !!env?.AI_GATEWAY_API_KEY, chaveVercel: !!env?.VERCEL_TOKEN },
+    },
     assunto,
     cache: guardado ? { presente: true, expiraEm: new Date(guardado.expiresAt).toISOString(), emCache: true } : { presente: false },
     nota: 'o token nunca sai da função: só o tipo, a validade e o sujeito. Quem guarda o refresh token é a Vercel.',
@@ -177,10 +203,10 @@ export async function estado(env = process.env, { importar = null } = {}) {
 }
 
 /** Um pedido a sério, com o token mascarado na resposta. */
-export async function testar({ pedido = null, escopos = null, forcar = true } = {}, { env = process.env, importar = null, agora = Date.now() } = {}) {
+export async function testar({ pedido = null, escopos = null, forcar = true, modoCredencial = 'auto' } = {}, { env = process.env, importar = null, agora = Date.now() } = {}) {
   const t0 = agora;
   try {
-    const t = await tokenPara({ pedido, escopos, forcar }, { env, importar, agora });
+    const t = await tokenPara({ pedido, escopos, forcar, modoCredencial }, { env, importar, agora });
     return {
       ok: true,
       ms: Date.now() - t0,
@@ -193,6 +219,7 @@ export async function testar({ pedido = null, escopos = null, forcar = true } = 
       expiraEm: new Date(t.expiresAt).toISOString(),
       faltamSegundos: Math.max(0, Math.round((t.expiresAt - Date.now()) / 1000)),
       emCache: !!t.cache,
+      credencial: credencialDe(env, modoCredencial).tipo,
       quando: new Date().toISOString(),
       prova: 'token pedido agora ao Vercel Connect (o valor não sai daqui)',
     };
@@ -201,6 +228,7 @@ export async function testar({ pedido = null, escopos = null, forcar = true } = 
       ok: false,
       ms: Date.now() - t0,
       conector: conectorDe(env),
+      credencial: credencialDe(env, modoCredencial).tipo,
       codigo: e.codigo || 'erro',
       erro: String(e.message || e).slice(0, 300),
       detalhe: e.detalhe || null,

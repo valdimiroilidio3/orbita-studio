@@ -365,7 +365,13 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const pedido = limpo(fonte?.sujeito || fonte?.subject || fonte?.id) || null;
     const escopos = limpo(fonte?.escopos || fonte?.scopes);
     const r = await c.testar(
-      { pedido: pedido ? { id: pedido } : null, escopos: escopos ? escopos.split(',').map((x) => x.trim()).filter(Boolean) : null, forcar: m === 'GET' ? true : fonte?.forcar !== false },
+      {
+        pedido: pedido ? { id: pedido } : null,
+        escopos: escopos ? escopos.split(',').map((x) => x.trim()).filter(Boolean) : null,
+        forcar: m === 'GET' ? true : fonte?.forcar !== false,
+        /* diagnóstico: auto | oidc-env | oidc-pedido | chave */
+        modoCredencial: limpo(fonte?.credencial) || 'auto',
+      },
       { env, importar: importarConect },
     );
     /* o botão do Centro de Controlo grava o resultado; um GET de diagnóstico não */
