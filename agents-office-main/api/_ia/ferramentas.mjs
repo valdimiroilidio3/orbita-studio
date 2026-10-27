@@ -243,6 +243,49 @@ export function paraModelo(permitidas) {
  * Executa uma chamada pedida pelo modelo. Nunca lança para o orquestrador:
  * devolve sempre um resultado que ele possa contar ao modelo.
  */
+/* ---------------- 1.19.0 · memória (os plugins do Graft, como ferramentas) ---------------- */
+Object.assign(FERRAMENTAS, {
+  memoria_procurar: {
+    descricao: 'Procura nas notas guardadas (memória do projecto) antes de resolveres algo que pode já ter sido resolvido.',
+    parametros: {
+      type: 'object',
+      properties: { consulta: s('o que procuras (obrigatório)', { minLength: 3, maxLength: 300 }), limite: n('quantas notas (1–20)', { minimum: 1, maximum: 20 }) },
+      required: ['consulta'],
+      additionalProperties: false,
+    },
+    async executar(args, ctx) {
+      const { procurar } = await import('./memoria.mjs');
+      const r = await procurar(ctx.repo, { consulta: args.consulta, limite: Number(args.limite) || 6 });
+      return {
+        ok: true,
+        resumo: `${r.achados.length} notas (procura ${r.modo})`,
+        dados: { modo: r.modo, achados: r.achados.map((x) => ({ id: x.id, titulo: x.titulo, texto: String(x.texto || '').slice(0, 400), etiquetas: x.etiquetas, pontos: x.pontos || null })) },
+      };
+    },
+  },
+
+  memoria_guardar: {
+    descricao: 'Guarda uma nota no fim: a decisão, o que se aprendeu, o que falhou e porquê. Uma nota por chamada.',
+    parametros: {
+      type: 'object',
+      properties: {
+        titulo: s('título curto (obrigatório)', { minLength: 3, maxLength: 160 }),
+        texto: s('a nota, com o contexto suficiente para servir da próxima vez', { minLength: 10, maxLength: 8000 }),
+        etiquetas: s('etiquetas separadas por vírgulas', { maxLength: 200 }),
+        fonte: s('de onde veio (execução, conversa, documento)', { maxLength: 200 }),
+      },
+      required: ['titulo', 'texto'],
+      additionalProperties: false,
+    },
+    async executar(args, ctx) {
+      const { guardar } = await import('./memoria.mjs');
+      const r = await guardar(ctx.repo, { ...args, projeto: 'orbita' });
+      if (!r.ok) return { ok: false, erro: r.erro };
+      return { ok: true, resumo: r.resumo, dados: { id: r.nota.id, criada: r.criada } };
+    },
+  },
+});
+
 export async function executar(nome, args, ctx = {}) {
   const f = FERRAMENTAS[nome];
   if (!f) return { ok: false, erro: `ferramenta desconhecida: ${nome}` };

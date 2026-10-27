@@ -32,14 +32,20 @@ const envFalso = { OPENROUTER_API_KEY: CHAVE };
 const json = (corpo, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(corpo) });
 
 /* ---------- 1 · catálogo ---------- */
-test('catálogo: comChave só vê variáveis com valor, e a máscara não revela a chave', () => {
-  assert.deepEqual(comChave({}), []);
-  const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' });
+test('catálogo: comChave só vê variáveis com valor (mais os keyless), e a máscara não revela a chave', () => {
+  /* 1.19.0: os keyless do freellmapi (Kilo, OVH) estão «prontos» sem chave —
+     é isso que os torna utilizáveis já; os outros continuam a precisar dela. */
+  const semNada = comChave({});
+  assert.equal(semNada.every((x) => x.semChave), true, 'apareceu um fornecedor com chave sem haver chave');
+  assert.deepEqual(semNada.map((x) => x.id).sort(), ['kilo', 'ovh']);
+  assert.equal(comChave({ OPENROUTER_API_KEY: CHAVE }).some((x) => x.id === 'openrouter' && x.variavel === 'OPENROUTER_API_KEY'), true);
+  const vistos = comChave({ GROQ_API_KEY: CHAVE, CEREBRAS_API_KEY: '   ' }).filter((x) => !x.semChave);
   assert.deepEqual(vistos, [{ id: 'groq', variavel: 'GROQ_API_KEY' }]);
   const m = mascarar(CHAVE);
   assert.ok(!m.includes('1234567890'), 'a máscara mostrou o meio da chave');
   assert.match(m, /^sk-tes…cdef$/);
-  assert.equal(Object.keys(FORNECEDORES).length >= 8, true);
+  assert.equal(Object.keys(FORNECEDORES).length >= 60, true, 'os fornecedores do freellmapi não entraram');
+  assert.equal(MODELOS.length >= 120, true, 'os modelos do freellmapi não entraram');
 });
 
 /* ---------- 2 · cliente, três dialetos ---------- */
@@ -301,8 +307,11 @@ test('orquestrador: plano → passos → ferramenta → revisão, tudo gravado n
   assert.equal(uso.every((u) => u.fornecedor === 'openrouter'), true);
 });
 
-test('orquestrador: sem fornecedor com chave, a execução falha com a razão escrita', async () => {
+test('orquestrador: sem fornecedor pronto (keyless desligados), falha com a razão escrita', async () => {
   const repo = createMemRepo();
+  /* 1.19.0: por omissão há dois keyless prontos; para provar a falha honesta,
+     desligam-se os dois — é o mesmo caminho de quem não tem nada configurado. */
+  await repo.ia.config.gravar('desligados', ['kilo', 'ovh']);
   const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('não devia chamar'); } });
   const run = await correr({ repo, motor, objetivo: 'qualquer coisa', env: {} });
   assert.equal(run.estado, 'falhou');
@@ -364,12 +373,15 @@ test('rota /ia/runs/:id/correr: retomar sem plano é recusado com razão', async
   assert.match(r.corpo.error, /não tem plano gravado/);
 });
 
-test('rota /ia/estado: sem chaves diz que não há motor, e nunca devolve a chave', async () => {
+test('rota /ia/estado: só os keyless ficam prontos sem chave, e nunca devolve a chave', async () => {
   const repo = createMemRepo();
   const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: {} });
   assert.equal(r.status, 200);
-  assert.equal(r.corpo.pronto, false);
-  assert.equal(r.corpo.fornecedores.every((f) => f.configurado === false), true);
+  /* 1.19.0: Kilo e OVH funcionam sem chave → há motor, mas nada está «funcional»
+     até um teste real. O resto continua sem_chave. */
+  const prontos = r.corpo.fornecedores.filter((f) => f.configurado).map((f) => f.id).sort();
+  assert.deepEqual(prontos, ['kilo', 'ovh']);
+  assert.equal(r.corpo.fornecedores.every((f) => f.estado !== 'funcional'), true, 'alguém ficou «funcional» sem teste');
   assert.ok(!JSON.stringify(r.corpo).includes(CHAVE));
 });
 

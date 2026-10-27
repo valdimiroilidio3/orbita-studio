@@ -18,12 +18,27 @@
      POST   /ia/runs/:id/cancelar       — pede paragem (verificada entre passos)
      GET    /ia/uso                     — pedidos, latência, erros, tokens
      PATCH  /ia/config                  — desligar fornecedores, modelo por agente
+     1.19.0
+     GET    /ia/memoria                 — estado da memória (plugins do Graft)
+     POST   /ia/memoria                 — guardar uma nota
+     POST   /ia/memoria/procurar        — procurar (lexical; o modo vai na resposta)
+     POST   /ia/memoria/aprender        — ingestão em lote (plano → confirmar)
+     GET    /ia/memoria/auditar         — duplicados, notas curtas, paradas
+     DELETE /ia/memoria/:id             — apagar uma nota
+     GET    /media/estado               — estúdio: worker vivo? pipelines?
+     GET    /media/trabalhos            — fila e resultados
+     POST   /media/trabalhos            — pedir um vídeo/imagem/áudio/animação/3D
+     POST   /media/assumir              — (worker) pega o próximo
+     POST   /media/:id/concluir|falhar  — (worker) devolve o resultado real
+     POST   /media/sinal                — (worker) heartbeat com o que está instalado
    =========================================================================== */
 import { AGENTES, LISTA, promptDe } from './agentes.mjs';
 import { FORNECEDORES, MODELOS, modelosDe } from './catalogo.mjs';
 import { FERRAMENTAS, INDISPONIVEIS, executar as executarFerramenta, paraModelo } from './ferramentas.mjs';
 import { criarMotor } from './motor.mjs';
 import { correr } from './orquestrador.mjs';
+import * as memoria from './memoria.mjs';
+import * as media from './media.mjs';
 import { TIPOS } from './router.mjs';
 
 const corpoDe = (c) => (c && typeof c === 'object' ? c : {});
@@ -44,8 +59,20 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   if (limpo === '/ia/estado' && m === 'GET') {
     const estado = await motor.estado();
     const cfg = await motor.config();
+    /* 1.19.0 · a memória e o estúdio fazem parte do estado: se a base não os
+       tiver (SQL por correr), diz-se em vez de rebentar a página toda. */
+    let resumoMemoria = null;
+    try {
+      const e = await memoria.estado(repo);
+      resumoMemoria = { total: e.total, usos: e.usos, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5) };
+    } catch (e) { resumoMemoria = { erro: `a memória ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
+    let estudio = null;
+    try { estudio = await media.estado(repo, env); } catch (e) { estudio = { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
+
     return { status: 200, corpo: {
       ...estado,
+      memoria: resumoMemoria,
+      estudio,
       agentes: LISTA.map((a) => ({ id: a.id, numero: a.numero, nome: a.nome, papel: a.papel, ferramentas: a.ferramentas, tipos: a.tipos, criterios: a.criterios, modelo: cfg.agentes?.[a.id]?.modelo || null })),
       ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({ id, descricao: f.descricao, destrutiva: !!f.destrutivo })),
       tipos: TIPOS,
@@ -171,6 +198,65 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
     const r = await repo.ia.runs.actualizar(id, { estado: 'cancelado', fim: new Date().toISOString() });
     return { status: 200, corpo: { ok: true, run: r, nota: 'a paragem é verificada entre passos — o passo a decorrer termina primeiro' } };
+  }
+
+  /* ---------------- 1.19.0 · memória (Graft) ---------------- */
+  if (limpo === '/ia/memoria' && m === 'GET') {
+    return { status: 200, corpo: await memoria.estado(repo) };
+  }
+
+  if (limpo === '/ia/memoria' && m === 'POST') {
+    const r = await memoria.guardar(repo, corpoDe(corpo));
+    return { status: r.ok ? 201 : 400, corpo: r.ok ? r : { error: r.erro } };
+  }
+
+  if (limpo === '/ia/memoria/procurar' && m === 'POST') {
+    const c = corpoDe(corpo);
+    return { status: 200, corpo: await memoria.procurar(repo, { consulta: c.consulta, projeto: c.projeto || null, limite: Number(c.limite) || 8 }) };
+  }
+
+  if (limpo === '/ia/memoria/aprender' && m === 'POST') {
+    const c = corpoDe(corpo);
+    const r = await memoria.aprender(repo, { ...c, confirmar: !!c.confirmar });
+    return { status: r.ok ? 200 : 400, corpo: r.ok ? r : { error: r.erro } };
+  }
+
+  if (limpo === '/ia/memoria/auditar' && m === 'GET') {
+    return { status: 200, corpo: await memoria.auditar(repo, { projeto: qs.get('projeto') || null }) };
+  }
+
+  if (seg[1] === 'memoria' && seg.length === 3 && m === 'DELETE') {
+    await repo.ia.memoria.apagar(seg[2]);
+    return { status: 200, corpo: { ok: true, apagada: seg[2] } };
+  }
+
+  /* ---------------- 1.19.0 · estúdio de media (OpenMontage) ---------------- */
+  if (limpo === '/media/estado' && m === 'GET') {
+    return { status: 200, corpo: await media.estado(repo, env) };
+  }
+
+  if (limpo === '/media/trabalhos' && m === 'GET') {
+    return media.listar(repo, Number(qs.get('limite')) || 30);
+  }
+
+  if (limpo === '/media/trabalhos' && m === 'POST') {
+    const c = corpoDe(corpo);
+    return media.criar(repo, { pedido: c.pedido, tipo: c.tipo, pipeline: c.pipeline }, env);
+  }
+
+  /* a partir daqui é o worker: token próprio, comparado em tempo constante possível */
+  if (limpo.startsWith('/media/') && m === 'POST') {
+    const recebido = corpoDe(corpo).token || qs.get('token');
+    if (!media.tokenOk(env, recebido)) return { status: 401, corpo: { error: 'token do worker inválido ou ausente' } };
+    const c = corpoDe(corpo);
+
+    if (limpo === '/media/assumir') return media.assumir(repo, env);
+    if (limpo === '/media/sinal') return media.sinal(repo, c);
+
+    const acao = seg[seg.length - 1];
+    if (seg[1] === 'media' && seg.length === 4 && acao === 'concluir') return media.concluir(repo, seg[2], c);
+    if (seg[1] === 'media' && seg.length === 4 && acao === 'falhar') return media.falhar(repo, seg[2], c.motivo);
+    return { status: 404, corpo: { error: `rota de media desconhecida: ${limpo}` } };
   }
 
   /* ---------------- uso ---------------- */

@@ -19,14 +19,16 @@ export function pararSeguimento() {
 }
 
 export async function carregarIA(api) {
-  const [estado, uso, runs] = await Promise.all([
+  const [estado, uso, runs, fila] = await Promise.all([
     api.call('/ia/estado'),
     api.call('/ia/uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     api.call('/ia/runs').catch(() => ({ runs: [] })),
+    api.call('/media/trabalhos').catch(() => ({ trabalhos: [] })),
   ]);
   api.S.ia = estado;
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
+  api.S.iaFila = fila.trabalhos || [];
   if (!api.S.iaRun && api.S.iaRuns.length) {
     const mais = api.S.iaRuns[0];
     try { api.S.iaRun = await api.call(`/ia/runs/${mais.id}`); } catch { api.S.iaRun = null; }
@@ -82,14 +84,22 @@ export function vistaIA(S, { esc, hhmm, when }) {
 
   const prontos = ia.fornecedores.filter((f) => f.estado === 'funcional');
   const comChave = ia.fornecedores.filter((f) => f.configurado);
+  /* 1.19.0 · os fornecedores do freellmapi vêm em dois grupos: os que este
+     cliente sabe falar e os que não (dialeto próprio, sem base). Não se
+     esconde nenhum: os que não servem dizem porquê, numa linha. */
+  const nucleo = ia.fornecedores.filter((f) => (f.familia || 'nucleo') !== 'freellmapi');
+  const extra = ia.fornecedores.filter((f) => f.familia === 'freellmapi');
+  const extraOk = extra.filter((f) => f.estado !== 'inutilizavel');
+  const extraNao = extra.filter((f) => f.estado === 'inutilizavel');
+  const semChave = comChave.filter((f) => f.semChave).length;
   const uso = S.iaUso || { resumo: [] };
 
   const aviso = ia.modo === 'local'
     ? `<div class="ia-faixa bad"><b>Modo local.</b> ${esc(ia.motivo || 'a IA corre no servidor')}.
         O resto da mesa funciona aqui; o Control Center só ganha vida quando a página estiver a falar com o \`/api\` (que é o caso do site publicado).</div>`
     : ia.pronto
-    ? `<div class="ia-faixa ok"><b>Motor operacional.</b> ${comChave.length} fornecedor(es) com chave; ${prontos.length} com teste real bem-sucedido.
-        ${prontos.length ? '' : ' Nenhum foi testado ainda — usa «Testar» na linha do fornecedor: só isso conta como prova.'}</div>`
+    ? `<div class="ia-faixa ok"><b>Motor operacional.</b> ${comChave.length} fornecedor(es) prontos${semChave ? ` (${semChave} sem chave, por desenho)` : ''}; ${prontos.length} com teste real bem-sucedido.
+        ${prontos.length ? '' : ' Ainda nenhum foi testado — usa «Testar» na linha do fornecedor: só isso conta como prova.'}</div>`
     : `<div class="ia-faixa bad"><b>Sem motor.</b> Nenhum fornecedor tem chave no ambiente da Vercel.
         Os agentes não correm e as tarefas dizem isso mesmo. Para ligar, mete <em>uma</em> destas variáveis
         (Production e Preview) em Vercel → Settings → Environment Variables e volta a publicar:
@@ -103,8 +113,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
       ? `${f.ultimoTeste.ok ? 'ok' : 'falhou'} · ${f.ultimoTeste.ms != null ? `${f.ultimoTeste.ms} ms` : '—'} · ${when(f.ultimoTeste.quando)}`
       : 'nunca';
     return `<tr class="${f.estado === 'funcional' ? 'ia-ok' : ''}">
-      <td><b>${esc(f.nome)}</b><div class="ia-sub">${esc(f.limites)}</div></td>
-      <td class="ia-mono">${f.configurado ? `${esc(f.variavel)}<div class="ia-sub">${esc(f.chaveMascarada)}</div>` : `<span class="ia-sub">${esc(f.variavel || f.chave?.[0] || '')}</span>`}</td>
+      <td><b>${esc(f.nome)}</b> ${f.semChave ? etiqueta('sem chave', 'ok') : ''}<div class="ia-sub">${esc(f.limites || '')}</div></td>
+      <td class="ia-mono">${f.semChave ? '<span class="ia-sub">não precisa</span>' : f.configurado ? `${esc(f.variavel)}<div class="ia-sub">${esc(f.chaveMascarada)}</div>` : `<span class="ia-sub">${esc(f.variavel || '')}</span>`}</td>
       <td>${etiqueta(st.texto, st.tipo)}<div class="ia-sub">${esc(st.porque)}</div></td>
       <td>${esc(teste)}</td>
       <td class="ia-acts">
@@ -206,12 +216,23 @@ export function vistaIA(S, { esc, hhmm, when }) {
     </div>
 
     <div class="card">
-      <h3 style="margin-top:0">Fornecedores <span class="ia-sub">· ${comChave.length} com chave, ${prontos.length} provados</span></h3>
+      <h3 style="margin-top:0">Fornecedores do núcleo <span class="ia-sub">· ${comChave.length} prontos, ${prontos.length} provados</span></h3>
       <table class="ia-tab">
         <thead><tr><th>Fornecedor</th><th>Variável</th><th>Estado</th><th>Último teste</th><th></th></tr></thead>
-        <tbody>${ia.fornecedores.map(linhaFornecedor).join('')}</tbody>
+        <tbody>${nucleo.map(linhaFornecedor).join('')}</tbody>
       </table>
-      <div class="ia-sub" style="margin-top:8px">«Por testar» quer dizer exactamente isso: tem chave, mas ninguém provou que responde. O teste faz dois pedidos reais (lista de modelos + uma resposta curta) e fica registado.</div>
+      <div class="ia-sub" style="margin-top:8px">«Por testar» quer dizer exactamente isso: está pronto, mas ninguém provou que responde. O teste faz dois pedidos reais (lista de modelos + uma resposta curta) e fica registado.</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Fornecedores do freellmapi <span class="ia-sub">· ${extraOk.length} utilizáveis de ${extra.length}</span></h3>
+      <p class="ia-sub" style="margin-top:0">Extraídos do <code>freellmapi</code> (MIT) por <code>scripts/extrair-freellmapi.mjs</code>: ${extra.length} adaptadores e os modelos com os limites que ele declara. Os <b>sem chave</b> (Kilo, OVH) funcionam sem configurares nada — mas só o teste real o confirma.</p>
+      <table class="ia-tab">
+        <thead><tr><th>Fornecedor</th><th>Credencial</th><th>Estado</th><th>Último teste</th><th></th></tr></thead>
+        <tbody>${extraOk.map(linhaFornecedor).join('')}</tbody>
+      </table>
+      ${extraNao.length ? `<details style="margin-top:10px"><summary class="ia-sub">${extraNao.length} que este cliente não sabe falar</summary>
+        <ul class="ia-erros">${extraNao.map((f) => `<li><b>${esc(f.nome)}</b> — ${esc(f.nota || 'fora do nosso cliente')}</li>`).join('')}</ul></details>` : ''}
     </div>
 
     <div class="card">
@@ -223,6 +244,50 @@ export function vistaIA(S, { esc, hhmm, when }) {
       <h3 style="margin-top:0">Uso e erros</h3>
       ${usoLinhas ? `<table class="ia-tab"><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Ok</th><th>Erros</th><th>Latência média</th><th>Tokens</th></tr></thead><tbody>${usoLinhas}</tbody></table>` : '<div class="ia-sub">Sem pedidos registados.</div>'}
       ${(uso.errosRecentes || []).length ? `<h4>Erros recentes</h4><ul class="ia-erros">${uso.errosRecentes.map((e) => `<li><b>${esc(e.fornecedor || '')}</b> · ${esc(when(e.quando))} — ${esc(e.erro || '')}</li>`).join('')}</ul>` : ''}
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Memória <span class="ia-sub">· plugins do Graft (Apache-2.0)</span></h3>
+      ${ia.memoria?.erro
+        ? `<div class="ia-faixa bad">${esc(ia.memoria.erro)}</div>`
+        : `<p class="ia-sub" style="margin-top:0">${ia.memoria?.total || 0} notas · ${ia.memoria?.usos || 0} consultas registadas.
+             A procura é por palavras (lexical), não por embeddings — o resultado di-lo. O Orchestrator consulta a memória antes de planear e escreve uma nota no fim de cada execução concluída.</p>
+           ${(ia.memoria?.etiquetas || []).length ? `<div style="margin-bottom:8px">${ia.memoria.etiquetas.map((e) => etiqueta(`${esc(e.etiqueta)} · ${e.notas}`, '')).join(' ')}</div>` : ''}
+           <div class="ia-acts" style="gap:6px;flex-wrap:wrap">
+             <input id="iaMemBusca" class="ia-input" style="flex:1;min-width:180px" placeholder="procurar na memória…" />
+             <button class="btn quiet small" data-act="ia-memoria-procurar">Procurar</button>
+             <button class="btn quiet small" data-act="ia-memoria-auditar">Auditar</button>
+           </div>
+           <div id="iaMemResultado" class="ia-sub" style="margin-top:8px"></div>
+           <details style="margin-top:10px"><summary class="ia-sub">Guardar uma nota</summary>
+             <input id="iaMemTitulo" class="ia-input" placeholder="título (o que ficou decidido)" style="margin-top:6px" maxlength="160" />
+             <textarea id="iaMemTexto" class="ia-input" rows="3" placeholder="a nota: contexto, decisão e porquê" maxlength="8000" style="margin-top:6px"></textarea>
+             <div class="ia-acts" style="justify-content:flex-end;margin-top:6px"><button class="btn primary small" data-act="ia-memoria-guardar">Guardar nota</button></div>
+           </details>`}
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Estúdio de media <span class="ia-sub">· OpenMontage (AGPL-3.0, por fora)</span></h3>
+      ${(() => {
+        const est = ia.estudio || {};
+        const w = est.worker || {};
+        return `${est.porque ? `<div class="ia-faixa ${est.configurado ? 'warn' : 'bad'}">${esc(est.porque)}</div>` : `<div class="ia-faixa ok"><b>Worker vivo.</b> OpenMontage ${esc(w.versao || '?')}${w.commit ? ` @ ${esc(String(w.commit).slice(0, 7))}` : ''} · visto há ${w.vistoHaMinutos ?? '?'} min${w.ferramentas ? ` · ffmpeg ${w.ferramentas.ffmpeg ? 'sim' : 'não'}, python ${w.ferramentas.python ? 'sim' : 'não'}` : ''}</div>`}
+          <textarea id="iaMediaPedido" class="ia-input" rows="2" maxlength="2000" placeholder="Ex.: explicador de 30 s sobre o Café Central, legendas em português, 1080p"></textarea>
+          <div class="ia-acts" style="gap:6px;flex-wrap:wrap;margin-top:6px">
+            <select id="iaMediaTipo" class="ia-select">
+              ${(est.tipos || ['video']).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+            </select>
+            <select id="iaMediaPipeline" class="ia-select">
+              <option value="">pipeline: escolher sozinho</option>
+              ${(est.pipelines || []).map((p) => `<option value="${esc(p.id)}">${esc(p.nome)} · ${esc(p.tipo)}</option>`).join('')}
+            </select>
+            <button class="btn primary small" data-act="ia-media-pedir">Pedir produção</button>
+          </div>
+          ${(S.iaFila || []).length ? `<table class="ia-tab" style="margin-top:10px"><thead><tr><th>Pedido</th><th>Tipo</th><th>Estado</th><th>Resultado</th><th>Quando</th></tr></thead><tbody>
+            ${(S.iaFila || []).slice(0, 8).map((j) => `<tr><td>${esc(String(j.pedido).slice(0, 60))}</td><td>${esc(j.tipo)}</td><td>${etiqueta(j.estado, j.estado === 'concluido' ? 'ok' : j.estado === 'falhou' || j.estado === 'indisponivel' ? 'bad' : 'warn')}${j.erro ? `<div class="ia-sub">${esc(String(j.erro).slice(0, 140))}</div>` : ''}</td><td>${j.url_resultado ? `<a href="${esc(j.url_resultado)}" target="_blank" rel="noopener">abrir</a>` : '<span class="ia-sub">—</span>'}</td><td class="ia-sub">${when(j.criado)}</td></tr>`).join('')}
+          </tbody></table>` : '<div class="ia-sub" style="margin-top:8px">Nenhum trabalho de media pedido.</div>'}
+          <div class="ia-sub" style="margin-top:8px">O OpenMontage não corre na Vercel: precisa de Python, FFmpeg e Node. A mesa só enfileira e mostra o que o worker devolve — <code>scripts/estudio-worker.mjs</code>, instruções em <code>docs/OPENMONTAGE.md</code>.</div>`;
+      })()}
     </div>
 
     <div class="card">
@@ -317,6 +382,62 @@ export async function accaoIA(nome, el, api) {
   if (nome === 'ia-retomar') {
     try { lancar(id, { retomar: true }); toast('A retomar do passo em falta — os passos já feitos não se repetem.'); }
     catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-memoria-procurar') {
+    const consulta = String(document.getElementById('iaMemBusca')?.value || '').trim();
+    const alvo = document.getElementById('iaMemResultado');
+    if (!consulta) { toast('escreve o que procuras', true); return true; }
+    try {
+      const r = await call('/ia/memoria/procurar', 'POST', { consulta, limite: 8 });
+      if (!alvo) return true;
+      alvo.innerHTML = r.achados.length
+        ? `<b>${r.achados.length} nota(s)</b> · procura ${esc(r.modo)}<ul style="margin:6px 0 0 16px">${r.achados.map((n) => `<li><b>${esc(n.titulo)}</b> ${n.pontos ? etiqueta(`pontos ${n.pontos}`, '') : ''}<div class="ia-sub">${esc(String(n.texto).slice(0, 240))}</div></li>`).join('')}</ul>`
+        : `Nada parecido com «${esc(consulta)}» — a memória tem um buraco, não uma resposta.`;
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-memoria-guardar') {
+    const titulo = String(document.getElementById('iaMemTitulo')?.value || '').trim();
+    const texto = String(document.getElementById('iaMemTexto')?.value || '').trim();
+    if (titulo.length < 3 || texto.length < 10) { toast('título (3+) e texto (10+) são obrigatórios', true); return true; }
+    try {
+      const r = await call('/ia/memoria', 'POST', { titulo, texto });
+      toast(r.resumo || 'nota guardada');
+      const t = document.getElementById('iaMemTitulo'); if (t) t.value = '';
+      const x = document.getElementById('iaMemTexto'); if (x) x.value = '';
+      await carregarIA(api); paint();
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-memoria-auditar') {
+    const alvo = document.getElementById('iaMemResultado');
+    try {
+      const r = await call('/ia/memoria/auditar');
+      if (alvo) {
+        alvo.innerHTML = `<b>${r.total} notas</b> · ${esc(r.recomendacao)}
+          ${r.duplicados.length ? `<div class="ia-sub">duplicados: ${r.duplicados.map((d) => esc(d.titulo)).join(' · ')}</div>` : ''}
+          ${r.curtas.length ? `<div class="ia-sub">notas curtas (menos de 40 caracteres): ${r.curtas.length}</div>` : ''}
+          <div class="ia-sub">não funde nem apaga nada — lista para decidires.</div>`;
+      }
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-media-pedir') {
+    const pedido = String(document.getElementById('iaMediaPedido')?.value || '').trim();
+    const tipo = String(document.getElementById('iaMediaTipo')?.value || 'video');
+    const pipeline = String(document.getElementById('iaMediaPipeline')?.value || '') || null;
+    if (pedido.length < 10) { toast('descreve o que queres produzir (10+ caracteres)', true); return true; }
+    try {
+      const r = await call('/media/trabalhos', 'POST', { pedido, tipo, pipeline });
+      toast(r.trabalho?.estado === 'indisponivel' ? 'Ficou na fila como indisponível — vê a razão no cartão.' : 'Pedido entregue à fila do estúdio.');
+      const t = document.getElementById('iaMediaPedido'); if (t) t.value = '';
+      await carregarIA(api); paint();
+    } catch (e) { toast(e.message, true); }
     return true;
   }
 

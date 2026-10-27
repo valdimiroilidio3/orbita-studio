@@ -202,3 +202,58 @@ Para o motor arrancar é preciso **uma** destas coisas:
 
 O token OIDC nunca é guardado: `api/_env.mjs` copia-o para o ambiente **daquele pedido** e o
 `/ia/estado` só mostra o nome da variável e a máscara.
+
+---
+
+## 12. 1.19.0 · fornecedores do freellmapi
+
+O `freellmapi-main.zip` (MIT) trazia 49 adaptadores e uma tabela de modelos com
+limites. Em vez de copiar código, um extractor lê-o e gera o catálogo:
+
+```bash
+unzip freellmapi-main.zip -d /tmp
+node scripts/extrair-freellmapi.mjs /tmp/freellmapi-main
+# fornecedores: 72 · modelos: 116 · keyless: kilo, ovh
+```
+
+| o que | onde |
+|---|---|
+| extractor | `scripts/extrair-freellmapi.mjs` |
+| resultado (gerado) | `api/_ia/catalogo-extra.json` |
+| junção no catálogo | `api/_ia/catalogo.mjs` (`familia: 'freellmapi'`) |
+
+- **76 fornecedores, 146 modelos** no total (11 + 72 do freellmapi, menos os
+  repetidos; 30 + 116 modelos).
+- **Sem chave**: `kilo` (Kilo Gateway, 200 pedidos/hora por IP) e `ovh` (OVH AI
+  Endpoints, ~2 pedidos/min por IP). Ficam «prontos» — e **por testar** até um
+  pedido real.
+- **Não utilizáveis por este cliente** (21): dialeto próprio (Cohere, AI Horde,
+  ACLIDE, Moondream, Sail, os seis de pesquisa — Tavily, Brave, Exa, Firecrawl,
+  Linkup, Parallel) ou base que o código dele não declara. Aparecem na interface
+  com a razão; não entram no router.
+- Aviso que fica escrito: a documentação do Kilo diz que prompts e respostas
+  podem ser usados para treino. Não é sítio para dados de clientes.
+
+## 13. 1.19.0 · memória (plugins do Graft)
+
+| skill do Graft | o que existe aqui |
+|---|---|
+| `graft-init` | estado da memória no Control Center (`/ia/estado` → `memoria`) |
+| `recall` | `memoria_procurar` + `POST /ia/memoria/procurar` (lexical) |
+| `memoryze` | `memoria_guardar` + nota automática no fim de cada execução |
+| `learn` | `POST /ia/memoria/aprender` (plano → `confirmar: true`) |
+| `memory-audit` | `GET /ia/memoria/auditar` (duplicados, curtas, paradas) |
+| `graft` (ciclo) | o orquestrador consulta antes de planear e escreve no fim |
+
+O que **não** existe: embeddings, grafo, daemon, perfis, o modelo de 600 MB. A
+procura é por palavras e a resposta diz `modo: 'lexical'`.
+
+Tabela: `orbita_ai_memoria` (RLS fechado, grants revogados a `anon`/`authenticated`).
+
+## 14. 1.19.0 · estúdio de media (OpenMontage)
+
+Ver `docs/OPENMONTAGE.md`. Resumo: fila em `orbita_media_jobs`, worker com
+`MEDIA_WORKER_TOKEN`, `scripts/estudio-worker.mjs` a correr onde há Python +
+FFmpeg + Node, e o OpenMontage **por fora** do repositório (AGPL-3.0).
+
+Sem worker, um trabalho fica `indisponivel` com a razão — nunca «concluído».

@@ -127,9 +127,19 @@ export async function correr({
       await mudar({ estado: 'a_executar', erro: null, plano });
     } else {
       const contextoMesa = await executarFerramenta('mesa_resumo', {}, ctx);
+      /* 1.19.0 · antes de planear, ouvir a memória (plugins do Graft): notas
+         parecidas poupam raciocínio e evitam repetir decisões antigas. */
+      let notas = [];
+      try {
+        const { procurar } = await import('./memoria.mjs');
+        notas = (await procurar(repo, { consulta: objetivo, limite: 5 })).achados || [];
+      } catch { notas = []; }
+      const blocoMemoria = notas.length
+        ? `\n\nNotas da memória que podem ser próximas (procura lexical; confirma antes de usar):\n${notas.map((n) => `- ${n.titulo}: ${String(n.texto).slice(0, 300)}`).join('\n')}`
+        : '\n\nA memória não tem nada parecido com este objectivo.';
       const planoR = await motor.pedir('plano', [
         { role: 'system', content: `${promptDe('orchestrator')}\n\nResponde SÓ com um objecto JSON, sem prosa, neste formato:\n{\"passos\":[{\"agente\":\"research|design|frontend|backend|qa|creative|reviewer\",\"titulo\":\"...\",\"instrucao\":\"...\",\"criterio\":\"...\"}],\"limites\":[\"o que não é possível nesta instalação\"]}` },
-        { role: 'user', content: `Objectivo do dono:\n${objetivo}\n\nContexto real da mesa agora: ${JSON.stringify(contextoMesa.dados || {})}\n\nFerramentas que existem: ${Object.keys(FERRAMENTAS).join(', ')}.\nNÃO existem: ${INDISPONIVEIS.map((i) => i.id).join(', ')}.` },
+        { role: 'user', content: `Objectivo do dono:\n${objetivo}\n\nContexto real da mesa agora: ${JSON.stringify(contextoMesa.dados || {})}${blocoMemoria}\n\nFerramentas que existem: ${Object.keys(FERRAMENTAS).join(', ')}.\nNÃO existem: ${INDISPONIVEIS.map((i) => i.id).join(', ')}.` },
       ], { agente: 'orchestrator', maxTokens: 1400, orc });
 
       plano = normalizarPlano(lerPlano(planoR.texto));
@@ -224,11 +234,28 @@ Responde SÓ com JSON: {"decisao":"aprovado|com_ressalvas|rejeitado","justificac
       orcamento: orc.resumo(),
       indisponiveis: INDISPONIVEIS,
     };
-    return await mudar({
+    const fim = await mudar({
       estado: 'concluido', resultado, artefactos, revisao,
       tokens_in: orc.tokens, tokens_out: 0, custo_centimos: orc.custoCentimos,
       fim: new Date().toISOString(),
     });
+
+    /* 1.19.0 · escrever na memória no fim, como o `memoryze` do Graft: uma
+       nota por execução concluída, com a decisão do Reviewer. Se falhar, a
+       execução não falha por isso. */
+    try {
+      const { guardar } = await import('./memoria.mjs');
+      const agentesUsados = [...new Set(resumos.map((r) => r.agente))];
+      await guardar(repo, {
+        titulo: String(objetivo).slice(0, 140),
+        texto: `Objectivo: ${objetivo}\n\nO que foi feito:\n${resumos.map((r) => `- [${r.agente}] ${r.titulo}: ${String(r.saida).slice(0, 400)}`).join('\n')}\n\nRevisão (${revisao?.decisao}): ${revisao?.justificacao || ''}\n\nFerramentas usadas: ${(artefactos.ferramentasUsadas || []).map((f) => `${f.nome}${f.ok ? '' : '(falhou)'}`).join(', ') || 'nenhuma'}`,
+        etiquetas: ['execucao', ...agentesUsados],
+        fonte: `execução ${run.id}`,
+        projeto: 'orbita',
+      });
+    } catch { /* memória é um extra: não parte o trabalho */ }
+
+    return fim;
   } catch (e) {
     return await mudar({ estado: 'falhou', erro: String(e.message || e).slice(0, 500), fim: new Date().toISOString() });
   }

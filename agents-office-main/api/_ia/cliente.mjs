@@ -47,6 +47,7 @@ function classificar(status, corpao, { fornec, modelo }) {
 /* ---------- tradução de cabeçalhos ---------- */
 function cabecalhos(prov, chave) {
   const h = { 'content-type': 'application/json' };
+  if (prov.keyless && !chave) return h;         // anónimo: nem um Bearer vazio se manda
   if (prov.estilo === 'anthropic') {
     h['x-api-key'] = chave;
     h['anthropic-version'] = '2023-06-01';
@@ -130,7 +131,7 @@ export async function falar({
   fornec, prov, chave, modelo, mensagens, ferramentas = [],
   maxTokens = 1200, temperatura = 0.3, timeoutMs = 45000, fetchImpl = fetch,
 }) {
-  if (!chave) throw new ErroIA(`falta a chave de ${fornec} no ambiente`, { fornec, modelo, codigo: 'semchave' });
+  if (!chave && !prov.keyless) throw new ErroIA(`falta a chave de ${fornec} no ambiente`, { fornec, modelo, codigo: 'semchave' });
   if (!modelo) throw new ErroIA(`falta o modelo para ${fornec}`, { fornec, codigo: 'semmodelo' });
 
   const inicio = Date.now();
@@ -213,7 +214,7 @@ export async function falar({
 
 /* ---------- descoberta de modelos (a verdade, não o catálogo) ---------- */
 export async function listarModelos({ fornec, prov, chave, timeoutMs = 15000, fetchImpl = fetch }) {
-  if (!chave) throw new ErroIA(`falta a chave de ${fornec}`, { fornec, codigo: 'semchave' });
+  if (!chave && !prov.keyless) throw new ErroIA(`falta a chave de ${fornec}`, { fornec, codigo: 'semchave' });
   const ctl = new AbortController();
   const relogio = setTimeout(() => ctl.abort(), timeoutMs);
   const url = prov.estilo === 'anthropic' ? `${prov.base}/v1/models` : `${prov.base}/models`;

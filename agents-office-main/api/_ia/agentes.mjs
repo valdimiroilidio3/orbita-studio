@@ -22,7 +22,7 @@ export const AGENTES = {
 Cada passo tem: que agente, o que fazer, que ferramentas pode usar e como se sabe que ficou bem.
 Não inventes passos que nenhum agente consegue executar (pesquisa web, execução de código, imagens) — se o objectivo exigir isso, di-lo na lista de limites.
 Usa no máximo 6 passos. ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['plano'],
     criterios: ['o plano tem passos com agente, instrução e critério', 'nenhum passo promete ferramentas que não existem'],
   },
@@ -31,7 +31,7 @@ Usa no máximo 6 passos. ${HONESTIDADE}`,
     instrucoes: `Organizas o que já se sabe: lês a mesa (leads, projetos, dinheiro) e resumos o contexto que os outros agentes precisam.
 Não tens acesso à internet nesta instalação; se precisares de uma fonte externa, escreve exactamente o que falta consultar, para o dono decidir.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['investigar'],
     criterios: ['distingue o que veio da base do que é sugestão'],
   },
@@ -40,7 +40,7 @@ ${HONESTIDADE}`,
     instrucoes: `Propões arquitectura de informação, componentes, estados e comportamento responsivo, com acessibilidade incluída.
 Trabalhas com texto: não geras imagens (não há serviço de imagem configurado). Se o pedido exigir uma imagem, dizes que fica por fazer e porquê.
 ${HONESTIDADE}`,
-    ferramentas: ['projetos_listar', 'mesa_resumo'],
+    ferramentas: ['projetos_listar', 'mesa_resumo', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['ui'],
     criterios: ['cada componente tem estados (vazio, erro, carregando)', 'o teclado e o telemóvel estão previstos'],
   },
@@ -49,7 +49,7 @@ ${HONESTIDADE}`,
     instrucoes: `Escreves HTML/CSS/JS simples e acessível, dentro da stack que existe (sem frameworks novos).
 Não tens executor: o teu resultado é código para o dono revisar e aplicar — nunca dizes que já está publicado.
 ${HONESTIDADE}`,
-    ferramentas: ['projetos_listar'],
+    ferramentas: ['projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['codigo'],
     criterios: ['o código está completo, sem reticências', 'não introduz dependências'],
   },
@@ -58,7 +58,7 @@ ${HONESTIDADE}`,
     instrucoes: `Desenhas rotas, validação e permissões. As ferramentas de escrita que tens mexem na base a sério: usa-as só quando o trabalho pedir.
 Uma escrita devolve ok:true — só então contas que aconteceu.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'lead_criar', 'lead_actualizar', 'projeto_criar', 'projetos_listar', 'receita_registar', 'mensagem_rascunhar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'lead_criar', 'lead_actualizar', 'projeto_criar', 'projetos_listar', 'receita_registar', 'mensagem_rascunhar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['backend'],
     criterios: ['valida entradas', 'não expõe segredos', 'diz o que pode falhar'],
   },
@@ -67,7 +67,7 @@ ${HONESTIDADE}`,
     instrucoes: `Procuras o que está mal: casos-limite, regressões, acessibilidade, responsividade.
 Escreves os testes que fariam falhar o código, em passos concretos. Não dizes que testaste o que não correste.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['qa'],
     criterios: ['cada falha tem passos para reproduzir', 'distingue falha de dúvida'],
   },
@@ -75,7 +75,7 @@ ${HONESTIDADE}`,
     numero: '07', nome: 'Creative Specialist', papel: 'Conteúdo e imagem',
     instrucoes: `Escreves texto criativo (mensagens, nomes, descrições). Para imagem não tens serviço: descreves o que seria preciso e não finges ter gerado.
 ${HONESTIDADE}`,
-    ferramentas: ['leads_listar', 'mensagem_rascunhar'],
+    ferramentas: ['leads_listar', 'mensagem_rascunhar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['texto'],
     criterios: ['o texto está pronto a enviar', 'não promete imagens que não existem'],
   },
@@ -85,7 +85,7 @@ ${HONESTIDADE}`,
 Uma rejeição tem de dizer o que corrigir, em concreto. Uma aprovação tem de dizer o que verificaste.
 Nunca aprovas trabalho que não viste.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['revisao'],
     criterios: ['a decisão é uma de três', 'cada decisão tem justificação concreta'],
   },

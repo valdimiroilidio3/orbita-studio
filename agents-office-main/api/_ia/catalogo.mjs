@@ -20,6 +20,19 @@
        fornecedor quando há chave, e o Control Center deixa fixar outro.
    =========================================================================== */
 
+/* 1.19.0 · o que veio do freellmapi (MIT). É um ficheiro gerado por
+   `scripts/extrair-freellmapi.mjs` a partir do código dele: 72 adaptadores e
+   116 modelos com rpm/rpd/tpm/tpd/contexto. O que está aqui é a *lista dele*,
+   não uma promessa nossa — continua a ser `/ia/testar` que decide. */
+import extra from './catalogo-extra.json' with { type: 'json' };
+
+export const FAMILIA_FREELLMAPI = 'freellmapi';
+
+/* Marca de «pronto sem chave». Não é uma variável de ambiente: nenhum env tem
+   esta chave, por isso o valor lido é sempre vazio e nada vaza. Serve para o
+   router contar o fornecedor como configurado sem inventar uma chave. */
+export const SEM_CHAVE = '\u0000sem-chave';
+
 export const FORNECEDORES = {
   openrouter: {
     nome: 'OpenRouter',
@@ -148,6 +161,34 @@ export const FORNECEDORES = {
   },
 };
 
+/* ---- 1.19.0 · os fornecedores do freellmapi entram aqui, sem apagar nada ---- */
+for (const f of extra.fornecedores) {
+  const nosso = FORNECEDORES[f.id];
+  if (nosso) {
+    /* os do núcleo mandam: só se completa o que faltava */
+    nosso.keyless = !!f.keyless;
+    nosso.familia = nosso.familia || 'nucleo';
+    continue;
+  }
+  FORNECEDORES[f.id] = {
+    nome: f.nome,
+    site: f.base ? new URL(f.base).origin : '',
+    docs: '',
+    estilo: f.dialeto === 'google' ? 'google' : 'openai',
+    base: f.base,
+    chave: f.chave,
+    keyless: !!f.keyless,
+    familia: FAMILIA_FREELLMAPI,
+    tipo: f.tipo,                       // chat | pesquisa | media
+    usavel: !!f.usavel,
+    gratuito: true,
+    limites: f.keyless ? 'sem chave (anónimo) — limite por IP, declarado pelo freellmapi' : 'plano gratuito declarado pelo freellmapi',
+    nota: f.usavel
+      ? `Veio do freellmapi (${f.ficheiro}).${f.keyless ? ' Não precisa de chave.' : ''}`
+      : `Veio do freellmapi mas não é utilizável aqui: ${f.porque}`,
+  };
+}
+
 /* Etiquetas usadas pelo router e pelos agentes:
    raciocinio · codigo · texto · rapido · barato · visao · ferramentas · contexto */
 export const MODELOS = [
@@ -190,6 +231,22 @@ export const MODELOS = [
   { fornecedor: 'openai', modelo: 'gpt-5-mini', etiquetas: ['raciocinio', 'codigo', 'ferramentas'], janela: 400000, preco: [0.25, 2] },
   { fornecedor: 'openai', modelo: 'gpt-5', etiquetas: ['raciocinio', 'codigo', 'ferramentas', 'visao'], janela: 400000, preco: [1.25, 10] },
   { fornecedor: 'deepseek', modelo: 'deepseek-chat', etiquetas: ['codigo', 'barato', 'texto'], janela: 131000, preco: [0.27, 1.1] },
+  /* ---- 1.19.0 · os modelos do freellmapi (sementes dele, com os limites dele) ---- */
+  ...extra.modelos.map((m) => ({
+    fornecedor: m.plataforma,
+    modelo: m.modelo,
+    etiquetas: m.etiquetas,
+    janela: m.contexto || 32000,
+    preco: [0, 0],                       // é o plano gratuito dele; o custo real só o fornecedor sabe
+    gratuito: true,
+    familia: FAMILIA_FREELLMAPI,
+    rotulo: m.rotulo,
+    limites: {
+      rpm: m.rpm, rpd: m.rpd, tpm: m.tpm, tpd: m.tpd,
+      orcamento: m.orcamento, tamanho: m.tamanho,
+      inteligencia: m.inteligencia, velocidade: m.velocidade,
+    },
+  })),
 ];
 
 /** Todos os modelos de um fornecedor, do catálogo. */
@@ -197,14 +254,21 @@ export function modelosDe(fornecedor) {
   return MODELOS.filter((m) => m.fornecedor === fornecedor);
 }
 
-/** Que fornecedores têm chave no ambiente (nomes mascarados; nunca valores). */
+/** Que fornecedores estão prontos: com chave no ambiente, ou sem chave por desenho.
+    Devolve NOMES de variáveis e o motivo — nunca valores. */
 export function comChave(env = process.env) {
   const out = [];
   for (const [id, f] of Object.entries(FORNECEDORES)) {
-    const nome = f.chave.find((k) => env[k] && String(env[k]).trim().length >= 8);
+    const nome = (f.chave || []).find((k) => env[k] && String(env[k]).trim().length >= 8);
     if (nome) out.push({ id, variavel: nome });
+    else if (f.keyless && f.usavel !== false) out.push({ id, variavel: SEM_CHAVE, semChave: true });
   }
   return out;
+}
+
+/** Só os fornecedores que o nosso cliente sabe falar e que têm base. */
+export function utilizaveis() {
+  return Object.entries(FORNECEDORES).filter(([, f]) => f.base && f.usavel !== false).map(([id]) => id);
 }
 
 /** Uma chave mascarada, para a interface: `sk-or-v1-…a1b2`. */

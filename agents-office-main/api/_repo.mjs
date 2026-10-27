@@ -192,6 +192,35 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
           return (await pedir(`orbita_ai_uso?select=*&order=criado.desc&limit=${Math.min(500, limit)}`)) || [];
         },
       },
+      /* 1.19.0 · memória (plugins do Graft) e trabalhos de media (OpenMontage) */
+      memoria: {
+        async listar({ projeto = null, limite = 500 } = {}) {
+          const filtro = projeto ? `projeto=eq.${q(projeto)}&` : '';
+          return (await pedir(`orbita_ai_memoria?select=*&${filtro}order=actualizado.desc&limit=${Math.min(500, limite)}`)) || [];
+        },
+        async criar(nota) {
+          return um(await pedir('orbita_ai_memoria', { method: 'POST', body: { ...nota, usos: 0 }, prefer: 'return=representation' }));
+        },
+        async usar(idNota) {
+          await pedir(`orbita_ai_memoria?id=eq.${q(idNota)}`, {
+            method: 'PATCH', body: { ultimo_uso: new Date().toISOString() },
+            prefer: 'return=minimal',
+          }).catch(() => {});
+          return true;
+        },
+        async apagar(idNota) {
+          await pedir(`orbita_ai_memoria?id=eq.${q(idNota)}`, { method: 'DELETE', prefer: 'return=minimal' });
+          return true;
+        },
+      },
+      media: {
+        async criar(job) { return um(await pedir('orbita_media_jobs', { method: 'POST', body: job, prefer: 'return=representation' })); },
+        async actualizar(idJob, campos) {
+          return um(await pedir(`orbita_media_jobs?id=eq.${q(idJob)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' }));
+        },
+        async porId(idJob) { return um(await pedir(`orbita_media_jobs?select=*&id=eq.${q(idJob)}&limit=1`)); },
+        async listar(limit = 30) { return (await pedir(`orbita_media_jobs?select=*&order=criado.desc&limit=${Math.min(100, limit)}`)) || []; },
+      },
     },
   };
 }
@@ -200,7 +229,7 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [],
-    iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {},
+    iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [],
     ...JSON.parse(JSON.stringify(seed)),
   };
   let n = 0;
@@ -293,6 +322,33 @@ export function createMemRepo(seed = {}) {
           return Object.fromEntries([...soma].map(([k, a]) => [k, Math.round(a.ms / a.n)]));
         },
         async recentes(limit = 200) { return d.iaUso.slice(0, limit); },
+      },
+      memoria: {
+        async listar({ projeto = null, limite = 500 } = {}) {
+          const lista = projeto ? d.iaMemoria.filter((n) => n.projeto === projeto) : d.iaMemoria;
+          return [...lista].sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || ''))).slice(0, limite);
+        },
+        async criar(nota) {
+          const nova = { id: id('mem'), criado: agora(), actualizado: agora(), usos: 0, ...nota };
+          d.iaMemoria.unshift(nova);
+          return nova;
+        },
+        async usar(idNota) {
+          const n = d.iaMemoria.find((x) => x.id === idNota);
+          if (n) { n.usos = Number(n.usos || 0) + 1; n.ultimo_uso = agora(); }
+          return true;
+        },
+        async apagar(idNota) {
+          const i = d.iaMemoria.findIndex((x) => x.id === idNota);
+          if (i >= 0) d.iaMemoria.splice(i, 1);
+          return true;
+        },
+      },
+      media: {
+        async criar(job) { const novo = { id: id('mjob'), criado: agora(), estado: 'pedido', ...job }; d.mediaJobs.unshift(novo); return novo; },
+        async actualizar(i, campos) { const j = d.mediaJobs.find((x) => x.id === i); if (!j) return null; Object.assign(j, campos); return j; },
+        async porId(i) { return d.mediaJobs.find((x) => x.id === i) || null; },
+        async listar(limit = 30) { return d.mediaJobs.slice(0, limit); },
       },
     },
   };

@@ -10,7 +10,7 @@
      · dizer que um fornecedor funciona sem um teste real bem-sucedido;
      · esconder um erro atrás de texto bonito.
    =========================================================================== */
-import { FORNECEDORES, MODELOS, comChave, mascarar, modelosDe } from './catalogo.mjs';
+import { FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './cliente.mjs';
 import { cadeia, diagnostico, falarComFallback, orcamento } from './router.mjs';
 
@@ -24,7 +24,8 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
   const chaves = chavesDoAmbiente(env);
   const valorDaChave = (id) => {
     const nome = chaves[id];
-    return nome ? String(env[nome] || '') : '';
+    if (!nome || nome === SEM_CHAVE) return '';        // keyless: não há chave para ler
+    return String(env[nome] || '');
   };
 
   let cacheConfig = null;
@@ -53,7 +54,9 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
 
   return {
     chaves,
-    temChave: (id) => !!chaves[id],
+    /* «pronto» = tem chave, ou não precisa dela (keyless). Nunca confundir
+       «pronto» com «funcional»: isso é o teste real. */
+    temChave: (id) => !!chaves[id] || (!!FORNECEDORES[id]?.keyless && FORNECEDORES[id]?.usavel !== false),
     config,
     latencias,
     limparCaches() { cacheConfig = null; cacheLat = null; },
@@ -65,18 +68,25 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const testes = cfg.testes || {};
       const lat = await latencias();
       const fornecedores = Object.entries(FORNECEDORES).map(([id, p]) => {
-        const variavel = chaves[id] || null;
+        const variavel = chaves[id] === SEM_CHAVE ? null : (chaves[id] || null);
         const t = testes[id] || null;
+        const pronto = !!variavel || (!!p.keyless && p.usavel !== false);
         return {
           id, nome: p.nome, site: p.site, docs: p.docs, estilo: p.estilo,
           gratuito: !!p.gratuito, limites: p.limites, nota: p.nota || '',
-          variavel,                                    // NOME da variável, não valor
+          variavel,                                    // NOME da variável, não valor (null = sem chave por desenho)
           variaveis: p.chave,                          // o que aceita (para a interface dizer)
+          semChave: !!p.keyless,
+          familia: p.familia || 'nucleo',
+          tipo: p.tipo || 'chat',
           chaveMascarada: variavel ? mascarar(env[variavel]) : '',
-          configurado: !!variavel,
+          configurado: pronto,
           desligado: desligados.includes(id),
           testado: !!t, ultimoTeste: t ? { quando: t.quando, ok: !!t.ok, ms: t.ms ?? null, erro: t.erro || null, modelos: t.modelos ?? null } : null,
-          estado: !variavel ? 'sem_chave' : desligados.includes(id) ? 'desligado' : (t ? (t.ok ? 'funcional' : 'erro') : 'por_testar'),
+          estado: p.usavel === false ? 'inutilizavel'
+            : !pronto ? 'sem_chave'
+            : desligados.includes(id) ? 'desligado'
+            : (t ? (t.ok ? 'funcional' : 'erro') : 'por_testar'),
           modelosNoCatalogo: modelosDe(id).length,
           latenciaMediaMs: Object.entries(lat).filter(([k]) => k.startsWith(`${id}\u0000`)).map(([, v]) => v)[0] ?? null,
         };
@@ -134,19 +144,29 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
       const cfg = await config();
       const testes = { ...(cfg.testes || {}) };
       try {
-        const modelos = await listarModelos({ fornec: fornecedor, prov, chave, fetchImpl });
-        const alvo = modelos.find((m) => (MODELOS.find((x) => x.fornecedor === fornecedor)?.modelo || '') === m) || modelos[0];
-        if (!alvo) throw new ErroIA(`${fornecedor} não devolveu modelos`, { fornec: fornecedor, codigo: 'vazio' });
+        /* a lista do fornecedor é a verdade; se ele não a servir (405, formato
+           diferente, keyless sem /models), usamos a primeira entrada do catálogo */
+        let modelos = [];
+        let avisoLista = null;
+        try {
+          modelos = await listarModelos({ fornec: fornecedor, prov, chave, fetchImpl });
+        } catch (e) {
+          avisoLista = e.message;
+          modelos = modelosDe(fornecedor).map((m) => m.modelo);
+        }
+        const preferido = modelosDe(fornecedor)[0]?.modelo;
+        const alvo = modelos.find((m) => m === preferido) || modelos[0];
+        if (!alvo) throw new ErroIA(`${fornecedor} não devolveu modelos (${avisoLista || 'lista vazia'})`, { fornec: fornecedor, codigo: 'vazio' });
         const r = await falar({
           fornec: fornecedor, prov, chave, modelo: alvo,
           mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
           maxTokens: 16, temperatura: 0, timeoutMs: 30000, fetchImpl,
         });
         const ms = Date.now() - inicio;
-        testes[fornecedor] = { ok: true, ms, quando: agora(), modelos: modelos.length, usado: alvo, resposta: String(r.texto || '').slice(0, 60) };
+        testes[fornecedor] = { ok: true, ms, quando: agora(), modelos: modelos.length || null, usado: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };
         await repo.ia.config.gravar('testes', testes);
         await repo.ia.uso.registar({ fornecedor, modelo: alvo, agente: 'teste', tipo: 'teste', ok: true, ms, tokens_in: r.uso?.entrada || 0, tokens_out: r.uso?.saida || 0, erro: null });
-        return { ok: true, ms, modelos: modelos.length, modelo: alvo, resposta: String(r.texto || '').slice(0, 60) };
+        return { ok: true, ms, modelos: modelos.length || null, modelo: alvo, resposta: String(r.texto || '').slice(0, 60), avisoLista };
       } catch (e) {
         const ms = Date.now() - inicio;
         testes[fornecedor] = { ok: false, ms, quando: agora(), erro: String(e.message || e).slice(0, 300) };
