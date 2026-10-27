@@ -1,0 +1,20 @@
+[
+  {
+    "_nota": "Copia este ficheiro para data/api/providers.json e apaga as chaves que começam por _ . Cada entrada acrescenta um serviço ao retrato de /api/platform — sem tocar em código. Ver docs/PLATAFORMA.md.",
+    "id": "meu-crm",
+    "name": "CRM da casa",
+    "kind": "crm",
+    "env": ["MEU_CRM_TOKEN"],
+    "docs": "https://crm.exemplo.pt/docs",
+    "probe": { "url": "https://crm.exemplo.pt/api/me", "header": "Authorization", "prefix": "Bearer " }
+  },
+  {
+    "_nota": "Uma sonda que não devolve 2xx quando está tudo bem. `probe` é opcional: sem ele, o serviço aparece como configurado e não verificado — nunca como pronto.",
+    "id": "erp-interno",
+    "name": "ERP interno",
+    "kind": "erp",
+    "env": ["ERP_URL", "ERP_KEY"],
+    "note": "Só responde dentro da VPN.",
+    "probe": { "url": "https://erp.interno/health", "header": "x-api-key" }
+  }
+]

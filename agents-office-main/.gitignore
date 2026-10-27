@@ -1,0 +1,18 @@
+node_modules/
+dist/*
+!dist/command-centre-v2.html
+!dist/mesa.html
+data/
+office.config.local.json
+office.agents.local.json
+brain/Agents Office/
+brain/Órbita/
+.DS_Store
+*.backup-*
+
+# Local credentials; commit only the example template
+.env*
+!.env.example
+
+# inspecção local: PNGs do rasterizador caseiro (scripts em tools/, imagens não)
+.shot/

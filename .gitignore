@@ -1,0 +1,24 @@
+# Nada de dependências, builds ou segredos no repositório.
+node_modules/
+
+# O build vive fora do git, excepto a página que o `npm start` serve tal e qual.
+agents-office-main/dist/*
+!agents-office-main/dist/command-centre-v2.html
+
+# Credenciais locais: só o exemplo entra.
+.env
+.env.*
+!.env.example
+
+# Dados de trabalho (leads, tarefas, rascunhos) e ficheiros locais.
+data/*.json
+.DS_Store
+*.log
+
+# ZIPs novos ficam fora do git; os dois já versionados (agents-office-main.zip e
+# orbita-studio-integrations.zip) continuam lá por serem o material de origem.
+*.zip
+
+# artefactos de ferramentas locais
+__pycache__/
+*.pyc
