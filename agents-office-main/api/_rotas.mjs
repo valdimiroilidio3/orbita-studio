@@ -389,11 +389,16 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { id: 'vercel-connect', ...r } };
   }
 
-  if (caminhoLimpo === '/conectar/consentimento' && m === 'POST') {
+  if (caminhoLimpo === '/conectar/consentimento' && (m === 'POST' || m === 'GET')) {
     const c = await import('./_conect.mjs');
+    const fonte = m === 'POST' ? corpo : Object.fromEntries(qs.entries());
     try {
       const r = await c.consentimento(
-        { pedido: corpo?.sujeito ? { id: limpo(corpo.sujeito) } : null, escopos: corpo?.escopos || null, voltarPara: corpo?.voltarPara || null },
+        {
+          pedido: fonte?.sujeito ? { id: limpo(fonte.sujeito) } : null,
+          escopos: fonte?.escopos ? String(fonte.escopos).split(',').map((x) => x.trim()).filter(Boolean) : null,
+          voltarPara: fonte?.voltarPara || null,
+        },
         { env, importar: importarConect },
       );
       return { status: 200, corpo: r };
