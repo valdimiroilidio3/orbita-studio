@@ -174,7 +174,11 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch }
   }
 }
 
-/* ---------- o encaminhador ---------- */
+/* ---------- o encaminhador ----------
+   27 out 2026: esta marca existe para forçar um pacote de funções novo quando o
+   build da Vercel reutiliza cache e continua a servir código antigo. */
+const MARCA_FUNCOES = 'rpc-1.23.0';
+export const marcaDasFuncoes = () => MARCA_FUNCOES;
 export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
 
