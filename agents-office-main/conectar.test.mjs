@@ -165,6 +165,13 @@ test('connect: um token curto demais é mascarado por completo', () => {
   assert.equal(mascarar(''), '');
 });
 
+test('rotas: o link de consentimento sai por GET quando o dono o permite', async () => {
+  const repo = createMemRepo();
+  const r = await chamar(repo, '/conectar/consentimento', 'GET', null, { AI_GATEWAY_API_KEY: 'oidc', ORBITA_PERMITIR_CONSENTIMENTO: '1' }, importarCom(sdkFalso()));
+  assert.equal(r.status, 200);
+  assert.match(r.corpo.url, /^https:\/\//);
+});
+
 test('connect: o link de consentimento está desligado por omissão', async () => {
   await assert.rejects(() => consentimento({}, { env: { VERCEL_OIDC_TOKEN: OIDC }, importar: importarCom(sdkFalso()) }), (e) => {
     assert.equal(e.codigo, 'consentimento-desligado');

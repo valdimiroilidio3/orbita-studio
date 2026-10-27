@@ -151,7 +151,7 @@ export function traduzirErro(e, conector) {
   erro.codigo = 'connect';
   erro.detalhe = { codigo, status: e?.status ?? null, conector };
   if (/UserAuthorizationRequired|user_authorization_required/i.test(`${e?.name} ${codigo} ${base}`)) {
-    erro.message = `o dono ainda não autorizou «${conector}» — é preciso abrir o link de consentimento uma vez`;
+    erro.message = `o dono ainda não autorizou «${conector}» — autoriza uma vez em Vercel → Connect → ${conector} (ou pede o link em /conectar/consentimento)`;
     erro.codigo = 'precisa-consentimento';
     erro.precisaConsentimento = true;
   } else if (/ConnectorInstallationRequired|installation_required/i.test(`${e?.name} ${codigo} ${base}`)) {
