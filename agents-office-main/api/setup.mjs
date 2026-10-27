@@ -93,6 +93,41 @@ export default async function handler(req, res) {
         };
       }
     }
+    /* ---- prova da IA a sério (só com ?ia=1): testar + correr um trabalho ---- */
+    if (q.get('ia') === '1') {
+      const { envDoPedido } = await import('./_env.mjs');
+      const { createSupabaseRepo: repoBase, envBase: base } = await import('./_repo.mjs');
+      const { criarMotor } = await import('./_ia/motor.mjs');
+      const { correr } = await import('./_ia/orquestrador.mjs');
+      const envIA = envDoPedido(req);
+      if (!base().pronto) saida.ia = { erro: 'a base não está configurada' };
+      else {
+        const repo = repoBase(base());
+        const motor = criarMotor({ repo, env: envIA });
+        const est = await motor.estado();
+        const provas = {};
+        for (const id of est.motoresConfigurados) {
+          try { provas[id] = await motor.testar(id); } catch (e) { provas[id] = { ok: false, erro: e.message }; }
+        }
+        saida.ia = { motores: est.motoresConfigurados, pronto: est.diagnostico.pronto, testes: provas };
+        if (est.diagnostico.pronto) {
+          const run = await correr({
+            repo, motor, env: envIA,
+            objetivo: 'Verificar, com dados reais da mesa, quantos leads existem e escrever uma frase de estado para o dono.',
+            limites: { maxChamadas: 6, maxTokens: 30000 },
+          });
+          const passos = await repo.ia.steps.porRun(run.id);
+          saida.ia.run = {
+            id: run.id, estado: run.estado, modelo: run.modelo, fornecedor: run.fornecedor,
+            passosDoPlano: run.plano ? run.plano.passos.length : 0,
+            passosGravados: passos.length,
+            ferramentas: (run.artefactos && run.artefactos.ferramentasUsadas) || [],
+            revisao: run.revisao || null, erro: run.erro || null,
+            tokens: run.tokens || null, fim: run.fim || null,
+          };
+        }
+      }
+    }
   } catch (e) {
     saida.error = e.message;
     saida.codigo = e.code || null;

@@ -41,7 +41,8 @@
   ],
   "functions": {
     "api/setup.mjs": {
-      "includeFiles": "supabase/**"
+      "includeFiles": "supabase/**",
+      "maxDuration": 60
     }
   }
 }
