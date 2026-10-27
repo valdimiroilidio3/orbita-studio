@@ -1,4 +1,4 @@
-# O Centro de Controlo (1.23.1)
+# O Centro de Controlo (1.24.0)
 
 A aba de Configurações deixou de ser uma lista de opções e passou a ser o sítio onde se
 vê — e se muda — o estado real da Órbita: as seis salas, a inteligência, a execução e a

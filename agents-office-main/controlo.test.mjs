@@ -513,3 +513,26 @@ test('backup: as rotas devolvem a cópia e o resultado do teste (e o registo fic
   const reg = await chamar(api, '/controlo/registo');
   assert.ok(reg.corpo.registo.some((x) => /cópia de segurança testada/.test(x.o_que)));
 });
+
+test('integrações: um conector liga a conta ao assistente — e diz-se que a app continua sem chave', async () => {
+  const api = createMemRepo();
+  const r = await responder(api, { caminho: '/platform/apis', env: { CONECTORES: 'vercel' } });
+  assert.equal(r.status, 200);
+  const v = r.corpo.list.find((x) => x.id === 'vercel' && x.kind === 'deploy');
+  assert.equal(v.conector, true);
+  assert.equal(v.via, 'conector', 'conector sem chave: a app não tem credencial');
+  assert.equal(v.verified, false, 'um conector não é um teste real da aplicação');
+  assert.ok(v.missing.includes('VERCEL_TOKEN'));
+  assert.equal(r.corpo.summary.porConector, 1);
+
+  /* com chave e conector, os dois caminhos existem */
+  const dois = await responder(api, { caminho: '/platform/apis', env: { CONECTORES: 'vercel', VERCEL_TOKEN: 'x' } });
+  const v2 = dois.corpo.list.find((x) => x.id === 'vercel' && x.kind === 'deploy');
+  assert.equal(v2.via, 'conector+chave');
+
+  /* sem a variável, nada muda: nada de conectores inventados */
+  const sem = await responder(api, { caminho: '/platform/apis', env: {} });
+  const v3 = sem.corpo.list.find((x) => x.id === 'vercel' && x.kind === 'deploy');
+  assert.equal(v3.conector, false);
+  assert.equal(v3.via, null);
+});
