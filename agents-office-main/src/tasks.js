@@ -725,7 +725,21 @@ export function initTasks(ctx) {
       dirty = true;
       if (onLive) onLive(h);
       await poll(); setInterval(poll, 6000); // V3.5: routines fire on the server's clock — the page keeps up
-    } catch (e) { console.warn('servidor do escritório inacessível — a correr offline:', e.message); }
+    } catch (e) {
+      /* 29 out 2026 (lançamento): a vista publicada não tem servidor atrás. Antes disto, o canto
+         ficava em silêncio e a barra parecia avariada; agora diz o que é — e o que fazer para
+         trabalhar a sério. Não se inventa uma tarefa local: uma tarefa sem base de dados é ficção. */
+      console.warn('servidor do escritório inacessível — a correr offline:', e.message);
+      const mode = panel.querySelector('.tp-mode');
+      if (mode) {
+        mode.hidden = false;
+        mode.textContent = 'SÓ VISUALIZAÇÃO';
+        mode.classList.remove('live');
+        mode.classList.add('off');
+        mode.title = 'Esta é a vista publicada do escritório: a cena, as salas e os agentes. Sem servidor não há tarefas — corre o Órbita na tua máquina (npm start).';
+      }
+      if (onLive) onLive(null);
+    }
   }
   connect();
   // chips: filters with live counts

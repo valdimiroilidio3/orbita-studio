@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Órbita Agentes">
+  <rect width="64" height="64" rx="15" fill="#FDFFF8"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.4" fill="none" stroke="#151414" stroke-opacity=".14"/>
+  <circle cx="32" cy="32" r="21.5" fill="none" stroke="#151414" stroke-opacity=".55" stroke-width="1.4"/>
+  <circle cx="32" cy="32" r="6.6" fill="#4C7A57"/>
+  <circle cx="32" cy="32" r="2.4" fill="#FDFFF8" fill-opacity=".9"/>
+  <circle cx="32.00" cy="10.50" r="3.5" fill="#1FA36B"/>
+  <circle cx="50.62" cy="21.25" r="3.5" fill="#E3B93A"/>
+  <circle cx="50.62" cy="42.75" r="3.5" fill="#DC5348"/>
+  <circle cx="32.00" cy="53.50" r="3.5" fill="#8B5AD6"/>
+  <circle cx="13.38" cy="42.75" r="3.5" fill="#4A6DE0"/>
+  <circle cx="13.38" cy="21.25" r="3.5" fill="#41AEE4"/>
+</svg>

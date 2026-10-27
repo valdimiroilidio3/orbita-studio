@@ -1639,7 +1639,11 @@ tasks = initTasks({
   brainWrite: (id, title) => brain.write(id, title), brain,
   // 26 out 2026: a marca não se reescreve quando o escritório fica ao vivo. Antes esta linha
   // trocava a etiqueta por «BETA»; agora a marca é «ÓRBITA AGENTES» e fica quieta.
-  onLive: (h) => { document.title = `${h.name} — Órbita Agentes`; brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents); },
+  onLive: (h) => {
+    if (!h) return;                      // vista publicada (sem servidor): a marca e o título ficam
+    document.title = `${h.name} — Órbita Agentes`;
+    brain.setOwner(h.name); brain.setQuiet(true); applyRoster(h.agents);
+  },
   onTools: (agentId, keys) => mcp.onToolsUsed(agentId, keys),
   requestApproval, setStuck: setStuckLive,
   onUsage: (u) => { if (mcp && mcp.setUsage) mcp.setUsage(u); }, // V3.6: the plan's gauge in the top bar
@@ -1755,6 +1759,12 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
    onde há trabalho a sério — e só onde há: `deptCount` lê a base de dados, não um relógio. */
 const ledBusy = {};
 let lastLedSync = 0;
+/* 29 out 2026 (lançamento): quem pediu ao sistema «menos movimento» não quer o vídeo de LED a correr.
+   O CSS já respeita a preferência nas transições; a cena passa a abrandar a luz e o tapete para um
+   terço da velocidade — continua vivo (é a vida das salas), mas deixa de puxar pelo olho. */
+const CALMO = (() => {
+  try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
+})();
 function tickLeds(now, dt) {
   if (now - lastLedSync > 700) {
     lastLedSync = now;
@@ -1764,7 +1774,7 @@ function tickLeds(now, dt) {
     const tex = L.mat.userData.ledTex;
     if (!tex) continue;
     // 28 out 2026: sala ocupada → a fita de luz e o tapete da passadeira andam mais depressa
-    const speed = (L.mat.userData.ledSpeed || 0.06) * (ledBusy[L.dept] ? 2.6 : 1);
+    const speed = (L.mat.userData.ledSpeed || 0.06) * (ledBusy[L.dept] ? 2.6 : 1) * (CALMO ? 0.34 : 1);
     tex.offset.x = (tex.offset.x - dt * speed) % 1;
   }
 }
@@ -1817,6 +1827,8 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
      targets* e o first render mata o `requestAnimationFrame`; sem isto, nada que se mexa (uma luz a
      passar, um chefe a andar) podia ser provado. Em browser não é preciso: o ciclo corre sozinho. */
   stepSim: (dt = 0.016) => { const t = performance.now(); tickLeds(t, dt); tickSim(t, dt); return t; },
+  // a preferência de movimento do sistema, tal como a cena a leu (para a inspecção poder prová-lo)
+  motion: { reduced: CALMO },
   forge: { toggle: () => forgeTerm.toggle(), open: () => forgeTerm.open(), close: () => forgeTerm.close(),
     isOpen: () => forgeTerm.isOpen(), command: (c) => forgeTerm.command(c), stats: () => forgeTerm.stats() },
   toggleBoard: () => tasks.toggle(), tasks, routines: () => tasks.routines };

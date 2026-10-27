@@ -166,8 +166,12 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   }
 
   /* ---------------------------------------------------------------- saúde do servidor */
-  function setHealth(h) {
+  function setHealth(h, porque = '') {
     state.health = h || null;
+    /* 29 out 2026 (lançamento): há DUAS razões para não haver motor, e diziam a mesma frase. Sem
+       servidor nenhum (a vista publicada, aberta em estático) o problema não é a chave da IA — é não
+       haver Órbita a correr. A frase passa a dizer qual das duas é. */
+    state.semServidor = !h && porque === 'sem-servidor';
     if (state.model && h && Array.isArray(h.models) && !h.models.includes(state.model)) state.model = '';
     if (!state.favs.length && h && h.model) state.favs = [h.model];
     renderModelButton(); renderList(); renderEfforts(); renderContextMenu();
@@ -176,9 +180,11 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       const missing = !engine;
       el.pro.hidden = !missing;
       const t = el.pro.querySelector('.mc-pro-t');
-      if (t) t.textContent = missing
-        ? 'Sem motor de IA ligado — este posto não inventa uma resposta. Vê o que falta.'
-        : '';
+      if (t) t.textContent = state.semServidor
+        ? 'Vista publicada — sem servidor. Esta cena é o escritório, mas as tarefas vivem na base de dados local: arranca o Órbita na tua máquina (npm start) para trabalhar a sério.'
+        : missing
+          ? 'Sem motor de IA ligado — este posto não inventa uma resposta. Vê o que falta.'
+          : '';
     }
     if (onHealth) onHealth(h);
   }
@@ -187,7 +193,12 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       const r = await fetch('/api/health', { headers: { accept: 'application/json' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       setHealth(await r.json());
-    } catch (e) { setHealth(null); }
+    } catch (e) {
+      // «sem-servidor» é diferente de «o servidor respondeu 503»: o primeiro é estático, o segundo
+      // é um Órbita de pé a dizer que não tem motor. Só o primeiro muda a frase do aviso.
+      const rede = !!(e && (e.name === 'TypeError' || /fetch|network|load failed/i.test(e.message || '')));
+      setHealth(null, rede ? 'sem-servidor' : (e && e.message));
+    }
   }
 
   /* ---------------------------------------------------------------- modos */
