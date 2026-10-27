@@ -47,6 +47,14 @@ const PLACES = {
         categories: ['healthcare.dentist'],
       },
     },
+    {
+      properties: {
+        name: 'Clínica com Etiquetas', city: 'Coimbra', formatted: 'Rua B 2, Coimbra',
+        lat: 40.2, lon: -8.43, place_id: 'p3',
+        /* o OSM mistura a atividade com etiquetas de acesso */
+        categories: ['healthcare', 'healthcare.dentist', 'wheelchair.yes', 'payment.cards'],
+      },
+    },
   ],
 };
 
@@ -128,7 +136,7 @@ test('pesquisa: os leads vêm da zona pedida, com telefone, site e nota', async 
   const f = falso({ 'geocode/search': { json: GEO }, 'v2/places': { json: PLACES } });
   const r = await procurarLeads({ oQue: 'dentistas', onde: 'Coimbra', limite: 5, raio: 3000 }, { env: ENV, fetchImpl: f });
   assert.equal(r.categoria, 'healthcare.dentist');
-  assert.equal(r.encontrados, 2);
+  assert.equal(r.encontrados, 3);
   assert.equal(r.centro.cidade, 'Coimbra');
 
   const url = f.pedidos[1].url;
@@ -147,6 +155,11 @@ test('pesquisa: os leads vêm da zona pedida, com telefone, site e nota', async 
   assert.match(com.porque, /já tem site/);
   assert.equal(sem.nota, 80);
   assert.match(sem.porque, /sem site/);
+
+  /* etiquetas de acesso não são a atividade */
+  const etiquetada = r.leads[2];
+  assert.equal(etiquetada.categoria, 'healthcare.dentist');
+  assert.equal(etiquetada.porque.includes('wheelchair'), false);
   assert.equal(JSON.stringify(r).includes(CHAVE_GEO), false, 'a chave não pode viajar no resultado');
 });
 
@@ -243,8 +256,8 @@ test('rotas: /pesquisa/leads guarda no funil e não duplica na segunda vez', asy
   const f = falso({ 'geocode/search': { json: GEO }, 'v2/places': { json: PLACES } });
   const a = await chamar(repo, '/pesquisa/leads', 'POST', { oQue: 'dentistas', onde: 'Coimbra' }, { fetchImpl: f });
   assert.equal(a.status, 200);
-  assert.equal(a.corpo.guardados.novos, 2);
-  assert.equal(repo._dados.leads.length, 2);
+  assert.equal(a.corpo.guardados.novos, 3);
+  assert.equal(repo._dados.leads.length, 3);
   const guardado = repo._dados.leads.find((l) => l.name.startsWith('Clínica'));
   assert.equal(guardado.source, 'geoapify');
   assert.equal(guardado.phone, '+351239000000');
@@ -252,8 +265,8 @@ test('rotas: /pesquisa/leads guarda no funil e não duplica na segunda vez', asy
 
   const b = await chamar(repo, '/pesquisa/leads', 'POST', { oQue: 'dentistas', onde: 'Coimbra' }, { fetchImpl: f });
   assert.equal(b.corpo.guardados.novos, 0);
-  assert.equal(b.corpo.guardados.repetidos, 2);
-  assert.equal(repo._dados.leads.length, 2);
+  assert.equal(b.corpo.guardados.repetidos, 3);
+  assert.equal(repo._dados.leads.length, 3);
 });
 
 test('rotas: /pesquisa/leads sem chave responde 502 com a razão (nunca 500 nem resultado vazio)', async () => {
@@ -302,7 +315,7 @@ test('rotas: por GET a pesquisa é só leitura — nada entra no funil', async (
   const f = falso({ 'geocode/search': { json: GEO }, 'v2/places': { json: PLACES } });
   const r = await chamar(repo, '/pesquisa/leads?oQue=dentistas&onde=Coimbra&limite=5', 'GET', null, { fetchImpl: f });
   assert.equal(r.status, 200);
-  assert.equal(r.corpo.encontrados, 2);
+  assert.equal(r.corpo.encontrados, 3);
   assert.equal(r.corpo.guardados, null);
   assert.equal(repo._dados.leads.length, 0, 'um GET não pode escrever na base');
 

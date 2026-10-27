@@ -196,9 +196,14 @@ function leadDeSitio(f, alvo) {
   const cidade = String(p.city || p.town || p.village || p.county || alvo?.cidade || '').trim();
   const morada = String(p.formatted || [p.street, p.housenumber, p.postcode, cidade].filter(Boolean).join(', ')).trim();
   const categorias = Array.isArray(p.categories) ? p.categories : [];
-  /* a categoria mais específica é a última do caminho (`healthcare` → `healthcare.dentist`) */
-  const especifica = [...categorias].reverse().find((c) => String(c).includes('.')) || p.category || '';
-  const { nota, porque } = notaDeLead({ website, telefone, email, categorias: categorias.slice(-1) });
+  /* A lista do OSM mistura a atividade com etiquetas (`wheelchair.yes`,
+     `payment.cards`). A atividade é a mais específica que sobra depois de as
+     tirar; se não sobrar nenhuma, vale a que foi pedida. */
+  const TAGS = /^(wheelchair|access|payment|organic|vegetarian|vegan|smoking|internet_access|dog|fee|covered|surveillance|opening_hours|operator|brand|wikidata|wikipedia|no|yes)\b/i;
+  const atividades = categorias.filter((c) => !TAGS.test(String(c)));
+  const especifica = [...atividades].reverse().find((c) => String(c).includes('.'))
+    || atividades[0] || p.category || alvo?.categoria || '';
+  const { nota, porque } = notaDeLead({ website, telefone, email, categorias: especifica ? [especifica] : [] });
   return {
     fonte: 'geoapify',
     nome,
