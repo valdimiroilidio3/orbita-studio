@@ -1,4 +1,4 @@
-# O Centro de Controlo (1.21.0)
+# O Centro de Controlo (1.22.0)
 
 A aba de Configurações deixou de ser uma lista de opções e passou a ser o sítio onde se
 vê — e se muda — o estado real da Órbita: as seis salas, a inteligência, a execução e a
@@ -76,7 +76,7 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
 
 ## 5 · Provas
 
-`controlo.test.mjs` — 20 provas que correm com `node --test`, sem rede (uma desenha o painel num DOM falso e confirma as seis salas, os três estados, o cursor de tamanho e o registo; outra confirma peça a peça o que se repinta ao mudar a cor):
+`controlo.test.mjs` — 22 provas que correm com `node --test`, sem rede (uma desenha o painel num DOM falso e confirma as seis salas, os três estados, o cursor de tamanho e o registo; outra confirma peça a peça o que se repinta ao mudar a cor):
 
 - `filasNecessarias`, `profundidadePara`, `lugarLivre`, `plantaAjustada`;
 - a sala cresce com 11 agentes e **não encolhe** com zero;
@@ -93,4 +93,4 @@ mudar de máquina. O browser é a cópia que a cena consegue ler sem esperar por
   borda, poça, LED, passadeira e entrada; devolve `null` para paredes, secretárias
   e adereço, e para cores inválidas.
 
-Suite completa: **332/332**.
+Suite completa: **334/334**.
