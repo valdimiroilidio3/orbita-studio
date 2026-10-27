@@ -73,3 +73,22 @@ a ocupar o ecrã, com fechar de 44 px.
 O que é do browser funciona: **tema**, **painéis** e o interruptor dos avisos (que fica em baixo,
 porque não há trabalho que os gere). O que precisa da máquina **não finge**: a secção das APIs diz que
 as chaves vivem na máquina onde o Órbita corre e que é preciso `npm start` para as gravar e sondar.
+
+## 1.28.0 · o desenho (pedido: «cara de um dev da Apple… tudo bem calculado e animado»)
+
+O painel deixou de ser uma lista com caixas e passou a ter um sistema. As decisões, uma a uma:
+
+| Decisão | Porquê |
+|---|---|
+| Grelha de 4 px e cinco degraus tipográficos | nada fica «quase» alinhado; o olho lê hierarquia antes de ler texto |
+| Três camadas de superfície (fundo → cartão → controlo) | distingue-se contentor de acção sem precisar de rótulos |
+| Controlo segmentado com pastilha elevada | o vocabulário que se conhece; a escolha vê-se pelo relevo, não pela cor |
+| Interruptores a sério (`appearance:none` + mola) | uma caixa de selecção pintada nunca engana ninguém durante meio segundo |
+| Pastilhas de estado com pulso só no que está ligado | movimento é informação: o que pulsa está vivo, o que está parado está parado |
+| Entrada com `cubic-bezier(.16,1,.3,1)` e cascata de 40 ms | ritmo, não espectáculo — 5 secções não podem entrar todas ao mesmo tempo |
+| Esqueleto a deslizar enquanto o catálogo carrega | espera percebida menor do que uma frase «a carregar…» |
+| `prefers-reduced-motion` desliga tudo | elegância que exclui não é elegância |
+| Escuro com as mesmas camadas, não com as mesmas cores | contraste e relevo recalculados para fundo escuro |
+
+Nada disto mudou o contrato: as mesmas rotas, os mesmos três estados, os mesmos testes.
+O que mudou foi a probabilidade de o dono perceber, num relance, o que está ligado.

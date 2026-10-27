@@ -1,3 +1,51 @@
+## 1.28.0 — 27 out 2026 · A pesquisa passou a acontecer (e o manual saiu do site)
+
+Duas frases do dono, e o que cada uma obrigou a fazer:
+
+> «faz as pesquisas já estarem realmente a funcionar — leads e qualquer outra coisa»
+
+A pesquisa do servidor estava pronta desde 1.25.0 (Geoapify + Tavily), mas a
+gaveta do canto falava com `/api/google` e `/api/google/search` — caminhos que só
+existem em `serve.mjs`. Na aplicação publicada davam 404: a gaveta abria, dizia
+«sem chave da Google» e nunca procurava nada. Agora fala com as rotas que estão
+mesmo publicadas, `/api/rpc?caminho=/pesquisa/*`:
+
+- **Empresas** → `POST /pesquisa/leads` (Geoapify, dados do OpenStreetMap):
+  nome, morada, telefone, site, nota de oportunidade explicada; o que entra no
+  funil vai sem duplicados (`dedupe_key`).
+- **Web** → `POST /pesquisa/web` (Tavily): resposta curta, excertos e endereço de
+  cada fonte. Nada disto entra no funil como lead.
+- **Sugestões** → `GET /pesquisa/categorias` (25 atividades reais) e a lista
+  guardada em `GET /ops/leads`.
+- O rodapé diz o que aconteceu de verdade: quantas empresas, quantos segundos,
+  quantas novas no funil.
+
+> «remove isso, porque esse tipo de informações não devem aparecer no site»
+
+O bloco «Para procurar preciso de uma chave da Google. 1. Cria uma chave em
+console.cloud.google.com… 2. Põe GOOGLE_MAPS_API_KEY…» saiu da interface, assim
+como os nomes de variáveis na gaveta e no painel de IA. As chaves continuam a
+existir — no ambiente do servidor, que é o sítio delas — e o Centro de Controlo,
+que é do dono, continua a dizer o que falta a cada serviço. Quando uma fonte cai,
+o visitante lê «esta fonte não está disponível agora»; o nome da variável fica no
+registo, não no ecrã.
+
+**Configurações redesenhadas** (pedido: «cara de um dev da Apple, elegância e
+perfeição, tudo bem calculado e animado»): grelha de 4 px, cinco degraus
+tipográficos, superfícies em camadas, controlo segmentado com pastilha elevada,
+interruptores a sério (não caixas de selecção pintadas), pastilhas de estado com
+pulso contínuo no que está ligado, entrada com mola, revelação em cascata de
+40 ms por secção, esqueleto a deslizar enquanto o catálogo carrega e
+`prefers-reduced-motion` a desligar tudo.
+
+Prova real, em produção, antes deste commit: `GET /pesquisa/teste` → Geoapify
+ok em 575 ms; `GET /pesquisa/leads?oQue=dentistas&onde=Coimbra` → 5 empresas
+verdadeiras (Clínica Santa Madalena, Optidente, Clínica Delille, O meu Doutor,
+Clínica de Medicina Dentária de Celas) com notas 80/48; `GET /pesquisa/web?q=…`
+→ Tavily com 3 fontes e resposta curta. Interface: 5 testes novos em
+`pesquisa-ui.test.mjs` (jsdom) provam as rotas pedidas, os leads desenhados e a
+ausência de manuais de configuração.
+
 ## 1.27.0 — 27 out 2026 · Vercel Connect: credenciais ao minuto em vez de chaves em repouso
 
 O dono pediu `getToken('opencode/orbita-agentes', { subject: { type: 'user', id } })`.

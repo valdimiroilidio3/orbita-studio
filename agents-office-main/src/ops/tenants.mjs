@@ -84,7 +84,7 @@ export function create(reg, { nome, nicho = '', cidade = '', oferta = null, dado
 export function nextSteps(nicho, cidade) {
   const passos = [];
   if (nicho && cidade) {
-    passos.push({ passo: 1, acao: 'procurar', texto: `Procurar ${nicho} em ${cidade}`, nota: 'precisa de GOOGLE_MAPS_API_KEY; sem chave, acrescenta leads à mão' });
+    passos.push({ passo: 1, acao: 'procurar', texto: `Procurar ${nicho} em ${cidade}`, nota: 'a gaveta PESQUISAR faz isto a sério: empresas reais do OpenStreetMap, guardadas sem duplicados' });
   } else {
     passos.push({ passo: 1, acao: 'definir-nicho', texto: 'Dizer o nicho e a cidade deste cliente' });
   }

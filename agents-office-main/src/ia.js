@@ -100,12 +100,10 @@ export function vistaIA(S, { esc, hhmm, when }) {
     : ia.pronto
     ? `<div class="ia-faixa ok"><b>Motor operacional.</b> ${comChave.length} fornecedor(es) prontos${semChave ? ` (${semChave} sem chave, por desenho)` : ''}; ${prontos.length} com teste real bem-sucedido.
         ${prontos.length ? '' : ' Ainda nenhum foi testado — usa «Testar» na linha do fornecedor: só isso conta como prova.'}</div>`
-    : `<div class="ia-faixa bad"><b>Sem motor.</b> Nenhum fornecedor tem chave no ambiente da Vercel.
-        Os agentes não correm e as tarefas dizem isso mesmo. Para ligar, mete <em>uma</em> destas variáveis
-        (Production e Preview) em Vercel → Settings → Environment Variables e volta a publicar:
-        <code>${esc((ia.fornecedores[0]?.variavel || 'OPENROUTER_API_KEY'))}</code>
-        — ou <code>GROQ_API_KEY</code>, <code>GOOGLE_AI_API_KEY</code>, <code>CEREBRAS_API_KEY</code>, <code>MISTRAL_API_KEY</code>.
-        Também podes abrir o separador «Fornecedores» para ver os limites de cada um.</div>`;
+    : `<div class="ia-faixa bad"><b>Sem motor.</b> Nenhum fornecedor está ligado nesta instalação.
+        Os agentes não correm e as tarefas dizem isso mesmo. As chaves vivem no servidor: quem as põe
+        é o dono, em Configurações → Centro de Controlo, onde cada serviço diz o que falta — aqui não
+        se mostra configuração, mostra-se trabalho. O separador «Fornecedores» lista os limites de cada um.</div>`;
 
   const linhaFornecedor = (f) => {
     const st = ESTADO_FORNECEDOR[f.estado] || ESTADO_FORNECEDOR.sem_chave;
