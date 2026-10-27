@@ -1,6 +1,9 @@
 // Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
+/* 1.20.0 · este import vem PRIMEIRO e de propósito: aplica as cores e os agentes
+   que o dono configurou (e alarga as salas que precisam) antes de a cena assentar. */
+import './escritorio.js';
 import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, stationSpot, deskFront } from './data.js';
 import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (teclado e leitor de ecrã)
 import { createForgeTerminal } from './forge.js'; // 27 out 2026: o terminal da oficina de ferramentas
