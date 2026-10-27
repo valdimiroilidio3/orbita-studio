@@ -49,6 +49,13 @@ há provas para as duas coisas.
 Aviso honesto na própria aba: a cena aplica as mudanças **no próximo arranque** — o
 painel não finge que já mudaram.
 
+### O painel falava com um endereço que não existe
+
+A Vercel só alcança a função de `api/` no caminho exacto do ficheiro: `/api/platform/apis`
+e `/api/controlo/estado` respondem **404**. O painel pedia-os a sério — por isso a lista
+de APIs nunca aparecia em produção. Passou tudo por `/api/rpc` (o mesmo envelope que a
+mesa já usava), com leitura por GET e escrita por POST.
+
 ### APIs no modo base
 
 `GET /api/platform/apis` **não existia** no modo base: o painel pedia e recebia 404.
