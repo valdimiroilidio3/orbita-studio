@@ -202,6 +202,42 @@ export async function estado(env = process.env, { importar = null } = {}) {
   };
 }
 
+/**
+ * O que a Vercel sabe do conector — sem pedir token nenhum. Serve para separar
+ * «o conector não existe / não está ligado a este projecto» de «a credencial de
+ * chamada não presta»: são problemas diferentes e com donos diferentes.
+ */
+export async function metadataDoConector({ modoCredencial = 'auto' } = {}, { env = process.env, importar = null } = {}) {
+  const conector = conectorDe(env);
+  const cred = credencialDe(env, modoCredencial);
+  try {
+    const sdk = await carregarSdk(importar);
+    if (typeof sdk.getConnectorMetadata !== 'function') {
+      const e = new Error('esta versão do SDK não expõe getConnectorMetadata');
+      e.codigo = 'sempacote';
+      throw e;
+    }
+    if (!cred.valor) {
+      const e = new Error(cred.motivo);
+      e.codigo = 'semcredencial';
+      throw e;
+    }
+    const m = await sdk.getConnectorMetadata(
+      conector,
+      cred.tipo === 'chave' || cred.tipo === 'oidc-pedido' ? { vercelToken: cred.valor } : undefined,
+    );
+    return { ok: true, conector, credencial: cred.tipo, metadata: m, quando: new Date().toISOString() };
+  } catch (e) {
+    return {
+      ok: false, conector, credencial: cred.tipo,
+      codigo: e.codigo || 'erro',
+      erro: String(e.message || e).slice(0, 300),
+      detalhe: e.detalhe || { codigo: e.code || null, status: e.status ?? null },
+      quando: new Date().toISOString(),
+    };
+  }
+}
+
 /** Um pedido a sério, com o token mascarado na resposta. */
 export async function testar({ pedido = null, escopos = null, forcar = true, modoCredencial = 'auto' } = {}, { env = process.env, importar = null, agora = Date.now() } = {}) {
   const t0 = agora;
