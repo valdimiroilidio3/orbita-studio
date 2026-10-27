@@ -67,6 +67,14 @@ ok(!!main(), 'a mesa não tem #main');
 ok(!/precisa do Órbita a correr/i.test(texto()), 'o cartão de demonstração ainda está lá');
 ok(/modo local/i.test(texto()), 'a mesa não diz que está em modo local');
 ok(!/Voltar ao escritório/.test(texto()), 'a mesa continua a mandar as pessoas de volta ao escritório');
+/* 1.34.0 · o X de sair: a mesa é uma página inteira e o dono pediu uma saída à mão.
+   Tem de ser um link para o escritório e ter nome acessível (não só um glifo). */
+const sair = doc.querySelector('a.side-x');
+ok(!!sair, 'a mesa não tem o X de voltar ao sistema');
+if (sair) {
+  ok(sair.getAttribute('href') === '/', 'o X não leva ao escritório (href=' + sair.getAttribute('href') + ')');
+  ok(!!sair.getAttribute('aria-label'), 'o X não tem nome acessível');
+}
 
 /* --- escrever a sério: o lead entra no armazém deste browser e volta na leitura --- */
 ok(memoria.has('orbita.mesa.v1') || true, 'a chave do armazém');
@@ -77,6 +85,9 @@ const nav = (h) => { win.location.hash = h; };
 nav('#/leads');
 await new Promise((r) => setTimeout(r, 600));
 ok(/Sem leads|Ainda não há|Sem nenhum/i.test(texto()) || texto().length > 0, 'a página de leads não abriu');
+/* 1.34.0 · procurar leads a partir da mesa (antes só no escritório) */
+ok(/Procurar leads reais/i.test(texto()), 'a mesa não tem a procura de leads');
+ok(/Procurar e guardar/i.test(texto()), 'a procura de leads não tem o botão que guarda');
 
 // escreve pelo formulário: abre o "+ Lead" e preenche
 const abrir = [...doc.querySelectorAll('[data-act]')].find((b) => b.dataset.act === 'novo-lead');
@@ -180,6 +191,10 @@ ok(/Barbearia do Largo/.test((w2.document.getElementById('main') || {}).textCont
   ok(/Control Center|Fornecedores/i.test(t), 'a vista #/ia não abriu no modo local');
   ok(/precisa do servidor|a IA corre no servidor/i.test(t), 'a vista #/ia não explica porque não há motor no local');
   ok(/Enviar ao Orchestrator/i.test(t) === false || true, 'sem motor continua a mostrar o botão');
+  /* 1.34.0 · o defeito que o dono viu: «A carregar o Control Center…» para sempre.
+     Com /api em 404 a mesa tem de cair no modo local e dizer o que sabe. */
+  ok(!/A carregar o Control Center/.test(t), 'a vista #/ia ficou presa em «A carregar o Control Center…»');
+  ok(/llm7|LLM7/i.test(t) && /opencode/i.test(t), 'a vista #/ia não lista os motores gratuitos que não precisam de chave');
   domD.window.close();
 }
 

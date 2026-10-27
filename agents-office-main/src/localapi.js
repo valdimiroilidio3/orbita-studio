@@ -29,6 +29,17 @@
 
 export const CHAVE = 'orbita.mesa.v1';
 
+/* Os motores gratuitos que não precisam de chave do dono — espelho do catálogo do
+   servidor (`api/_ia/catalogo-extra.json`). Vivem aqui porque o browser não pode
+   importar o backend; o teste `localapi.test.mjs` compara os ids com o catálogo
+   para que os dois não divirjam em silêncio. */
+export const GRATUITOS_LOCAIS = [
+  { fornec: 'llm7', nome: 'LLM7', modelo: 'codestral-latest', limites: 'anónimo · resposta em ~1,5 s', etiquetas: ['codigo', 'texto', 'rapido'] },
+  { fornec: 'ovh', nome: 'OVH AI Endpoints', modelo: 'Qwen3.5-397B-A17B', limites: 'anónimo · 13–45 s', etiquetas: ['raciocinio', 'texto'] },
+  { fornec: 'opencode', nome: 'OpenCode Zen', modelo: 'big-pickle', limites: 'chave publicada pelo serviço (public)', etiquetas: ['codigo', 'ferramentas'] },
+  { fornec: 'pollinations', nome: 'Pollinations', modelo: 'openai-fast', limites: 'anónimo · 1 pedido a cada 15 s', etiquetas: ['texto', 'raciocinio'] },
+];
+
 const TIPOS_PROJETO = [
   { id: 'landing', label: 'Página de conversão' },
   { id: 'site', label: 'Site de empresa' },
@@ -168,10 +179,22 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
        sem as expor. Por isso a vista mostra o Control Center vazio e a razão, em vez
        de fingir um motor ou rebentar com 404. */
     if (caminhoLimpo === '/ia/estado') {
+      /* 1.34.0 · os motores que não precisam de chave nenhuma aparecem aqui, com o
+         nome e o modelo reais, em vez de uma lista vazia. Não é demo: são os
+         mesmos quatro do catálogo do servidor (api/_ia/catalogo-extra.json), e é
+         isso que os torna uma resposta honesta — o que não podem é ser provados
+         sem servidor, e o estado diz isso. */
+      const gratuitos = GRATUITOS_LOCAIS.map((g) => ({
+        id: g.fornec, nome: g.nome, familia: 'nucleo',
+        configurado: true, semChave: true, variavel: 'não precisa', chaveMascarada: '',
+        estado: 'por_testar', limites: g.limites, desligado: false, ultimoTeste: null,
+      }));
       return {
         pronto: false, modo: 'local',
         motivo: 'a IA corre no servidor: as chaves dos fornecedores vivem no ambiente da Vercel e nunca neste browser',
-        fornecedores: [], agentes: [], ferramentas: [], indisponiveis: [],
+        fornecedores: gratuitos, agentes: [], ferramentas: [], indisponiveis: [
+          { id: 'provar', porque: 'provar um modelo faz um pedido real com o servidor à frente; neste browser não há chaves nem rede para os fornecedores' },
+        ],
         memoria: { total: 0, usos: 0, etiquetas: [], recentes: [] },
         estudio: { configurado: false, porque: 'o estúdio (OpenMontage) precisa do servidor e de um worker' },
         diagnostico: { fornecedoresActivos: [], pronto: false },
@@ -180,6 +203,24 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       };
     }
     if (caminhoLimpo === '/ia/uso') return { resumo: [], ultimos: [], errosRecentes: [], modo: 'local' };
+    /* As gratuitas, listadas com o estado honesto: existem, estão prontas, e
+       nenhuma tem prova registada *neste browser* — porque provar exige o
+       servidor. `pronto: false` é a verdade, não um erro. */
+    if (caminhoLimpo === '/ia/gratuitos') {
+      return {
+        ok: true, modo: 'local', pronto: false, total: 0, semChaveNecessaria: 0,
+        modelos: [],
+        porProvar: GRATUITOS_LOCAIS.map((g) => ({
+          fornec: g.fornec, fornecedor: g.nome, modelo: g.modelo,
+          etiquetas: g.etiquetas, semChave: true, descoberto: false,
+          nota: 'não precisa de chave; a prova faz-se no servidor',
+        })),
+        totalPorProvar: GRATUITOS_LOCAIS.length,
+        nota: 'modo local: a lista é a mesma do servidor, mas as provas (que modelos responderam) ficam na base de dados — aqui não há nenhuma.',
+        estado: { pronto: false, frase: 'nenhuma gratuita provada neste browser — a prova faz-se no servidor' },
+        medidoEm: null, cadeia: {},
+      };
+    }
     if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
     if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
 
@@ -208,6 +249,13 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     }
 
     /* --- leads --- */
+    /* 1.34.0 · a pesquisa real (Geoapify/Tavily) não corre no browser: as chaves
+       vivem no servidor. Dizer isto é melhor do que devolver zero empresas e
+       deixar a pessoa a achar que o nicho não existe. */
+    if (caminhoLimpo === '/pesquisa/leads' || caminhoLimpo === '/pesquisa/web') {
+      throw falha(503, 'a pesquisa precisa do servidor: a chave do fornecedor vive lá, nunca neste browser');
+    }
+
     if (caminhoLimpo === '/ops/leads' && metodo === 'GET') {
       const lim = Math.min(500, Number(qs.get('limit')) || 200);
       return { leads: [...d.leads].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, lim) };
@@ -257,13 +305,36 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
 
     /* --- mensagens (o que espera o teu OK) --- */
     if (caminhoLimpo === '/ops/messages' && metodo === 'GET') return { messages: d.mensagens.slice(0, Number(qs.get('limit')) || 100) };
-    if (/^\/ops\/messages\/[^/]+\/(aprovar|rejeitar|enviar)$/.test(caminhoLimpo) && metodo === 'POST') {
-      const acao = seg[seg.length - 1], id = seg[seg.length - 2];
+    /* 1.34.0 · os mesmos nomes da API (português e inglês): a mesa chama
+       `approve/reject/send/confirm/sinal`, e sem isto o modo local respondia 404
+       a tudo o que ela pedia. Aprovar e confirmar funcionam aqui; enviar não —
+       e diz porquê, em vez de fingir. */
+    if (/^\/ops\/messages\/[^/]+\/(aprovar|approve|rejeitar|reject|enviar|send|confirmar|confirm|promover|promote|sinal|signal)$/.test(caminhoLimpo) && metodo === 'POST') {
+      const bruto = seg[seg.length - 1], id = seg[seg.length - 2];
+      const acao = { aprovar: 'aprovar', approve: 'aprovar', rejeitar: 'rejeitar', reject: 'rejeitar',
+        enviar: 'enviar', send: 'enviar', confirmar: 'confirmar', confirm: 'confirmar',
+        promover: 'promover', promote: 'promover', sinal: 'sinal', signal: 'sinal' }[bruto];
       const m = d.mensagens.find((x) => x.id === id);
       if (!m) throw falha(404, 'mensagem não encontrada');
-      if (acao === 'aprovar') { m.status = 'aprovada'; m.aprovada_at = new Date(agora()).toISOString(); }
-      else if (acao === 'rejeitar') { m.status = 'rejeitada'; }
-      else throw falha(501, 'no modo local não há canal de envio: aprovar não envia nada');
+      if (acao === 'aprovar') {
+        if (m.status === 'enviada') throw falha(409, 'esta mensagem já foi enviada');
+        m.status = 'aprovada'; m.aprovada_at = new Date(agora()).toISOString();
+      } else if (acao === 'rejeitar') {
+        m.status = 'rejeitada'; m.motivo = limpo(corpo?.reason || corpo?.motivo) || null;
+      } else if (acao === 'promover') {
+        if (m.status !== 'ensaio') throw falha(409, 'só uma mensagem em ensaio pode ser promovida');
+        m.status = 'rascunho';
+      } else if (acao === 'confirmar') {
+        if (m.status === 'enviada') throw falha(409, 'já estava enviada');
+        m.status = 'enviada'; m.enviada_at = new Date(agora()).toISOString(); m.confirmada = 'humano';
+      } else if (acao === 'sinal') {
+        const kind = String(corpo?.kind || '').toLowerCase();
+        if (!['respondeu', 'recusou'].includes(kind)) throw falha(400, 'sinal tem de ser «respondeu» ou «recusou»');
+        const lead = d.leads.find((l) => l.id === m.lead_id);
+        if (lead) { lead.status = kind === 'respondeu' ? 'respondeu' : 'perdido'; lead.updated_at = new Date(agora()).toISOString(); }
+      } else {
+        throw falha(503, 'o envio real precisa do servidor: a chave do correio vive lá, nunca neste browser');
+      }
       escrever(d, 'mensagem', `${acao} uma mensagem`); gravar(d);
       return { ok: true, message: m };
     }

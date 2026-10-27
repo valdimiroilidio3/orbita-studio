@@ -1296,6 +1296,15 @@
   .ai-why.bad { color: #B4391E; }
   .ai-more { font-family: var(--ui); font-size: 9px; line-height: 1.5; color: var(--grey); padding: 8px 13px 11px; border-top: 1px solid var(--hairline); }
   .ai-more code { font-family: var(--ui); font-size: 9px; background: rgba(21,20,20,.05); border-radius: 4px; padding: 1px 4px; }
+  .ai-more a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .ai-cap { color: var(--ink); margin-bottom: 6px; }
+  .ai-lab { font-size: 8px; letter-spacing: .12em; color: var(--grey); }
+  .ai-grat { line-height: 1.7; }
+  .ai-g { white-space: nowrap; display: inline-block; margin-right: 6px; }
+  .ai-g.dead { color: var(--faint); }
+  .ai-g-sep { color: var(--faint); margin-right: 4px; }
+  .ai-gf { margin-top: 4px; color: var(--faint); }
+  .ai-foot { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--hairline); }
   .ai-bt { display: flex; gap: 4px; align-items: center; }
   .ai-bt button { background: none; border: 1px solid var(--hairline); border-radius: 99px; font-family: var(--ui); font-size: 8px;
     letter-spacing: .12em; font-weight: 700; color: var(--grey); padding: 3px 7px; cursor: pointer; white-space: nowrap; }
@@ -3189,7 +3198,10 @@
       <button class="ai-refresh" title="voltar a ver o que está instalado (deteta CLIs e chaves)">REVER</button>
       <button class="ai-close" title="fechar (Esc)">✕</button></div>
     <div class="ai-list"></div>
-    <div class="ai-more">Um CLI dá mãos ao agente (ferramentas MCP e Chrome). Uma API responde só com texto — honesto: o agente escreve, não mexe. A escolha fica em <code>data/ai.json</code>; <code>AO_AI</code> ganha-lhe.</div>
+    <!-- 1.34.0: o rodapé deixou de ser uma frase fixa. Diz o que o motor AGORA
+         faz (ferramentas ou só texto) e mostra as gratuitas com o estado real,
+         lido de /ia/gratuitos; se a rota não existir, di-lo em vez de inventar. -->
+    <div class="ai-more" id="aiMore" aria-live="polite">a ler os motores gratuitos…</div>
   </div>
 </div>
 <!-- V3.7: the big editor — the task box with room for a brief -->

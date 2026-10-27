@@ -134,6 +134,12 @@ async function call(path, method = 'GET', body) {
      está ligada (sem chaves, ou sem o esquema aplicado). Nos dois casos a mesa não fica em
      branco: continua neste browser, e o aviso diz porquê. */
   if (r.status === 404 || r.status === 405) return usarLocal().call(path, method, body);
+  /* O envelope traz o status do caminho DENTRO do JSON (`{status: 404}`) e a
+     resposta HTTP é 200. Sem isto, uma rota que a versão publicada ainda não
+     tem (foi o caso de /ia/estado e /ia/gratuitos na 1.29) chegava como erro e
+     a página ficava presa em «A carregar…» para sempre. 404/405/503 no envelope
+     querem dizer o mesmo que no HTTP: esta instalação não tem a rota — usa o
+     armazém do browser e di-lo. */
   if (r.status === 503) {
     let motivo = '';
     try { motivo = (await r.json()).error || ''; } catch { /* sem corpo */ }
@@ -143,6 +149,12 @@ async function call(path, method = 'GET', body) {
   S.baseLigada = true;
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
+  const doCaminho = Number(j?.status);
+  if (doCaminho === 404 || doCaminho === 405) return usarLocal().call(path, method, body);
+  if (doCaminho === 503) {
+    S.baseMotivo = j?.corpo?.error || S.baseMotivo || 'a base de dados não respondeu';
+    return usarLocal().call(path, method, body);
+  }
   if (r.status === 401) {
     if (j.hint || j.mode === 'sessao' || j.error === 'entra') {
       // instalação com contas: mostra o ecrã de entrada (não um prompt do browser)
@@ -524,6 +536,30 @@ function pipelineCard() {
   </div>`;
 }
 
+/* 1.34.0 · procurar leads a partir da mesa. Antes, quem estava na mesa tinha de
+   ir ao escritório (◈ LEADS) para uma pesquisa real; agora a mesma rota
+   `/pesquisa/leads` (Geoapify, com dedupe) é chamada daqui e o que volta entra
+   no funil. «Procurar mais» repete com um limite maior — é a única forma
+   honesta de trazer mais: o fornecedor não tem paginação, tem teto. */
+function procurarLeadsForm() {
+  const p = S.procura || {};
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Procurar leads reais</h3><span class="count">${esc(p.fonte || 'Geoapify')} · sem duplicados</span></div>
+    <div class="form three">
+      <input class="in" id="plNicho" placeholder="Nicho (ex.: barbearias)" aria-label="nicho a procurar" value="${esc(p.nicho || '')}" autocomplete="off">
+      <input class="in" id="plCidade" placeholder="Cidade ou zona" aria-label="cidade a procurar" value="${esc(p.cidade || '')}" autocomplete="off">
+      <select class="in" id="plQuantos" aria-label="quantos pedir">
+        ${[20, 40, 60, 100].map(n => `<option value="${n}"${Number(p.limite) === n ? ' selected' : ''}>${n} de cada vez</option>`).join('')}
+      </select>
+    </div>
+    <div class="acts" style="margin-top:var(--s2)">
+      <button class="btn primary" data-act="procurar-leads">Procurar e guardar</button>
+      ${p.nicho || p.cidade ? `<button class="btn ghost" data-act="procurar-leads" data-mais="1">Procurar mais</button>` : ''}
+    </div>
+    <div class="hint">Cada pesquisa é um pedido real ao fornecedor de empresas. O que voltar é comparado com o que já tens: o repetido actualiza-se, o novo entra como «por contactar».</div>
+  </div>`;
+}
+
 function novoLeadForm() {
   return `<div class="card" style="margin-bottom:var(--s4)">
     <div class="sec-h"><h3>Acrescentar um lead à mão</h3><span class="count">fica guardado e pontuado</span></div>
@@ -550,8 +586,9 @@ function viewLeads() {
     ${headHTML({
       title: 'Leads',
       sub: total ? `${total} guardados · ${alta} com nota alta · ${S.leads.filter(l => !['novo'].includes(l.status)).length} já contactados` : 'ainda não há nenhum lead guardado',
-      right: `${may('write') ? '<button class="btn small ghost" data-act="novo-lead">+ Lead</button>' : ''}${stopPill()}`,
+      right: `${may('write') ? '<button class="btn small ghost" data-act="actualizar-leads" title="voltar a ler os leads da base">↻ Actualizar</button><button class="btn small ghost" data-act="novo-lead">+ Lead</button>' : ''}${stopPill()}`,
     })}
+    ${procurarLeadsForm()}
     ${S.adding ? novoLeadForm() : ''}
     ${searchBar()}
     ${pipelineCard()}
@@ -568,7 +605,7 @@ function viewLeads() {
       : `<div class="card empty">${IC.vazio}<h3>${total ? 'Nenhum lead neste filtro' : 'Ainda não há leads guardados'}</h3>
         <p>${total
           ? 'Nada corresponde a esta procura. Limpa a pesquisa ou escolhe outro filtro — os dados que existem estão todos aqui.'
-          : 'Os leads entram pela pesquisa real do escritório: abre ◈ LEADS, procura um nicho e uma cidade, e o que voltar fica guardado aqui, pontuado e sem duplicados. Se preferires, podes acrescentá-los à mão.'}</p></div>`}
+          : 'Procura aqui mesmo: escreve o nicho e a cidade no cartão «Procurar leads reais» e o que o fornecedor devolver entra nesta lista, pontuado e sem duplicados. Se preferires, podes acrescentá-los à mão.'}</p></div>`}
   </div>`;
 }
 
@@ -601,9 +638,16 @@ function leadMessageCard(m) {
     ? `<button class="btn ghost" data-act="rejeitar" data-id="${esc(m.id)}">Rejeitar</button>
        <button class="btn primary" data-act="aprovar" data-id="${esc(m.id)}">${st === 'ensaio' ? 'Promover e aprovar' : 'Aprovar e enviar'}</button>`
     : st === 'aprovada'
-      ? `<button class="btn primary" data-act="abrir" data-id="${esc(m.id)}">Abrir WhatsApp</button>
-         <button class="btn ghost" data-act="confirmar" data-id="${esc(m.id)}">Já enviei</button>`
-      : st === 'enviada'
+      ? (m.channel === 'email'
+        ? `<button class="btn primary" data-act="enviar" data-id="${esc(m.id)}">Enviar agora</button>
+           <button class="btn ghost" data-act="confirmar" data-id="${esc(m.id)}">Já enviei</button>`
+        : `<button class="btn primary" data-act="abrir" data-id="${esc(m.id)}">Abrir WhatsApp</button>
+           <button class="btn ghost" data-act="confirmar" data-id="${esc(m.id)}">Já enviei</button>`)
+      : st === 'falhou'
+        ? `<button class="btn primary" data-act="enviar" data-id="${esc(m.id)}">Tentar outra vez</button>
+           <button class="btn ghost" data-act="escrever">Escrever outra</button>
+           <div class="hint" style="width:100%">O último envio falhou: ${esc(m.erro || 'sem motivo guardado')}</div>`
+        : st === 'enviada'
         ? `<button class="btn ghost" data-act="sinal" data-id="${esc(m.id)}" data-kind="respondeu">Respondeu</button>
            <button class="btn ghost" data-act="sinal" data-id="${esc(m.id)}" data-kind="recusou">Recusou</button>`
         : `<button class="btn primary" data-act="escrever">Escrever outra</button>`;
@@ -621,7 +665,9 @@ function leadMessageCard(m) {
       ${m.why ? `<div class="hint">${esc(m.why)}</div>` : ''}
     </details>
     <div class="acts">${acts}</div>
-    <div class="hint" id="leadNote">${m.status === 'ensaio' ? 'Modo ensaio ligado: esta mensagem não sai. Aprovar promove-a a rascunho a sério.' : 'Nada sai sem este botão. O WhatsApp abre com o texto; o email exige token e consentimento.'}</div>
+    <div class="hint" id="leadNote">${m.status === 'ensaio' ? 'Modo ensaio ligado: esta mensagem não sai. Aprovar promove-a a rascunho a sério.'
+      : m.status === 'enviada' ? `Saiu${m.enviada_at ? ` em ${esc(when(m.enviada_at))}` : ''}${m.provider ? ` por ${esc(m.provider)}` : ''}${m.provider_id ? ` · ${esc(m.provider_id)}` : ''}${m.confirmada === 'humano' ? ' (confirmada à mão)' : ''}.`
+      : 'Nada sai sem o teu OK. O email sai pela Resend quando a chave estiver no servidor; o WhatsApp abre na app e confirma-se aqui — quem confirma é uma pessoa.'}</div>
   </div>`;
 }
 
@@ -1192,6 +1238,19 @@ async function act(name, el, ev) {
       return;
     }
 
+    if (name === 'enviar') {
+      /* 1.34.0 · envio real: um pedido ao fornecedor, com a chave do servidor.
+         Se correr mal, a mensagem fica «falhou» com o motivo e o botão passa a
+         «Tentar outra vez» — não se marca como enviada o que não saiu. */
+      try {
+        toast('A enviar…');
+        const r = await call(`/ops/messages/${encodeURIComponent(id)}/enviar`, 'POST', {});
+        toast(`Enviada por ${r.canal} para ${r.para}${r.providerId ? ` · ${r.providerId}` : ''}${r.ms ? ` · ${r.ms} ms` : ''}.`);
+      } catch (e) { toast(`Não saiu: ${e.message}`, true); }
+      await boot();
+      return;
+    }
+
     if (name === 'abrir') {
       const m = S.leadMessages.find(x => x.id === id) || (S.today?.decidir || []).find(x => x.id === id);
       const lead = m?.lead || S.lead || {};
@@ -1404,6 +1463,41 @@ async function act(name, el, ev) {
       a.click();
       URL.revokeObjectURL(a.href);
       toast('Ficheiros prontos para levar para qualquer alojamento.');
+      return;
+    }
+
+    if (name === 'procurar-leads') {
+      const v = (id) => String($('#' + id)?.value || '').trim();
+      const mais = el?.dataset?.mais === '1';
+      const nicho = v('plNicho') || S.procura?.nicho || '';
+      const cidade = v('plCidade') || S.procura?.cidade || '';
+      if (!nicho || !cidade) { toast('Diz o nicho e a cidade — sem isso a pesquisa não sabe o que procurar.', true); return; }
+      const limite = mais ? Math.min(100, Number(S.procura?.limite || 20) + 20) : Number(v('plQuantos')) || Number(S.procura?.limite) || 20;
+      toast(mais ? `A procurar mais ${limite}…` : 'A procurar empresas reais…');
+      let r;
+      try {
+        r = await call('/pesquisa/leads', 'POST', { oQue: nicho, onde: cidade, limite, guardar: true });
+      } catch (e) {
+        toast(`A pesquisa não correu: ${e.message}`, true);
+        return;
+      }
+      S.procura = { nicho, cidade, limite, fonte: r.fonte === 'geoapify' ? 'Geoapify' : r.fonte };
+      const g = r.guardados || { novos: 0, repetidos: 0 };
+      toast(r.encontrados
+        ? `${r.encontrados} encontrados · ${g.novos} novos · ${g.repetidos} já estavam`
+        : (r.avisos?.[0] || 'O fornecedor não devolveu empresas para esse nicho e essa zona.'));
+      try { S.leads = (await call('/ops/leads?limit=500')).leads || S.leads; } catch { await boot(); }
+      paint();
+      return;
+    }
+
+    if (name === 'actualizar-leads') {
+      try {
+        const r = await call('/ops/leads?limit=500');
+        S.leads = r.leads || [];
+        toast(`${S.leads.length} lead(s) lidos da base agora.`);
+        paint();
+      } catch (e) { toast(`Não consegui actualizar: ${e.message}`, true); }
       return;
     }
 

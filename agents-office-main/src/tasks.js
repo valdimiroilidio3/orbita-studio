@@ -294,7 +294,7 @@ export function initTasks(ctx) {
      O escritório não está preso a um fornecedor: GET /api/ai diz o que está realmente instalado
      nesta máquina (CLIs no PATH, chaves no ambiente, servidores locais a responder), o que falta e
      porquê. Aqui vê-se, testa-se com um turno a sério, e troca-se a quente (POST /api/ai/switch). */
-  const AI_ = { state: null, busy: false };
+  const AI_ = { state: null, busy: false, gratuitas: null };
   const aiLabel = () => {
     const a = AI_.state?.active;
     if (!a) return { text: 'SEM IA', dead: true, title: 'Nenhum motor de IA disponível — clica para ver o que falta' };
@@ -322,6 +322,56 @@ export function initTasks(ctx) {
       <div class="ai-bt">${resBit}<button data-ai="test" ${ok ? '' : 'disabled'}>TESTAR</button><button class="use" data-ai="use" ${ok && !act ? '' : 'disabled'}>USAR</button></div>
     </div>`;
   }
+  /* 1.34.0 · o rodapé do painel IA, com vida: o que o motor faz agora e as
+     gratuitas que existem — provadas e por provar — lidas do servidor. Sem
+     servidor, diz que não conseguiu ler; não inventa modelos nem estados. */
+  function aiMoreHTML(g) {
+    const a = AI_.state?.active;
+    const cap = a
+      ? (a.tools
+        ? `<b>${esc(a.label)}</b> mexe: recebe ferramentas MCP e o Chrome — abre páginas, lê ficheiros e corre comandos.`
+        : `<b>${esc(a.label)}</b> só escreve: responde texto e não mexe em nada. Para mãos, escolhe um motor CLI.`)
+      : (AI_.state ? 'Nenhum motor ligado: escolhe um acima. As tarefas não correm sem um.' : 'a ler os motores…');
+    const prov = Array.isArray(g?.modelos) ? g.modelos : [];
+    const liv = Array.isArray(g?.porProvar) ? g.porProvar : [];
+    const nome = (m) => `${m.fornec || m.fornecedor}/${m.modelo}`;
+    const linhas = [
+      ...prov.map((m) => `<span class="ai-g" title="${esc(m.nota || 'respondeu de verdade')}">✓ ${esc(nome(m))}</span>`),
+      ...liv.slice(0, 8).map((m) => `<span class="ai-g dead" title="${esc(m.nota || 'existe e está pronto, mas ainda não respondeu')}">· ${esc(nome(m))}</span>`),
+    ];
+    const gratis = !g
+      ? '<span class="ai-g dead">não consegui ler a lista (a versão publicada pode não ter a rota)</span>'
+      : (linhas.length
+        ? `${prov.length ? '' : '<span class="ai-g dead">nenhuma provada</span> '}${linhas.join(' ')}`
+        : '<span class="ai-g dead">nenhuma gratuita pronta</span>');
+    return `<div class="ai-cap">${cap}</div>
+      <div class="ai-grat"><span class="ai-lab">GRATUITAS</span> ${gratis}${g?.estado?.frase ? `<div class="ai-gf">${esc(g.estado.frase)}</div>` : ''}</div>
+      <div class="ai-foot">A escolha fica em <code>data/ai.json</code>; <code>AO_AI</code> ganha-lhe. <a href="/app#/ia">ver todas na mesa →</a></div>`;
+  }
+  function paintAiMore() {
+    const el = P_.aiPop?.querySelector('#aiMore');
+    if (el) el.innerHTML = aiMoreHTML(AI_.gratuitas);
+  }
+  async function loadGratuitas() {
+    const el = P_.aiPop?.querySelector('#aiMore');
+    if (el) el.textContent = 'a ler os motores gratuitos…';
+    let g = null;
+    try {
+      let r = await fetch(`${API}/ia/gratuitos`);
+      if (r.ok) g = await r.json();
+      /* na Vercel o caminho directo não existe: a mesa fala por /api/rpc */
+      if (!g || !g.ok) {
+        r = await fetch(`${API}/rpc`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ caminho: '/ia/gratuitos', metodo: 'GET', corpo: null }),
+        });
+        const j = r.ok ? await r.json() : null;
+        if (j && j.status === 200 && j.corpo) g = j.corpo;
+      }
+    } catch { g = null; }
+    AI_.gratuitas = g;
+    paintAiMore();
+  }
   function paintAiPop() {
     if (!P_.aiPop) return;
     const st = AI_.state;
@@ -331,6 +381,7 @@ export function initTasks(ctx) {
     now.textContent = a ? `AGORA · ${String(a.label).toUpperCase()}${a.tools ? '' : ' · SÓ TEXTO'}` : 'NENHUM MOTOR DISPONÍVEL';
     now.classList.toggle('dead', !a);
     P_.aiPop.querySelector('.ai-list').innerHTML = st.providers.map(aiRowHTML).join('');
+    paintAiMore();
   }
   async function loadAi(refresh = false) {
     try {
@@ -373,7 +424,7 @@ export function initTasks(ctx) {
       const show = P_.aiPop.hasAttribute('hidden');
       P_.aiPop.toggleAttribute('hidden', !show);
       P_.ai.classList.toggle('on', show);
-      if (show) loadAi(true);
+      if (show) { loadAi(true); loadGratuitas(); }
     });
     P_.aiPop.querySelector('.ai-close').addEventListener('click', () => { P_.aiPop.hidden = true; P_.ai.classList.remove('on'); });
     P_.aiPop.querySelector('.ai-refresh').addEventListener('click', () => loadAi(true));

@@ -733,17 +733,114 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   if (seg[0] === 'ops' && seg[1] === 'messages' && seg.length === 4 && m === 'POST') {
     const msg = await repo.mensagens.byId(seg[2]);
     if (!msg) throw falha(404, 'mensagem não encontrada');
-    if (seg[3] === 'aprovar') {
+    /* 1.34.0 · os nomes das acções: a mesa sempre chamou `approve/reject/send…`
+       (é o que está no src/mesa.js desde a 1.21) e a API só tinha `aprovar/
+       rejeitar`. Tudo o que a mesa mandava caía em 404 — e o dono via «não
+       funciona» sem saber porquê. Aceitam-se os dois nomes: o português é o
+       canónico e o inglês é o que está publicado nos clientes. */
+    const acao = { aprovar: 'aprovar', approve: 'aprovar', rejeitar: 'rejeitar', reject: 'rejeitar',
+      enviar: 'enviar', send: 'enviar', confirmar: 'confirmar', confirm: 'confirmar',
+      promover: 'promover', promote: 'promover', sinal: 'sinal', signal: 'sinal' }[seg[3]];
+    if (!acao) throw falha(404, `acção desconhecida numa mensagem: ${seg[3]}`);
+    if (acao === 'aprovar') {
+      if (msg.status === 'enviada') throw falha(409, 'esta mensagem já foi enviada');
       const m2 = await repo.mensagens.patch(msg.id, { status: 'aprovada', aprovada_at: agoraIso() });
       await repo.atividade.add('mensagem', 'mensagem aprovada');
       return { status: 200, corpo: { ok: true, message: m2 } };
     }
-    if (seg[3] === 'rejeitar') {
-      const m2 = await repo.mensagens.patch(msg.id, { status: 'rejeitada' });
+    if (acao === 'rejeitar') {
+      const m2 = await repo.mensagens.patch(msg.id, { status: 'rejeitada', motivo: limpo(corpo?.reason || corpo?.motivo) || null });
       await repo.atividade.add('mensagem', 'mensagem rejeitada');
       return { status: 200, corpo: { ok: true, message: m2 } };
     }
-    if (seg[3] === 'enviar') throw falha(501, 'não há canal de envio configurado (WhatsApp/email): aprovar não envia nada');
+    if (acao === 'promover') {
+      if (msg.status !== 'ensaio') throw falha(409, 'só uma mensagem em ensaio pode ser promovida');
+      const m2 = await repo.mensagens.patch(msg.id, { status: 'rascunho' });
+      return { status: 200, corpo: { ok: true, message: m2 } };
+    }
+    if (acao === 'confirmar') {
+      /* o WhatsApp não tem envio automático nesta instalação: a pessoa abre a
+         app, envia, e confirma aqui. Fica registado que foi um humano. */
+      if (msg.status === 'enviada') throw falha(409, 'já estava enviada');
+      const m2 = await repo.mensagens.patch(msg.id, { status: 'enviada', enviada_at: agoraIso(), confirmada: 'humano' });
+      await repo.atividade.add('mensagem', 'mensagem confirmada como enviada (à mão)');
+      return { status: 200, corpo: { ok: true, message: m2, enviada: true, canal: msg.channel } };
+    }
+    if (acao === 'sinal') {
+      const kind = String(corpo?.kind || '').toLowerCase();
+      if (!['respondeu', 'recusou'].includes(kind)) throw falha(400, 'sinal tem de ser «respondeu» ou «recusou»');
+      const lead = msg.lead_id ? await repo.leads.byId(msg.lead_id) : null;
+      if (lead) await repo.leads.patch(lead.id, { status: kind === 'respondeu' ? 'respondeu' : 'perdido', updated_at: agoraIso() });
+      await repo.atividade.add('mensagem', kind === 'respondeu' ? 'o lead respondeu' : 'o lead recusou');
+      return { status: 200, corpo: { ok: true, sinal: kind, lead: lead ? { id: lead.id, status: lead.status } : null } };
+    }
+    /* ---- enviar: um pedido real, com a chave que estiver no ambiente ----
+       Email pela Resend; WhatsApp pela Cloud API (se houver número e token). Sem
+       chave não se finge: 501/503 com o nome da variável que falta. O estado só
+       passa a `enviada` quando o fornecedor devolve um id. */
+    if (acao === 'enviar') {
+      if (msg.status === 'enviada') throw falha(409, 'esta mensagem já foi enviada');
+      if (msg.status !== 'aprovada' && msg.status !== 'falhou') throw falha(409, 'aprova a mensagem antes de enviar');
+      const lead = msg.lead_id ? await repo.leads.byId(msg.lead_id) : null;
+      const canal = msg.channel === 'email' ? 'email' : 'whatsapp';
+      const para = limpo(msg.to) || (canal === 'email' ? limpo(lead?.email) : limpo(lead?.phone));
+      if (!para) throw falha(400, canal === 'email' ? 'o lead não tem email' : 'o lead não tem telefone');
+      const corpoTexto = String(msg.body || '').trim();
+      if (!corpoTexto) throw falha(400, 'a mensagem está vazia');
+
+      let pedido = null;
+      if (canal === 'email') {
+        if (!env.RESEND_API_KEY) {
+          throw falha(503, 'falta RESEND_API_KEY no ambiente: o email não sai daqui sem essa chave (o WhatsApp não precisa dela, mas exige WHATSAPP_TOKEN)');
+        }
+        pedido = {
+          url: 'https://api.resend.com/emails',
+          opt: {
+            method: 'POST',
+            headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+            body: JSON.stringify({
+              from: limpo(env.ORBITA_FROM_EMAIL) || 'onboarding@resend.dev',
+              to: [para], subject: limpo(msg.subject) || 'Olá', text: corpoTexto,
+            }),
+          },
+          ler: (j) => j?.id || null,
+        };
+      } else {
+        if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
+          throw falha(501, 'o WhatsApp abre na app e confirma-se à mão (é o que a mesa faz). Para envio automático faltam WHATSAPP_TOKEN e WHATSAPP_PHONE_ID no ambiente');
+        }
+        pedido = {
+          url: `https://graph.facebook.com/v20.0/${encodeURIComponent(env.WHATSAPP_PHONE_ID)}/messages`,
+          opt: {
+            method: 'POST',
+            headers: { authorization: `Bearer ${env.WHATSAPP_TOKEN}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ messaging_product: 'whatsapp', to: String(para).replace(/[^0-9]/g, ''), type: 'text', text: { body: corpoTexto } }),
+          },
+          ler: (j) => j?.messages?.[0]?.id || null,
+        };
+      }
+      const inicio = Date.now();
+      let r;
+      try { r = await fetchImpl(pedido.url, pedido.opt); } catch (e) {
+        await repo.mensagens.patch(msg.id, { status: 'falhou', erro: `rede: ${e.message}`.slice(0, 300) });
+        throw falha(502, `não consegui falar com o fornecedor de ${canal}: ${e.message}`);
+      }
+      let devolvido = null;
+      try { devolvido = await r.json(); } catch { devolvido = null; }
+      if (!r.ok) {
+        const motivo = String(devolvido?.message || devolvido?.error?.message || devolvido?.error || `HTTP ${r.status}`).slice(0, 300);
+        await repo.mensagens.patch(msg.id, { status: 'falhou', erro: motivo });
+        await repo.atividade.add('mensagem', `o envio por ${canal} falhou: ${motivo}`);
+        throw falha(502, `o fornecedor recusou o envio: ${motivo}`);
+      }
+      const providerId = pedido.ler(devolvido);
+      const m2 = await repo.mensagens.patch(msg.id, {
+        status: 'enviada', enviada_at: agoraIso(), canal_confirmado: canal,
+        provider: canal === 'email' ? 'resend' : 'whatsapp-cloud', provider_id: providerId || null, erro: null,
+      });
+      await repo.atividade.add('mensagem', `mensagem enviada por ${canal}${providerId ? ` (${providerId})` : ''}`);
+      return { status: 200, corpo: { ok: true, enviada: true, canal, para, providerId, ms: Date.now() - inicio, message: m2 } };
+    }
   }
 
   /* ---- projetos ---- */
