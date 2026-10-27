@@ -353,3 +353,82 @@ test('cor ao vivo: só as peças seguras mudam, e cada uma recebe o tom certo', 
   assert.equal(tomDaParte('floorGlass', camadas, 'vermelho'), null, 'cor inválida não pinta nada');
   assert.ok(Object.keys(PARTES_VIVAS).length >= 8);
 });
+
+/* ---------- 10 · testar uma integração, a sério ---------- */
+test('integrações: o botão de teste faz um pedido real e diz o que aconteceu', async () => {
+  const api = createMemRepo();
+  const pedidos = [];
+  const fetchFalso = async (url, opt = {}) => {
+    pedidos.push({ url: String(url), auth: opt.headers?.Authorization || opt.headers?.apikey });
+    if (String(url).includes('api.github.com')) {
+      if (!opt.headers?.Authorization) return { ok: false, status: 401, text: async () => 'Bad credentials', json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ login: 'valdimiroilidio3' }), text: async () => '' };
+    }
+    if (String(url).includes('api.vercel.com')) return { ok: false, status: 403, text: async () => 'Forbidden', json: async () => ({}) };
+    return { ok: false, status: 404, text: async () => '', json: async () => ({}) };
+  };
+
+  /* com chave: o GitHub responde e diz quem é */
+  const bom = await responder(api, {
+    caminho: '/platform/testar', metodo: 'POST', corpo: { id: 'github' },
+    env: { GITHUB_TOKEN: 'ghp_teste' }, fetchImpl: fetchFalso,
+  });
+  assert.equal(bom.status, 200);
+  assert.equal(bom.corpo.ok, true);
+  assert.equal(bom.corpo.detalhe, 'valdimiroilidio3');
+  assert.equal(bom.corpo.status, 200);
+  assert.equal(pedidos[0].url, 'https://api.github.com/user');
+  assert.equal(pedidos[0].auth, 'Bearer ghp_teste');
+
+  /* e o catálogo passa a dizer «verificada» para essa integração */
+  const apis = await responder(api, { caminho: '/platform/apis', env: { GITHUB_TOKEN: 'ghp_teste' }, fetchImpl: fetchFalso });
+  const gh = apis.corpo.list.find((x) => x.id === 'github');
+  assert.equal(gh.verified, true, 'um teste bem-sucedido tinha de marcar a integração como verificada');
+  assert.equal(gh.latencyMs != null, true);
+  assert.ok(apis.corpo.summary.verificadas >= 1);
+
+  /* sem chave: não se inventa um teste — diz-se o que falta */
+  const sem = await responder(api, { caminho: '/platform/testar', metodo: 'POST', corpo: { id: 'vercel' }, env: {}, fetchImpl: fetchFalso });
+  assert.equal(sem.corpo.ok, false);
+  assert.match(sem.corpo.erro, /falta VERCEL_TOKEN/);
+  assert.equal(sem.corpo.codigo, 'semchave');
+
+  /* com chave mas o serviço a recusar: HTTP real, sem véu */
+  const mau = await responder(api, { caminho: '/platform/testar', metodo: 'POST', corpo: { id: 'vercel' }, env: { VERCEL_TOKEN: 'x' }, fetchImpl: fetchFalso });
+  assert.equal(mau.corpo.ok, false);
+  assert.match(mau.corpo.erro, /HTTP 403/);
+
+  /* integração que não existe → 404, não um falso «ok» */
+  await assert.rejects(
+    () => responder(api, { caminho: '/platform/testar', metodo: 'POST', corpo: { id: 'inexistente' }, env: {}, fetchImpl: fetchFalso }),
+    (e) => e.status === 404,
+  );
+
+  /* a IA segue o mesmo caminho: sem chave, responde «falta …» */
+  const groq = await responder(api, { caminho: '/platform/testar', metodo: 'POST', corpo: { id: 'groq' }, env: {}, fetchImpl: fetchFalso });
+  assert.equal(groq.status, 200);
+  assert.equal(groq.corpo.ok, false);
+  assert.match(groq.corpo.erro, /GROQ_API_KEY/);
+
+  /* e o registo guarda o teste (auditoria) */
+  const reg = await chamar(api, '/controlo/registo');
+  assert.ok(reg.corpo.registo.some((x) => /teste de github/.test(x.o_que)));
+});
+
+test('integrações: a lista de /platform/apis inclui a IA (antes vinha vazia) e diz o que falta', async () => {
+  const api = createMemRepo();
+  const r = await responder(api, { caminho: '/platform/apis', env: { GROQ_API_KEY: 'k' } });
+  assert.equal(r.status, 200);
+  const ia = r.corpo.list.filter((x) => x.kind === 'ia');
+  assert.ok(ia.length >= 10, `esperava os fornecedores de IA na lista, vieram ${ia.length}`);
+  const groq = r.corpo.list.find((x) => x.id === 'groq');
+  assert.equal(groq.configured, true);
+  assert.equal(groq.verified, false, 'configurada não é verificada');
+  const google = r.corpo.list.find((x) => x.id === 'google');
+  assert.equal(google.configured, false);
+  assert.ok(google.missing.length > 0, 'sem chave, tem de dizer qual falta');
+  /* um fornecedor sem chave por desenho (llm7) conta como configurado, mas não como ligado */
+  const llm7 = r.corpo.list.find((x) => x.id === 'llm7');
+  assert.equal(llm7.configured, true);
+  assert.equal(llm7.verified, false);
+});

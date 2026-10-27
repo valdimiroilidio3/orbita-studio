@@ -1,3 +1,27 @@
+## 1.22.0 — 27 out 2026 · Testar cada integração, uma a uma
+
+- **`POST /platform/testar`** — o botão que faltava: faz um pedido real à
+  integração escolhida, agora, e devolve o que aconteceu. Para os fornecedores de
+  IA usa o teste verdadeiro que já existia (lista de modelos + uma resposta
+  pequena, com até três modelos candidatos, porque um modelo de raciocínio pode
+  gastar o orçamento de saída a «pensar» e devolver texto vazio — isso **não** é
+  um teste bem-sucedido). Para GitHub, Vercel, Supabase e Resend faz um pedido à
+  API de cada um com o token do ambiente e lê a resposta.
+- **O resultado fica guardado** em `testes` (a mesma tabela que a IA usa) e no
+  registo de alterações. «Verificada» passa a significar «um pedido real
+  respondeu», não «tem uma chave».
+- **Bug corrigido:** `/platform/apis` filtrava fornecedores por `tipo === 'chat'`,
+  campo que o catálogo não tem — a lista de IA vinha **vazia**. Agora só ficam de
+  fora os serviços de pesquisa (Exa, Linkup, Firecrawl…), e o fornecedor
+  «Vercel AI Gateway» passa a `ia:vercel` para não colidir com o serviço
+  «Vercel».
+- **Interface:** cada linha de integração tem «Testar ligação» (desactivado sem
+  chave, com a razão no `title`), e a resposta aparece na própria linha: modelo,
+  HTTP, milissegundos e, quando há, o texto que o modelo devolveu.
+- Provas: `controlo.test.mjs` passa de 20 para **22** (teste real do GitHub com
+  `fetch` falso, chave em falta, HTTP 403, integração inexistente → 404, e a
+  lista de IA deixar de vir vazia).
+
 ## 1.21.0 — 27 out 2026 · Salas: cor ao vivo, tamanho à mão e registo de quem mudou
 
 - **A cor de uma sala muda sem recarregar.** Ao escolher a cor, o painel chama

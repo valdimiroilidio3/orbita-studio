@@ -175,7 +175,8 @@ export function createConfig({
       ${inputs}
       <div class="cfg-line">
         <button type="button" class="cfg-btn" data-act="save" ${p.missing.length === 0 && !p.configured ? 'disabled' : ''}>Guardar e testar</button>
-        ${p.configured ? `<button type="button" class="cfg-btn quiet" data-act="clear">Apagar chave</button>` : ''}
+        <button type="button" class="cfg-btn quiet" data-act="test" ${!p.configured ? 'disabled' : ''} title="${p.configured ? 'faz um pedido real a esta integração, agora' : 'sem chave: não há nada para testar'}">Testar ligação</button>
+        <button type="button" class="cfg-btn quiet" data-act="clear" ${p.configured ? '' : 'hidden'}>Apagar chave</button>
         ${detail}
         <span class="cfg-out" role="status" aria-live="polite"></span>
       </div>
@@ -405,6 +406,30 @@ export function createConfig({
     }
   }
 
+  /* 1.22.0 · o botão «Testar ligação»: um pedido real, agora, a esta integração.
+     Sem chave o servidor responde «falta X» — e é isso que se mostra. */
+  async function testarIntegracao(row) {
+    const id = row.getAttribute('data-id');
+    const out = row.querySelector('.cfg-out');
+    const btn = row.querySelector('[data-act="test"]');
+    const antes = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'a testar…'; }
+    if (out) { out.className = 'cfg-out'; out.textContent = ''; }
+    try {
+      const r = await pedir('/platform/testar', { metodo: 'POST', corpo: { id } });
+      const d = r.dados || {};
+      const texto = d.ok
+        ? `✓ ${d.nome || id} ligou${d.status ? ' · HTTP ' + d.status : ''}${d.ms != null ? ' · ' + d.ms + ' ms' : ''}${d.modelo ? ' · ' + d.modelo : ''}${d.detalhe ? ' · ' + d.detalhe : ''}${d.resposta ? ` · «${d.resposta}»` : ''}`
+        : `✗ ${d.erro || r.erro || 'sem resposta'}`;
+      if (out) { out.className = 'cfg-out ' + (d.ok ? 'good' : 'bad'); out.textContent = texto; }
+      if (d.ok || d.erro) setTimeout(() => loadApis(), 700);
+    } catch (e) {
+      if (out) { out.className = 'cfg-out bad'; out.textContent = 'sem resposta do servidor: ' + e.message; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = antes || 'Testar ligação'; }
+    }
+  }
+
   function wire() {
     if (!body) return;
     body.querySelectorAll('[data-theme]').forEach((b) => {
@@ -489,6 +514,8 @@ export function createConfig({
       if (sv) sv.addEventListener('click', () => saveKey(row));
       const cl = row.querySelector('[data-act="clear"]');
       if (cl) cl.addEventListener('click', () => clearKey(row));
+      const ts = row.querySelector('[data-act="test"]');
+      if (ts) ts.addEventListener('click', () => testarIntegracao(row));
       row.querySelectorAll('input[data-env]').forEach((inp) => {
         inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveKey(row); } });
       });

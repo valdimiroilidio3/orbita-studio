@@ -109,6 +109,71 @@ function resumoPipeline(leads) {
   };
 }
 
+/* ---------- os serviços que não são de IA, com uma sonda REAL cada ----------
+   1.22.0: cada integração tem um botão «Testar ligação» que faz um pedido de
+   verdade e guarda o resultado em `testes` (a mesma tabela que a IA usa). Um
+   serviço sem token não é «testado»: é «falta a chave», e diz-se assim. */
+/* 1.22.0: o catálogo não marca `tipo` nos fornecedores de chat — um filtro
+   `f.tipo === 'chat'` excluía TODOS e a lista de IA vinha vazia. Só ficam de
+   fora os que não conversam (pesquisa). */
+const NAO_CHAT = new Set(['exa', 'linkup', 'firecrawl', 'brave', 'tavily', 'serper']);
+const eChat = (id, f) => (f?.tipo ? f.tipo === 'chat' : !NAO_CHAT.has(id));
+
+const SERVICOS = [
+  {
+    id: 'github', name: 'GitHub', kind: 'codigo', env: ['GITHUB_TOKEN'], docs: 'https://github.com/settings/tokens',
+    sonda: 'https://api.github.com/user',
+    cabecalhos: (e) => ({ Authorization: `Bearer ${e.GITHUB_TOKEN}`, 'User-Agent': 'orbita-studio', Accept: 'application/vnd.github+json' }),
+    leitura: (j) => j?.login || j?.name || null,
+  },
+  {
+    id: 'vercel', name: 'Vercel', kind: 'deploy', env: ['VERCEL_TOKEN'], docs: 'https://vercel.com/account/tokens',
+    sonda: 'https://api.vercel.com/v2/user',
+    cabecalhos: (e) => ({ Authorization: `Bearer ${e.VERCEL_TOKEN}` }),
+    leitura: (j) => j?.user?.username || j?.user?.email || null,
+  },
+  {
+    id: 'supabase', name: 'Supabase', kind: 'base-de-dados', env: ['SUPABASE_URL', 'SUPABASE_SECRET_KEY'], docs: 'https://supabase.com/dashboard',
+    sonda: (e) => `${String(e.SUPABASE_URL).replace(/\/+$/, '')}/rest/v1/`,
+    cabecalhos: (e) => ({ apikey: e.SUPABASE_SECRET_KEY, Authorization: `Bearer ${e.SUPABASE_SECRET_KEY}` }),
+    leitura: () => 'REST respondeu',
+  },
+  {
+    id: 'resend', name: 'Resend (email)', kind: 'correio', env: ['RESEND_API_KEY'], docs: 'https://resend.com/api-keys',
+    sonda: 'https://api.resend.com/domains',
+    cabecalhos: (e) => ({ Authorization: `Bearer ${e.RESEND_API_KEY}` }),
+    leitura: (j) => (Array.isArray(j?.data) ? `${j.data.length} domínio(s)` : 'conta respondeu'),
+  },
+];
+
+/** Faz o pedido de sonda a um serviço. Não inventa: sem chave, devolve o que falta. */
+export async function sondarServico(id, { env = process.env, fetchImpl = fetch } = {}) {
+  const s = SERVICOS.find((x) => x.id === id);
+  if (!s) return { ok: false, erro: 'integração desconhecida', codigo: 'desconhecida' };
+  const faltam = s.env.filter((v) => !env[v]);
+  if (faltam.length) return { ok: false, erro: `falta ${faltam.join(' e ')} no ambiente`, codigo: 'semchave', faltam };
+  const alvo = typeof s.sonda === 'function' ? s.sonda(env) : s.sonda;
+  const inicio = Date.now();
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 12000);
+    let r;
+    try {
+      r = await fetchImpl(alvo, { headers: s.cabecalhos(env), signal: ctl.signal });
+    } finally { clearTimeout(t); }
+    const ms = Date.now() - inicio;
+    if (!r.ok) {
+      const corpo = await r.text().catch(() => '');
+      return { ok: false, ms, status: r.status, erro: `${s.name} respondeu HTTP ${r.status}${corpo ? `: ${corpo.slice(0, 120)}` : ''}`, codigo: 'http' };
+    }
+    let detalhe = null;
+    try { detalhe = s.leitura(await r.json()); } catch { detalhe = null; }
+    return { ok: true, ms, status: r.status, detalhe, quando: new Date().toISOString() };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - inicio, erro: String(e.message || e).slice(0, 200), codigo: e.name === 'AbortError' ? 'tempo' : 'rede' };
+  }
+}
+
 /* ---------- o encaminhador ---------- */
 export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
@@ -208,13 +273,16 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     const cfg = await repo.ia.config.ler().catch(() => ({}));
     const testes = cfg.testes || {};
     const ia = Object.entries(FORNECEDORES)
-      .filter(([, f]) => f.tipo === 'chat')
+      .filter(([id, f]) => eChat(id, f))
       .map(([id, f]) => {
         const vars = f.chave || [];
         const env2 = vars.filter((v) => !!env[v]);
         const t = testes[id];
         return {
-          id, name: f.nome, kind: 'ia', docs: f.docs || f.site || null,
+          /* nomes únicos: o serviço «Vercel» e o fornecedor «Vercel AI Gateway»
+             chamam-se os dois `vercel`; o de IA leva prefixo `ia:` */
+          id: SERVICOS.some((x) => x.id === id) ? `ia:${id}` : id,
+          name: f.nome, kind: 'ia', docs: f.docs || f.site || null,
           env: env2, missing: vars.filter((v) => !env[v]),
           configured: env2.length > 0 || !!f.keyless,
           verified: !!t?.ok, status: t?.ok ? 200 : null, latencyMs: t?.ms ?? null,
@@ -222,20 +290,52 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
           note: f.nota || null,
         };
       });
-    const servicos = [
-      { id: 'github', name: 'GitHub', kind: 'codigo', env: ['GITHUB_TOKEN'], docs: 'https://github.com/settings/tokens' },
-      { id: 'vercel', name: 'Vercel', kind: 'deploy', env: ['VERCEL_TOKEN'], docs: 'https://vercel.com/account/tokens' },
-      { id: 'supabase', name: 'Supabase', kind: 'base-de-dados', env: ['SUPABASE_URL', 'SUPABASE_SECRET_KEY'], docs: 'https://supabase.com/dashboard' },
-      { id: 'resend', name: 'Resend (email)', kind: 'correio', env: ['RESEND_API_KEY'], docs: 'https://resend.com/api-keys' },
-    ].map((s) => {
+    const servicos = SERVICOS.map((s) => {
       const tem = s.env.filter((v) => !!env[v]);
-      return { ...s, env: tem, missing: s.env.filter((v) => !env[v]), configured: tem.length === s.env.length, verified: false, status: null, latencyMs: null, checkedAt: null, error: null, note: null };
+      const t = testes[s.id];
+      return {
+        id: s.id, name: s.name, kind: s.kind, docs: s.docs,
+        env: tem, missing: s.env.filter((v) => !env[v]),
+        configured: tem.length === s.env.length,
+        verified: !!t?.ok, status: t?.status ?? null, latencyMs: t?.ms ?? null,
+        checkedAt: t?.quando || null, error: t?.ok ? null : (t?.erro || null),
+        detalhe: t?.ok ? (t.detalhe || null) : null, note: null,
+      };
     });
     const list = [...servicos, ...ia];
     return { status: 200, corpo: {
       list,
       summary: { total: list.length, configuradas: list.filter((x) => x.configured).length, verificadas: list.filter((x) => x.verified).length },
     } };
+  }
+
+  /* ---- 1.22.0 · testar uma integração, uma de cada vez, a sério ----
+     É o botão que faltava: sem ele, «testar» só existia ao guardar a chave. */
+  if (caminhoLimpo === '/platform/testar' && m === 'POST') {
+    const cru = String(corpo?.id || '');
+    const id = cru.startsWith('ia:') ? cru.slice(3) : cru;
+    const soIA = cru.startsWith('ia:');
+    const { FORNECEDORES } = await import('./_ia/catalogo.mjs');
+    const cfg = await repo.ia.config.ler().catch(() => ({}));
+    const testes = { ...(cfg.testes || {}) };
+
+    if (FORNECEDORES[id] && eChat(id, FORNECEDORES[id]) && (soIA || !SERVICOS.some((x) => x.id === id))) {
+      const { criarMotor } = await import('./_ia/motor.mjs');
+      const motor = criarMotor({ repo, env, fetchImpl });
+      try {
+        const r = await motor.testar(id);
+        return { status: 200, corpo: { ok: true, id, nome: FORNECEDORES[id].nome, ...r, prova: 'pedido real a este fornecedor, agora' } };
+      } catch (e) {
+        return { status: 200, corpo: { ok: false, id, nome: FORNECEDORES[id].nome, erro: String(e.message || e).slice(0, 300), codigo: e.codigo || 'erro', quando: new Date().toISOString() } };
+      }
+    }
+
+    const r = await sondarServico(id, { env, fetchImpl });
+    if (r.codigo === 'desconhecida') throw falha(404, r.erro);
+    testes[id] = { ...r, quando: r.quando || new Date().toISOString() };
+    await repo.ia.config.gravar('testes', testes).catch(() => {});
+    await repo.atividade.add('config', `teste de ${id}: ${r.ok ? 'ligou' : `falhou (${String(r.erro).slice(0, 80)})`}`).catch(() => {});
+    return { status: 200, corpo: { ...r, id, prova: 'pedido real, agora' } };
   }
 
   if (caminhoLimpo === '/platform/key' && m === 'POST') {
