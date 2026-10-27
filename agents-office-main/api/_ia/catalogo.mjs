@@ -105,10 +105,13 @@ export const FORNECEDORES = {
     docs: 'https://vercel.com/docs/ai-gateway',
     estilo: 'openai',
     base: 'https://ai-gateway.vercel.sh/v1',
-    chave: ['AI_GATEWAY_API_KEY'],
+    /* Na Vercel não é preciso chave nenhuma: o deployment recebe um token OIDC
+       (cabeçalho `x-vercel-oidc-token` / `VERCEL_OIDC_TOKEN`) que o Gateway aceita
+       como Bearer. É por isso que este fornecedor é o primeiro a tentar. */
+    chave: ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN'],
     gratuito: true,
-    limites: '$5/mês de crédito',
-    nota: 'Encaminha para vários fornecedores; útil quando a conta da Vercel já existe.',
+    limites: '$5/mês de crédito no plano Hobby',
+    nota: 'Na Vercel autentica por OIDC (sem chave); fora dela precisa de AI_GATEWAY_API_KEY.',
   },
   anthropic: {
     nome: 'Anthropic',
