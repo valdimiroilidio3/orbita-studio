@@ -23,6 +23,8 @@
    de origem e a planta é a cena — como sempre foi.
    =========================================================================== */
 
+import { VERSAO } from './_versao.mjs';
+
 export const MAX_POR_SALA = 12;
 export const MAX_AGENTES_EXTRA = 60;
 
@@ -188,5 +190,5 @@ export async function retrato({ repo, motor = null, env = process.env, agora = D
     .slice(0, 20)
     .map((a) => ({ quando: a.at, quem: 'dono', o_que: a.texto }));
 
-  return { versao: '1.21.0', ajustes, ia, execucao, seguranca, registo, quando: new Date(agora).toISOString(), env: { temChaves: Object.keys(env || {}).length > 3 } };
+  return { versao: VERSAO, ajustes, ia, execucao, seguranca, registo, quando: new Date(agora).toISOString(), env: { temChaves: Object.keys(env || {}).length > 3 } };
 }
