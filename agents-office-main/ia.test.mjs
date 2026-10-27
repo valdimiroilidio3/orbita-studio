@@ -138,16 +138,19 @@ test('cliente: sem chave não vai à rede', async () => {
 });
 
 /* ---------- 3 · router ---------- */
-test('router: só fornecedores com chave, e o tipo certo para o tipo de trabalho', () => {
+test('router: só fornecedores utilizáveis (chave ou keyless), e o tipo certo para o tipo de trabalho', () => {
   const semChave = cadeia('plano', { chaves: {} });
-  assert.deepEqual(semChave, []);
-  const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' } });
+  /* sem chave nenhuma só entram os keyless — e o OVH, que responde anónimo,
+     agora traz modelos reais ao catálogo (antes não trazia nenhum). */
+  assert.ok(semChave.length > 0);
+  assert.ok(semChave.every((m) => m.fornec === 'ovh'));
+  const comOpenRouter = cadeia('plano', { chaves: { openrouter: 'OPENROUTER_API_KEY' }, desligados: ['ovh'] });
   assert.ok(comOpenRouter.length > 0);
   assert.ok(comOpenRouter.every((m) => m.fornec === 'openrouter'));
   assert.ok(comOpenRouter[0].etiquetas.includes('raciocinio'));
   const visao = cadeia('visao', { chaves: { openrouter: 'X' } });
   assert.ok(visao.every((m) => m.etiquetas.includes('visao')));
-  assert.equal(cadeia('visao', { chaves: { groq: 'X' } }).length, 0, 'groq não tem modelos de visão no catálogo');
+  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh'] }).length, 0, 'groq não tem modelos de visão no catálogo');
 });
 
 test('router: preferido do agente vai à frente, e desligado fica de fora', () => {
@@ -298,6 +301,9 @@ function fornecedorFalso({ plano = null, chamarFerramenta = null } = {}) {
 test('orquestrador: plano → passos → ferramenta → revisão, tudo gravado na base', async () => {
   const repo = createMemRepo();
   const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'lead_criar', args: { nome: 'Café Central', cidade: 'Coimbra' } } });
+  /* o teste fixa o fornecedor: o OVH (keyless) seria candidato e este falso só
+     fala o dialeto que o teste preparou. Desligar é uma função real do motor. */
+  await repo.ia.config.gravar('desligados', ['ovh', 'kilo']);
   const motor = criarMotor({ repo, env: envFalso, fetchImpl });
   const run = await correr({ repo, motor, objetivo: 'Encontrar um cliente para o site do Café Central', env: envFalso });
 

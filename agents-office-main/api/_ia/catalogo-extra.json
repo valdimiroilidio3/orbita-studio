@@ -3465,6 +3465,193 @@
     "contexto"
    ],
    "buraco": "sem limites declarados"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Qwen3.5-397B-A17B",
+   "rotulo": "Qwen3.5-397B-A17B (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "raciocinio",
+    "texto",
+    "contexto"
+   ],
+   "buraco": "o maior do OVH; janela não declarada em /models"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "gpt-oss-120b",
+   "rotulo": "gpt-oss-120b (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": 131072,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "raciocinio",
+    "codigo",
+    "ferramentas",
+    "texto"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "gpt-oss-20b",
+   "rotulo": "gpt-oss-20b (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": 131072,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "rapido"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Mistral-Small-3.2-24B-Instruct-2506",
+   "rotulo": "Mistral-Small-3.2-24B-Instruct-2506 (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "ferramentas",
+    "rapido"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Qwen3.6-27B",
+   "rotulo": "Qwen3.6-27B (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "raciocinio"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Qwen3.8-27B",
+   "rotulo": "Qwen3.8-27B (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "codigo",
+    "raciocinio"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Meta-Llama-3_3-70B-Instruct",
+   "rotulo": "Meta-Llama-3_3-70B-Instruct (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": 131072,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "raciocinio"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Mistral-Nemo-Instruct-2407",
+   "rotulo": "Mistral-Nemo-Instruct-2407 (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "texto",
+    "rapido"
+   ],
+   "buraco": "sem limites publicados para anónimo"
+  },
+  {
+   "plataforma": "ovh",
+   "modelo": "Qwen2.5-VL-72B-Instruct",
+   "rotulo": "Qwen2.5-VL-72B-Instruct (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": null,
+   "migracao": "lista real de /v1/models do OVH (27 out 2026)",
+   "etiquetas": [
+    "visao",
+    "texto"
+   ],
+   "buraco": "o único com visão"
   }
  ]
 }
