@@ -285,3 +285,79 @@ O que ficou provado com pedidos reais:
 O esquema foi aplicado em produção por um endpoint temporário
 (`/api/setup`, protegido por token, já removido): `orbita_ai_memoria` e
 `orbita_media_jobs` existem na base, e `orbita_ai_uso` já tem linhas reais.
+
+## 16. 1.49.0 · Mem0 — a memória passou a ter duas camadas
+
+Até aqui a memória da Órbita era uma só: notas na tabela `orbita_ai_memoria`,
+procuradas **por palavras** (`modo: 'lexical'`). Funcionava e dizia o que era.
+Faltava-lhe o que os embeddings dão: encontrar «prefere respostas curtas» quando
+se procura «como escrever no ecrã».
+
+A partir desta versão há duas camadas, e nenhuma delas mente sobre a outra:
+
+| camada | onde | quando responde | o que custa |
+|---|---|---|---|
+| local | `orbita_ai_memoria` | sempre, mesmo sem rede | nada |
+| Mem0 | `api.mem0.ai` | quando há `MEM0_API_KEY` | pedidos ao fornecedor |
+
+**Leitura.** `procurar()` soma as duas. Se o Mem0 responder, `modo` é
+`'mem0+lexical'` e cada achado traz `origem: 'mem0'` ou `'origem': 'local'` —
+a nota que vier nas duas fica uma vez só. Se o Mem0 falhar, `modo` volta a
+`'lexical'` e `mem0.motivo` diz o que aconteceu (401, 429, tempo esgotado,
+`ECONNRESET`). O Orchestrator passa a escrever no prompt de planeamento se a
+memória que recebeu foi «por sentido» ou «por palavras».
+
+**Escrita.** `guardar()` grava localmente **primeiro** e só depois empurra para o
+Mem0 (`infer: false`: o texto fica como está, sem extracção por LLM). Se o Mem0
+recusar, a nota está guardada e a resposta diz `mem0: { ok: false, motivo }`.
+Uma memória remota em baixo não pode perder uma nota.
+
+**O que entra no prompt** continua a ser pouco de propósito: 5 notas, 300
+caracteres cada. Memória a mais é contexto a menos para o trabalho.
+
+### Rotas
+
+| rota | o que faz |
+|---|---|
+| `GET /ia/memoria` | estado das duas camadas: `modo`, `camadas`, `mem0` com a chave mascarada |
+| `POST /ia/memoria` | guarda uma nota (local e Mem0), devolve as duas respostas |
+| `POST /ia/memoria/procurar` | procura nas duas camadas; `modo` diz qual respondeu |
+| `POST /ia/memoria/importar` | lote para o Mem0 — sem `confirmar: true` só devolve o plano |
+| `DELETE /ia/memoria/mem0:<id>` | apaga a memória semântica (o resto apaga a nota local) |
+
+### Configuração
+
+Só ambiente, nada na base:
+
+| variável | obrigatória | para quê |
+|---|---|---|
+| `MEM0_API_KEY` | sim, para ligar | a chave; sem ela a memória é lexical |
+| `MEM0_BASE_URL` | não | `https://api.mem0.ai` por omissão |
+| `MEM0_ORG_ID` | não | vai em `X-Org-Id` (diagnóstico) |
+| `MEM0_PROJECT_ID` | não | vai em `X-Project-Id` (diagnóstico) |
+| `MEM0_USER_ID` | não | espaço de nomes; `orbita` por omissão |
+
+A chave nunca sai do servidor: o Control Center mostra `m0-F…T149`, o mesmo tipo
+de máscara que já se usa para os outros fornecedores.
+
+### Importar o que já existe
+
+Duas portas, ambas com o mesmo formato (`[{ memory, metadata }]`, o que o
+`openclaw mem0 import` também lê):
+
+- **do workspace do OpenClaw** — `mem0-import/construir-import.mjs` lê
+  `~/.openclaw/workspace/{SOUL,IDENTITY,USER,MEMORY}.md` e os diários dos últimos
+  30 dias e escreve `/tmp/mem0_import.json`; `mem0-import/enviar-para-orbita.mjs`
+  envia-o para `POST /ia/memoria/importar` da Órbita.
+- **das notas locais** — botão «Enviar as notas para o Mem0» no Control Center
+  (`{ origem: 'locais', confirmar: true }`).
+
+### O que continua a não existir
+
+- **Não há grafo de ligações** nem daemon: o Mem0 é um índice semântico, não um
+  grafo de conhecimento.
+- **Não há captura automática** de tudo o que se escreve na mesa. As notas entram
+  no fim de cada execução concluída e quando o dono as escreve — nada mais.
+- **Não há deduplicação semântica local**: o duplicado exacto é recusado, o
+  «quase igual» não. É o Mem0 que funde o que lá chega (`infer: true`), e nós
+  enviamos com `infer: false` de propósito.

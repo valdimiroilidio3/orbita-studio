@@ -21,7 +21,19 @@
 
    O que NÃO existe: daemon, grafo de ligações, embeddings/modelo de 600 MB,
    perfis GRAFT_PROFILE. A busca é lexical e o resultado di-lo (`modo`).
+
+   1.49.0 · MEM0 — a memória passou a ter duas camadas, e as duas dizem quem são:
+
+     local (aqui)   → lexical, sempre disponível, sem rede. É a rede de segurança.
+     Mem0 (mem0.mjs) → semântica, quando há `MEM0_API_KEY`. Procura por sentido,
+                      não por palavras, e responde com `origem: 'mem0'`.
+
+   As duas somam-se na leitura (`modo: 'mem0+lexical'`) e na escrita: a nota é
+   guardada localmente primeiro e só depois empurrada para o Mem0. Se o Mem0
+   estiver em baixo, a nota fica guardada e o resultado di-lo (`mem0.ok:false`)
+   — uma memória remota em baixo não pode perder uma nota.
    =========================================================================== */
+import * as mem0 from './mem0.mjs';
 
 const MAX_NOTA = 8000;
 const MAX_TITULO = 160;
@@ -77,22 +89,52 @@ export function normalizar({ titulo, texto, etiquetas, fonte, projeto }) {
   };
 }
 
-/** Guarda uma nota — e recusa duplicados exactos (mesmo título, mesmo texto). */
-export async function guardar(repo, dados) {
+/**
+ * Guarda uma nota — e recusa duplicados exactos (mesmo título, mesmo texto).
+ * Grava localmente primeiro; depois empurra para o Mem0 se houver chave. O
+ * resultado diz o que aconteceu nas duas camadas, sem esconder falhas.
+ */
+export async function guardar(repo, dados, { env = process.env, fetchImpl = fetch, paraMem0 = true } = {}) {
   const { nota, erro } = normalizar(dados);
   if (erro) return { ok: false, erro };
   const existentes = await repo.ia.memoria.listar({ projeto: nota.projeto, limite: 500 });
   const igual = existentes.find((n) => n.titulo === nota.titulo && n.texto === nota.texto);
-  if (igual) return { ok: true, criada: false, nota: igual, resumo: `já estava guardada (#${igual.id})` };
+  const cfg = mem0.config(env);
+  let remoto = { configurada: mem0.configurada(cfg), ok: false, motivo: null };
+  if (igual) {
+    remoto.motivo = remoto.configurada ? 'a nota já existia; não voltei a enviá-la' : 'falta MEM0_API_KEY';
+    return { ok: true, criada: false, nota: igual, resumo: `já estava guardada (#${igual.id})`, mem0: remoto };
+  }
   const criada = await repo.ia.memoria.criar(nota);
-  return { ok: true, criada: true, nota: criada, resumo: `guardada: «${nota.titulo}»` };
+  if (paraMem0 && remoto.configurada) {
+    const envio = await mem0.adicionar(cfg, {
+      texto: `${nota.titulo}\n\n${nota.texto}`,
+      titulo: nota.titulo,
+      metadados: { fonte: nota.fonte, projeto: nota.projeto, etiquetas: nota.etiquetas, notaLocal: criada.id },
+      fetchImpl,
+    });
+    remoto = { configurada: true, ok: envio.ok, id: envio.id || null, motivo: envio.motivo || null, ms: envio.ms };
+  } else if (!remoto.configurada) {
+    remoto.motivo = 'falta MEM0_API_KEY — a nota ficou só na memória local';
+  }
+  return { ok: true, criada: true, nota: criada, resumo: `guardada: «${nota.titulo}»`, mem0: remoto };
 }
 
-/** Procura notas. `modo` diz como se procurou — lexical, não semântico. */
-export async function procurar(repo, { consulta, projeto = null, limite = 8 } = {}) {
+/**
+ * Procura notas nas duas camadas. `modo` diz exactamente como se procurou:
+ * `'lexical'` (só palavras), `'mem0+lexical'` (semântica em cima da lexical) ou
+ * `'recente'` (sem consulta). Os achados trazem `origem: 'local' | 'mem0'`.
+ */
+export async function procurar(repo, { consulta, projeto = null, limite = 8, env = process.env, fetchImpl = fetch } = {}) {
   const notas = await repo.ia.memoria.listar({ projeto, limite: 500 });
   const q = String(consulta || '').trim();
-  if (!q) return { ok: true, modo: 'recente', achados: notas.slice(0, limite) };
+  const cfg = mem0.config(env);
+  const remoto = { configurada: mem0.configurada(cfg), ligada: false, motivo: null, achados: [], ms: null };
+
+  if (!q) {
+    return { ok: true, modo: 'recente', achados: notas.slice(0, limite).map((n) => ({ ...n, origem: 'local' })), mem0: remoto };
+  }
+
   const pontuadas = notas
     .map((n) => ({ nota: n, pontos: pontuar(n, q) }))
     .filter((x) => x.pontos > 0)
@@ -101,7 +143,33 @@ export async function procurar(repo, { consulta, projeto = null, limite = 8 } = 
   for (const { nota } of pontuadas) {
     try { await repo.ia.memoria.usar(nota.id); } catch { /* contar usos não pode falhar a procura */ }
   }
-  return { ok: true, modo: 'lexical', consulta: q, achados: pontuadas.map((x) => ({ ...x.nota, pontos: x.pontos })) };
+  const locais = pontuadas.map((x) => ({ ...x.nota, pontos: x.pontos, origem: 'local' }));
+
+  if (remoto.configurada) {
+    const r = await mem0.pesquisar(cfg, { consulta: q, limite, fetchImpl });
+    remoto.ligada = r.ok;
+    remoto.motivo = r.ok ? null : r.motivo;
+    remoto.ms = r.ms ?? null;
+    remoto.achados = r.ok ? r.achados.length : 0;
+    if (r.ok) {
+      /* juntar sem repetir: uma nota que veio nas duas camadas fica uma vez,
+         com a origem semântica (foi essa que a encontrou por sentido). */
+      const chave = (n) => String(n.texto || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 160);
+      const vistos = new Set(r.achados.map(chave));
+      const juntos = [...r.achados, ...locais.filter((n) => !vistos.has(chave(n)))];
+      return {
+        ok: true,
+        modo: 'mem0+lexical',
+        consulta: q,
+        achados: juntos.slice(0, Math.max(limite, r.achados.length)),
+        mem0: remoto,
+      };
+    }
+  } else {
+    remoto.motivo = 'falta MEM0_API_KEY — procurei só por palavras';
+  }
+
+  return { ok: true, modo: 'lexical', consulta: q, achados: locais, mem0: remoto };
 }
 
 /** O «memory-audit»: o que está duplicado, vazio, sem fonte ou parado. */
@@ -178,16 +246,94 @@ export async function aprender(repo, { texto, projeto = 'orbita', fonte = 'docum
 }
 
 /** O que a memória tem, para o Control Center (e para o `/ia/memoria`). */
-export async function estado(repo) {
+
+/* O ping ao Mem0 não pode acontecer a cada desenho do painel: 60 s de validade
+   por chave. Um painel que abre depressa é parte de «funcionar». */
+let cacheSaude = { chave: null, quando: 0, valor: null };
+const TTL_SAUDE = 60000;
+
+async function saudeComCache(cfg, fetchImpl) {
+  const agora = Date.now();
+  if (cacheSaude.chave === cfg.chave && agora - cacheSaude.quando < TTL_SAUDE && cacheSaude.valor) {
+    return { ...cacheSaude.valor, cache: true };
+  }
+  const valor = await mem0.saude(cfg, { fetchImpl });
+  cacheSaude = { chave: cfg.chave, quando: agora, valor };
+  return valor;
+}
+
+export async function estado(repo, { env = process.env, fetchImpl = fetch } = {}) {
   const notas = await repo.ia.memoria.listar({ limite: 500 });
   const etiquetas = new Map();
   for (const n of notas) for (const e of n.etiquetas || []) etiquetas.set(e, (etiquetas.get(e) || 0) + 1);
+  const cfg = mem0.config(env);
+  const saude = await saudeComCache(cfg, fetchImpl);
   return {
     total: notas.length,
     recentes: notas.slice(0, 8),
     etiquetas: [...etiquetas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([e, n]) => ({ etiqueta: e, notas: n })),
     usos: notas.reduce((s, n) => s + Number(n.usos || 0), 0),
-    modo: 'lexical',
-    origem: 'plugins do Graft (Apache-2.0) — recall, memoryze, learn, memory-audit, graft-init',
+    modo: saude.ligada ? 'mem0+lexical' : 'lexical',
+    camadas: { local: 'lexical', mem0: saude.ligada ? 'semântica' : null },
+    mem0: saude,
+    origem: 'plugins do Graft (Apache-2.0) — recall, memoryze, learn, memory-audit, graft-init · Mem0 (memória semântica)',
+  };
+}
+
+/**
+ * Importa um lote para o Mem0. Aceita o mesmo formato do OpenClaw
+ * (`[{ memory, metadata }]`) ou, com `origem:'locais'`, tudo o que já está na
+ * memória local — é o botão «enviar as notas para o Mem0».
+ * Sem `confirmar: true` devolve só o plano: nada sai daqui.
+ */
+export async function importar(repo, { itens = null, origem = null, confirmar = false, env = process.env, fetchImpl = fetch } = {}) {
+  const cfg = mem0.config(env);
+  if (!mem0.configurada(cfg)) {
+    return { ok: false, erro: 'falta MEM0_API_KEY no ambiente — sem chave não há para onde importar', mem0: { configurada: false } };
+  }
+
+  let lista = Array.isArray(itens) ? itens : [];
+  if (!lista.length && origem === 'locais') {
+    const notas = await repo.ia.memoria.listar({ limite: 500 });
+    lista = notas.map((n) => ({
+      memory: `${n.titulo}\n\n${n.texto}`,
+      metadata: { fonte: n.fonte, projeto: n.projeto, etiquetas: n.etiquetas, notaLocal: n.id },
+    }));
+  }
+
+  const limpos = lista
+    .map((i) => ({
+      memory: String((i && (i.memory ?? i.text ?? i.content)) || '').trim(),
+      metadata: (i && i.metadata) || {},
+    }))
+    .filter((i) => i.memory.length >= 10);
+
+  if (!limpos.length) return { ok: false, erro: 'não há itens com texto suficiente para importar', mem0: { configurada: true } };
+
+  if (!confirmar) {
+    return {
+      ok: true,
+      confirmado: false,
+      quantos: limpos.length,
+      plano: limpos.slice(0, 10).map((i) => ({
+        fonte: i.metadata.fonte || '(sem fonte)',
+        titulo: String(i.memory.split('\n')[0]).replace(/^#+\s*/, '').slice(0, 90),
+        caracteres: i.memory.length,
+      })),
+      nota: 'nada foi enviado: chama outra vez com confirmar=true depois de veres o plano',
+      mem0: { configurada: true },
+    };
+  }
+
+  const r = await mem0.importar(cfg, limpos, { fetchImpl });
+  return {
+    ok: r.ok,
+    confirmado: true,
+    total: r.total,
+    importados: r.importados,
+    falhados: r.falhados,
+    erros: r.erros,
+    mem0: { configurada: true },
+    nota: r.importados ? `${r.importados} memória(s) semântica(s) guardadas no Mem0` : 'o Mem0 não aceitou nenhum item — vê `erros`',
   };
 }

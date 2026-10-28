@@ -1,3 +1,41 @@
+## 1.49.0 — 28 out 2026 · Mem0: a memória passa a procurar por sentido
+
+A memória da Órbita era uma camada só, lexical. Agora são duas — e cada uma diz
+quem é:
+
+- **local** (`orbita_ai_memoria`) — sempre disponível, sem rede, procura por
+  palavras. É a rede de segurança.
+- **Mem0** — procura semântica, quando `MEM0_API_KEY` existe. Cada achado traz
+  `origem: 'mem0'` ou `'origem': 'local'`; a nota que vier nas duas aparece uma
+  vez. O modo da resposta (`mem0+lexical` ou `lexical`) nunca inventa: se o Mem0
+  falhar, o motivo vai no corpo (401, 429, tempo esgotado, `ECONNRESET`).
+
+A escrita é local primeiro e remota depois: se o Mem0 recusar, **a nota fica
+guardada** e a resposta di-lo (`mem0.ok: false`). O Orchestrator passa a receber
+no prompt se a memória que consultou foi semântica ou lexical.
+
+Rotas novas ou alteradas:
+
+| rota | o que faz |
+|---|---|
+| `GET /ia/memoria` | estado das duas camadas, chave mascarada (`m0-F…T149`) |
+| `POST /ia/memoria` | grava local e empurra para o Mem0; devolve as duas respostas |
+| `POST /ia/memoria/procurar` | `modo` diz qual respondeu |
+| `POST /ia/memoria/importar` | lote para o Mem0, com plano e `confirmar` |
+| `DELETE /ia/memoria/mem0:<id>` | apaga a memória semântica |
+
+Control Center: o cartão da memória mostra `Ligada`/`Desligada` com a razão real,
+e há um botão «Enviar as notas para o Mem0». A pesquisa passa a marcar cada
+resultado como `mem0` ou `local`.
+
+Fora do código: `mem0-import/` traz três utilitários para correr no host do
+OpenClaw — construir o lote a partir do workspace (`SOUL/IDENTITY/USER/MEMORY.md`
+e os diários dos últimos 30 dias), verificar a chave e enviar o lote para a
+Órbita. O runbook está em `docs/IA.md` §16.
+
+**Testes:** 632 (11 novos: sem chave, chave mascarada, 401/429/rede, junção sem
+repetição, escrita que sobrevive ao Mem0 em baixo, plano vs `confirmar`, rotas).
+
 ## 1.48.2 — 28 out 2026 · a imagem do Cine descarrega-se
 
 Até aqui a imagem só existia dentro do JSON do projecto, em base64: não se podia
