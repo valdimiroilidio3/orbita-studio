@@ -158,6 +158,12 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
   const descobertos = descobertosSalvos(cfg);
 
   const jaProvado = (id, modelo) => !!(testes[id]?.provados?.[modelo] && testes[id].provados[modelo].ok !== false);
+  /* 1.44.2 · um fornecedor que acabou de dizer «limite atingido» não é tentado
+     outra vez na chamada seguinte: em produção, três chamadas seguidas foram
+     quatro tentativas cada ao OpenCode, todas com o mesmo 429. O bloqueio fica
+     gravado (30 min para limite; 6 h para chave/crédito) e expira sozinho. */
+  const agoraMs = Date.parse(agora()) || Date.now();
+  const bloqueados = [];
   const candidatos = [];
   for (const id of Object.keys(FORNECEDORES)) {
     if (so && id !== so) continue;
@@ -165,6 +171,11 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     if (!prov || prov.usavel === false || desligados.includes(id)) continue;
     const chave = valorDaChave(id);
     if (!chave && !prov.keyless) continue;                 // sem acesso, não se tenta
+    const ate = Date.parse(testes[id]?.bloqueadoAte || '') || 0;
+    if (ate > agoraMs) {
+      bloqueados.push({ fornec: id, motivo: testes[id]?.bloqueadoPor || 'bloqueado por falha recente', ate: testes[id].bloqueadoAte });
+      continue;
+    }
     const declarados = modelosDe(id)
       .filter((m) => m.gratuito !== false)
       .map((m) => m.modelo)
@@ -222,6 +233,10 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     resultados.push(...feitos);
     for (const r of feitos) {
       if (!r.doFornecedor) continue;
+      const ttl = r.codigo === 'limite' ? 30 * 60 * 1000 : 6 * 60 * 60 * 1000;
+      testes[r.fornec] = testes[r.fornec] || {};
+      testes[r.fornec].bloqueadoAte = new Date(agoraMs + ttl).toISOString();
+      testes[r.fornec].bloqueadoPor = String(r.erro || '').slice(0, 200);
       saltados.push({ fornec: r.fornec, motivo: r.erro, restantes: alvos.filter((a) => a.fornec === r.fornec && !resultados.some((x) => x.modelo === a.modelo)).length });
       for (let k = alvos.length - 1; k > i + paralelo - 1; k -= 1) {
         if (alvos[k].fornec === r.fornec) alvos.splice(k, 1);
@@ -234,7 +249,7 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     testes[r.fornec] = testes[r.fornec] || {};
     testes[r.fornec].provados = { ...(testes[r.fornec].provados || {}), [r.modelo]: { ok: true, ms: r.ms, quando: agora() } };
   }
-  if (bons.length) {
+  if (bons.length || saltados.length) {
     try { await repo.ia.config.gravar('testes', testes); } catch { /* sem base, a prova existe mas não persiste */ }
     cacheConfig = null;
   }
@@ -250,7 +265,10 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     falhados: resultados.length - bons.length,
     porProvarRestantes: Math.max(0, candidatos.length - resultados.length),
     /* fornecedores que pararam o lote por um motivo que não é do modelo */
-    saltados: saltados.filter((x, i, arr) => arr.findIndex((y) => y.fornec === x.fornec) === i),
+    saltados: [
+      ...bloqueados,
+      ...saltados.filter((x, i, arr) => arr.findIndex((y) => y.fornec === x.fornec) === i),
+    ],
     resultados,
   };
 };

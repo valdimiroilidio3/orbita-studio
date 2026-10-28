@@ -1,3 +1,17 @@
+## 1.44.2 — 28 out 2026 · um fornecedor sem quota não é tentado outra vez
+
+A prova em produção do 1.44.1 correu três vezes e provou mais quatro modelos reais
+(`openai/gpt-5.4-nano` 4,6 s, `gpt-6.1-terra` 3,3 s, `gpt-6.1-sol` 4,6 s, `gpt-5.3-codex` 3,7 s).
+Mas as três chamadas começaram com **quatro tentativas ao OpenCode a bater no mesmo 429**:
+o curto-circuito parava o lote, não a chamada seguinte.
+
+- O bloco fica **gravado** por fornecedor (`cfg.testes[fornec].bloqueadoAte`): 30 min para
+  `limite`, 6 h para `chave`/`credito`/`semchave`, e expira sozinho.
+- A chamada seguinte salta-o de imediato e diz porquê em `saltados` (com a hora do fim).
+- Efeito prático: o botão «Provar os por provar» gasta as 12 tentativas em quem pode responder.
+
+**Testes:** 551 (1 novo: bloqueio aplicado, horário certo, e expiração aos 40 min).
+
 ## 1.44.1 — 28 out 2026 · a prova aprende onde não vale a pena insistir
 
 A primeira prova em produção (1.44.0, `GET /ia/provar-modelos?limite=12`) deu 2 provados
