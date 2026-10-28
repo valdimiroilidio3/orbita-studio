@@ -1,3 +1,21 @@
+## 1.47.1 — 28 out 2026 · a câmara ao vivo no ecrã de papel (e o site já não se proíbe de a usar)
+
+A 1.47.0 tinha o ecrã, mas no computador «Abrir câmara» abria uma janela de
+ficheiros — `capture="environment"` só faz o que promete no telemóvel. Duas
+coisas, então:
+
+- **câmara de verdade** (`getUserMedia`): pré-visualização no ecrã, botão que
+  dispara, e o fluxo é desligado no disparo, ao fechar e ao sair da página (senão
+  ficava a luz acesa). Se o browser recusar, diz porquê em palavras — «a câmara
+  está bloqueada: autoriza-a no cadeado do endereço» — e manda usar o ficheiro.
+- **o `vercel.json` proibia a câmara ao próprio site**: `Permissions-Policy:
+  camera=()` em todas as rotas. Passou a `camera=(self)`. Isto estava lá desde o
+  lançamento e teria bloqueado a câmara em produção sem ninguém perceber porquê.
+  Há agora um teste que lê o `vercel.json` e falha se voltar a `camera=()`.
+
+**Testes:** 585 (3 novos: sem acesso volta ao ficheiro, fluxo entra no `<video>` e
+o disparo fecha a câmara, e a política do site não se pode proibir a si mesma).
+
 ## 1.47.0 — 28 out 2026 · o ecrã de papel, e os modelos que não conversam deixam de gastar tentativas
 
 Duas coisas que faltavam, e um erro que estava a comer o tempo das provas.

@@ -68,6 +68,89 @@ export function encolherFoto(dataUrl, { maxLado = MAX_LADO, qualidade = 0.85 } =
   });
 }
 
+/* ---------- a câmara ao vivo ----------
+   1.47.0 · no telemóvel, `capture="environment"` abre a app da câmara e resolve.
+   No computador não resolve nada: o input abre uma janela de ficheiros. Por isso
+   há também a câmara de verdade (`getUserMedia`), com pré-visualização e um
+   botão que dispara. Se o browser não deixar (permissão, sem câmara, contexto
+   inseguro), a vista volta ao ficheiro — e diz que voltou, em vez de ficar morta.
+
+   Duas armadilhas que isto evita:
+     · repintar a página destrói o `<video>` e o fluxo fica aceso na barra do
+       browser — por isso se guarda o fluxo aqui e se desliga ao sair;
+     · um `getUserMedia` pendente nunca pode deixar a vista em «abrir câmara…». */
+
+let fluxo = null;
+
+const mediaDe = () => (typeof navigator !== 'undefined' && navigator.mediaDevices
+  ? navigator.mediaDevices
+  : null);
+
+export function cameraLigada() { return !!fluxo; }
+
+export function fecharCamera() {
+  try { fluxo?.getTracks?.().forEach((t) => t.stop()); } catch { /* já estava parada */ }
+  fluxo = null;
+}
+
+/** Abre a câmara. Devolve true se conseguiu; em caso de falha, a razão fica dita. */
+export async function abrirCamera(api) {
+  const media = mediaDe();
+  const explicar = (msg) => {
+    api.S.papelCamera = false;
+    api.S.papelCameraErro = msg;
+    api.S.papelFalha = `${msg} — usa «Escolher ficheiro», que funciona sempre.`;
+    api.paint?.();
+    return false;
+  };
+  if (!media?.getUserMedia) {
+    return explicar('este browser não dá acesso à câmara daqui (precisa de https ou de um browser recente)');
+  }
+  try {
+    fluxo = await media.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false });
+  } catch (e) {
+    const nome = e?.name || '';
+    return explicar(nome === 'NotAllowedError'
+      ? 'a câmara está bloqueada: autoriza-a no cadeado do endereço'
+      : nome === 'NotFoundError'
+        ? 'não encontrei nenhuma câmara neste aparelho'
+        : `a câmara não abriu (${nome || 'motivo desconhecido'})`);
+  }
+  api.S.papelCamera = true;
+  api.S.papelCameraErro = null;
+  api.S.papelFalha = null;
+  api.paint?.();
+  /* depois do repaint é que o <video> existe; o fluxo entra nele aqui */
+  const video = typeof document !== 'undefined' ? document.getElementById('papelVideo') : null;
+  if (video) {
+    video.srcObject = fluxo;
+    try { await video.play?.(); } catch { /* o autoplay pode esperar por um toque */ }
+  }
+  return true;
+}
+
+/** Dispara: a imagem do vídeo vira JPEG e segue para o servidor. */
+export async function dispararFoto(api, { maxLado = MAX_LADO, qualidade = 0.9 } = {}) {
+  const video = typeof document !== 'undefined' ? document.getElementById('papelVideo') : null;
+  if (!video || !video.videoWidth) { api.toast?.('a câmara ainda não está pronta', true); return; }
+  const maior = Math.max(video.videoWidth, video.videoHeight);
+  const escala = maior > maxLado ? maxLado / maior : 1;
+  const largura = Math.round(video.videoWidth * escala);
+  const altura = Math.round(video.videoHeight * escala);
+  let base64 = null;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = largura; canvas.height = altura;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, largura, altura);
+    base64 = canvas.toDataURL('image/jpeg', qualidade).replace(/^data:[^;]+;base64,/, '');
+  } catch { base64 = null; }
+  fecharCamera();
+  api.S.papelCamera = false;
+  if (!base64) { api.S.papelFalha = 'não consegui apanhar a imagem da câmara — tenta outra vez ou escolhe um ficheiro'; api.paint?.(); return; }
+  await digitalizarFoto(api, { base64, mime: 'image/jpeg' });
+}
+
 /* ---------- as acções do servidor ---------- */
 
 export async function carregarPapel(api) {
@@ -146,6 +229,8 @@ export async function guardarLead(api) {
 }
 
 export function limparPapel(api) {
+  fecharCamera();
+  api.S.papelCamera = false;
   api.S.papelResultado = null;
   api.S.papelProposta = null;
   api.S.papelFalha = null;
@@ -230,10 +315,18 @@ export function vistaPapel(S, { esc = String } = {}) {
       <h3 style="margin-top:0">${ocupado ? 'A ler o documento…' : 'Tirar fotografia ou escolher ficheiro'}</h3>
       <p class="ia-sub" style="margin-top:0">Fotografa o papel de frente, com luz, sem sombras por cima do texto. Aceito imagem (PNG, JPEG, WebP, TIFF) e PDF até 6 MB.</p>
       <input type="file" id="papelFoto" accept="image/*,application/pdf" capture="environment" hidden>
+      <div id="papelCam"${S.papelCamera ? '' : ' hidden'} style="margin-top:var(--s3)">
+        <video id="papelVideo" autoplay playsinline muted style="width:100%;max-width:520px;border-radius:12px;background:#000"></video>
+        <div class="acts" style="margin-top:var(--s3)">
+          <button class="btn primary" data-act="papel-disparar">Tirar fotografia</button>
+          <button class="btn ghost" data-act="papel-fechar">Fechar câmara</button>
+        </div>
+      </div>
       <div class="acts" style="margin-top:var(--s3)">
-        <button class="btn primary" data-act="papel-escolher"${ocupado ? ' disabled' : ''}>${ocupado ? 'A ler…' : 'Abrir câmara'}</button>
+        <button class="btn primary" data-act="papel-camera"${ocupado || S.papelCamera ? ' disabled' : ''}>${S.papelCamera ? 'Câmara aberta' : ocupado ? 'A ler…' : 'Abrir câmara'}</button>
         <label class="btn ghost" for="papelFoto" style="cursor:pointer">Escolher ficheiro</label>
       </div>
+      <p class="hint" style="margin-top:var(--s2)">No telemóvel, «Escolher ficheiro» abre logo a câmara de trás. No computador, a câmara aparece aqui em cima.</p>
       ${falha}
     </div>
     ${resultado}
@@ -249,6 +342,14 @@ export async function accaoPapel(nome, el, api) {
     if (input) input.click();
     return true;
   }
+  if (nome === 'papel-camera') { await abrirCamera(api); return true; }
+  if (nome === 'papel-disparar') { await dispararFoto(api); return true; }
+  if (nome === 'papel-fechar') {
+    fecharCamera();
+    api.S.papelCamera = false;
+    api.paint?.();
+    return true;
+  }
   if (nome === 'papel-propor') { await proporLead(api); return true; }
   if (nome === 'papel-guardar') { await guardarLead(api); return true; }
   if (nome === 'papel-limpar') { limparPapel(api); return true; }
@@ -256,8 +357,13 @@ export async function accaoPapel(nome, el, api) {
 }
 
 /** Liga o input da fotografia. Chamado uma vez, no arranque da mesa. */
-export function ligarPapel(api) {
+export function ligarPapel(api, { rota = null } = {}) {
   if (typeof document === 'undefined') return;
+  if (typeof window !== 'undefined') {
+    /* sair da página com a câmara ligada deixaria a luz acesa */
+    window.addEventListener('hashchange', () => { if (typeof rota === 'function' && rota() !== 'papel') fecharCamera(); });
+    window.addEventListener('pagehide', fecharCamera);
+  }
   document.addEventListener('change', async (e) => {
     if (!e.target || e.target.id !== 'papelFoto') return;
     const f = e.target.files && e.target.files[0];

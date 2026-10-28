@@ -138,3 +138,73 @@ test('papel: encolher a fotografia nunca perde a imagem (sem canvas, segue o ori
   assert.equal(r.encolhida, false);
   assert.equal(r.mime, 'image/png');
 });
+
+/* ---------- 1.47.0 · a câmara ao vivo (e o que acontece quando não há) ---------- */
+
+test('câmara: sem acesso, a vista diz que voltou ao ficheiro — não fica morta', async () => {
+  const api = apiFalsa({ respostas: { '/digitalizar/estado': ESTADO } });
+  await carregarPapel(api);
+  const antes = globalThis.navigator;
+  try {
+    /* um browser sem getUserMedia (http simples, browser antigo) */
+    Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true, writable: true });
+    const { abrirCamera } = await import('./src/papel.js');
+    const ok = await abrirCamera(api);
+    assert.equal(ok, false);
+    assert.equal(api.S.papelCamera, false);
+    assert.match(api.S.papelFalha, /Escolher ficheiro/, 'tem de dizer qual é o plano B');
+  } finally {
+    Object.defineProperty(globalThis, 'navigator', { value: antes, configurable: true, writable: true });
+  }
+});
+
+test('câmara: com permissão dada, o fluxo entra no <video> e o disparo volta a fechá-la', async () => {
+  const api = apiFalsa({ respostas: { '/digitalizar/estado': ESTADO, '/digitalizar': LEITURA } });
+  await carregarPapel(api);
+  const paradas = [];
+  const fluxoFalso = { getTracks: () => [{ stop: () => paradas.push('stop') }] };
+  const antes = globalThis.navigator;
+  const docAntes = globalThis.document;
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { mediaDevices: { getUserMedia: async () => fluxoFalso } }, configurable: true, writable: true,
+    });
+    /* um documento mínimo: um <video> e um canvas que devolve um JPEG falso */
+    const video = { id: 'papelVideo', srcObject: null, videoWidth: 2000, videoHeight: 1000, play: async () => {} };
+    Object.defineProperty(globalThis, 'document', {
+      value: {
+        getElementById: (id) => (id === 'papelVideo' ? video : null),
+        createElement: () => ({
+          width: 0, height: 0,
+          getContext: () => ({ drawImage() {} }),
+          toDataURL: () => 'data:image/jpeg;base64,Zm90bw==',
+        }),
+      }, configurable: true, writable: true,
+    });
+    const { abrirCamera, dispararFoto, cameraLigada } = await import('./src/papel.js');
+    const ok = await abrirCamera(api);
+    assert.equal(ok, true);
+    assert.equal(api.S.papelCamera, true);
+    assert.equal(video.srcObject, fluxoFalso, 'o fluxo não chegou ao <video>');
+    assert.equal(cameraLigada(), true);
+    await dispararFoto(api);
+    assert.equal(cameraLigada(), false, 'a câmara ficou acesa depois do disparo');
+    assert.deepEqual(paradas, ['stop']);
+    const enviado = api.chamadas.find((c) => c.caminho === '/digitalizar');
+    assert.equal(enviado.corpo.imagem, 'Zm90bw==');
+    assert.equal(enviado.corpo.mime, 'image/jpeg');
+    assert.equal(api.S.papelResultado.texto.includes('Clínica do Mondego'), true);
+  } finally {
+    Object.defineProperty(globalThis, 'navigator', { value: antes, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'document', { value: docAntes, configurable: true, writable: true });
+  }
+});
+
+test('câmara: o site publicado não pode proibir a câmara a si próprio', async () => {
+  const fs = await import('node:fs');
+  const v = JSON.parse(fs.readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
+  const politica = v.headers.flatMap((h) => h.headers).find((h) => h.key === 'Permissions-Policy');
+  assert.ok(politica, 'falta a Permissions-Policy no vercel.json');
+  assert.match(politica.value, /camera=\(self\)/, 'com «camera=()» a câmara ao vivo fica bloqueada no site');
+  assert.doesNotMatch(politica.value, /camera=\(\)/);
+});
