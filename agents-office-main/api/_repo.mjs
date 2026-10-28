@@ -67,7 +67,26 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         try { await pedir(`${t}?select=id&limit=1`, { head: false }); }
         catch (e) { if (e.semEsquema) faltam.push(t); else throw e; }
       }
-      return { ok: faltam.length === 0, base: base.replace(/^https?:\/\//, '').split('.')[0], faltam };
+      /* 1.41.0 · a saúde passou a olhar para as COLUNAS do envio, não só para as tabelas.
+         O `1.37.0` acrescentou `subject`, `to`, `from`, `provider` e as datas a
+         `orbita_messages`; sem elas o SELECT `*` responde 200 e o INSERT rebenta com 400
+         («column does not exist») — foi o que aconteceu em produção. Um `select` das
+         colunas certas prova o esquema inteiro sem escrever nada. */
+      let mensagensProntas = null, mensagensErro = null;
+      try {
+        await pedir('orbita_messages?select=id,subject,%22to%22,%22from%22,provider,enviada_at,recebida_at&limit=1');
+        mensagensProntas = true;
+      } catch (e) {
+        if (e.semEsquema) { mensagensProntas = false; mensagensErro = e.message; }
+        else throw e;
+      }
+      return {
+        ok: faltam.length === 0 && mensagensProntas !== false,
+        base: base.replace(/^https?:\/\//, '').split('.')[0],
+        faltam,
+        mensagensProntas,
+        ...(mensagensErro ? { mensagensErro } : {}),
+      };
     },
 
     leads: {
@@ -241,7 +260,7 @@ export function createMemRepo(seed = {}) {
   return {
     tipo: 'memoria',
     _dados: d,
-    async health() { return { ok: true, base: 'memoria', faltam: [] }; },
+    async health() { return { ok: true, base: 'memoria', faltam: [], mensagensProntas: true }; },
     leads: {
       async list(limit = 200) { return [...d.leads].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
       async byId(i) { return d.leads.find((l) => l.id === i) || null; },
