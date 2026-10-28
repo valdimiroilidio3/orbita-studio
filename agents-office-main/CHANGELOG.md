@@ -40,8 +40,11 @@ silenciosa, nem na tarefa nem na conversa.
 - Rotinas e tarefas agendadas guardam o par tal e qual (antes, um par virava
   `undefined` → sonnet).
 
-**Testes:** 679 (11 novos em `lista-modelos.test.mjs`, incluindo o do motor que
-fixa o par e o da falha honesta).
+A precedência vive numa função só (`parDoPasso`: tarefa > rotina > agente >
+escritório), para o painel, o servidor e o teste não divergirem.
+
+**Testes:** 680 (12 novos em `lista-modelos.test.mjs`, incluindo o do motor que
+fixa o par, o da falha honesta e o da precedência).
 
 ## 1.51.2 — 28 out 2026 · o aviso também espera pela resposta
 

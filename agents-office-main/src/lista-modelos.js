@@ -141,6 +141,16 @@ export function opcoesDoCatalogo(catalogo, estado = {}, provas = {}) {
   return { grupos, contagem: { casa: DA_CASA.length, orbita: opcoes.length, semChave, desligados, inuteis }, nomes };
 }
 
+/** O par que governa um passo, na mesma precedência da casa:
+    tarefa > rotina > agente > escritório. `null` = nenhum par escolhido (o CLI). */
+export function parDoPasso({ tarefa, rotina, agente, escritorio } = {}) {
+  for (const v of [tarefa, rotina, agente, escritorio]) {
+    const par = parDeModelo(v);
+    if (par) return par;
+  }
+  return null;
+}
+
 /** A frase que o painel mostra por baixo da lista — o que ficou de fora e porquê. */
 export function notaDaLista(contagem = {}) {
   const fora = [];

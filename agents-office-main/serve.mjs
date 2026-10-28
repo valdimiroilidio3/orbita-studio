@@ -80,7 +80,7 @@ import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT
 /* 1.52.0 · a lista de modelos do painel de tarefas cresceu: além de Sonnet · Opus ·
    Fable, aceita qualquer par fornecedor|modelo da IA da Órbita. É este ficheiro
    que tem de honrar a escolha — correr a tarefa nesse fornecedor, não em sonnet. */
-import { parDeModelo } from './src/lista-modelos.js';
+import { parDeModelo, parDoPasso } from './src/lista-modelos.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
 const cfg = loadConfig();
@@ -115,7 +115,7 @@ async function motorDaOrbita() {
   return motorOrbita;
 }
 /** O par escolhido, na mesma precedência da casa: tarefa > rotina > agente > escritório. */
-const parPara = (task, a) => parDeModelo(task?.model) || parDeModelo(task?.routineModel) || parDeModelo(a?.model) || parDeModelo(cfg.model) || null;
+const parPara = (task, a) => parDoPasso({ tarefa: task?.model, rotina: task?.routineModel, agente: a?.model, escritorio: cfg.model });
 
 /** Um passo de uma tarefa no fornecedor escolhido. `limite: 1` é de propósito: a
     escolha é uma escolha — se aquele fornecedor não responder, a tarefa diz o
