@@ -988,3 +988,37 @@ test('rota /ia/bloqueios: vê e limpa, com o motivo de cada um', async () => {
   const ver2 = await rotasIA(repo, { caminho: '/ia/bloqueios?ver=1', metodo: 'GET', env: {}, fetchImpl });
   assert.equal(ver2.corpo.bloqueios.length, 0);
 });
+
+/* ---------- 1.45.1 · um modelo que o fornecedor diz ser pago não é «gratuito» ---------- */
+test('descoberta por GET: os modelos que o LLM7 marca como pro não entram nos gratuitos', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.includes('api.llm7.io')) {
+      return json({ object: 'list', data: [
+        { id: 'Qwen2.5-Coder-32B', tier: 'free' },
+        { id: 'DeepSeek-V4.1-Flash', tier: 'pro', usage_based_only: true },
+        { id: 'Inkling-Small', tier: 'pro' },
+      ] });
+    }
+    return json({ data: [] });
+  };
+  /* a descoberta passa a poder ser pedida num GET — sem isto, um URL sozinho
+     não conseguia perguntar a lista real a ninguém */
+  const r = await rotasIA(repo, {
+    caminho: '/ia/modelos/descobrir?fornecedor=llm7&forcar=1', metodo: 'GET', env: {}, fetchImpl,
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.fornecedor, 'llm7');
+  assert.equal(r.corpo.guardados.llm7.quantos, 3, 'a descoberta tem de guardar a lista crua');
+  const g = await rotasIA(repo, { caminho: '/ia/gratuitos', metodo: 'GET', env: {}, fetchImpl });
+  const llm7 = (g.corpo.porProvar || []).filter((m) => m.fornec === 'llm7').map((m) => m.modelo);
+  assert.deepEqual(llm7, ['Qwen2.5-Coder-32B'],
+    `entraram modelos pagos na lista dos gratuitos: ${llm7.join(', ')}`);
+  /* e o `pago` fica registado como a API o declarou, não como um palpite */
+  const cfg = await repo.ia.config.ler();
+  const guardados = cfg.descobertos.llm7.modelos;
+  assert.equal(guardados.find((m) => m.id === 'DeepSeek-V4.1-Flash').pago, true);
+  assert.equal(guardados.find((m) => m.id === 'Qwen2.5-Coder-32B').pago, null);
+});

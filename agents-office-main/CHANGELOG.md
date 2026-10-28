@@ -1,3 +1,24 @@
+## 1.45.1 — 28 out 2026 · os modelos pagos do LLM7 saem da lista, a lista do OVH cresce, descobrir por URL
+
+Encontrado ao continuar a provar modelos em produção:
+
+- **O LLM7 estava a dar-nos 46 erros em 63 pedidos.** A descoberta guardava
+  **todos** os modelos do `/v1/models` — incluindo os que o próprio LLM7 marca
+  `tier: "pro"` e `usage_based_only: true` — e a lista dos «gratuitos por provar»
+  enchia-se de modelos que nunca poderiam responder sem conta paga («Model … is
+  currently unavailable», HTTP 400). Agora o `pago` também se lê de
+  `usage_based_only` e `tier: "pro"`, e esses modelos ficam de fora do caminho
+  gratuito. **Um preço declarado não serve para isto**: o OVH publica preços em
+  todos os modelos que serve de graça a pedidos anónimos.
+- **`Qwen3.5-9B` do OVH entra no catálogo** (janela 262 144, rápido, bom para
+  código e texto). Estava na lista real do `/v1/models` e não era nosso.
+- **`GET /ia/modelos/descobrir?fornecedor=&forcar=1`**: descobrir modelos também
+  por URL. Antes só um POST o conseguia — o que deixava a operação de fora de
+  qualquer sítio que só saiba abrir um endereço.
+
+**Testes:** 564 (1 novo: descoberta por GET, com um modelo `pro` que não pode
+entrar nos gratuitos).
+
 ## 1.45.0 — 28 out 2026 · bloqueios que não deviam existir, e a lista local a dizer a verdade
 
 Três erros encontrados ao continuar a provar modelos:

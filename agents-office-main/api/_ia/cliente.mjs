@@ -288,8 +288,17 @@ export async function listarModelosDetalhados({ fornec, prov, chave, timeoutMs =
       return {
         id,
         /* `paid_only` só existe onde o fornecedor o declara (Pollinations). Em
-           todos os outros `pago: null` = «não se sabe», e não se presume nada. */
-        pago: typeof m?.paid_only === 'boolean' ? m.paid_only : null,
+           todos os outros `pago: null` = «não se sabe», e não se presume nada.
+           1.45.1 · mas há fornecedores que dizem o mesmo com outras palavras:
+           o LLM7 marca os modelos que só existem com conta paga com
+           `tier: "pro"` e `usage_based_only: true`. Em produção (28 out 2026)
+           isso deu 46 erros em 63 pedidos — todos «Model ... is currently
+           unavailable» — e seis modelos pagos a ocupar a lista dos gratuitos.
+           Um preço declarado NÃO serve para isto: o OVH publica preços em
+           todos os modelos que serve de graça a pedidos anónimos. */
+        pago: typeof m?.paid_only === 'boolean'
+          ? m.paid_only
+          : (m?.usage_based_only === true || String(m?.tier || '').toLowerCase() === 'pro' ? true : null),
         ferramentas: typeof m?.tools === 'boolean' ? m.tools : null,
         raciocinio: typeof m?.reasoning === 'boolean' ? m.reasoning : null,
         janela: Number(m?.context_length) || null,

@@ -9,6 +9,7 @@
      GET    /ia/agentes                 — identidade, ferramentas e critérios
      GET    /ia/modelos?fornecedor=     — catálogo (e o que já foi descoberto)
      POST   /ia/modelos/descobrir       — lista real do fornecedor (gasta um pedido)
+     GET    /ia/modelos/descobrir?fornecedor=&forcar=1 — o mesmo, a partir de um URL
      POST   /ia/provar-modelos          — prova modelo a modelo (descobertos incluídos)
      GET    /ia/bloqueios?ver=1         — quem está bloqueado e porquê
      POST   /ia/bloqueios/limpar        — tira bloqueios antigos (com o motivo à vista)
@@ -255,8 +256,13 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     return { status: 200, corpo: { fornecedores, totalModelosCatalogo: MODELOS.length } };
   }
 
-  if (limpo === '/ia/modelos/descobrir' && m === 'POST') {
-    const pedido = corpoDe(corpo);
+  /* 1.45.1 · também por GET, com `?fornecedor=&forcar=1`. A descoberta é a
+     única forma de saber que modelos um fornecedor passou a ter, e até aqui só
+     se podia pedir com um POST — o que deixava a operação de fora de qualquer
+     sítio que só saiba abrir um URL (o painel de produção, um cron, o
+     `fetch` de um telemóvel). O custo é o mesmo, é um pedido ao fornecedor. */
+  if (limpo === '/ia/modelos/descobrir' && (m === 'POST' || m === 'GET')) {
+    const pedido = m === 'GET' ? Object.fromEntries(qs.entries()) : corpoDe(corpo);
     /* 1.43.0 · `fornecedor: 'todos'` pergunta a todos os que se podem listar
        (chave, chave pública ou keyless). É o botão «Descobrir modelos»: sem
        ele, o catálogo ficava nos 158 declarados à mão e o tier do Pollinations
@@ -272,7 +278,8 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       }
     }
     /* a força é explícita: `remoto` só se pedires (a cache de 6 h serve o resto) */
-    const feitos = await motor.descobrirSePreciso({ forcar: pedido.forcar === true, fornec: todos ? null : alvo });
+    const forcar = pedido.forcar === true || pedido.forcar === '1';
+    const feitos = await motor.descobrirSePreciso({ forcar, fornec: todos ? null : alvo });
     const cfg = await motor.config();
     const descobertos = cfg.descobertos || {};
     const quantos = Object.values(descobertos).reduce((n, x) => n + (Array.isArray(x?.modelos) ? x.modelos.length : 0), 0);
