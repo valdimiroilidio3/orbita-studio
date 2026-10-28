@@ -13,7 +13,7 @@
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, marcarFora, orcamento } from './router.mjs';
-import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
+import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, provadosActivos, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
   const mapa = {};
@@ -433,7 +433,12 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         /* 1.32.0 · os gratuitos medidos entram à frente do catálogo
            1.33.0 · e o catálogo passa a incluir o que a descoberta encontrou
            nos fornecedores sem custo (OpenCode Zen, Pollinations) */
-        provados: PROVADOS,
+        /* 1.44.9 · TODOS os provados, não só os três curados à mão. Em produção,
+           a cadeia começava por modelos `community/…` que nunca responderam,
+           enquanto 43 modelos com resposta registada ficavam de fora da
+           ordenação. Provar não servia de nada — o mesmo erro do «listar não é
+           funcionar», agora na pontuação. */
+        provados: provadosActivos({ chaves, desligados, cfg: cfgAgora }),
         catalogo: catalogoDaCadeia(cfgAgora),
         executar: (entrada) => chamar(entrada, mensagens, { ferramentas, maxTokens, temperatura, timeoutMs }),
         registar: async (evento) => {
@@ -489,7 +494,8 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
       const cfg = await config();
       return cadeia(tipo, {
         chaves, desligados: cfg.desligados || [], preferido: cfg.agentes?.[agente]?.modelo || null,
-        latencias: await latencias(), provados: PROVADOS,
+        latencias: await latencias(),
+        provados: provadosActivos({ chaves, desligados: cfg.desligados || [], cfg }),
         catalogo: catalogoDaCadeia(cfg),
       });
     },

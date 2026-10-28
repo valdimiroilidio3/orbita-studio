@@ -215,6 +215,10 @@ export function cadeia(tipo, {
     p += desejadas.filter((r) => temEtiqueta(m, r)).length * 4;
     p += (m.etiquetas || []).filter((r) => r === 'ferramentas').length * 6;   // quem tem mãos serve mais
     p -= precoDe(m) / 10;                                                     // barato primeiro
+    /* 1.44.9 · um modelo descoberto que nunca respondeu não é igual a um
+       declarado: é uma aposta. Não se proíbe — é assim que se descobrem
+       modelos novos — mas não passa à frente de quem já respondeu. */
+    if (m.descoberto && !medido) p -= 120;
     p += Math.min(6, (m.janela || 0) / 50000);                                // contexto ajuda
     const lat = latencias[`${m.fornecedor}\u0000${m.modelo}`];
     if (Number.isFinite(lat)) p -= Math.min(8, lat / 800);                    // o que já foi rápido, primeiro
