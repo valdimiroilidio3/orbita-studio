@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { remetente } from './api/_prontidao.mjs';   // 1.41.0: um nome só para o «from» do correio
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(ROOT, 'data');
@@ -117,8 +118,12 @@ export function apiTokenOk(req) {
 }
 
 export function integrationStatus() {
-  const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-  const hasResend = !!(process.env.RESEND_API_KEY && process.env.ORBITA_EMAIL_FROM);
+  /* 1.41.0 · os MESMOS nomes que o código usa. Antes, este retrato dizia «Resend
+     configurado» só com `ORBITA_EMAIL_FROM` — e o envio real lia
+     `ORBITA_FROM_EMAIL` e caía no `onboarding@resend.dev`. Um painel a mentir por
+     uma letra trocada é pior do que um painel vazio. */
+  const hasSupabase = !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY));
+  const hasResend = !!(process.env.RESEND_API_KEY && remetente());
   const hasInstagram = !!(process.env.META_ACCESS_TOKEN && process.env.META_IG_USER_ID && process.env.META_GRAPH_API_VERSION);
   const hasVercelDeployHook = isValidVercelDeployHook(process.env.VERCEL_DEPLOY_HOOK_URL);
   return {
@@ -528,9 +533,9 @@ export async function sendApprovedEmail(dataDir = DATA_DIR, input = {}) {
   if (suppressedEmails(dataDir).includes(to)) { const e = new Error('Destinatário está na lista de supressão; envio recusado.'); e.status = 409; throw e; }
   const purpose = str(input.purpose, 40);
   if (!['requested_follow_up', 'transactional'].includes(purpose)) { const e = new Error('Só são permitidos follow-up solicitado ou email transacional individual; não é permitido envio de campanhas em massa.'); e.status = 400; throw e; }
-  const from = str(process.env.ORBITA_EMAIL_FROM, 200);
+  const from = str(remetente(), 200);
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || !from) { const e = new Error('Resend não está configurado. Define RESEND_API_KEY e ORBITA_EMAIL_FROM com um remetente verificado.'); e.status = 503; throw e; }
+  if (!apiKey || !from) { const e = new Error('Resend não está configurado. Define RESEND_API_KEY e ORBITA_FROM_EMAIL (ou ORBITA_EMAIL_FROM) com um remetente verificado.'); e.status = 503; throw e; }
   const subject = str(input.subject, 180), textBody = str(input.text, 10000);
   if (!subject || !textBody) throw new Error('subject e text são obrigatórios.');
   const sent = await fetchJson('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ from, to: [to], subject, text: textBody }) }, 20000);

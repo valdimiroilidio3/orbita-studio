@@ -1,3 +1,54 @@
+## 1.41.0 — 28 out 2026 · lançar a sério: produção em dia, `/api` provado, SQL inteiro, chaves certas
+
+Pedido: «implementa 1+2+3+4». Os quatro itens eram *publicar*, *ter `/api` a responder*,
+*aplicar o SQL* e *ter as variáveis certas*. Fazer isto revelou três defeitos que só se vêem
+do lado de fora.
+
+**1 · A produção estava 11 versões atrás.** O `/api/health` dizia `1.29.0` (commit `3c00e5b`,
+PR #59) enquanto o `main` já ia na 1.40.0: os treze merges seguintes criaram **previews** e
+nenhum promoveu produção. O site público mostrava o rodapé «1.0.0» e o botão «afastar» antigo.
+Produção promovida a partir do `main` e confirmada no próprio `/api/health` → `versao: 1.40.0`.
+
+**2 · O `/api/health` rebentava sem base.** Usava `ia` no ramo de erro e só o declarava seis
+linhas abaixo: `ReferenceError: Cannot access 'ia' before initialization`. Em produção, sem
+chaves, isso é um **500 da Vercel** em vez de um 503 explicativo. Corrigido e preso por um teste
+que chama o handler com o ambiente vazio.
+
+**3 · Dois nomes para a mesma chave.** O painel dizia «Resend configurado» com
+`ORBITA_EMAIL_FROM`, e o envio real lia `ORBITA_FROM_EMAIL` — caía em `onboarding@resend.dev`.
+O mesmo com o Supabase, que o painel só reconhecia como `SUPABASE_SERVICE_ROLE_KEY`. Agora há
+uma função (`remetente()`) e um conjunto de nomes aceitos, os mesmos em todos os sítios.
+
+**4 · O SQL aplicava-se a meio.** O `/api/setup` corria só `orbita_ia.sql`, num único `query`
+sem transacção, e respondia «ok» mesmo com metade das tabelas em falta. Agora aplica
+`orbita_mesa.sql` → `orbita_ia.sql` → `orbita_1_37_0.sql`, **um ficheiro por transacção**, e diz
+quantas tabelas da mesa existem mesmo. E recusa aplicar `orbita_schema.sql` — o desenho da
+migração do SQLite, que cria `orbita_leads` com `company_name`/`lead_status` e, se corresse
+primeiro, deixava a mesa sem as colunas que usa (o `if not exists` seguinte era ignorado em
+silêncio).
+
+**5 · A prontidão, num sítio só.** `api/_prontidao.mjs` lista as variáveis por grupo, com os
+nomes alternativos que o código aceita e o que se perde SEM cada uma — nunca valores. Lê-se em
+três sítios que dizem o mesmo: `npm run prontidao` (terminal, sai com 1 se faltar algo crítico),
+`/api/health` (resumo) e `GET /sistema/prontidao` (completo, pela rota normal).
+
+**6 · A saúde passou a olhar para as colunas.** `faltam: []` só provava tabelas. O `1.37.0`
+acrescentou `subject`, `to`, `from`, `provider` e as datas a `orbita_messages`; sem elas o
+`SELECT *` responde 200 e o `INSERT` rebenta com 400 («column does not exist») — o defeito real
+de 27 de outubro. O `health` faz agora um `select` dessas colunas e devolve `mensagensProntas`.
+
+**Documentação:** `docs/LANCAMENTO.md` reescrito (dizia 1.14.0 e afirmava que a nuvem «não tem
+`/api/*`», o que já era falso), `.env.example` completo e comentado por grupo.
+
+**Testes:** 533/533 — 14 novos em `prontidao.test.mjs` (lista e alternativas, nenhum valor no
+retrato, token curto não conta, esquema pela ordem certa com rollback, `?so=`, rota de prontidão,
+`/api/health` sem base a responder 503, `/api/setup` sem token a responder 404, colunas do envio).
+
+**Limitação declarada:** a promoção a produção foi feita pela API do Vercel com `target=production`
+sobre o `main`; a integração Git continua a criar apenas previews para ramos `arena/*` — o
+lançamento é o merge, e a prova é o `/api/health`. As chaves em falta (pesquisa, correio,
+WhatsApp) só o dono as cria, e o painel diz quais.
+
 ## 1.40.0 — 28 out 2026 · a luz acende, a operação respira, o «afastar» aparece
 
 O dono pediu quatro coisas: «leds a acender realmente», «o campo de operações bem

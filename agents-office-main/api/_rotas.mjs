@@ -11,6 +11,7 @@
    nada na interface.
    =========================================================================== */
 import { VERSAO } from './_versao.mjs';
+import { remetente } from './_prontidao.mjs';   // 1.41.0: o «from» do correio, com um nome só
 
 
 const TIPOS_PROJETO = [
@@ -221,6 +222,15 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   const seg = caminhoLimpo.split('/').filter(Boolean);
   const qs = new URLSearchParams(String(caminho).split('?')[1] || '');
   const m = String(metodo || 'GET').toUpperCase();
+
+  /* ---- 1.41.0 · A PRONTIDÃO PARA LANÇAR ------------------------------------
+     O que falta à instalação para servir a sério, por NOME de variável (nunca por
+     valor). É a mesma lista que o `/api/health` resume e que o `npm run prontidao`
+     imprime: uma verdade, três sítios onde se lê. Só leitura. */
+  if (caminhoLimpo === '/sistema/prontidao' && m === 'GET') {
+    const { avaliarProntidao } = await import('./_prontidao.mjs');
+    return { status: 200, corpo: { ok: true, versao: VERSAO, ...avaliarProntidao(env) } };
+  }
 
   /* ---- 1.37.0 · as respostas dos clientes (o lado que faltava) -------------
      A mesa mandava e ficava à espera. Estes dois caminhos são os que os
@@ -873,7 +883,7 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
             method: 'POST',
             headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
             body: JSON.stringify({
-              from: limpo(env.ORBITA_FROM_EMAIL) || 'onboarding@resend.dev',
+              from: remetente(env) || 'onboarding@resend.dev',
               to: [para], subject: limpo(msg.subject) || 'Olá', text: corpoTexto,
             }),
           },
