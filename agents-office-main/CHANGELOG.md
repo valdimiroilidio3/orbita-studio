@@ -50,8 +50,12 @@ possível daqui foi GET — a API autentica por `POST` com `Authorization: Beare
 ambiente não consegue fazer sem rede de saída. O código já usa POST JSON com Bearer; falta uma
 resposta real para se poder dizer «funciona». **Não está declarada funcional.**
 
-**Testes:** 538 (534 + 4 novos: o padrão do Pollinations, o `listarModelos` do tier, a rota
-`/ia/diagnostico` com resposta e sem rede, e a cadeia por tipo). Suite 538/538 ·
+**8 · Com chave ou só anónimo, dito no estado.** `GET /ia/estado` ganhou `comChaveAgora`: o
+Pollinations é keyless *e* tem tier, e sem este campo o painel não distinguia os dois motores.
+
+**Testes:** 540 (534 + 6 novos: o padrão do Pollinations, o `listarModelos` do tier, a rota
+`/ia/diagnostico` com resposta e sem rede, a cadeia por tipo, os modelos `soComChave` fora da
+cadeia anónima e o estado com/sem chave). Suite 540/540 ·
 `scene.smoke.mjs` ✓ · `mesa.smoke.mjs` ✓ · `npm run build` ✓ (1553 KB) · `check.mjs` 94/95
 (a falha de sempre: WebGL falso no harness).
 

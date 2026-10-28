@@ -118,7 +118,12 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
           gratuito: !!p.gratuito, limites: p.limites, nota: p.nota || '',
           variavel,                                    // NOME da variável, não valor (null = sem chave por desenho)
           variaveis: p.chave,                          // o que aceita (para a interface dizer)
+          /* 1.42.0 · `semChave` = «também trabalha sem chave» (o Pollinations é
+             keyless e tem tier). `comChaveAgora` diz se a chave existe mesmo
+             neste ambiente — sem isto, o painel não distinguia o Pollinations
+             anónimo do Pollinations com chave, que são motores diferentes. */
           semChave: !!p.keyless || publica,
+          comChaveAgora: !!variavel || publica,
           publica,
           familia: p.familia || 'nucleo',
           tipo: p.tipo || 'chat',
