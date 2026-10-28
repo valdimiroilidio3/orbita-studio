@@ -1302,6 +1302,14 @@
   .ai-grat { line-height: 1.7; }
   .ai-g { white-space: nowrap; display: inline-block; margin-right: 6px; }
   .ai-g.dead { color: var(--faint); }
+  /* 1.37.0 · uma gratuita provada é um botão: clicar fixa-a no motor «gratis» */
+  button.ai-g {
+    font: inherit; font-size: 11px; line-height: 1.6; cursor: pointer;
+    background: transparent; color: var(--ink); border: 1px solid var(--hair);
+    border-radius: 999px; padding: 0 8px; margin-right: 6px;
+  }
+  button.ai-g:hover { border-color: var(--ink); }
+  button.ai-g.on { background: var(--ink); color: #fff; border-color: var(--ink); }
   .ai-g-sep { color: var(--faint); margin-right: 4px; }
   .ai-gf { margin-top: 4px; color: var(--faint); }
   .ai-foot { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--hairline); }

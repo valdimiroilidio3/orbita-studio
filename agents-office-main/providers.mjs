@@ -204,6 +204,12 @@ export function resolve(cfg = {}, dataDir = null) {
   const ai = cfg.ai || {};
   const saved = dataDir ? readJSON(path.join(dataDir, 'ai.json'), {}) : {};
   const wanted = process.env.AO_AI || saved.provider || ai.provider || 'auto';
+  /* 1.37.0 · o modelo fixado para o motor guardado (ex.: uma gratuita concreta)
+     entra como se estivesse na configuração — a escolha da barra tem de sobreviver
+     a um reinício, senão não é uma escolha. */
+  const cfgModelo = (saved.provider && saved.model)
+    ? { ...cfg, ai: { ...ai, models: { ...(ai.models || {}), [saved.provider]: saved.model } } }
+    : cfg;
 
   // todos os ids que interessam: os pedidos, os de fallback, os definidos à mão, e os presets
   const order = [];
@@ -214,7 +220,7 @@ export function resolve(cfg = {}, dataDir = null) {
   for (const id of IDS) push(id);
 
   const candidates = order.map(id => {
-    const d = define(id, cfg);
+    const d = define(id, cfgModelo);
     // um servidor local (Ollama/LM Studio) não tem chave: só uma sonda prova que está lá. Até lá
     // não conta como disponível — não se promete um motor que talvez não responda.
     const pending = d.kind === 'api' && d.noKey && d.style !== 'orbita';
@@ -292,8 +298,16 @@ async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, mo
       };
       const mensagens = [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }];
       const catalogo = catalogoDaCadeia({});
+      /* 1.37.0 · o dono pode fixar UM modelo gratuito (ex.: «llm7/codestral-latest»)
+         em vez de «auto»: assim o canto de IA da barra deixa de ser uma lista e
+         passa a ser uma escolha. Se o modelo falhar, o resto da cadeia continua a
+         valer — fixar é preferir, não é ficar sem motor. */
+      const fixado = String(d.model || '');
+      const preferido = fixado.includes('/')
+        ? { fornecedor: fixado.split('/')[0], modelo: fixado.split('/').slice(1).join('/') }
+        : null;
       const r = await falarComFallback('texto', {
-        chaves: mapa, provados: PROVADOS, catalogo, limite: 4,
+        chaves: mapa, provados: PROVADOS, catalogo, limite: 4, preferido,
         executar: async (entrada) => falar({
           fornec: entrada.fornec, prov: FORNECEDORES[entrada.fornec], chave: valor(entrada.fornec),
           modelo: entrada.modelo, mensagens, maxTokens,

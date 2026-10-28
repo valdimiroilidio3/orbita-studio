@@ -19,6 +19,13 @@ declara `tools: false` (responde texto; não mexe) e a cadeia é a mesma do
 fornecedor que respondeu no `modelId`. Quando há um motor com chave, esse fica à
 frente: o gratuito é o chão, não o teto.
 
+**Escolher um modelo concreto (1.37.0).** No canto de IA do escritório, cada
+gratuita **provada** é um botão: clicar faz `POST /api/ai/switch` com
+`{provider: 'gratis', model: 'llm7/codestral-latest'}`. O modelo fica em
+`data/ai.json` (`{provider, model}`) e é lido no arranque; a cadeia começa por ele
+e continua a cair para os outros se ele falhar. As gratuitas por provar aparecem,
+mas não são seleccionáveis — não se escolhe o que ainda não respondeu.
+
 Há três pares que **responderam de verdade** em produção a 27 out 2026, sem chave e
 sem cartão. Estão em `api/_ia/gratuitos.mjs`, com a data, o número de sucessos e a
 latência medidos em `/ia/uso`:

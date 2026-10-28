@@ -613,7 +613,12 @@ function viewLeads() {
 /* ---------------- o lead: aprovação, factos, histórico ---------------- */
 function currentMessage() {
   const order = { revisao: 0, rascunho: 1, ensaio: 2, aprovada: 3, enviada: 4, falhou: 5, bloqueada: 6, rejeitada: 7 };
-  return [...S.leadMessages].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))[0] || null;
+  /* 1.37.0 · as respostas que chegam (direction 'in') são conversa, não são o
+     rascunho a decidir: se entrassem aqui, a mesa mostrava «Sem mensagem ainda»
+     a um lead que já respondeu. */
+  return [...S.leadMessages]
+    .filter((m) => m.direction !== 'in' && m.status !== 'recebida')
+    .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))[0] || null;
 }
 
 function leadMessageCard(m) {
@@ -731,14 +736,18 @@ function leadFacts() {
 
 function leadHistory() {
   if (!S.leadMessages.length) return '';
-  const label = { rascunho: 'rascunho', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever' };
+  const label = { rascunho: 'rascunho', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever', recebida: 'respondeu' };
+  const respostas = S.leadMessages.filter(m => m.status === 'recebida' || m.direction === 'in').length;
   return `<div class="card">
-    <div class="sec-h"><h3>Histórico</h3><span class="count">${S.leadMessages.length} mensagem(ns)</span></div>
-    <table><tbody>${S.leadMessages.map(m => `<tr>
+    <div class="sec-h"><h3>Histórico</h3><span class="count">${S.leadMessages.length} mensagem(ns)${respostas ? ` · ${respostas} do cliente` : ''}</span></div>
+    <table><tbody>${S.leadMessages.map(m => {
+      const dentro = m.status === 'recebida' || m.direction === 'in';
+      return `<tr>
       <td style="color:var(--muted);white-space:nowrap">${esc(hhmm(m.created_at))} · ${esc(when(m.created_at))}</td>
-      <td>${esc(String(m.body).slice(0, 70))}${String(m.body).length > 70 ? '…' : ''}</td>
-      <td class="n"><span class="tag ${m.status === 'enviada' ? 'respondeu' : m.status === 'rejeitada' ? 'perdido' : ''}">${esc(label[m.status] || m.status)}</span></td>
-    </tr>`).join('')}</tbody></table>
+      <td>${dentro ? '<b>← </b>' : '<span style="color:var(--muted)">→ </span>'}${esc(String(m.body).slice(0, 70))}${String(m.body).length > 70 ? '…' : ''}</td>
+      <td class="n"><span class="tag ${dentro || m.status === 'enviada' ? 'respondeu' : m.status === 'rejeitada' ? 'perdido' : ''}">${esc(label[m.status] || m.status)}</span></td>
+    </tr>`;
+    }).join('')}</tbody></table>
   </div>`;
 }
 
@@ -1094,15 +1103,15 @@ function viewAgentes() {
 /* ---------------- Conversas ---------------- */
 function viewConversas() {
   const list = S.messages;
-  const label = { rascunho: 'por aprovar', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever' };
+  const label = { rascunho: 'por aprovar', ensaio: 'ensaio', aprovada: 'aprovada', enviada: 'enviada', rejeitada: 'rejeitada', bloqueada: 'bloqueada', falhou: 'falhou', revisao: 'a rever', recebida: 'responderam' };
   return `<div class="wrap">
     ${headHTML({
       title: 'Conversas',
-      sub: list.length ? `${list.length} mensagens · ${list.filter(m => m.status === 'rascunho').length} à espera do teu OK` : 'ainda não há nenhuma mensagem escrita',
+      sub: list.length ? `${list.length} mensagens · ${list.filter(m => m.status === 'rascunho').length} à espera do teu OK${list.filter(m => m.status === 'recebida').length ? ` · ${list.filter(m => m.status === 'recebida').length} resposta(s) de clientes` : ''}` : 'ainda não há nenhuma mensagem escrita',
       right: stopPill(),
     })}
     ${list.length ? `<div class="rows">${list.map(m => `<button class="row" data-act="ver-lead" data-id="${esc(m.lead_id)}">
-      <div><div class="nm">${esc(m.lead?.name || 'sem lead')}</div><div class="mt">${esc(String(m.body).slice(0, 80))}${String(m.body).length > 80 ? '…' : ''}</div></div>
+      <div><div class="nm">${esc(m.lead?.name || 'sem lead')}</div><div class="mt">${m.status === 'recebida' || m.direction === 'in' ? '<b>← </b>' : ''}${esc(String(m.body).slice(0, 80))}${String(m.body).length > 80 ? '…' : ''}</div></div>
       <div class="cell hide-m">${esc(m.channel === 'whatsapp' ? 'WhatsApp' : 'email')} · ${esc(when(m.created_at))}</div>
       <div class="cell"><span class="tag ${m.status === 'enviada' ? 'respondeu' : m.status === 'rejeitada' || m.status === 'bloqueada' ? 'perdido' : ''}">${esc(label[m.status] || m.status)}</span></div>
       <div class="cell">${m.lead?.score != null ? scoreBadge(m.lead.score) : ''}</div>

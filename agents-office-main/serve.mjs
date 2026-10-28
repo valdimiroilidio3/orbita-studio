@@ -60,6 +60,13 @@ import * as ferramentas from './api/_ferramentas.mjs'; // 1.30.0: a mesma camada
 import * as limites from './api/_limites.mjs';
 import * as artefactos from './api/_artefactos.mjs'; // 1.31.0: criar sites e digitalizar, também no local
 import * as digitalizar from './api/_digitalizar.mjs';
+/* 1.37.0 · a ponte da mesa. A mesa (dist/mesa.html) fala por `/api/rpc` com o
+   envelope {status, corpo}; na Vercel isso é `api/rpc.mjs` sobre a Supabase.
+   Aqui — no computador do dono e no preview — a mesma rota existe sobre um
+   ficheiro em `data/mesa.json`, para a mesa não cair em «modo local» só por não
+   haver nuvem. As chaves continuam no servidor; o que muda é onde ficam os dados. */
+import { responder as responderMesa } from './api/_rotas.mjs';
+import { createMemRepo } from './api/_repo.mjs';
 import * as ops from './src/ops/index.mjs';
 import { createForge } from './forge/index.mjs';      // 27 out 2026: a oficina de ferramentas dos agentes
 import { createBus } from './forge/bus.mjs';
@@ -86,7 +93,36 @@ function ensureBundle() {
 ensureBundle();
 const HTML = path.join(ROOT, 'dist', 'command-centre-v2.html'); // built by build.mjs; shipped so npm start works without a build
 const MESA = path.join(ROOT, 'dist', 'mesa.html'); // a mesa de trabalho: Hoje, leads, aprovação, conversas, saldo
-const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data'); // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
+const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_DIR) : path.join(ROOT, 'data');
+
+/* o armazém da mesa: um JSON só, lido uma vez, gravado quando muda alguma coisa.
+   Não é uma base de dados e não finge ser — é o suficiente para a mesa funcionar
+   nesta máquina e para o dono poder levar o ficheiro consigo. */
+let mesaRepo = null;
+function repoDaMesa() {
+  if (mesaRepo) return mesaRepo;
+  const ficheiro = path.join(DATA, 'mesa.json');
+  let seed = {};
+  try { seed = JSON.parse(fs.readFileSync(ficheiro, 'utf8')); } catch { seed = {}; }
+  mesaRepo = createMemRepo(seed);
+  mesaRepo._ficheiro = ficheiro;
+  return mesaRepo;
+}
+function gravarMesa() {
+  if (!mesaRepo) return;
+  try {
+    fs.mkdirSync(DATA, { recursive: true });
+    fs.writeFileSync(mesaRepo._ficheiro, JSON.stringify(mesaRepo._dados, null, 1));
+  } catch { /* se o disco não deixar, a mesa continua a funcionar em memória */ }
+}
+function lerCorpoBruto(req) {
+  return new Promise((resolve) => {
+    const partes = [];
+    req.on('data', (p) => partes.push(p));
+    req.on('end', () => resolve(Buffer.concat(partes).toString('utf8')));
+    req.on('error', () => resolve(''));
+  });
+} // 26 out 2026: os dados podem viver fora do repo (testes, alojamentos)
 
 // ---------- operação a sério (26 out 2026) ----------
 // SQLite: leads, mensagens, fila, eventos e consumo das APIs. Sem estado escondido em memória.
@@ -248,17 +284,24 @@ buildRunner();
 
 // Troca de motor a quente: só aceita um motor que exista e responda; guarda a escolha em
 // data/ai.json (o sítio que ganha ao office.config.json) e reconstrói o runner sem reiniciar.
-async function switchProvider(id) {
+async function switchProvider(id, modelo = null) {
   if (!ai.IDS.includes(id)) return { error: `não conheço o motor "${id}" — os que existem: ${ai.IDS.join(', ')}` };
-  const next = ai.resolve({ ...cfg, ai: { ...(cfg.ai || {}), provider: id } }, DATA);
+  /* 1.37.0 · escolher UM modelo (as gratuitas fixam-se assim: «llm7/codestral-latest»).
+     Só se aceita a forma fornecedor/modelo — não se inventa um modelo. */
+  const modeloLimpo = modelo ? String(modelo).trim() : null;
+  if (modeloLimpo && !modeloLimpo.includes('/')) return { error: `o modelo tem de ser «fornecedor/modelo» (recebi «${modeloLimpo}»)` };
+  const next = ai.resolve(modeloLimpo
+    ? { ...cfg, ai: { ...(cfg.ai || {}), provider: id, models: { ...(cfg.ai?.models || {}), [id]: modeloLimpo } } }
+    : { ...cfg, ai: { ...(cfg.ai || {}), provider: id } }, DATA);
   await ai.probe(next, 900);
   const target = next.candidates.find(c => c.id === id);
   if (!target) return { error: `não conheço o motor "${id}"`, known: ai.IDS };
   if (!target.available) return { error: target.reason, refused: true, provider: id };
   AI = next; buildRunner();
+  if (modeloLimpo) cfg = { ...cfg, ai: { ...(cfg.ai || {}), models: { ...(cfg.ai?.models || {}), [id]: modeloLimpo } } };
   try {
     fs.mkdirSync(DATA, { recursive: true });
-    fs.writeFileSync(path.join(DATA, 'ai.json'), JSON.stringify({ provider: id, at: new Date().toISOString() }, null, 2));
+    fs.writeFileSync(path.join(DATA, 'ai.json'), JSON.stringify({ provider: id, model: modeloLimpo || null, at: new Date().toISOString() }, null, 2));
   } catch (e) { return { warning: 'motor trocado, mas não consegui gravar data/ai.json: ' + e.message, active: describeAi() }; }
   console.log(`  ia: motor trocado para ${target.label} (${id})`);
   return { ok: true, active: describeAi() };
@@ -767,6 +810,34 @@ const server = http.createServer(async (req, res) => {
     // 2) autenticação: quem está do outro lado. Uma pessoa (sessão com papel), uma máquina
     //    (token da instalação, vale como dono) ou o modo local — que só existe quando não há
     //    contas nem token, e que o arranque anuncia em voz alta.
+    /* ---- 1.37.0 · /api/rpc: a mesa, com o contrato do `api/rpc.mjs` ---- */
+    if (url.pathname === '/api/rpc') {
+      const a = authenticate(req, { db: OPS?.db });
+      if (!a.ok) return json(res, 401, { ok: false, ...a, entrar: '/app' });
+      const csrf = csrfOk(req);
+      if (!csrf.ok) return json(res, 403, { ok: false, error: csrf.error });
+      let pedido = {};
+      if (req.method === 'POST') {
+        const bruto = await lerCorpoBruto(req);
+        try { pedido = bruto ? JSON.parse(bruto) : {}; } catch { return json(res, 400, { error: 'corpo que não é JSON' }); }
+      }
+      const caminho = String(pedido.caminho || url.searchParams.get('caminho') || '');
+      const metodo = String(pedido.metodo || (req.method === 'POST' ? 'GET' : req.method)).toUpperCase();
+      if (!caminho) return json(res, 400, { error: 'falta o caminho' });
+      /* escrita só por POST: um GET nunca muda nada (a regra do api/rpc.mjs) */
+      if (req.method === 'GET' && metodo !== 'GET') return json(res, 405, { error: 'escrita exige POST' });
+      const repo = repoDaMesa();
+      const antes = JSON.stringify(repo._dados).length;
+      try {
+        const r = await responderMesa(repo, { caminho, metodo, corpo: pedido.corpo ?? null, env: process.env, fetchImpl: fetch, headers: req.headers || {} });
+        if (metodo !== 'GET') gravarMesa();
+        return json(res, 200, { status: r.status, corpo: r.corpo });
+      } catch (e) {
+        if (metodo !== 'GET') gravarMesa();
+        return json(res, 200, { status: e.status || 500, corpo: { error: e.message || 'erro na mesa' } });
+      }
+    }
+
     let AUTH = null;
     if (url.pathname.startsWith('/api/ops')) {
       AUTH = authenticate(req, { db: OPS?.db });
@@ -916,7 +987,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/ai/switch' && req.method === 'POST') {
       const b = await body(req);
       if (!b.provider) return json(res, 400, { error: 'falta o campo provider' });
-      const out = await switchProvider(String(b.provider));
+      const out = await switchProvider(String(b.provider), b.model || null);
       return json(res, out.error ? 400 : 200, { ...out, ai: ai.summary(AI, cfg) });
     }
     /* ---- 1.32.0: os motores gratuitos, também no local -------------------

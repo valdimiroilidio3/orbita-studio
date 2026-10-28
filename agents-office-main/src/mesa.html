@@ -358,6 +358,21 @@
   .toast.on { opacity: 1; transform: translate(-50%, 0); }
   .toast.bad { background: var(--risk); }
   .tabbar { display: none; }
+  /* o X do telemóvel: 44 px de alvo, no canto, sempre por cima do conteúdo */
+  .m-x { display: none; }
+  @media (max-width: 820px) {
+    .m-x {
+      display: inline-flex; position: fixed; top: 10px; right: 10px; z-index: 60;
+      width: 44px; height: 44px; align-items: center; justify-content: center;
+      border-radius: 50%; background: rgba(255,255,255,.96); color: var(--ink);
+      border: 1px solid var(--hair); box-shadow: 0 1px 2px rgba(20,20,24,.06);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    }
+    .m-x svg { width: 17px; height: 17px; }
+    .m-x:active { background: #F2F2F0; }
+    /* para o X não tapar o botão «Sair» do cabeçalho */
+    main { padding-top: calc(var(--s5) + 34px); }
+  }
   .skeleton { color: var(--faint); padding: var(--s6); text-align: center; }
 
   @media (max-width: 1080px) {
@@ -414,6 +429,11 @@
   <main id="main" tabindex="-1"><div class="skeleton">a abrir…</div></main>
 </div>
 <nav class="tabbar" id="tabbar" aria-label="secções (telemóvel)"></nav>
+<!-- 1.37.0 · o X de voltar também no telemóvel: em ecrãs estreitos a barra lateral
+     (onde ele vive) desaparece, e sem isto só se saía da mesa pelo endereço. -->
+<a class="m-x" href="/" aria-label="Fechar a mesa e voltar ao escritório" title="Fechar a mesa e voltar ao escritório">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+</a>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <!--APP-->
 </body>

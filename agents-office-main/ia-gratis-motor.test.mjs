@@ -96,3 +96,30 @@ test('gratis: runner.ask devolve só o texto (é o que as salas consomem)', asyn
   const texto = await runner.ask('sistema', 'pedido', { fetchImpl });
   assert.equal(texto, 'texto simples');
 });
+
+test('gratis: fixar um modelo põe-no à frente da cadeia (é assim que a barra escolhe)', async () => {
+  limparFora();
+  /* o dono escolheu «ovh/gpt-oss-120b» no canto de IA */
+  const d = define('gratis', { ai: { models: { gratis: 'ovh/gpt-oss-120b' } } });
+  assert.equal(d.model, 'ovh/gpt-oss-120b');
+  const r = resolve({ ai: { models: { gratis: 'ovh/gpt-oss-120b' } } }, null);
+  assert.equal(r.active.id, 'gratis');
+  assert.equal(r.active.model, 'ovh/gpt-oss-120b');
+
+  const pedidos = [];
+  const runner = makeRunner(r.active, {});
+  await runner.askX({
+    system: 'Sê breve.',
+    user: 'Escreve uma frase.',
+    fetchImpl: async (url) => {
+      pedidos.push(String(url));
+      return { ok: true, status: 200, ...{
+        text: async () => JSON.stringify({ choices: [{ message: { content: 'feito' } }] }),
+        json: async () => ({ choices: [{ message: { content: 'feito' } }] }),
+      } };
+    },
+  });
+  assert.ok(pedidos.length >= 1);
+  /* o primeiro sítio a que se bate é o do modelo fixado, não o primeiro da lista */
+  assert.match(pedidos[0], /ovh|kepler/i, 'a cadeia não começou pelo modelo escolhido: ' + pedidos[0]);
+});

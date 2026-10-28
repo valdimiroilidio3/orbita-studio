@@ -1,3 +1,54 @@
+## 1.37.0 — 27 out 2026 · as respostas voltam, e a mesa vive no teu computador
+
+Três buracos que só se vêem a usar: o cliente respondia e ninguém sabia; a mesa
+publicada ficava «a carregar» a IA para sempre; e no telemóvel não havia X para
+sair. Fecharam-se os três.
+
+**1 · As respostas dos clientes (o lado que faltava).** Até aqui a mesa mandava e
+ficava à espera. Agora há dois webhooks — `POST /api/webhooks/whatsapp` (Meta) e
+`POST /api/webhooks/resend` (email) — que recebem, **verificam a assinatura**
+(Svix no Resend, `x-hub-signature-256` na Meta), encontram a pessoa certa (primeiro
+pela mensagem a que se responde, depois pelo telefone/email) e gravam a resposta
+na conversa. O lead passa a `respondeu`, mas **quem já é cliente não anda para
+trás**. É idempotente: a Meta repete o webhook quando não recebe 200, e a mesma
+resposta nunca aparece duas vezes. Uma resposta de quem não está no funil não se
+perde — fica registada com o remetente e sem lead. Os estados «entregue» e «lido»
+actualizam a mensagem que saiu em vez de criar outra. Sem segredo configurado,
+o webhook **recusa** (503): nunca se aceita um POST anónimo a fingir de cliente.
+
+**2 · A mesa fala com o servidor também no teu computador.** Novo `/api/rpc` no
+`serve.mjs` com o mesmo envelope da Vercel (`{status, corpo}`), sobre um ficheiro
+`data/mesa.json`. Consequência prática: em `npm start`, a mesa deixa de cair em
+«modo local» e passa a ter leads, conversas e Control Center reais — e no preview.
+O ficheiro é teu: vê-se, copia-se e leva-se.
+
+**3 · X para sair da mesa, também no telemóvel.** Em ecrãs estreitos a barra
+lateral desaparece — e o X ia com ela. Passa a haver um X fixo (44 px) no canto,
+com nome acessível, que leva ao escritório.
+
+**4 · As gratuitas passam a ser uma escolha.** No canto de IA do escritório, cada
+modelo gratuito **provado** é um botão: clicar fixa-o (`POST /api/ai/switch` com
+`provider: 'gratis'` e o modelo) e a escolha fica em `data/ai.json`, sobrevivendo a
+um reinício. O motor continua a cair para os restantes se esse falhar — fixar é
+preferir, não é ficar sem motor. As que ainda não responderam continuam à vista,
+a cinzento: não se escolhe o que não se provou.
+
+**5 · SQL que faltava, versionado.** O envio já escrevia `provider_id`,
+`enviada_at`, `canal_confirmado`, `erro` e a recepção precisa de `id_externo`,
+`direction`, `recebida_at` — colunas que **não estavam** em `supabase/orbita_mesa.sql`.
+Numa base criada só do repo, o envio respondia 400 do PostgREST. Há agora
+`supabase/orbita_1_37_0.sql`, idempotente, com as colunas, o CHECK de estado
+alargado (`ensaio`, `falhou`, `bloqueada`, `revisao`, `recebida`) e os índices.
+
+**Testes:** 499/499 (13 novos da recepção, 1 do modelo fixado, 1 do modo local) e
+o fumo da mesa a confirmar o X do telemóvel, a resposta do cliente no histórico e
+a edição de leads. `node check.mjs` 94/95 (falta Chromium).
+
+**Limitação declarada:** a assinatura e a normalização foram provadas contra os
+corpos reais dos fornecedores, mas **ainda não houve um evento verdadeiro** (faltam
+`WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `RESEND_WEBHOOK_SECRET` e uma conta
+Meta). E o deploy de produção continua bloqueado do meu lado (limite de 100/dia).
+
 ## 1.36.0 — 27 out 2026 · editar o lead sem sair da mesa
 
 Faltava o «actualizar» do pedido 57e: a API já aceitava `PATCH /ops/leads/:id`,
