@@ -26,6 +26,22 @@ export function chavesDoAmbiente(env = process.env) {
    fornecedor que acabou de dizer «limite atingido». */
 const BLOQUEIOS = {};
 
+/**
+ * Um bloqueio é válido?
+ * Não, quando o motivo é falta/recusa de chave e o fornecedor é keyless: nesse
+ * caso a chave não existe por desenho, e o erro é do modelo (tier pago) ou de um
+ * `chavePublica` que mudou. Respeitar isso tirava um fornecedor inteiro da cadeia
+ * sem motivo — aconteceu ao LLM7 a 28 out 2026.
+ */
+export function bloqueioValido(fornec, teste = {}) {
+  if (!teste?.bloqueadoAte) return true;
+  const prov = FORNECEDORES[fornec];
+  const semChavePorDesenho = !!prov && (prov.keyless || prov.chavePublica);
+  const motivo = String(teste.bloqueadoPor || '');
+  const eChave = /chave|api key|unauthor|forbidden|401|403/i.test(motivo);
+  return !(semChavePorDesenho && eChave);
+}
+
 /** Só para testes: esquecer os bloqueios deste processo. */
 export function esquecerBloqueios() { for (const k of Object.keys(BLOQUEIOS)) delete BLOQUEIOS[k]; }
 
@@ -177,6 +193,7 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
      gravado (30 min para limite; 6 h para chave/crédito) e expira sozinho. */
   const agoraMs = Date.parse(agora()) || Date.now();
   const bloqueados = [];
+  const ignorados = [];
   const candidatos = [];
   for (const id of Object.keys(FORNECEDORES)) {
     if (so && id !== so) continue;
@@ -184,7 +201,20 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     if (!prov || prov.usavel === false || desligados.includes(id)) continue;
     const chave = valorDaChave(id);
     if (!chave && !prov.keyless) continue;                 // sem acesso, não se tenta
-    const ate = Math.max(Date.parse(testes[id]?.bloqueadoAte || '') || 0, BLOQUEIOS[id] || 0);
+    const guardado = testes[id];
+    /* 1.45.0 · um bloqueio inválido não se respeita. Em produção, o LLM7 ficou
+       6 h de fora por um «Missing API key» de um modelo do tier pago — antes da
+       1.44.5, que corrigiu a origem. O bloqueio velho continuava a ser lido; a
+       regra certa é não confiar nele: um fornecedor keyless não pode estar
+       bloqueado por falta de chave. */
+    const valido = bloqueioValido(id, guardado);
+    const ate = valido
+      ? Math.max(Date.parse(guardado?.bloqueadoAte || '') || 0, BLOQUEIOS[id] || 0)
+      : 0;
+    if (!valido && guardado?.bloqueadoAte) {
+      ignorados.push({ fornec: id, motivo: guardado.bloqueadoPor || null, porque: 'bloqueio inválido: fornecedor keyless não fica sem chave' });
+      delete testes[id].bloqueadoAte; delete testes[id].bloqueadoPor;
+    }
     if (ate > agoraMs) {
       bloqueados.push({
         fornec: id,
@@ -341,6 +371,8 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
        ficou de fora. Sem isto, «testados: 4» sem saber quais é adivinhação. */
     alvos,
     /* fornecedores que pararam o lote por um motivo que não é do modelo */
+    /* bloqueios que existiam mas não valiam (ver `bloqueioValido`) */
+    ignorados,
     saltados: [
       ...bloqueados,
       ...saltados.filter((x, i, arr) => arr.findIndex((y) => y.fornec === x.fornec) === i),
@@ -349,9 +381,34 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
   };
 };
 
+  /**
+   * 1.45.0 · tirar bloqueios, com o motivo à vista. Serve para o caso real de
+   * hoje: um bloqueio escrito por um bug antigo (ou por uma avaria passageira)
+   * continuava a manter um fornecedor fora da cadeia até expirar sozinho.
+   * Com `so`, limpa um; sem, limpa todos os que existirem.
+   */
+  async function limparBloqueios({ so = null } = {}) {
+    const cfg = await config();
+    const testes = JSON.parse(JSON.stringify(cfg.testes || {}));
+    const limpos = [];
+    for (const [fornec, t] of Object.entries(testes)) {
+      if (so && fornec !== so) continue;
+      if (!t?.bloqueadoAte) continue;
+      limpos.push({ fornec, ate: t.bloqueadoAte, motivo: t.bloqueadoPor || null });
+      delete t.bloqueadoAte; delete t.bloqueadoPor;
+      delete BLOQUEIOS[fornec];
+    }
+    if (limpos.length) {
+      try { await repo.ia.config.gravar('testes', testes); } catch { /* sem base: a memória já foi limpa */ }
+      cacheConfig = null;
+    }
+    return limpos;
+  }
+
   return {
     descobrirSePreciso,
     provarModelos,
+    limparBloqueios,
     chaves,
     /* «pronto» = tem chave, ou não precisa dela (keyless). Nunca confundir
        «pronto» com «funcional»: isso é o teste real. */

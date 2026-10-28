@@ -33,11 +33,18 @@ export const CHAVE = 'orbita.mesa.v1';
    servidor (`api/_ia/catalogo-extra.json`). Vivem aqui porque o browser não pode
    importar o backend; o teste `localapi.test.mjs` compara os ids com o catálogo
    para que os dois não divirjam em silêncio. */
+/* 1.45.0 · esta lista é uma CÓPIA, não a verdade. No servidor há dezenas de
+   modelos provados (`/ia/gratuitos`); aqui, sem servidor, não há como saber
+   quais responderam hoje. Fica com os que responderam de forma estável, e a
+   interface diz que é uma cópia local — antes mostrava 4 como se fossem todos. */
 export const GRATUITOS_LOCAIS = [
   { fornec: 'llm7', nome: 'LLM7', modelo: 'codestral-latest', limites: 'anónimo · resposta em ~1,5 s', etiquetas: ['codigo', 'texto', 'rapido'] },
   { fornec: 'ovh', nome: 'OVH AI Endpoints', modelo: 'Qwen3.5-397B-A17B', limites: 'anónimo · 13–45 s', etiquetas: ['raciocinio', 'texto'] },
   { fornec: 'opencode', nome: 'OpenCode Zen', modelo: 'big-pickle', limites: 'chave publicada pelo serviço (public)', etiquetas: ['codigo', 'ferramentas'] },
-  { fornec: 'pollinations', nome: 'Pollinations', modelo: 'openai-fast', limites: 'anónimo · 1 pedido a cada 15 s', etiquetas: ['texto', 'raciocinio'] },
+  { fornec: 'pollinations', nome: 'Pollinations', modelo: 'openai', limites: 'anónimo · 1 pedido a cada 15 s', etiquetas: ['texto', 'rapido', 'ferramentas'] },
+  { fornec: 'pollinations', nome: 'Pollinations', modelo: 'openai-large', limites: 'anónimo · raciocínio', etiquetas: ['texto', 'raciocinio'] },
+  { fornec: 'ovh', nome: 'OVH AI Endpoints', modelo: 'Qwen3.8-27B', limites: 'anónimo · <1 s quando responde', etiquetas: ['texto', 'codigo', 'raciocinio'] },
+  { fornec: 'ovh', nome: 'OVH AI Endpoints', modelo: 'Mistral-Nemo-Instruct-2407', limites: 'anónimo · <1 s', etiquetas: ['texto', 'rapido'] },
 ];
 
 const TIPOS_PROJETO = [
@@ -186,10 +193,9 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
        de fingir um motor ou rebentar com 404. */
     if (caminhoLimpo === '/ia/estado') {
       /* 1.34.0 · os motores que não precisam de chave nenhuma aparecem aqui, com o
-         nome e o modelo reais, em vez de uma lista vazia. Não é demo: são os
-         mesmos quatro do catálogo do servidor (api/_ia/catalogo-extra.json), e é
-         isso que os torna uma resposta honesta — o que não podem é ser provados
-         sem servidor, e o estado diz isso. */
+         nome e o modelo reais, em vez de uma lista vazia. Não é demo: é uma cópia
+         pequena do que o servidor usa (a lista verdadeira, com as provas, vive na
+         base). O que não podem é ser provados sem servidor, e o estado diz isso. */
       const gratuitos = GRATUITOS_LOCAIS.map((g) => ({
         id: g.fornec, nome: g.nome, familia: 'nucleo',
         configurado: true, semChave: true, variavel: 'não precisa', chaveMascarada: '',
@@ -222,7 +228,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
           nota: 'não precisa de chave; a prova faz-se no servidor',
         })),
         totalPorProvar: GRATUITOS_LOCAIS.length,
-        nota: 'modo local: a lista é a mesma do servidor, mas as provas (que modelos responderam) ficam na base de dados — aqui não há nenhuma.',
+        nota: 'modo local: isto é uma cópia pequena dos motores gratuitos. A lista verdadeira — dezenas de modelos com resposta registada e latência — lê-se no servidor (/ia/gratuitos); sem servidor não há provas.',
         estado: { pronto: false, frase: 'nenhuma gratuita provada neste browser — a prova faz-se no servidor' },
         medidoEm: null, cadeia: {},
       };

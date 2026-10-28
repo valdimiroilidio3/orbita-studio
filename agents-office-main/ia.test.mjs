@@ -953,3 +953,38 @@ test('a cadeia põe os provados pela app à frente dos descobertos que nunca res
   assert.equal(c[0].modelo, 'openai-fast', `a cadeia começou em ${c[0].fornec}/${c[0].modelo} em vez do modelo que já respondeu`);
   assert.equal(c.some((x) => x.modelo.includes('community/')), false, 'um modelo nunca provado saltou para a frente');
 });
+
+test('um bloqueio inválido (keyless sem chave) é ignorado e limpo sozinho', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  let chamadas = 0;
+  const fetchImpl = async () => { chamadas += 1; return json({ choices: [{ message: { content: 'ok' } }] }); };
+  /* o LLM7 não tem modelos no catálogo declarado: os reais vêm da descoberta */
+  await repo.ia.config.gravar('descobertos', { llm7: { quando: new Date().toISOString(), modelos: [{ id: 'DeepSeek-V4.1-Flash' }, { id: 'Inkling-Small' }] } });
+  /* o bloqueio real que a produção tinha: LLM7 «Missing API key» até 6 h depois */
+  await repo.ia.config.gravar('testes', { llm7: {
+    bloqueadoAte: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+    bloqueadoPor: 'chave recusada por llm7: Missing API key.',
+  } });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'llm7', limite: 2, concorrencia: 1 });
+  assert.equal(chamadas > 0, true, 'o bloqueio inválido impediu de provar um fornecedor keyless');
+  assert.equal(r.ignorados.length, 1);
+  assert.match(r.ignorados[0].porque, /keyless/);
+  const cfg = await repo.ia.config.ler();
+  assert.equal(cfg.testes.llm7.bloqueadoAte, undefined, 'o bloqueio inválido continua gravado');
+});
+
+test('rota /ia/bloqueios: vê e limpa, com o motivo de cada um', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  await repo.ia.config.gravar('testes', { ovh: { bloqueadoAte: new Date(Date.now() + 60_000).toISOString(), bloqueadoPor: 'limite de utilização em ovh' } });
+  const fetchImpl = async () => json({ choices: [{ message: { content: 'ok' } }] });
+  const ver = await rotasIA(repo, { caminho: '/ia/bloqueios?ver=1', metodo: 'GET', env: {}, fetchImpl });
+  assert.equal(ver.corpo.bloqueios.length, 1);
+  assert.equal(ver.corpo.bloqueios[0].fornec, 'ovh');
+  const limpar = await rotasIA(repo, { caminho: '/ia/bloqueios/limpar', metodo: 'POST', corpo: {}, env: {}, fetchImpl });
+  assert.equal(limpar.corpo.quantos, 1);
+  const ver2 = await rotasIA(repo, { caminho: '/ia/bloqueios?ver=1', metodo: 'GET', env: {}, fetchImpl });
+  assert.equal(ver2.corpo.bloqueios.length, 0);
+});
