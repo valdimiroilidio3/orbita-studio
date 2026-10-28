@@ -335,8 +335,19 @@ export function initTasks(ctx) {
     const prov = Array.isArray(g?.modelos) ? g.modelos : [];
     const liv = Array.isArray(g?.porProvar) ? g.porProvar : [];
     const nome = (m) => `${m.fornec || m.fornecedor}/${m.modelo}`;
+    /* 1.37.0 · «as IAs todas» no canto de texto: as gratuitas provadas deixam de
+       ser uma legenda e passam a ser uma ESCOLHA. Clicar num modelo fixa-o no
+       motor «gratis» e a barra passa a dizer qual está a responder. As que ainda
+       não responderam continuam a aparecer — mas não se pode escolher o que não
+       se provou. */
+    const activo = AI_.state?.active;
+    const fixado = activo?.id === 'gratis' ? String(activo.model || '') : '';
     const linhas = [
-      ...prov.map((m) => `<span class="ai-g" title="${esc(m.nota || 'respondeu de verdade')}">✓ ${esc(nome(m))}</span>`),
+      ...prov.map((m) => {
+        const id = nome(m);
+        const este = fixado === id;
+        return `<button type="button" class="ai-g${este ? ' on' : ''}" data-ai-gratis="${esc(id)}" title="${esc(este ? 'a responder agora' : (m.nota || 'respondeu de verdade') + ' — clica para usar')}">${este ? '◉' : '✓'} ${esc(id)}</button>`;
+      }),
       ...liv.slice(0, 8).map((m) => `<span class="ai-g dead" title="${esc(m.nota || 'existe e está pronto, mas ainda não respondeu')}">· ${esc(nome(m))}</span>`),
     ];
     const gratis = !g
@@ -347,6 +358,23 @@ export function initTasks(ctx) {
     return `<div class="ai-cap">${cap}</div>
       <div class="ai-grat"><span class="ai-lab">GRATUITAS</span> ${gratis}${g?.estado?.frase ? `<div class="ai-gf">${esc(g.estado.frase)}</div>` : ''}</div>
       <div class="ai-foot">A escolha fica em <code>data/ai.json</code>; <code>AO_AI</code> ganha-lhe. <a href="/app#/ia">ver todas na mesa →</a></div>`;
+  }
+  /* fixar uma gratuita concreta: o mesmo caminho do «USAR», com o modelo colado */
+  async function usarGratis(id) {
+    if (!id) return;
+    const [fornec, ...resto] = String(id).split('/');
+    const modelo = resto.join('/');
+    try {
+      const r = await fetch(`${API}/ai/switch`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'gratis', model: `${fornec}/${modelo}` }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) { say(`Não fixei ${esc(id)}: ${esc(j.error || r.status)}`, 'err'); return; }
+      AI_.state = j.ai || AI_.state;
+      paintAiButton(); paintAiPop(); await loadGratuitas();
+      say(`${esc(id)} é agora o motor das gratuitas (${AI_.state?.active?.tools ? 'com' : 'sem'} ferramentas).`, 'ok');
+    } catch (e) { say(`Não fixei ${esc(id)}: ${esc(e.message)}`, 'err'); }
   }
   function paintAiMore() {
     const el = P_.aiPop?.querySelector('#aiMore');
@@ -429,6 +457,8 @@ export function initTasks(ctx) {
     P_.aiPop.querySelector('.ai-close').addEventListener('click', () => { P_.aiPop.hidden = true; P_.ai.classList.remove('on'); });
     P_.aiPop.querySelector('.ai-refresh').addEventListener('click', () => loadAi(true));
     P_.aiPop.addEventListener('click', e => {
+      const g = e.target.closest('button[data-ai-gratis]');
+      if (g) { usarGratis(g.dataset.aiGratis); return; }
       const b = e.target.closest('button[data-ai]'); if (!b) return;
       const id = b.closest('[data-prov]')?.dataset.prov;
       if (!id) return;

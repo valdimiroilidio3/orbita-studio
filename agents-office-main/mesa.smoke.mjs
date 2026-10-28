@@ -69,6 +69,15 @@ ok(/modo local/i.test(texto()), 'a mesa não diz que está em modo local');
 ok(!/Voltar ao escritório/.test(texto()), 'a mesa continua a mandar as pessoas de volta ao escritório');
 /* 1.34.0 · o X de sair: a mesa é uma página inteira e o dono pediu uma saída à mão.
    Tem de ser um link para o escritório e ter nome acessível (não só um glifo). */
+/* 1.37.0 · o X também no telemóvel: a barra lateral desaparece abaixo de 820 px,
+   e sem este havia ecrãs onde só se saía da mesa pelo endereço. */
+const sairMovel = doc.querySelector('a.m-x');
+ok(!!sairMovel, 'a mesa não tem o X de voltar no telemóvel');
+if (sairMovel) {
+  ok(sairMovel.getAttribute('href') === '/', 'o X do telemóvel não leva ao escritório');
+  ok(!!sairMovel.getAttribute('aria-label'), 'o X do telemóvel não tem nome acessível');
+}
+
 const sair = doc.querySelector('a.side-x');
 ok(!!sair, 'a mesa não tem o X de voltar ao sistema');
 if (sair) {
@@ -259,6 +268,54 @@ if (bar) {
   ok(/neste browser/i.test(bar.textContent), 'o aviso não diz que os dados ficam no browser');
   ok(!!bar.querySelector('[data-act="exportar-local"]'), 'o aviso não tem «Guardar cópia»');
   ok(!!bar.querySelector('[data-act="importar-local"]'), 'o aviso não tem «Ler cópia»');
+}
+
+/* --- 1.37.0 · a resposta do cliente aparece na conversa (e não vira «Sem mensagem») ---
+   O webhook grava uma mensagem com status 'recebida' e direction 'in'. Aqui
+   injeta-se esse estado no armazém e vê-se o que o dono vê: a resposta no
+   histórico com «←», e o cartão de decisão a continuar a ser o da mensagem que
+   saiu — não «Sem mensagem ainda» a um lead que já respondeu. */
+{
+  const guarda = new Map();
+  const agora = new Date().toISOString();
+  guarda.set('orbita.mesa.v1', JSON.stringify({
+    v: 1, criado: agora,
+    leads: [{ id: 'l_resp', name: 'Padaria Ana', city: 'Coimbra', phone: '912345678', status: 'respondeu', score: 70, created_at: agora, updated_at: agora, responded_at: agora }],
+    projetos: [], tarefas: [], receitas: [], atividade: [],
+    mensagens: [
+      { id: 'm_out', lead_id: 'l_resp', channel: 'whatsapp', body: 'Bom dia, falo do site da padaria.', status: 'enviada', direction: 'out', created_at: agora, enviada_at: agora },
+      { id: 'm_in', lead_id: 'l_resp', channel: 'whatsapp', body: 'Quanto custa? Tenho interesse.', status: 'recebida', direction: 'in', from: '351912345678', created_at: agora, recebida_at: agora },
+    ],
+  }));
+  const armazemResp = {
+    getItem: (k) => (guarda.has(k) ? guarda.get(k) : null),
+    setItem: (k, v) => guarda.set(k, String(v)),
+    removeItem: (k) => guarda.delete(k),
+    clear: () => guarda.clear(),
+    key: (i) => [...guarda.keys()][i] ?? null,
+    get length() { return guarda.size; },
+  };
+  const domR = new JSDOM(html, {
+    url: 'https://orbita-agentes.vercel.app/app#/lead/l_resp', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(win) {
+      win.fetch = async () => ({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
+      Object.defineProperty(win, 'localStorage', { value: armazemResp, configurable: true });
+      win.Element.prototype.scrollIntoView = () => {};
+    },
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const wR = domR.window;
+  const t = (wR.document.getElementById('main') || {}).textContent || '';
+  ok(/Quanto custa\? Tenho interesse\./.test(t), 'a resposta do cliente não aparece no histórico do lead');
+  ok(/←/.test(t), 'a resposta não está marcada como vinda do cliente');
+  ok(/respondeu/i.test(t), 'o lead não mostra que respondeu');
+  ok(!/Sem mensagem ainda/.test(t), 'a um lead que respondeu a mesa diz «Sem mensagem ainda»');
+
+  wR.location.hash = '#/conversas';
+  await new Promise((r) => setTimeout(r, 800));
+  const tc = (wR.document.getElementById('main') || {}).textContent || '';
+  ok(/resposta\(s\) de clientes|responderam/i.test(tc), 'a página de conversas não conta as respostas dos clientes');
+  domR.window.close();
 }
 
 if (falhas.length) {

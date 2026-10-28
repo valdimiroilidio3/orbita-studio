@@ -167,6 +167,12 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     const caminhoLimpo = '/' + caminho.replace(/^\/+/, '').split('?')[0];
 
     /* --- quem és tu: no modo local és o dono deste browser, e não há senha --- */
+    /* 1.37.0 · a pesquisa real (Geoapify/Tavily) não corre no browser: as chaves
+       vivem no servidor. Dizer isto é melhor do que devolver zero empresas e
+       deixar a pessoa a achar que o nicho não existe. */
+    if (caminhoLimpo === '/pesquisa/leads' || caminhoLimpo === '/pesquisa/web') {
+      throw falha(503, 'a pesquisa precisa do servidor: a chave do fornecedor (Geoapify/Tavily) vive lá, nunca neste browser');
+    }
     if (caminhoLimpo === '/auth/eu') {
       return { user: { id: 'local', name: 'Dono deste browser', email: '', role: 'owner', roleLabel: 'modo local' },
         modo: 'local', local: true, perms: { ver: true, escrever: true, aprovar: true, admin: true, write: true, approve: true } };

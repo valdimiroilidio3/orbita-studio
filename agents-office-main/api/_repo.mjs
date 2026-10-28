@@ -118,6 +118,9 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       async byId(id) { return um(await pedir(`orbita_messages?select=*&id=eq.${q(id)}&limit=1`)); },
       async rascunhos() { return (await pedir('orbita_messages?select=*&status=eq.rascunho&order=created_at.desc&limit=50')) || []; },
       async inserir(m) { return um(await pedir('orbita_messages', { method: 'POST', body: m, prefer: 'return=representation' })); },
+      /* 1.37.0 · a Meta repete o webhook: o id lá de fora é a chave que impede a
+         mesma resposta de aparecer duas vezes na mesa */
+      async porExterno(x) { return um(await pedir(`orbita_messages?select=*&id_externo=eq.${q(x)}&limit=1`)); },
       async patch(id, campos) {
         const r = await pedir(`orbita_messages?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
         return um(r);
@@ -281,6 +284,7 @@ export function createMemRepo(seed = {}) {
       async byId(i) { return d.mensagens.find((m) => m.id === i) || null; },
       async rascunhos() { return d.mensagens.filter((m) => m.status === 'rascunho'); },
       async inserir(m) { const novo = { id: id('m'), created_at: agora(), status: 'rascunho', ...m }; d.mensagens.push(novo); return novo; },
+      async porExterno(x) { return d.mensagens.find((m) => m.id_externo === x) || null; },
       async patch(i, campos) { const m = d.mensagens.find((x) => x.id === i); if (!m) return null; Object.assign(m, campos); return m; },
     },
     receitas: {

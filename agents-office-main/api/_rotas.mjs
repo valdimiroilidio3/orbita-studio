@@ -208,7 +208,7 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch, 
    build da Vercel reutiliza cache e continua a servir código antigo. */
 const MARCA_FUNCOES = 'rpc-1.23.0';
 export const marcaDasFuncoes = () => MARCA_FUNCOES;
-export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch, importarConect = null }) {
+export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch, importarConect = null, headers = {}, corpoBruto = null }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
 
   /* ---- 1.18.0 · tudo o que é IA vive em api/_ia (fornecedores, router, agentes)
@@ -221,6 +221,80 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
   const seg = caminhoLimpo.split('/').filter(Boolean);
   const qs = new URLSearchParams(String(caminho).split('?')[1] || '');
   const m = String(metodo || 'GET').toUpperCase();
+
+  /* ---- 1.37.0 · as respostas dos clientes (o lado que faltava) -------------
+     A mesa mandava e ficava à espera. Estes dois caminhos são os que os
+     fornecedores chamam quando o cliente responde: assinatura obrigatória (nunca
+     se aceita um POST anónimo a fingir de cliente), gravação idempotente e o
+     funil a andar. Ver api/_entrada.mjs. */
+  if (caminhoLimpo === '/webhooks/whatsapp' || caminhoLimpo === '/webhooks/resend') {
+    const e = await import('./_entrada.mjs');
+    const canal = caminhoLimpo.endsWith('whatsapp') ? 'whatsapp' : 'email';
+
+    if (canal === 'whatsapp' && m === 'GET') {
+      /* a Meta pede isto uma vez, ao ligar o webhook ao número */
+      const modo = qs.get('hub.mode');
+      const dado = qs.get('hub.verify_token');
+      const desafio = qs.get('hub.challenge');
+      const esperado = limpo(env.WHATSAPP_VERIFY_TOKEN);
+      if (modo !== 'subscribe') return { status: 400, corpo: { error: 'verificação do WhatsApp: falta hub.mode=subscribe' } };
+      if (!esperado) return { status: 501, corpo: { error: 'falta WHATSAPP_VERIFY_TOKEN no ambiente (inventa uma frase e cola-a no painel da Meta)' } };
+      if (String(dado || '') !== esperado) return { status: 403, corpo: { error: 'token de verificação errado' } };
+      return { status: 200, corpo: String(desafio || '') };   // texto puro, é o que a Meta lê
+    }
+
+    if (m !== 'POST') return { status: 405, corpo: { error: 'este webhook só aceita POST' } };
+
+    const bruto = typeof corpoBruto === 'string' ? corpoBruto : JSON.stringify(corpo ?? {});
+    if (canal === 'whatsapp') {
+      const segredo = limpo(env.WHATSAPP_APP_SECRET);
+      if (!segredo) return { status: 503, corpo: { error: 'falta WHATSAPP_APP_SECRET no ambiente: sem ele não se distingue um cliente de um desconhecido' } };
+      if (!e.assinaturaMeta({ segredo, corpoBase: bruto, assinatura: headers['x-hub-signature-256'] || headers['X-Hub-Signature-256'] })) {
+        return { status: 401, corpo: { error: 'assinatura inválida' } };
+      }
+    } else {
+      const segredo = limpo(env.RESEND_WEBHOOK_SECRET);
+      if (!segredo) return { status: 503, corpo: { error: 'falta RESEND_WEBHOOK_SECRET no ambiente: sem ele não se distingue um cliente de um desconhecido' } };
+      const ok = e.assinaturaSvix({
+        segredo,
+        id: headers['svix-id'] || headers['Svix-Id'],
+        timestamp: headers['svix-timestamp'] || headers['Svix-Timestamp'],
+        assinatura: headers['svix-signature'] || headers['Svix-Signature'],
+        corpoBase: bruto,
+      });
+      if (!ok) return { status: 401, corpo: { error: 'assinatura inválida' } };
+    }
+
+    const eventos = canal === 'whatsapp' ? e.normalizarWhatsapp(corpo) : e.normalizarEmail(corpo);
+    if (!eventos.length) {
+      /* não é erro: a Meta manda eventos que não interessam (leitura de recibos,
+         números a mudar de estado) e o Resend manda entregas e aberturas */
+      return { status: 200, corpo: { ok: true, ignorado: 'nada para guardar neste evento', canal } };
+    }
+    const feitos = [];
+    for (const ev of eventos) {
+      try { feitos.push(await e.registarResposta(repo, ev)); } catch (err) {
+        feitos.push({ ok: false, erro: String(err.message || err) });
+      }
+    }
+    const respostas = feitos.filter((x) => x.ok && !x.duplicado && !x.ignorado).length;
+    const duplicadas = feitos.filter((x) => x.duplicado).length;
+    const semLead = feitos.filter((x) => x.ok && !x.duplicado && x.casou === false).length;
+    return {
+      status: 200,
+      corpo: {
+        ok: feitos.every((x) => x.ok !== false),
+        canal, recebidas: respostas, duplicadas, semLead,
+        eventos: feitos.map((x) => ({
+          ok: x.ok !== false, duplicado: !!x.duplicado, ignorado: x.ignorado || null,
+          erro: x.erro || null, lead: x.lead ? { id: x.lead.id, name: x.lead.name, status: x.lead.status } : null,
+        })),
+        /* a Meta repete quando não recebe 200: responder 200 é o que trava a
+           repetição, e a idempotência cobre o caso de ela insistir de qualquer forma */
+        nota: respostas ? `${respostas} resposta(s) guardada(s)` : (duplicadas ? 'evento repetido — nada foi duplicado' : 'nada de novo'),
+      },
+    };
+  }
 
   /* ---- 1.20.0 · o Centro de Controlo: salas, estados, segurança ----
      As três marcas de cada linha (configurado / ligado / a funcionar) vêm todas
