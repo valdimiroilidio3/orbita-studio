@@ -1,3 +1,22 @@
+## 1.48.2 — 28 out 2026 · a imagem do Cine descarrega-se
+
+Até aqui a imagem só existia dentro do JSON do projecto, em base64: não se podia
+guardar no disco nem abrir numa janela. Agora há dois sítios onde ela é imagem a
+sério:
+
+- `GET /api/cine-imagem?leadId=…&imagemId=…` devolve os bytes com o
+  `content-type` verdadeiro do fornecedor (`image/jpeg`) e `inline`;
+- com `&descarregar=1` vem como `attachment`, com o nome do negócio
+  (`orbita-dom-franguito-<id>.jpg`);
+- na galeria, cada peça ganhou o link **guardar**.
+
+Não é um proxy aberto: o segundo parâmetro é o id de uma imagem **do projecto**,
+nunca um URL. Se o arquivo já não guarda os bytes daquela imagem (só os mantém nas
+duas mais recentes e na aprovada), a resposta é `410` e diz a semente com que ela
+volta a sair igual.
+
+**Testes:** 621 (1 novo). Nada muda no ecrã além do link.
+
 ## 1.48.1 — 28 out 2026 · o Cine deixa-se verificar de fora
 
 A 1.48.0 escreve o plano e gera imagens, mas só se podia provar com um browser e

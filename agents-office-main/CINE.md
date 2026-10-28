@@ -56,6 +56,7 @@ pronto — no dia em que houver créditos ou worker, é a mesma chamada que prod
 | POST | `/cine/aprovar` | marca uma imagem como aprovada |
 | POST | `/cine/apagar` | apaga uma imagem, ou o projecto |
 | POST | `/cine/video` | enfileira no worker, ou explica o que falta |
+| GET | `/api/cine-imagem?leadId=&imagemId=` | os bytes da peça como imagem (`&descarregar=1` = ficheiro) |
 
 Códigos: `404` sem lead, `409` sem Master Prompt (não há geração sem plano),
 `402` quando o fornecedor pede créditos, `429` quando o travessão de geração

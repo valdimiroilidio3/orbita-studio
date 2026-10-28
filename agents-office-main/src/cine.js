@@ -349,6 +349,7 @@ function cartaoGaleria(S) {
           <span class="cine-min">${escPadrao((i.modelo || '').split('/').pop() || 'modelo')} · ${i.ms ? `${Math.round(i.ms / 100) / 10} s` : ''} · semente ${escPadrao(i.seed ?? '—')}</span>
           <span class="cine-acts-min">
             ${i.aprovada ? '<span class="cine-selo ok">aprovada</span>' : `<button class="cine-link" data-act="cine-aprovar" data-id="${escPadrao(i.id)}">aprovar</button>`}
+            ${i.dataUrl ? `<a class="cine-link" href="/api/cine-imagem?leadId=${encodeURIComponent(S.projeto?.lead?.id || S.leadId || '')}&imagemId=${encodeURIComponent(i.id)}&descarregar=1" download>guardar</a>` : ''}
             <button class="cine-link perigo" data-act="cine-apagar" data-id="${escPadrao(i.id)}">apagar</button>
           </span>
         </figcaption>

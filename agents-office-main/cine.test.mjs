@@ -484,3 +484,30 @@ test('rotas /cine: com `semBytes=1` a verificação recebe os metadados e não o
   assert.match(r.corpo.imagens[0].dataUrl, /^\[\d+ bytes image\/jpeg\]$/);
   assert.equal(r.corpo.imagens[0].dataUrl.includes('base64'), false);
 });
+
+test('cine: a imagem serve-se como imagem (bytes, tipo e nome), não embrulhada em JSON', async () => {
+  const { imagemDoCine } = await import('./api/cine-imagem.mjs');
+  const repo = createMemRepo();
+  await prepararCine(repo, CLINICA, {}, { motor: null });
+  await gerarCine(repo, 'l1', { quantidade: 1, fetchImpl: async () => respostaImagem(5000) });
+  const img = (await lerArquivo(repo)).projetos.l1.imagens[0];
+
+  const bom = await imagemDoCine(repo, { leadId: 'l1', imagemId: img.id });
+  assert.equal(bom.status, 200);
+  assert.equal(bom.mime, 'image/jpeg');
+  assert.equal(bom.corpo.length, 5000);
+  assert.match(bom.nome, /^orbita-clinica-do-mondego-.*\.jpg$/);
+
+  assert.equal((await imagemDoCine(repo, { leadId: 'l1', imagemId: 'nao-existe' })).status, 404);
+  assert.equal((await imagemDoCine(repo, { leadId: 'x9', imagemId: img.id })).status, 404);
+  assert.equal((await imagemDoCine(repo, {})).status, 400);
+
+  /* sem bytes guardados a resposta diz que a semente os traz de volta */
+  const arquivo = await lerArquivo(repo);
+  arquivo.projetos.l1.imagens[0].dataUrl = null;
+  await repo.ia.config.gravar('cine', arquivo);
+  const sem = await imagemDoCine(repo, { leadId: 'l1', imagemId: img.id });
+  assert.equal(sem.status, 410);
+  assert.equal(sem.extra.semente, img.seed);
+  assert.match(sem.erro, /duas mais recentes/);
+});
