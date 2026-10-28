@@ -96,6 +96,64 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     return { status: 200, corpo: { ...r, cadeia: tipos } };
   }
 
+  /* 1.39.0 · «implementa todas as gratuitas»: uma acção que prova, de uma vez, os
+     modelos que NÃO exigem chave nova — as keyless (LLM7, OVH, Pollinations) e as
+     que publicam a chave (OpenCode Zen). Um a um, com tecto, e sem inventar: cada
+     resultado é um pedido real; o que falhar fica escrito com o motivo e não entra
+     na cadeia como se tivesse respondido. A prova é a mesma de `/ia/testar`, por
+     isso o que passar a funcionar aparece em `/ia/gratuitos` e no Control Center. */
+  if (limpo === '/ia/provar-gratuitas' && m === 'POST') {
+    const pedido = corpoDe(corpo);
+    const tecto = Math.max(1, Math.min(12, Number(pedido.limite) || 6));
+    /* só entram os que se podem provar sem uma chave nova: keyless (anónimos) ou
+       com chave pública publicada pelo próprio serviço */
+    const elegiveis = Object.entries(FORNECEDORES)
+      .filter(([, p]) => p && p.usavel !== false && (p.keyless || p.chavePublica))
+      .map(([id, p]) => ({ id, chavePublica: !!p.chavePublica, keyless: !!p.keyless }));
+    const escolhidos = (Array.isArray(pedido.fornec) && pedido.fornec.length
+      ? elegiveis.filter((x) => pedido.fornec.includes(x.id))
+      : elegiveis).slice(0, tecto);
+
+    const resultados = [];
+    for (const alvo of escolhidos) {
+      const modelos = modelosDe(alvo.id).filter((x) => x.gratuito !== false).map((x) => x.modelo);
+      const tentativas = modelos.slice(0, 3);
+      let provado = null;
+      let erros = [];
+      for (const modelo of tentativas) {
+        try {
+          const r = await motor.testar(alvo.id, { modelo });
+          if (r && r.ok !== false) { provado = { modelo, ms: r.ms ?? null, resposta: r.texto ? String(r.texto).slice(0, 80) : null }; break; }
+          erros.push(`${modelo}: ${r?.erro || 'sem resposta'}`);
+        } catch (e) {
+          erros.push(`${modelo}: ${String(e.message || e).slice(0, 160)}`);
+        }
+      }
+      resultados.push({
+        fornec: alvo.id,
+        ok: !!provado,
+        modelo: provado?.modelo || tentativas[0] || null,
+        ms: provado?.ms ?? null,
+        tentados: tentativas,
+        erros: provado ? [] : erros,
+      });
+    }
+    const provados = resultados.filter((x) => x.ok).length;
+    return {
+      status: 200,
+      corpo: {
+        ok: provados > 0,
+        testados: resultados.length,
+        provados,
+        falhados: resultados.length - provados,
+        resultados,
+        nota: provados
+          ? `${provados} fornecedor(es) sem chave responderam agora; os que já estavam provados continuam em /ia/gratuitos.`
+          : 'Nenhum respondeu agora. Os motivos estão em cada linha — não se marca nada como funcional sem uma resposta real.',
+      },
+    };
+  }
+
   if (limpo === '/ia/agentes' && m === 'GET') {
     return { status: 200, corpo: { agentes: LISTA } };
   }

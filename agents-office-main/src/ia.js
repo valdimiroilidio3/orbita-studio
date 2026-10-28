@@ -154,7 +154,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
     ['investigar', 'investigar'], ['revisao', 'revisão'], ['visao', 'visão'],
   ].filter(([id]) => (grCadeia[id] || []).length);
   const cartaoGratuitos = !gr ? '' : `<div class="card">
-      <h3 style="margin-top:0">IA gratuita <span class="ia-sub">· ${gr.total} provados · ${gr.totalPorProvar} por provar</span></h3>
+      <h3 style="margin-top:0">IA gratuita <span class="ia-sub">· ${gr.total} provados · ${gr.totalPorProvar} por provar</span>
+        ${gr.modo === 'local' ? '' : '<button class="btn quiet small" data-act="ia-provar-todas" style="float:right">Provar todas as sem chave</button>'}</h3>
       <p class="ia-sub" style="margin-top:0">${esc(gr.estado?.frase || 'sem medição')}${gr.medidoEm ? ` · medido em ${esc(gr.medidoEm)}` : ''}</p>
       ${grProvados.length ? `<table class="ia-tab">
         <thead><tr><th>Modelo</th><th>Fornecedor</th><th>Medido</th><th>Serve para</th></tr></thead>
@@ -390,6 +391,21 @@ export async function accaoIA(nome, el, api) {
       paint();
       toast(S.iaErro ? `Ainda não: ${S.iaErro}` : 'Estado da IA lido agora.', !!S.iaErro);
     } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-provar-todas') {
+    /* 1.39.0 · uma acção, não uma lista: percorre os fornecedores que não pedem
+       chave nova, faz um pedido real a cada um e só o que responde passa a
+       funcional. Os que falham ficam com o motivo à vista. */
+    try {
+      toast('A provar os motores sem chave… (pode levar meio minuto)');
+      const r = await call('/ia/provar-gratuitas', 'POST', { limite: 6 });
+      if (r.provados) toast(`${r.provados} de ${r.testados} responderam agora. Os que já estavam provados continuam válidos.`);
+      else toast(`Nenhum respondeu agora: ${(r.resultados?.[0]?.erros?.[0] || 'sem detalhe').slice(0, 160)}`, true);
+      await carregarIA(api);
+      paint();
+    } catch (e) { toast(`A prova não correu: ${e.message}`, true); }
     return true;
   }
 
