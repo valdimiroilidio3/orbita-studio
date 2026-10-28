@@ -134,6 +134,9 @@ export function cadeia(tipo, {
 
   const disponiveis = catalogo
     .filter((m) => fornecedorActivo(m.fornecedor, { chaves, desligados }))
+    /* 1.42.0 · um modelo que só existe no tier com chave não entra na cadeia
+       anónima (o `openai` do Pollinations): seria uma tentativa perdida. */
+    .filter((m) => !(m.soComChave && !chaveReal(m.fornecedor)))
     .filter((m) => !(semRepetir && jaTentados.has(`${m.fornecedor}\u0000${m.modelo}`)))
     .filter((m) => !foraDoAr(m.fornecedor, m.modelo, agora));
 
@@ -191,7 +194,11 @@ export function cadeia(tipo, {
 
   const pontos = (m) => {
     let p = 0;
-    if (preferido && preferido.fornecedor === m.fornecedor && preferido.modelo === m.modelo) p += 1000;
+    /* 1.42.0 · o preferido pode ser um FORNECEDOR (modelo nulo): assim o melhor
+       modelo desse fornecedor para cada tipo vai à frente. Era o que faltava ao
+       Pollinations com chave — fixar o `openai` deixava os tipos que ele não
+       declara (raciocínio, código) a cair noutro fornecedor sem necessidade. */
+    if (preferido && preferido.fornecedor === m.fornecedor && (!preferido.modelo || preferido.modelo === m.modelo)) p += 1000;
     /* 1.32.0 · medido a responder em produção: parte à frente do catálogo.
        O `ms` medido desempata — o mais rápido primeiro. */
     const medido = chavesCuradas.get(`${m.fornecedor}\u0000${m.modelo}`);

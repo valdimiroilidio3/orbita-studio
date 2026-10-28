@@ -191,6 +191,27 @@ export function porProvar({ chaves = {}, desligados = [], base = MODELOS, provad
     .slice(0, 60);
 }
 
+/**
+ * 1.42.0 · QUAL É O PADRÃO (28 out 2026, pedido: «padrão será uma gratuita»).
+ *
+ * A regra, em três linhas: se o dono deu uma chave de um fornecedor que é
+ * gratuito por desenho (Pollinations), esse é o motor de partida — ele escolheu-o
+ * ao criar a chave. Sem chave, o padrão é a cadeia anónima já medida (LLM7 →
+ * OVH → OpenCode → Pollinations anónimo). Em nenhum dos casos se escolhe um
+ * modelo pago por omissão.
+ *
+ * Devolve `{ fornec, modelo }` ou `null`, no formato que o router entende.
+ */
+export function preferidoDoAmbiente(chaves = {}) {
+  const temChave = (id) => !!chaves[id] && !String(chaves[id]).startsWith('\u0000');
+  /* 1.42.0 · o padrão é uma gratuita: com a chave do Pollinations, o motor
+     começa por ele. `modelo: null` = «o melhor deste fornecedor para o tipo de
+     trabalho» — o router escolhe (`openai` para texto/visão, `openai-large`
+     para raciocínio). Fixar um só modelo deixava os outros tipos a fugir. */
+  if (temChave('pollinations')) return { fornecedor: 'pollinations', modelo: null };
+  return null;
+}
+
 /** Ordem dentro dos curados: primeiro o que responde depressa. */
 export const porVelocidade = (a, b) => (a.ms || 0) - (b.ms || 0);
 

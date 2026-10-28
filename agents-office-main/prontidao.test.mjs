@@ -22,12 +22,12 @@ import { createMemRepo, createSupabaseRepo } from './api/_repo.mjs';
 
 const ENV_COMPLETO = {
   SUPABASE_URL: 'https://abcdefgh.supabase.co',
-  SUPABASE_SECRET_KEY: 'sb_secret_NAO_PODE_APARECER',
+  SUPABASE_SECRET_KEY: 'sb_secret_FAKE',
   ORBITA_API_TOKEN: 'x'.repeat(43),
   ORBITA_ADMIN_TOKEN: 'y'.repeat(24),
   SETUP_TOKEN: 'token-de-setup-1234',
-  DATABASE_URL: 'postgres://u:p@db.exemplo.pt:5432/postgres',
-  TAVILY_API_KEY: 'tvly-NAO-PODE-APARECER',
+  DATABASE_URL: 'postgres://u@db.exemplo.pt:5432/postgres',
+  TAVILY_API_KEY: 'tvly-FAKE',
   GEOAPIFY_API_KEY: 'geo-NAO-PODE-APARECER',
   RESEND_API_KEY: 're-NAO-PODE-APARECER',
   ORBITA_FROM_EMAIL: 'ola@orbita.pt',

@@ -33,7 +33,9 @@
      POST   /media/sinal                — (worker) heartbeat com o que está instalado
    =========================================================================== */
 import { AGENTES, LISTA, promptDe } from './agentes.mjs';
-import { FORNECEDORES, MODELOS, modelosDe } from './catalogo.mjs';
+import { FORNECEDORES, MODELOS, modelosDe, comChave, CHAVE_PUBLICA, SEM_CHAVE } from './catalogo.mjs';
+import { falar } from './cliente.mjs';
+import { VERSAO } from '../_versao.mjs';
 import { FERRAMENTAS, INDISPONIVEIS, executar as executarFerramenta, paraModelo } from './ferramentas.mjs';
 import { criarMotor } from './motor.mjs';
 import { correr } from './orquestrador.mjs';
@@ -94,6 +96,82 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       tipos[t] = await motor.cadeiaPara(t).catch(() => []);
     }
     return { status: 200, corpo: { ...r, cadeia: tipos } };
+  }
+
+  /* 1.42.0 · DIAGNÓSTICO DOS MOTORES — um pedido real, sem escrever nada.
+     Porque existe: saber se o Pollinations com chave responde exigia carregar num
+     botão na interface. Agora um GET faz a prova e devolve tudo o que se quer
+     saber — quem tem chave, que modelo se usou, quanto demorou, o que respondeu —
+     sem gravar nada na configuração (para isso é `/ia/testar`). É o que se lê
+     depois de um deploy para dizer «as gratuitas funcionam» com factos.
+
+       GET /ia/diagnostico            todos os fornecedores activos
+       GET /ia/diagnostico?fornec=pollinations   só um                    */
+  if (limpo === '/ia/diagnostico' && m === 'GET') {
+    const so = (qs.get('fornec') || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const chavesMapa = Object.fromEntries(comChave(env).map((c) => [c.id, c.variavel]));
+    const alvos = Object.entries(FORNECEDORES)
+      .filter(([id, p]) => p && p.usavel !== false && chavesMapa[id])
+      .filter(([id]) => !so.length || so.includes(id))
+      .map(([id]) => id);
+
+    const resultados = [];
+    for (const id of alvos) {
+      const prov = FORNECEDORES[id];
+      const marca = chavesMapa[id];
+      /* 1.42.0 · a marca pode ser uma variável de ambiente, `SEM_CHAVE`
+         (keyless por desenho) ou `CHAVE_PUBLICA` (o serviço publica a chave).
+         As duas últimas NÃO são variáveis — lê-las de `env[marca]` dava
+         `undefined` e o diagnóstico acusava «falta a chave» num fornecedor que
+         responde sem conta. */
+      const publica = marca === CHAVE_PUBLICA;
+      const daChave = marca && marca !== SEM_CHAVE;
+      const chave = publica ? (prov.chavePublica || null) : (daChave ? (env[marca] || null) : null);
+      const comChavePropria = !!chave || !!prov.keyless;
+      const doCatalogo = modelosDe(id)
+        .filter((x) => x.gratuito !== false)
+        /* `soComChave` só se prova quando a chave existe: sem ela o modelo nem
+           existe no tier anónimo. */
+        .filter((x) => !x.soComChave || !!chave)
+        .map((x) => x.modelo);
+      /* o primeiro modelo do catálogo; no Pollinations com chave, o `openai` */
+      const modelos = (id === 'pollinations' && chave ? ['openai', ...doCatalogo] : doCatalogo).slice(0, 2);
+      const reg = { fornec: id, nome: prov.nome, comChave: !!chave, publica, semChave: !chave, ok: false, modelo: null, ms: null, resposta: null, erro: null };
+      if (!modelos.length) { reg.erro = 'sem modelo no catálogo para este fornecedor'; resultados.push(reg); continue; }
+      for (const modelo of modelos) {
+        const t0 = Date.now();
+        try {
+          const r = await falar({
+            fornec: id, prov, chave, modelo,
+            mensagens: [{ role: 'user', content: 'Responde só com a palavra: órbita' }],
+            maxTokens: 30, temperatura: 0, timeoutMs: Math.min(40000, Number(prov.timeoutMs) || 40000), fetchImpl,
+          });
+          const texto = String(r.texto || '').trim();
+          if (!texto) { reg.erro = `${modelo}: resposta vazia`; continue; }
+          reg.ok = true; reg.modelo = r.modelo || modelo; reg.ms = r.ms ?? (Date.now() - t0);
+          reg.resposta = texto.slice(0, 80); reg.erro = null;
+          break;
+        } catch (e) {
+          reg.erro = `${modelo}: ${String(e.message || e).slice(0, 200)}`;
+        }
+      }
+      resultados.push(reg);
+    }
+    const ok = resultados.filter((r) => r.ok);
+    return {
+      status: 200,
+      corpo: {
+        ok: true,
+        versao: VERSAO,
+        quando: new Date().toISOString(),
+        testados: resultados.length,
+        aResponder: ok.length,
+        motores: resultados,
+        resumo: ok.length
+          ? `${ok.length} de ${resultados.length} fornecedor(es) responderam agora: ${ok.map((r) => `${r.fornec}/${r.modelo}`).join(', ')}`
+          : resultados.length ? 'nenhum fornecedor respondeu — ver o erro de cada um' : 'nenhum fornecedor activo (sem chave e sem keyless)',
+      },
+    };
   }
 
   /* 1.39.0 · «implementa todas as gratuitas»: uma acção que prova, de uma vez, os

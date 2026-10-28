@@ -1,3 +1,60 @@
+## 1.42.0 — 28 out 2026 · as gratuitas a sério: Pollinations com chave, padrão gratuito, `/ia/diagnostico`
+
+Pedido: «coloca IAs a sério no motor e as APIs; o padrão será uma gratuita» e «usa também
+esta IA gratuita» (Pollinations), mais a Tavily e o Geoapify. O que se fez, com o que ficou
+por provar dito à letra.
+
+**1 · O Pollinations passou a ser falado a sério.** O `freellmapi` só conhecia o tier anónimo
+(`text.pollinations.ai/<prompt>`, um GET, 1 pedido/15 s). A 28 out 2026 medi que existe um
+tier OpenAI-compatível com chave, em `gen.pollinations.ai/v1`, com modelos que o anónimo não
+vê. O cliente tem agora dois caminhos: **com `POLLINATIONS_API_KEY`** fala
+`POST https://gen.pollinations.ai/v1/chat/completions` com `Authorization: Bearer`, ferramentas
+e o modelo do tier; **sem chave** fala `POST https://text.pollinations.ai/openai` (OpenAI-compatível,
+aceita `tools`, ao contrário do GET antigo) com o `openai-fast`. `listarModelos` lê o catálogo
+certo em cada caso. **Prova real:** `GET gen.pollinations.ai/text/…?model=openai&key=…` devolveu
+`órbita`; o anónimo devolveu `orbita`. A chave nunca viaja em URL dentro da aplicação (o
+`?key=` só foi usado no teste manual, porque o sandbox não tem rede de saída).
+
+**2 · O padrão do motor é uma gratuita.** `preferidoDoAmbiente()` decide, a partir do ambiente,
+por onde começar: com a chave do Pollinations, o motor e o fornecedor `gratis` começam por ele;
+sem chave, pela cadeia anónima (LLM7 → OVH → OpenCode Zen → Pollinations anónimo). O preferido
+pode ser um **fornecedor** (`modelo: null`) e não um modelo fixo — assim cada tipo de trabalho
+usa o melhor modelo desse fornecedor (o `openai-large` para plano/raciocínio, o `openai` para
+texto/visão/rápido). Medido no router: `plano → pollinations/openai-large`,
+`rapido → pollinations/openai`, `visao → pollinations/openai`. Um modelo fixado em `ai.models`
+continua a ganhar.
+
+**3 · `soComChave`.** Os modelos do tier (`openai`, `openai-large`) só existem com chave. Sem
+esse campo, o router punha-os na cadeia anónima e gastava uma tentativa garantidamente falhada
+— foi o que o novo teste do diagnóstico apanhou. Agora o router e `/ia/diagnostico` filtram-nos.
+
+**4 · `GET /ia/diagnostico`.** Um pedido curto e real a cada fornecedor activo, com tecto de
+tempo, e a resposta com quem tem chave, que modelo respondeu, quanto demorou e o texto. Não
+grava nada (para isso é `/ia/testar`). `?fornec=pollinations` limita a um. Correu contra o
+servidor local: a rota responde 200 e regista «sem ligação: fetch failed» por fornecedor — este
+sandbox não tem rede de saída, e é isso que se lê em vez de um «ok» inventado.
+
+**5 · Prontidão.** O grupo «Motor de IA» passou a reconhecer o Pollinations como a chave
+gratuita que é, e ganhou o conceito de item **opcional**: um extra em falta já não deixa a
+função «desligada». A chave paga continua listada como opcional.
+
+**6 · Correio de testes que estava vermelho no `main`.** `segredos.test.mjs` falhava desde antes
+desta versão: as fixtures de `prontidao.test.mjs` tinham o formato exacto de chaves verdadeiras
+(`sb_secret_…`, `tvly-…`, URL Postgres com password). Passaram a `sb_secret_FAKE`, `tvly-FAKE` e
+uma URL sem password — a guarda continua a apanhar chaves a sério, e a suite voltou a verde.
+
+**7 · Tavily e Geoapify.** O Geoapify respondeu a sério (Coimbra → `40.2111874, -8.4291478`,
+`place_id`, `Europe/Lisbon`) e a prontidão local diz «Pesquisa pronto». A **Tavily não ficou
+provada**: a chave dada é recusada (`Unauthorized: missing or invalid API key`), e o único teste
+possível daqui foi GET — a API autentica por `POST` com `Authorization: Bearer`, que este
+ambiente não consegue fazer sem rede de saída. O código já usa POST JSON com Bearer; falta uma
+resposta real para se poder dizer «funciona». **Não está declarada funcional.**
+
+**Testes:** 538 (534 + 4 novos: o padrão do Pollinations, o `listarModelos` do tier, a rota
+`/ia/diagnostico` com resposta e sem rede, e a cadeia por tipo). Suite 538/538 ·
+`scene.smoke.mjs` ✓ · `mesa.smoke.mjs` ✓ · `npm run build` ✓ (1553 KB) · `check.mjs` 94/95
+(a falha de sempre: WebGL falso no harness).
+
 ## 1.41.0 — 28 out 2026 · lançar a sério: produção em dia, `/api` provado, SQL inteiro, chaves certas
 
 Pedido: «implementa 1+2+3+4». Os quatro itens eram *publicar*, *ter `/api` a responder*,

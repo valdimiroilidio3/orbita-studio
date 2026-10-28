@@ -15,9 +15,9 @@ import assert from 'node:assert/strict';
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, comChave } from './api/_ia/catalogo.mjs';
 import {
   PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, estadoCurto, etiquetasDoId,
-  porProvar, porVelocidade, provadosActivos, provasDe, resumo,
+  porProvar, porVelocidade, preferidoDoAmbiente, provadosActivos, provasDe, resumo,
 } from './api/_ia/gratuitos.mjs';
-import { falar } from './api/_ia/cliente.mjs';
+import { falar, listarModelos } from './api/_ia/cliente.mjs';
 import {
   cadeia, exportarFora, falarComFallback, foraDoAr, importarFora, limparFora, marcarFora,
 } from './api/_ia/router.mjs';
@@ -79,8 +79,10 @@ test('cadeia: «visão» não é relaxada — só entram modelos com olhos', () 
   const semOvh = cadeia('visao', { chaves: {}, desligados: ['ovh'], limite: 10 });
   assert.equal(semOvh.length > 0, true);
   assert.equal(semOvh.every((m) => m.etiquetas.includes('visao')), true);
+  /* 1.42.0: o Pollinations (gratuito) também traz um modelo com olhos — o
+     `openai` do tier. Por isso o teste desliga-o para provar a regra do vazio. */
   /* e se não houver nenhum, fica vazia em vez de aceitar um cego */
-  assert.deepEqual(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode'], limite: 10 }), []);
+  assert.deepEqual(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode', 'pollinations'], limite: 10 }), []);
 });
 
 test('cadeia: respeita a lista de desligados e de modelos já tentados', () => {
@@ -215,11 +217,18 @@ test('catálogo: o OpenCode publica a chave e o Pollinations é keyless', () => 
   assert.equal(pub.semChave, true);
 });
 
-test('pollinations: fala por GET, sem chave, e devolve o texto simples', async () => {
+test('pollinations: sem chave fala por POST /openai e devolve a resposta OpenAI', async () => {
+  /* 1.42.0 · o tier anónimo deixou de ser o GET com o prompt no caminho: a
+     própria API serve `POST https://text.pollinations.ai/openai` (OpenAI-
+     -compatível, sem chave), que é o único formato onde os `tools` funcionam.
+     Provado a 28 out 2026 com uma resposta real do `openai-fast`. */
   const pedidos = [];
   const fetchImpl = async (url, opt = {}) => {
     pedidos.push({ url: String(url), opt });
-    return { ok: true, status: 200, text: async () => 'teste' };
+    return {
+      ok: true, status: 200,
+      text: async () => JSON.stringify({ model: 'openai-fast', choices: [{ message: { role: 'assistant', content: 'teste' } }], usage: { prompt_tokens: 9, completion_tokens: 1 } }),
+    };
   };
   const r = await falar({
     fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: '', modelo: 'openai-fast',
@@ -227,14 +236,14 @@ test('pollinations: fala por GET, sem chave, e devolve o texto simples', async (
     fetchImpl,
   });
   assert.equal(r.texto, 'teste');
-  assert.equal(r.uso.entrada, 0);
+  assert.equal(r.uso.entrada, 9);
   const [p] = pedidos;
-  assert.equal(p.opt.method, 'GET');
-  assert.equal(p.opt.body, undefined, 'GET não leva corpo');
+  assert.equal(p.opt.method, 'POST');
+  const corpo = JSON.parse(p.opt.body);
+  assert.equal(p.url, 'https://text.pollinations.ai/openai');
+  assert.equal(corpo.model, 'openai-fast');
+  assert.equal(corpo.messages.length, 2, 'o system prompt viaja no corpo');
   assert.equal(p.opt.headers.authorization, undefined, 'keyless: nenhum cabeçalho de chave');
-  assert.match(p.url, /^https:\/\/text\.pollinations\.ai\/Diz%20apenas%20a%20palavra%20teste\?/);
-  assert.match(p.url, /model=openai-fast/);
-  assert.match(p.url, /system=s/i, 'o system prompt viaja no pedido');
 });
 
 test('pollinations: o limite (402) é retentável e cai no fornecedor seguinte', async () => {
@@ -410,4 +419,47 @@ test('gratuitos: a rota /ia/testar aceita o modelo e devolve qual respondeu', as
   assert.equal(r.corpo.ok, true);
   assert.equal(r.corpo.modelo, 'openai-fast');
   assert.equal(r.corpo.prova, 'pedido real a este fornecedor, agora');
+});
+
+/* ---------- 8 · o padrão é uma gratuita (1.42.0) ---------- */
+
+test('padrão: com a chave do Pollinations o motor começa por ele; sem ela, pela cadeia anónima', () => {
+  /* a Pollinations é gratuita e o dono ligou-a: com chave, é o primeiro motor */
+  assert.deepEqual(
+    preferidoDoAmbiente({ pollinations: 'sk-uma-chave-qualquer-suficiente' }),
+    { fornecedor: 'pollinations', modelo: null },
+  );
+  /* a marca interna de «sem chave» não conta como chave */
+  assert.equal(preferidoDoAmbiente({ pollinations: '\u0000sem-chave' }), null);
+  assert.equal(preferidoDoAmbiente({}), null);
+  /* e nada disto inventa um fornecedor que não esteja no catálogo */
+  assert.equal(FORNECEDORES[preferidoDoAmbiente({ pollinations: 'x'.repeat(12) }).fornecedor].gratuito, true);
+});
+
+test('pollinations: com chave, o `listarModelos` lê o tier (gen) e não o anónimo', async () => {
+  const vistos = [];
+  const fetchImpl = async (url, opt = {}) => {
+    vistos.push({ url: String(url), auth: opt.headers?.authorization });
+    return json({ data: [{ id: 'openai/gpt-5.4-nano' }] });
+  };
+  const r = await listarModelos({ fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: 'sk-chave-comprida-1234', fetchImpl });
+  assert.deepEqual(r.map((m) => m.id || m), ['openai/gpt-5.4-nano']);
+  assert.match(vistos[0].url, /^https:\/\/gen\.pollinations\.ai\/v1\/models$/);
+  assert.equal(vistos[0].auth, 'Bearer sk-chave-comprida-1234');
+});
+
+test('padrão: com a chave do Pollinations, a cadeia de cada tipo começa em casa (e não num pago)', () => {
+  const chaves = { pollinations: 'sk-uma-chave-qualquer-suficiente' };
+  const pref = preferidoDoAmbiente(chaves);
+  for (const tipo of ['plano', 'texto', 'rapido', 'revisao', 'visao']) {
+    const fila = cadeia(tipo, { chaves, preferido: pref, desligados: [], limite: 3 });
+    assert.equal(fila[0].fornec, 'pollinations', `${tipo}: o primeiro devia ser o gratuito com chave`);
+  }
+  /* e escolhe o modelo certo por tipo: raciocínio pede o `openai-large` */
+  assert.equal(cadeia('plano', { chaves, preferido: pref, limite: 1 })[0].modelo, 'openai-large');
+  assert.equal(cadeia('rapido', { chaves, preferido: pref, limite: 1 })[0].modelo, 'openai');
+  /* sem chave, os modelos `soComChave` não aparecem na cadeia anónima */
+  const anonima = cadeia('texto', { chaves: {}, desligados: [], limite: 20 });
+  assert.equal(anonima.some((m) => m.fornec === 'pollinations' && m.modelo !== 'openai-fast'), false,
+    'um modelo do tier com chave entrou na cadeia anónima');
 });

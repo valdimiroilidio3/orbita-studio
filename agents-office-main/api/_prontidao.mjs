@@ -20,7 +20,7 @@
    =========================================================================== */
 
 /** Um item = «basta UMA destas variáveis». A primeira é o nome recomendado. */
-const item = (nome, porque, aliases, { minimo = 0 } = {}) => ({ nome, porque, aliases, minimo });
+const item = (nome, porque, aliases, { minimo = 0, opcional = false } = {}) => ({ nome, porque, aliases, minimo, opcional });
 
 export const GRUPOS = [
   {
@@ -92,8 +92,13 @@ export const GRUPOS = [
     critico: false,
     porque: 'sem chave nenhuma o escritório arranca na cadeia gratuita (LLM7, OVH, Pollinations)',
     itens: [
-      item('Uma chave de IA (opcional)', 'melhora qualidade e limites; as gratuitas servem para começar',
-        ['OPENROUTER_API_KEY', 'GROQ_API_KEY', 'GOOGLE_AI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'GEMINI_API_KEY', 'AI_GATEWAY_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']),
+      /* 1.42.0 · o padrão passou a ser uma gratuita com chave: o Pollinations
+         (tier Seed) responde a sério e é o que o dono ligou. Continua a não ser
+         crítica — sem ela, a cadeia anónima (LLM7 → OVH → OpenCode) arranca. */
+      item('Pollinations (gratuita, com chave)', 'tier Seed: mais modelos e mais pedidos do que o anónimo; é o motor de partida quando existe',
+        ['POLLINATIONS_API_KEY', 'POLLINATIONS_TOKEN'], { opcional: true }),
+      item('Uma chave de IA paga (opcional)', 'só se quiseres acima do gratuito',
+        ['OPENROUTER_API_KEY', 'GROQ_API_KEY', 'GOOGLE_AI_API_KEY', 'CEREBRAS_API_KEY', 'MISTRAL_API_KEY', 'GEMINI_API_KEY', 'AI_GATEWAY_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'], { opcional: true }),
     ],
   },
   {
@@ -127,6 +132,7 @@ export function avaliarProntidao(env = {}) {
       const presente = primeiro(env, i.aliases, i.minimo);
       return {
         nome: i.nome,
+        opcional: !!i.opcional,
         pronto: !!presente,
         /* o nome que está lá (ou o recomendado, quando não está nenhum) */
         variavel: presente || i.aliases[0],
@@ -136,10 +142,14 @@ export function avaliarProntidao(env = {}) {
       };
     });
     const prontos = itens.filter((i) => i.pronto).length;
+    /* 1.42.0 · um item `opcional` em falta não deixa o grupo «desligado»: o
+       grupo diz se a FUNÇÃO está ligada, não se o extra está preenchido. */
+    const exigidos = itens.filter((i) => !i.opcional);
+    const prontoGrupo = exigidos.length ? exigidos.every((i) => i.pronto) : prontos > 0;
     return {
       id: g.id, nome: g.nome, critico: !!g.critico, porque: g.porque,
-      pronto: prontos === itens.length,
-      parcial: prontos > 0 && prontos < itens.length,
+      pronto: prontoGrupo,
+      parcial: prontos > 0 && !prontoGrupo,
       itens,
     };
   });

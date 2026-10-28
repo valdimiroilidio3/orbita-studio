@@ -159,8 +159,8 @@ test('router: só fornecedores utilizáveis (chave ou keyless), e o tipo certo p
   const visao = cadeia('visao', { chaves: { openrouter: 'X' } });
   assert.ok(visao.every((m) => m.etiquetas.includes('visao')));
   /* visão é o único tipo que nunca se relaxa (um modelo sem olhos não lê imagem) */
-  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh', 'llm7', 'opencode'] }).length, 0, 'groq não tem modelos de visão no catálogo');
-  assert.equal(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode'] }).length, 0, 'a visão foi relaxada para um modelo sem visão');
+  assert.equal(cadeia('visao', { chaves: { groq: 'X' }, desligados: ['ovh', 'llm7', 'opencode', 'pollinations'] }).length, 0, 'groq não tem modelos de visão no catálogo');
+  assert.equal(cadeia('visao', { chaves: {}, desligados: ['ovh', 'opencode', 'pollinations'] }).length, 0, 'a visão foi relaxada para um modelo sem visão');
 });
 
 test('router: preferido do agente vai à frente, e desligado fica de fora', () => {
@@ -672,4 +672,49 @@ test('router: falarComFallback marca o modelo indisponível ao ouvir a recusa', 
   assert.deepEqual(visto, ['morto', 'vivo']);
   assert.equal(foraDoAr('llm7', 'morto'), true);
   limparFora();
+});
+
+/* ---------- 8 · GET /ia/diagnostico (1.42.0) ---------- */
+test('rota /ia/diagnostico: um pedido real a cada motor activo, sem revelar a chave', async () => {
+  const repo = createMemRepo();
+  const vistos = [];
+  const fetchImpl = async (url, opt = {}) => {
+    vistos.push({ url: String(url), auth: opt.headers?.authorization || null });
+    if (String(url).startsWith('https://gen.pollinations.ai')) {
+      return json({ model: 'openai/gpt-5.4-nano', choices: [{ message: { content: 'órbita' } }], usage: { prompt_tokens: 8, completion_tokens: 2 } });
+    }
+    return json({ error: { message: 'sem serviço' } }, 503);
+  };
+  const r = await rotasIA(repo, {
+    caminho: '/ia/diagnostico', metodo: 'GET',
+    env: { POLLINATIONS_API_KEY: 'sk-uma-chave-comprida-1234' }, fetchImpl,
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.ok, true);
+  const pol = r.corpo.motores.find((m) => m.fornec === 'pollinations');
+  assert.equal(pol.ok, true, 'o Pollinations com chave tem de responder no diagnóstico');
+  assert.equal(pol.modelo, 'openai/gpt-5.4-nano');
+  assert.equal(pol.resposta, 'órbita');
+  assert.equal(pol.comChave, true);
+  /* foi pelo tier com chave, e não pelo anónimo */
+  const pedido = vistos.find((v) => v.url.startsWith('https://gen.pollinations.ai'));
+  assert.match(pedido.url, /\/v1\/chat\/completions$/);
+  assert.equal(pedido.auth, 'Bearer sk-uma-chave-comprida-1234');
+  /* o diagnóstico não vaza a chave nem inventa sucesso nos que falharam */
+  assert.ok(!JSON.stringify(r.corpo).includes('sk-uma-chave-comprida-1234'), 'a chave saiu na resposta');
+  assert.equal(r.corpo.motores.filter((m) => m.ok).length, r.corpo.aResponder);
+  assert.match(r.corpo.resumo, /responderam agora/);
+});
+
+test('rota /ia/diagnostico: só keyless e sem rede diz a verdade (nenhum respondeu)', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, {
+    caminho: '/ia/diagnostico?fornec=pollinations', metodo: 'GET', env: {},
+    fetchImpl: async () => json({ error: 'sem rede' }, 502),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.aResponder, 0);
+  assert.equal(r.corpo.motores.length, 1, 'o filtro ?fornec= limita a um');
+  assert.match(r.corpo.motores[0].erro, /openai-fast/);
+  assert.equal(r.corpo.motores[0].comChave, false);
 });

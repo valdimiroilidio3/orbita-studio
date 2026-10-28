@@ -282,7 +282,7 @@ async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, mo
        O `falar()` do api/_ia é que fala com cada um (dialetos diferentes); o
        router decide a ordem e marca de parte o que falhar. */
     if (d.style === 'orbita') {
-      const [{ falar }, { comChave, FORNECEDORES, CHAVE_PUBLICA }, { falarComFallback }, { PROVADOS, catalogoDaCadeia }] = await Promise.all([
+      const [{ falar }, { comChave, FORNECEDORES, CHAVE_PUBLICA }, { falarComFallback }, { PROVADOS, catalogoDaCadeia, preferidoDoAmbiente }] = await Promise.all([
         import('./api/_ia/cliente.mjs'),
         import('./api/_ia/catalogo.mjs'),
         import('./api/_ia/router.mjs'),
@@ -305,7 +305,8 @@ async function askHttp(d, { system, user, maxTokens = 4000, timeout = 300000, mo
       const fixado = String(d.model || '');
       const preferido = fixado.includes('/')
         ? { fornecedor: fixado.split('/')[0], modelo: fixado.split('/').slice(1).join('/') }
-        : null;
+        /* 1.42.0 · sem escolha à mão, o padrão é a gratuita que o dono ligou */
+        : preferidoDoAmbiente(mapa);
       const r = await falarComFallback('texto', {
         chaves: mapa, provados: PROVADOS, catalogo, limite: 4, preferido,
         executar: async (entrada) => falar({
