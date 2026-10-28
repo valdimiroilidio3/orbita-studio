@@ -1,3 +1,41 @@
+## 1.52.1 — 28 out 2026 · a lista do painel, provada de fora (e um bug das provas)
+
+A 1.52.0 pôs as IAs da Órbita no campo MODELO da aba de tarefas. Esta versão não
+muda o desenho: torna-o **verificável** e corrige o que só se viu ao correr o
+servidor a sério.
+
+### O bug: as provas eram ignoradas no `npm start`
+
+`GET /api/ia/gratuitos` no servidor local responde com `modelos`; a mesma rota na
+mesa responde com `catalogo`. O painel só lia `catalogo` — por isso, em local, a
+ordem por evidência **nunca se aplicava** e os provados ficavam perdidos por
+entre os grátis, por ordem alfabética. Agora `provasDeGratuitos()` lê as duas
+formas (e as duas juntas não repetem ninguém). Resultado, medido agora:
+
+```
+IA da Órbita — 23 modelo(s), 3 já responderam
+   codestral-latest · LLM7 · provado
+   gpt-oss-120b · OVH AI Endpoints · provado
+   Qwen3.5-397B-A17B · OVH AI Endpoints · provado
+   beam-free · OpenCode Zen · grátis …
+```
+
+### A lista vista de fora: `GET /api/prova-chat?lista=1`
+
+Devolve **exactamente** o menu do painel — grupos, opções, valores, contagem e a
+nota do que ficou de fora — calculado pela mesma função (`src/lista-modelos.js`),
+agora também acessível ao servidor por `api/_ia/lista.mjs`. Sem segunda opinião:
+um teste compara as duas saídas.
+
+### Um pedido de cada vez
+
+`connect()` e o arranque do painel pediam o catálogo ao mesmo tempo (duas vezes).
+Passa a haver um só pedido em voo, e uma falha pode ser tentada outra vez ao abrir
+o painel.
+
+**Testes:** 682 (14 em `lista-modelos.test.mjs`: as duas formas das provas, a
+prova de fora igual ao painel, a precedência, o motor que fixa o par).
+
 ## 1.52.0 — 28 out 2026 · a lista de modelos da aba de tarefas cresce
 
 O dono: *«lista de modelo na aba tarefas (sonnet,opus,fable) essa lista deve
