@@ -23,6 +23,58 @@ export function envBase(env = process.env) {
   return { url, key, pronto: !!(url && key) };
 }
 
+/* ---------- o que o PostgREST quis dizer (1.44.6) ---------- */
+
+/* As colunas que nasceram no 1.37.0. Em 28 out 2026, o `/api/health` dizia
+   «falta o esquema (corre supabase/orbita_mesa.sql)» quando o que faltava era a
+   coluna `subject` em `orbita_messages` — e a mesa não precisava de ser tocada.
+   A mensagem mandava para o ficheiro errado, e custou uma sessão inteira a
+   descobrir. Agora o erro nomeia a coluna, a tabela e o ficheiro certo. */
+export const COLUNAS_DO_1_37 = new Set([
+  'subject', 'to', 'from', 'provider', 'provider_id', 'enviada_at', 'recebida_at',
+  'entregue_at', 'lido_at', 'rejeitada_at', 'erro', 'canal_confirmado', 'direction', 'id_externo',
+  'responded_at', 'rating', 'reviews', 'score_reasons', 'consent',
+]);
+
+/** As tabelas que vivem no `orbita_ia.sql` (e não na mesa). */
+export const TABELAS_DA_IA = new Set(['orbita_ai_config', 'orbita_ai_runs', 'orbita_ai_steps', 'orbita_ai_uso', 'orbita_ai_memoria', 'orbita_media_jobs']);
+
+/**
+ * Traduz um erro do PostgREST para uma frase que diz o que fazer.
+ * Devolve sempre `{mensagem, semEsquema, tabela, coluna, ficheiro}`.
+ */
+export function explificar(texto = '', dados = null) {
+  const msg = String(texto || '');
+  const codigo = String((dados && dados.code) || '');
+  const coluna = (msg.match(/column\s+(?:"?[\w]+"?\.)?"?(\w+)"?\s+does not exist/i) || [])[1] || null;
+  let tabela = (msg.match(/relation\s+"?(?:public\.)?(\w+)"?\s+does not exist/i) || [])[1]
+    || (msg.match(/Could not find the table\s+'?(?:public\.)?(\w+)'?/i) || [])[1]
+    || null;
+  if (coluna) {
+    /* «column orbita_messages.subject does not exist»: a tabela vem antes do ponto */
+    tabela = tabela || (msg.match(/column\s+"?(?:public\.)?(\w+)"?\./i) || [])[1] || null;
+  }
+  const semColuna = codigo === '42703' || !!coluna;
+  const semTabela = codigo === '42P01' || codigo === 'PGRST205' || (!!tabela && /does not exist|Could not find/i.test(msg));
+  if (!semColuna && !semTabela) return { mensagem: msg, semEsquema: false, tabela: null, coluna: null, ficheiro: null };
+
+  let ficheiro = null;
+  if (semColuna && coluna && COLUNAS_DO_1_37.has(coluna)) ficheiro = 'orbita_1_37_0.sql';
+  if (semTabela && tabela && TABELAS_DA_IA.has(tabela)) ficheiro = 'orbita_ia.sql';
+  if (semTabela && tabela && !ficheiro) ficheiro = 'orbita_mesa.sql';
+  const onde = tabela ? `«${tabela}»` : 'uma tabela da base';
+  const dica = ficheiro ? ` — a correcção está em supabase/${ficheiro}` : ' — ver /api/setup?token=…&ler=1 para o esquema real';
+  /* a palavra «esquema» fica na frase de propósito: é o que quem lê procura, e
+     é o que o `/api/rpc` já mostra como «falta o esquema». O que muda é que
+     agora diz QUAL peça e QUAL ficheiro. */
+  return {
+    mensagem: semColuna
+      ? `falta a coluna «${coluna}» em ${onde}: o esquema está desactualizado${dica}`
+      : `falta a tabela ${onde}: o esquema não foi aplicado${dica}`,
+    semEsquema: true, tabela, coluna, ficheiro,
+  };
+}
+
 /* ---------- a base real ---------- */
 export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
   const base = String(url || '').replace(/\/+$/, '');
@@ -47,10 +99,12 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     try { dados = texto ? JSON.parse(texto) : null; } catch { dados = null; }
     if (!r.ok) {
       const msg = (dados && (dados.message || dados.hint || dados.error)) || texto || `HTTP ${r.status}`;
-      // 42P01 = tabela que não existe: é o sinal de que o SQL do esquema não foi aplicado
-      const semTabela = /does not exist|42P01|Could not find the table/i.test(msg);
-      throw Object.assign(new Error(semTabela ? 'a base existe mas falta o esquema (corre supabase/orbita_mesa.sql)' : msg), {
-        status: semTabela ? 503 : r.status, semEsquema: semTabela, detalhe: dados,
+      const explicado = explificar(msg, dados);
+      throw Object.assign(new Error(explicado.mensagem), {
+        status: explicado.semEsquema ? 503 : r.status,
+        semEsquema: explicado.semEsquema,
+        coluna: explicado.coluna, tabela: explicado.tabela, ficheiro: explicado.ficheiro,
+        detalhe: dados,
       });
     }
     return dados;

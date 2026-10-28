@@ -1,3 +1,24 @@
+## 1.44.6 — 28 out 2026 · ler a base antes de lhe mexer (e acabar com a mensagem que mentia)
+
+O `health` andava a dizer «a base existe mas falta o esquema (corre supabase/orbita_mesa.sql)». Fui
+ver, **sem aplicar nada**: as 12 tabelas existiam todas, `faltam: []`. O que faltava era o
+`orbita_1_37_0.sql` — as colunas do envio em `orbita_messages` (`subject`, `to`, `provider`,
+`direction`…). A mensagem mandava para o ficheiro errado e escondia o certo.
+
+- **`/api/setup?...&ler=1`**: só LÊ. Devolve as tabelas, as **colunas por tabela** e o que falta.
+  Existe porque era preciso ler antes de escrever e não havia como — a rota aplicava primeiro e
+  mostrava depois.
+- **`explificar()`**: um erro do PostgREST passa a nomear a peça e o ficheiro —
+  `falta a coluna «subject» em «orbita_messages»: o esquema está desactualizado — a correcção está
+  em supabase/orbita_1_37_0.sql`. Antes: «corre a mesa», para tudo.
+- **`COLUNAS_EXIGIDAS` / `colunasEmFalta()`**: a auditoria vê colunas, não só tabelas.
+
+**Feito em produção (aplicado, com prova):** `orbita_1_37_0.sql` aplicado sozinho →
+`/api/health` agora devolve **`ok: true`**, `faltam: []`, `mensagensProntas: true` (antes: `ok: false`).
+
+**Testes:** 558 (3 novos: auditoria só com SELECT; erro nomeia coluna/ficheiro; a saúde diz
+«subject» em vez de «corre a mesa»).
+
 ## 1.44.5 — 28 out 2026 · três correcções que só a produção mostrou
 
 O `alvos` do 1.44.4 (produção, 9 tentativas) revelou três defeitos meus:

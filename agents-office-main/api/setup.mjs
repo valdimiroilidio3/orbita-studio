@@ -6,13 +6,19 @@
    ficheiros do esquema, pela ordem certa (ver `_esquema.mjs`), um por
    transacção, e diz quantas tabelas da mesa ficaram a existir.
 
-     GET /api/setup?token=<SETUP_TOKEN>
+     GET /api/setup?token=<SETUP_TOKEN>                      (aplica tudo)
      GET /api/setup?token=<SETUP_TOKEN>&so=orbita_mesa.sql   (só um)
+     GET /api/setup?token=<SETUP_TOKEN>&ler=1                (SÓ LÊ: tabelas e
+          colunas, e o que falta — não aplica nada. 1.44.6)
+
+   O `ler=1` existe por um motivo concreto: em 28 out 2026 era preciso «ler as
+   tabelas existentes antes de correr SQL» e não havia como. A rota aplicava
+   primeiro e só depois mostrava o que existia.
 
    Sem `SETUP_TOKEN` definido, ou com o token errado, responde 404 — não 401:
    uma rota de bootstrap não deve confirmar que existe a quem não sabe o token.
    =========================================================================== */
-import { aplicarEsquema, NAO_APLICADOS, TABELAS_DA_MESA, tabelasExistentes, tabelasEmFalta } from './_esquema.mjs';
+import { aplicarEsquema, COLUNAS_EXIGIDAS, NAO_APLICADOS, TABELAS_DA_MESA, colunasEmFalta, colunasExistentes, tabelasExistentes, tabelasEmFalta } from './_esquema.mjs';
 import { VERSAO } from './_versao.mjs';
 
 export const config = { maxDuration: 60 };
@@ -43,6 +49,27 @@ export default async function handler(req, res) {
   try {
     c = await ligar();
     const so = q.get('so') || null;
+    /* 1.44.6 · auditoria sem escrever nada: é o que se corre ANTES de aplicar */
+    if (q.get('ler') === '1') {
+      const tabelas = await tabelasExistentes(c);
+      const colunas = await colunasExistentes(c, tabelas);
+      const faltamTabelas = tabelasEmFalta(tabelas);
+      const faltamColunas = colunasEmFalta(colunas);
+      await c.end();
+      res.status(200).json({
+        ok: !faltamTabelas.length && !Object.keys(faltamColunas).length,
+        modo: 'leitura',                                  // nada foi aplicado
+        versao: VERSAO,
+        tabelas,
+        faltamTabelas,
+        colunas,
+        exigidas: TABELAS_DA_MESA,
+        colunasExigidas: COLUNAS_EXIGIDAS,
+        faltamColunas,
+        naoAplicados: NAO_APLICADOS,
+      });
+      return;
+    }
     const r = await aplicarEsquema(c, { so, log: (t) => console.log(t) });
     const tabelas = await tabelasExistentes(c);
     const faltam = tabelasEmFalta(tabelas);

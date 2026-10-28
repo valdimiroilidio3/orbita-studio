@@ -227,3 +227,65 @@ test('a saúde da base prova as colunas do 1.37, não só as tabelas', async () 
   assert.equal(hb.ok, true);
   assert.equal(hb.mensagensProntas, true);
 });
+
+/* ---------- 1.44.6 · ler antes de escrever, e o erro certo ---------- */
+test('a auditoria de leitura diz tabelas e colunas e o que falta — sem aplicar nada', async () => {
+  const chamadas = [];
+  const cliente = {
+    async query(sql) {
+      chamadas.push(sql);
+      if (/information_schema\.tables/.test(sql)) return { rows: [{ table_name: 'orbita_leads' }, { table_name: 'orbita_messages' }] };
+      if (/information_schema\.columns/.test(sql)) {
+        return { rows: [
+          { table_name: 'orbita_leads', column_name: 'id' },
+          { table_name: 'orbita_messages', column_name: 'id' },
+          { table_name: 'orbita_messages', column_name: 'status' },
+        ] };
+      }
+      return { rows: [] };
+    },
+  };
+  const { colunasExistentes, colunasEmFalta } = await import('./api/_esquema.mjs');
+  const tabelas = ['orbita_leads', 'orbita_messages'];
+  const colunas = await colunasExistentes(cliente, tabelas);
+  assert.deepEqual(colunas['orbita_messages'], ['id', 'status']);
+  const falta = colunasEmFalta(colunas);
+  assert.equal(falta.orbita_messages.includes('subject'), true, 'não viu a coluna em falta');
+  assert.equal(falta.orbita_messages.includes('direction'), true);
+  assert.equal(falta.orbita_leads.includes('consent'), true);
+  /* nada foi escrito: só dois SELECT */
+  assert.equal(chamadas.every((s) => /^\s*select/i.test(s)), true, 'a auditoria escreveu na base');
+});
+
+test('o erro do PostgREST nomeia a coluna e o ficheiro certo (não manda correr a mesa)', async () => {
+  const { explificar } = await import('./api/_repo.mjs');
+  const e = explificar('column orbita_messages.subject does not exist', { code: '42703' });
+  assert.equal(e.semEsquema, true);
+  assert.equal(e.coluna, 'subject');
+  assert.equal(e.tabela, 'orbita_messages');
+  assert.equal(e.ficheiro, 'orbita_1_37_0.sql');
+  assert.match(e.mensagem, /orbita_messages/);
+  assert.doesNotMatch(e.mensagem, /orbita_mesa\.sql/, 'voltou a mandar para o ficheiro errado');
+
+  assert.equal(explificar('relation "public.orbita_leads" does not exist', { code: '42P01' }).ficheiro, 'orbita_mesa.sql');
+  assert.equal(explificar("Could not find the table 'public.orbita_ai_runs' in the schema cache").ficheiro, 'orbita_ia.sql');
+  const outro = explificar('permission denied', { code: '42501' });
+  assert.equal(outro.semEsquema, false);
+  assert.equal(outro.mensagem, 'permission denied');
+});
+
+test('a saúde passa a dizer a coluna em falta, não «corre a mesa»', async () => {
+  const { createSupabaseRepo } = await import('./api/_repo.mjs');
+  const fetchImpl = async (url) => {
+    const alvo = String(url);
+    if (alvo.includes('select=id,subject')) {
+      return { ok: false, status: 400, text: async () => JSON.stringify({ code: '42703', message: 'column orbita_messages.subject does not exist' }) };
+    }
+    return { ok: true, status: 200, text: async () => '[]' };
+  };
+  const repo = createSupabaseRepo({ url: 'https://x.supabase.co', key: 'k', fetchImpl });
+  const h = await repo.health();
+  assert.equal(h.ok, false);
+  assert.match(h.mensagensErro, /subject/);
+  assert.match(h.mensagensErro, /orbita_1_37_0\.sql/);
+});
