@@ -34,6 +34,15 @@ export const NAO_APLICADOS = {
   'orbita_schema.sql': 'desenho da migração do SQLite, nunca executado; cria orbita_leads com colunas incompatíveis (company_name/lead_status) e, se corresse primeiro, a mesa ficava sem as colunas que usa',
 };
 
+/* 1.44.6 · as colunas que o código USA e o esquema versionado acrescenta. A
+   auditoria (`/api/setup?ler=1`) olha para elas antes de aplicar o que quer que
+   seja — foi a falta disto que fez o `health` acusar «falta o esquema» quando só
+   faltava uma coluna. */
+export const COLUNAS_EXIGIDAS = {
+  orbita_messages: ['subject', 'to', 'from', 'provider', 'enviada_at', 'recebida_at', 'direction', 'id_externo'],
+  orbita_leads: ['responded_at', 'rating', 'reviews', 'score_reasons', 'consent'],
+};
+
 export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas'];
 
 /** Lê um ficheiro do esquema. Existe separado para o teste poder injectar outro `fs`. */
@@ -86,6 +95,36 @@ export async function tabelasExistentes(cliente, prefixo = 'orbita_') {
     [`${prefixo}%`],
   );
   return (r?.rows || []).map((x) => x.table_name);
+}
+
+/**
+ * As colunas que existem, por tabela. Uma consulta só, para o `orbita_` inteiro.
+ * Devolve `{ orbita_messages: ['id','subject',…], … }`.
+ */
+export async function colunasExistentes(cliente, tabelas = null, prefixo = 'orbita_') {
+  const r = await cliente.query(
+    "select table_name, column_name from information_schema.columns where table_schema='public' and table_name like $1 order by table_name, ordinal_position",
+    [`${prefixo}%`],
+  );
+  const quer = Array.isArray(tabelas) ? new Set(tabelas) : null;
+  const saida = {};
+  for (const linha of (r?.rows || [])) {
+    if (quer && !quer.has(linha.table_name)) continue;
+    (saida[linha.table_name] = saida[linha.table_name] || []).push(linha.column_name);
+  }
+  return saida;
+}
+
+/** As colunas exigidas que não existem, por tabela. Vazio = a base serve. */
+export function colunasEmFalta(colunas = {}, exigidas = COLUNAS_EXIGIDAS) {
+  const saida = {};
+  for (const [tabela, lista] of Object.entries(exigidas)) {
+    const tem = new Set(colunas[tabela] || []);
+    if (!colunas[tabela]) continue;                 // a tabela toda falta: é outro erro
+    const faltam = lista.filter((c) => !tem.has(c));
+    if (faltam.length) saida[tabela] = faltam;
+  }
+  return saida;
 }
 
 /** O que a mesa exige e não está lá. Vazio = a base serve. */
