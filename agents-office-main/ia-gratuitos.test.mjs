@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, comChave } from './api/_ia/catalogo.mjs';
 import {
-  PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, descobertosSalvos, estadoCurto, etiquetasDoId,
+  PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, descobertosSalvos, estadoCurto, eModeloDeConversa, etiquetasDoId,
   porProvar, porVelocidade, preferidoDoAmbiente, provadosActivos, provasDe, resumo,
 } from './api/_ia/gratuitos.mjs';
 import { falar, listarModelos } from './api/_ia/cliente.mjs';
@@ -541,4 +541,14 @@ test('motor: a descoberta pergunta uma vez e depois serve a cache (6 h)', async 
   /* forçar é explícito e volta a perguntar */
   const terceira = await motor.descobrirSePreciso({ forcar: true, fornec: 'pollinations' });
   assert.ok(terceira.length >= 1);
+});
+
+test('descoberta: embeddings, TTS e imagem ficam de fora (não conversam)', () => {
+  const cfg = { descobertos: { ovh: { quando: '2026-10-28T07:00:00.000Z', modelos: [
+    { id: 'whisper-large-v3' }, { id: 'nvr-tts-en-us' }, { id: 'bge-m3' },
+    { id: 'stable-diffusion-xl-base-v10' }, { id: 'Qwen3-Embedding-8B' },
+    { id: 'Qwen3.5-397B-A17B' },
+  ] } } };
+  assert.deepEqual(descobertosSalvos(cfg).map((m) => m.modelo), ['Qwen3.5-397B-A17B']);
+  assert.equal(eModeloDeConversa('llama-3.3-70b-versatile'), true, 'um modelo normal não pode ser excluído');
 });
