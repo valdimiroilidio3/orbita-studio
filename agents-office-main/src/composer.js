@@ -424,11 +424,15 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     const curto = par ? par.modelo.split('/').pop() : '';
     const name = par
       ? (curto.length > 22 ? curto.slice(0, 21) + '…' : curto)
-      : m ? (m === h?.model ? (h.modelName || m) : m.charAt(0).toUpperCase() + m.slice(1)) : 'sem motor';
+      : m ? (m === h?.model ? (h.modelName || m) : m.charAt(0).toUpperCase() + m.slice(1))
+        /* enquanto a lista da Órbita não chega, «auto»; «sem motor» só depois de a
+           resposta dizer que não há nenhum (era o que o dono via, e era falso) */
+        : (state.catalogo === null ? 'auto' : 'sem motor');
     if (el.name) el.name.textContent = name;
     if (el.badge) {
-      el.badge.textContent = par ? (linha?.badge || '·') : m ? 'A' : '—';
-      el.badge.title = par ? (linha?.provider || par.fornecedor) : m ? 'Anthropic' : 'sem motor ligado';
+      el.badge.textContent = par ? (linha?.badge || '·') : m ? 'A' : (state.catalogo === null ? '·' : '—');
+      el.badge.title = par ? (linha?.provider || par.fornecedor) : m ? 'Anthropic'
+        : (state.catalogo?.modelos?.length ? 'IA da Órbita — a lista é a real' : 'sem motor ligado');
     }
     const eff = state.auto ? (h?.effort || '') : state.effort;
     if (el.eff) {

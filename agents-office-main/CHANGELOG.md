@@ -1,3 +1,10 @@
+## 1.51.1 — 28 out 2026 · enquanto a lista chega, diz «auto» (não «sem motor»)
+
+Visto na página publicada, a abrir: o botão do modelo escrevia **«sem motor»**
+no instante antes de a lista da IA da Órbita chegar — a mesma frase que o dono
+apontou, e falsa por um segundo. Agora o estado inicial é `auto`, e «sem motor»
+só aparece depois de a resposta dizer que não há nenhum fornecedor com chave.
+
 ## 1.51.0 — 28 out 2026 · a IA escolhe-se onde se conversa
 
 A 1.50.0 pôs a escolha na Mesa e fez o erro dizer a verdade. Faltava o sítio
