@@ -1,3 +1,19 @@
+## 1.44.5 — 28 out 2026 · três correcções que só a produção mostrou
+
+O `alvos` do 1.44.4 (produção, 9 tentativas) revelou três defeitos meus:
+
+1. **Repetia o que já estava provado.** `codestral-latest`, `Qwen3.5-397B-A17B` e `gpt-oss-120b`
+   foram tentados outra vez — a lista curada (`PROVADOS`) não era consultada. Três das nove
+   tentativas eram repetições puras.
+2. **Bloqueava o LLM7 inteiro por causa de um modelo.** O `DeepSeek-V4.1-Flash` respondeu
+   «Missing API key» (tier pago dele) e o erro `chave` cortou o fornecedor 6 h — levando consigo
+   o `codestral-latest`, que respondeu em 677 ms. Num fornecedor **keyless**, erro de chave é do
+   modelo, não do fornecedor.
+3. **Insistia em modelos que dão 502 sempre.** O `openai-fast` do Pollinations falhou em todas as
+   chamadas. Um `avaria`/`modelo` passa a marcar o par de fora 6 h (mecanismo que já existia).
+
+**Testes:** 555 (2 novos).
+
 ## 1.44.4 — 28 out 2026 · o lote faz rodízio, e um fornecedor sem quota não o come todo
 
 Diagnóstico em produção, com o `/ia/provar-modelos` já a devolver `saltados`: o lote de 6 saía

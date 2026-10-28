@@ -12,7 +12,7 @@
    =========================================================================== */
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
-import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
+import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, marcarFora, orcamento } from './router.mjs';
 import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
@@ -165,7 +165,12 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
   const paralelo = Math.max(1, Math.min(6, Number(concorrencia) || 4));
   const descobertos = descobertosSalvos(cfg);
 
-  const jaProvado = (id, modelo) => !!(testes[id]?.provados?.[modelo] && testes[id].provados[modelo].ok !== false);
+  /* 1.44.5 · os curados da lista (PROVADOS) também já responderam: sem isto,
+     a prova voltava a tentar `codestral-latest` e `gpt-oss-120b` em cada lote —
+     viu-se em produção a 28 out 2026, 3 das 9 tentativas foram repetições. */
+  const curados = new Set(PROVADOS.map((p) => `${p.fornec}\u0000${p.modelo}`));
+  const jaProvado = (id, modelo) => curados.has(`${id}\u0000${modelo}`)
+    || !!(testes[id]?.provados?.[modelo] && testes[id].provados[modelo].ok !== false);
   /* 1.44.2 · um fornecedor que acabou de dizer «limite atingido» não é tentado
      outra vez na chamada seguinte: em produção, três chamadas seguidas foram
      quatro tentativas cada ao OpenCode, todas com o mesmo 429. O bloqueio fica
@@ -253,9 +258,16 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         return { fornec, modelo, ok: true, ms, resposta: texto.slice(0, 40) };
       } catch (e) {
         const codigo = e?.codigo || null;
+        /* 1.44.5 · num fornecedor keyless, «missing API key» é daquele modelo
+           (o tier pago dele), não do fornecedor: bloquear o LLM7 inteiro por
+           causa de um modelo tirava o `codestral-latest` da cadeia 6 h. */
+        const doFornecedor = falhaDoFornecedor(codigo) && !(codigo === 'chave' && prov.keyless);
+        /* um modelo que dá 502/404 repetidamente sai da cadeia 6 h (mecanismo que
+           já existia para os modelos indisponíveis): não vale a pena tentá-lo */
+        if (codigo === 'avaria' || codigo === 'modelo') marcarFora(fornec, modelo, Date.now());
         return {
           fornec, modelo, ok: false, ms: Date.now() - t0,
-          codigo, doFornecedor: falhaDoFornecedor(codigo),
+          codigo, doFornecedor,
           erro: String(e?.message || e).slice(0, 200),
         };
       }
@@ -280,6 +292,7 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     testes[r.fornec] = testes[r.fornec] || {};
     testes[r.fornec].provados = { ...(testes[r.fornec].provados || {}), [r.modelo]: { ok: true, ms: r.ms, quando: agora() } };
   }
+  await guardarFora().catch(() => {});
   if (bons.length || saltados.length) {
     try { await repo.ia.config.gravar('testes', testes); } catch { /* sem base, a prova existe mas não persiste */ }
     cacheConfig = null;

@@ -876,3 +876,37 @@ test('provar-modelos: o lote faz rodízio entre fornecedores (um só não o cons
   assert.equal(new Set(donos.slice(0, 4)).size >= 2, true, `o lote começou todo no mesmo fornecedor: ${donos.join(',')}`);
   assert.equal(vistos.length, 6);
 });
+
+test('provar-modelos: não repete os curados, nem bloqueia um keyless por erro de chave de um modelo', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const pedidos = [];
+  const fetchImpl = async (url, opt) => {
+    const modelo = JSON.parse(opt.body).model;
+    pedidos.push(modelo);
+    if (modelo === 'DeepSeek-V4.1-Flash') return { ok: false, status: 401, text: async () => '{"error":"Missing API key."}' };
+    return json({ choices: [{ message: { content: 'ok' } }] });
+  };
+  await repo.ia.config.gravar('descobertos', { llm7: { quando: new Date().toISOString(), modelos: [{ id: 'DeepSeek-V4.1-Flash' }, { id: 'Inkling-Small' }] } });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'llm7', limite: 4 });
+
+  assert.equal(r.alvos.some((a) => a.modelo === 'codestral-latest'), false, 'repetiu um modelo da lista curada');
+  const erroChave = r.resultados.find((x) => x.codigo === 'chave');
+  assert.ok(erroChave, 'o teste precisa de exercer o erro de chave');
+  assert.equal(erroChave.doFornecedor, false, 'bloqueou o fornecedor keyless inteiro por um modelo com tier pago');
+  assert.equal(r.saltados.some((x) => x.fornec === 'llm7'), false);
+});
+
+test('provar-modelos: um 502 marca o modelo de fora (6 h) para não voltar a ser tentado', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const fetchImpl = async () => ({ ok: false, status: 502, text: async () => '{"error":"upstream"}' });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'pollinations', limite: 1, concorrencia: 1 });
+  const alvo = r.alvos[0];
+  assert.equal(foraDoAr(alvo.fornec, alvo.modelo), true, 'o modelo avariado não ficou de fora');
+  /* a cadeia deixa de o propor */
+  const c = cadeia('texto', { chaves: { pollinations: SEM_CHAVE }, limite: 20 });
+  assert.equal(c.some((x) => x.fornec === alvo.fornec && x.modelo === alvo.modelo), false);
+});
