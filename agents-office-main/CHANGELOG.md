@@ -1,16 +1,33 @@
-## 1.47.2 — 28 out 2026 · a câmara fechada aparecia à frente do papel
+## 1.47.3 — 28 out 2026 · o registo diz a verdade, e o ecrã de papel fica como está
 
-Apanhado a verificar a 1.47.1 **em produção**, não em teste: em `/app#/papel`, com
-a câmara fechada, apareciam «Tirar fotografia» e «Fechar câmara» a seguir ao
-título. A causa é velha e silenciosa: o bloco tinha o atributo `hidden`, mas
-`.acts` define `display:flex`, e uma regra de autor ganha ao `[hidden]` do
-browser. O atributo estava lá e não escondia nada.
+Sem alterações de comportamento: sobe a versão para o `main` publicado não ficar
+com um `CHANGELOG` a afirmar um defeito que não existia (ver 1.47.2). O que muda
+é a prova — a câmara fechada é agora verificada num DOM a sério.
 
-Agora o esconder é `display:none` na própria marca, e há um teste que lê a marca
-`#papelCam` e falha se o atributo voltar (ou se o `display:none` desaparecer com
-a câmara fechada).
+## 1.47.2 — 28 out 2026 · registo corrigido: a câmara fechada nunca apareceu
 
-**Testes:** 586 (1 novo). `mesa.smoke` ✓.
+**Esta entrada começou por dizer o contrário.** Ao abrir `/app#/papel` publicado,
+o texto devolvido pela ferramenta de leitura trazia «Tirar fotografia» e «Fechar
+câmara» juntamente com o resto — e eu concluí que o bloco da câmara estava
+visível com a câmara fechada. Não estava. A ferramenta converte a página em
+texto e **ignora a CSS**: mostra o que está no HTML, escondido ou não.
+
+Provado com jsdom e a CSS real da mesa (`.acts { display:flex }`):
+
+| como estava | `getComputedStyle(#papelCam).display` |
+|---|---|
+| 1.47.1 — atributo `hidden` | `none` (estava certo) |
+| 1.47.2 — `display:none` na marca | `none` |
+
+A alteração fica, mas por outra razão que não a inventada: um `display:none`
+escrito na própria marca não pode ser derrotado por uma classe que alguém
+acrescente mais tarde (era esse o risco teórico do `hidden`, não um defeito).
+
+E fica a prova que faltava, agora no sítio certo: um teste que carrega a vista
+num DOM a sério, com a CSS do `.acts`, e exige `display: none` com a câmara
+fechada e diferente de `none` com ela aberta.
+
+**Testes:** 587 (2 do bloco da câmara, um deles a sério no DOM).
 
 ## 1.47.1 — 28 out 2026 · a câmara ao vivo no ecrã de papel (e o site já não se proíbe de a usar)
 
