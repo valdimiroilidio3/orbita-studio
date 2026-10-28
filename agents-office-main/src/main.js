@@ -84,7 +84,7 @@ function driveDesk(r, con, t, phase, dt) {
   }
 }
 import { initMcp } from './mcp.js';
-import { initComposer, chatBody, metaLine } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
+import { initComposer, chatBody, metaLine, dividirModelo, agenteDaOrbita, corpoDaOrbita, lerRespostaOrbita, juntarAnexos } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
 import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
@@ -1338,6 +1338,70 @@ async function buildFromChat(id, text, m) {
     throw Object.assign(new Error('Não foi criada. ' + f.frase + (f.detalhe ? ' — ' + f.detalhe : '') + ' ' + f.ajuda), { falha: f });
   }
 }
+/* 1.51.0 · a conversa com a IA da Órbita.
+   Quando a escolha do compositor é um par fornecedor|modelo (a lista real de
+   /ia/modelos), o caminho do servidor local não serve: `/api/chat` é o motor do
+   CLI desta máquina e não existe na página publicada. Vai por `/api/rpc` →
+   `POST /ia/chat`, que é o mesmo sítio onde a mesa conversa. O esforço escolhido
+   vira o tecto de tokens (o servidor diz quanto); quem respondeu volta escrito. */
+async function sendChatOrbita(id, texto, m, par) {
+  const r = R[id];
+  /* o histórico já leva esta mensagem (foi escrita antes de chegar aqui): tira-se a última,
+     senão a IA lia a pergunta duas vezes */
+  const anteriores = [...(chatHist[id] || [])];
+  const ultima = anteriores[anteriores.length - 1];
+  if (ultima && ultima.who === 'user' && ultima.text === texto) anteriores.pop();
+  const hist = anteriores.filter(x => x.who === 'user' || x.who === 'agent')
+    .slice(-8).map(x => ({ role: x.who === 'agent' ? 'assistant' : 'user', content: x.text }));
+  const agente = agenteDaOrbita(r?.a || {});
+  /* A rota /ia/chat leva uma mensagem (máx. 8000 caracteres), não um envelope de
+     ficheiros: os anexos entram no texto, e o que não couber é dito — nunca
+     desaparece em silêncio. O @Cérebro é do servidor local (as notas da casa);
+     nesta via a IA da Órbita usa a memória dela, e isso também é dito. */
+  const { mensagem, cortados } = juntarAnexos(texto, m.files || []);
+  if (cortados) composer?.toast(`A mensagem passou do limite de 8000 caracteres: ${cortados} anexo(s) ficaram de fora.`, 'err');
+  if ((m.context || []).length) composer?.toast('As notas do Cérebro são do servidor local. Aqui a IA da Órbita usa a memória dela — esta resposta não leu essas notas.', '');
+  const line = `${R[id]?.a?.name || 'O agente'} está a pensar`;
+  chatPush(id, { who: 'work', i: '…', text: line });
+  try {
+    const res = await fetch('/api/rpc', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(corpoDaOrbita({ agente, mensagem, historico: hist, par, esforco: m.effort })),
+    });
+    const lido = lerCorpo(await res.text());
+    dropWork(id, line);
+    if (!res.ok) {
+      const f = explicarFalha({ status: res.status, texto: lido.texto, json: lido.json, rota: '/api/rpc' });
+      throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+    }
+    const out = lerRespostaOrbita(lido.json, par);
+    if (!out.ok) {
+      chatPush(id, { who: 'agent', text: `Não consigo responder. O servidor respondeu: ${out.erro}.${par ? ` A escolha foi ${par.fornecedor} · ${par.modelo}.` : ''}` });
+      composer?.toast(out.erro, 'err');
+      return;
+    }
+    chatPush(id, { who: 'agent', text: out.texto, meta: out.meta });
+    /* a escolha fica para a próxima: o agente guarda o par no servidor */
+    if (par) saveEscolha(agente, par);
+  } catch (e) {
+    dropWork(id, line);
+    const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/rpc', erro: e.message });
+    chatPush(id, { who: 'agent', text: `Não consigo responder. ${f.frase}${f.detalhe ? ` — ${f.detalhe}` : ''} ${f.ajuda}` });
+    throw e;
+  }
+}
+/* A escolha não se perde ao mudar de agente: fica no agente, no servidor
+   (PATCH /ia/config). Se a gravação falhar, a conversa continua — e é dito. */
+let escolhaAVisar = false;
+async function saveEscolha(agente, par) {
+  if (escolhaAVisar) return;
+  escolhaAVisar = true;
+  try {
+    await fetch('/api/rpc', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ caminho: '/ia/config', metodo: 'PATCH', corpo: { agentes: { [agente]: { fornecedor: par.fornecedor, modelo: par.modelo } } } }) });
+  } catch { /* a conversa não depende disto */ }
+  setTimeout(() => { escolhaAVisar = false; }, 30000);
+}
 async function sendChat(text, meta = {}) {
   const id = modalOpen;
   const clean = String(text || '').trim();
@@ -1351,7 +1415,16 @@ async function sendChat(text, meta = {}) {
     files: Array.isArray(meta.files) ? meta.files.slice(0, 5) : [],
     context: Array.isArray(meta.context) ? meta.context : [],
   };
-  if (m.mode === 'build') { chatPush(id, { who: 'user', text: clean }); return buildFromChat(id, clean, m); }
+  const par = m.auto ? null : dividirModelo(m.model);
+  if (m.mode === 'build') {
+    chatPush(id, { who: 'user', text: clean });
+    /* construir cria uma tarefa no quadro, e o quadro só existe com o servidor local */
+    if (par) {
+      chatPush(id, { who: 'agent', text: 'Construir precisa do quadro de tarefas, que vive no servidor local (npm start). Com a IA da Órbita escolhida podes conversar e planear aqui; para criar a tarefa, abre o Órbita no teu computador ou usa a Mesa.' });
+      return;
+    }
+    return buildFromChat(id, clean, m);
+  }
 
   const hist = (chatHist[id] || []).filter(x => x.who === 'user' || x.who === 'agent').slice(-8).map(x => ({ who: x.who, text: x.text }));
   chatPush(id, { who: 'user', text: clean });
@@ -1365,6 +1438,13 @@ async function sendChat(text, meta = {}) {
     const tr = tasks && tasks.handleChat(id, clean); // "adicionar tarefa: …" / "o que está no quadro"
     if (tr) { chatPush(id, { who: 'agent', text: tr }); return; }
   }
+
+  /* 1.51.0 · quando a página não tem motor local (é o caso da publicada), o «automático»
+     não pode bater em `/api/chat` — a Órbita responde por /api/rpc e o router escolhe. */
+  const est = (composer && composer.state ? composer.state() : {}) || {};
+  const temCli = Array.isArray(est.health?.models) && est.health.models.length > 0;
+  const temOrbita = (est.catalogo?.modelos || []).length > 0;
+  if (par || (!temCli && temOrbita)) return sendChatOrbita(id, clean, m, par);
 
   const line = m.mode === 'plan' ? `${r.a.name} está a preparar o plano` : `${r.a.name} está a pensar`;
   chatPush(id, { who: 'work', i: '…', text: line });

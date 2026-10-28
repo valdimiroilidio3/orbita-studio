@@ -1,3 +1,56 @@
+## 1.51.0 — 28 out 2026 · a IA escolhe-se onde se conversa
+
+A 1.50.0 pôs a escolha na Mesa e fez o erro dizer a verdade. Faltava o sítio
+onde o dono estava a trabalhar: **o chat principal do escritório**. Aí o botão
+dizia «sem motor» — e a lista, quando aparecia, era *Sonnet · Opus · Fable*,
+os nomes do motor local, que na página publicada não existe.
+
+### O compositor pergunta à IA da Órbita
+
+- A lista de modelos passa a vir de `GET /ia/modelos` (por `/api/rpc`, o único
+  caminho que existe na Vercel) e mostra **pares reais** — fornecedor · modelo,
+  com «grátis» e «provado» quando é o caso. Só entram fornecedores que podem
+  responder agora; os sem chave e os desligados são **contados no fim da
+  lista**, em vez de aparecerem para falhar depois.
+- A conversa vai por `POST /ia/chat` no mesmo envelope: `{agente, mensagem,
+  historico, fornecedor, modelo, esforco}`. O **automático** também funciona
+  sem motor local: quando não há CLI, o router da Órbita decide — e a resposta
+  continua a dizer quem respondeu.
+- Cada posto do escritório tem agora um agente da Órbita a responder por ele
+  (`agenteDaOrbita`): a direcção planeia, a prospeção procura, o design desenha,
+  a engenharia implementa, os media criam, os contratos revêem. Antes de isto,
+  todos caíam no mesmo papel.
+- A resposta mostra `fornecedor · modelo · tecto de tokens · tempo` por baixo —
+  o que correu, não o que se pediu. A escolha fica gravada no agente
+  (`PATCH /ia/config`), para não se perder ao mudar de sala.
+
+### O esforço tem consequência
+
+`POST /ia/chat` aceita `esforco` (`low·medium·high·xhigh·max`), que vira o
+**tecto de tokens** da resposta (400 · 1200 · 2400 · 4000 · 6000) e volta
+escrito na resposta (`esforco: {pedido, maxTokens}`) e no pedido ao fornecedor.
+Não se chama «raciocínio» ao que é um tecto de tokens — o `reasoning_effort`
+não é entendido por todos os fornecedores e um rótulo sem efeito seria a
+simulação que o pedido 19 proíbe. `GET /ia/modelos` declara os níveis.
+
+### O que não se finge
+
+- **Construir** precisa do quadro de tarefas, que só existe no servidor local:
+  com a IA da Órbita escolhida, o compositor diz isso e aponta o caminho.
+- **Anexos** entram no texto da mensagem (a rota leva uma mensagem, máx. 8000
+  caracteres); o que não couber é dito, não desaparece.
+- **@Cérebro/@Documentos** são as notas do servidor local: nesta via a IA da
+  Órbita usa a memória dela, e o compositor diz isso em vez de prometer.
+
+### Prova de fora: `GET /api/prova-chat`
+
+Sem token faz o **ensaio** (catálogo real, escolha validada, esforço aplicado,
+quantos fornecedores podem responder) — zero pedidos de IA. Com
+`?token=<PROVA_TOKEN>` faz a conversa a sério, pela mesma função do `/api/rpc`,
+e devolve quem respondeu, em quanto tempo e o que disse.
+
+**Testes:** 668 (13 novos no `composer-ia.test.mjs`, 2 no `ia.test.mjs`).
+
 ## 1.50.0 — 28 out 2026 · a IA escolhe-se, e o erro diz a verdade
 
 Duas queixas do dono, uma causa comum: o escritório publicado na Vercel responde

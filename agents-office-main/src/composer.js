@@ -66,6 +66,138 @@ export function packFiles(current, incoming) {
   return { files: kept, rejected };
 }
 
+/* ---------------------------------------------------------------- a IA da Órbita (1.51.0)
+   14 out 2026: o compositor mostrava Sonnet/Opus/Fable porque esses eram os modelos
+   que o servidor local sabia correr. Na página publicada não há servidor local — e a
+   lista ficava vazia, com o botão a dizer «sem motor». A IA da Órbita existe nessa
+   mesma página (a mesa fala com ela por /api/rpc); o que faltava era o compositor
+   saber perguntar-lhe o catálogo. Passa a saber, e a escolha é um par
+   fornecedor|modelo — o mesmo que POST /ia/chat valida. */
+export const IA_SEP = '|';
+
+/** O nome com que a escolha fica guardada: `openrouter|qwen/qwen3-coder:free`. */
+export const chaveDeModelo = (fornecedor, modelo) => `${String(fornecedor || '')}${IA_SEP}${String(modelo || '')}`;
+
+/** Separa a escolha. `null` quer dizer «não é um par da Órbita» (um nome do CLI). */
+export function dividirModelo(chave) {
+  const s = String(chave || '');
+  const i = s.indexOf(IA_SEP);
+  if (i <= 0 || i === s.length - 1) return null;
+  const fornecedor = s.slice(0, i);
+  const modelo = s.slice(i + 1);
+  return fornecedor && modelo ? { fornecedor, modelo } : null;
+}
+
+/** As linhas do menú a partir do que `GET /ia/modelos` devolveu.
+    Só entram modelos de fornecedores que podem responder (chave + não desligados);
+    o resto é contado e dito, em vez de aparecer para falhar depois. */
+export function modelosDoCatalogo(corpo, estado = {}) {
+  const fora = new Map(((estado && estado.fornecedores) || []).map(f => [f && f.id, f]));
+  const modelos = [];
+  let semChave = 0, desligados = 0;
+  for (const f of (corpo && corpo.fornecedores) || []) {
+    if (!f || !f.id) continue;
+    const st = fora.get(f.id) || {};
+    const desligado = f.desligado === true || st.desligado === true;
+    const temChave = f.comChave === true || st.configurado === true || st.comChaveAgora === true;
+    if (!temChave || desligado) {
+      if (desligado) desligados += 1; else semChave += 1;
+      continue;
+    }
+    const vistos = new Set();
+    for (const x of f.catalogo || []) {
+      const modelo = typeof x === 'string' ? x : (x && x.modelo);
+      if (!modelo || vistos.has(modelo)) continue;
+      vistos.add(modelo);
+      modelos.push({
+        key: chaveDeModelo(f.id, modelo),
+        model: modelo,
+        name: modelo,
+        provider: f.nome || f.id,
+        badge: String(f.nome || f.id).charAt(0).toUpperCase(),
+        gratis: !!(x && typeof x === 'object' ? x.gratuito : f.gratuito),
+        testado: st.testado === true && !!(st.ultimoTeste && st.ultimoTeste.ok),
+      });
+    }
+  }
+  // quem já respondeu a um pedido real primeiro; depois os gratuitos
+  modelos.sort((a, b) => (Number(b.testado) - Number(a.testado)) || (Number(b.gratis) - Number(a.gratis)) || a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
+  return {
+    modelos,
+    semChave,
+    desligados,
+    esforcos: Array.isArray(corpo && corpo.esforcos) ? corpo.esforcos.filter(k => typeof k === 'string') : [],
+    nota: (corpo && corpo.esforcoNota) || '',
+  };
+}
+
+/** Que agente da IA da Órbita responde por um agente do escritório.
+    O escritório tem 35 postos com nomes de gente; a IA da Órbita tem 8 papéis.
+    Sem esta ponte, todos caíam no `research` — o «automático» que o dono estranhou. */
+const POR_DEPT = { emails: 'orchestrator', sales: 'research', ops: 'research', fin: 'design', delivery: 'backend', marketing: 'creative' };
+const POR_POSTO = {
+  qa: 'qa', crep: 'frontend', cass: 'backend', apay: 'backend', dlead: 'orchestrator', pco: 'orchestrator',
+  gfx: 'design', dasst: 'design', alead: 'design', inv: 'design', invoo: 'design',
+  newt: 'creative', ada: 'creative', iggy: 'creative', vid: 'creative', lexi: 'creative', recon: 'creative', mlead: 'creative',
+  legal: 'reviewer', comply: 'reviewer', report: 'reviewer',
+  elead: 'orchestrator', imail: 'orchestrator', olead: 'research', pros: 'research',
+};
+export function agenteDaOrbita(agente = {}) {
+  const posto = String(agente.id || agente.key || '');
+  if (POR_POSTO[posto]) return POR_POSTO[posto];
+  return POR_DEPT[String(agente.dept || '')] || 'research';
+}
+
+/* ---------------------------------------------------------------- a conversa pela Órbita
+   O mesmo contrato da mesa (POST /ia/chat), mas dentro do envelope /api/rpc que é
+   o único caminho que existe na página publicada. Estas três funções são puras
+   para o teste poder discuti-las: o que se pede, o que se lê, e o que cabe. */
+export const ROTA_CHAT_ORBITA = '/ia/chat';
+
+export function corpoDaOrbita({ agente = 'research', mensagem = '', historico = [], par = null, esforco = '' } = {}) {
+  return {
+    caminho: ROTA_CHAT_ORBITA,
+    metodo: 'POST',
+    corpo: {
+      agente,
+      mensagem: String(mensagem || ''),
+      historico: (historico || []).slice(-8),
+      /* sem par = auto: o router da Órbita decide; com par = vai àquele fornecedor */
+      ...(par ? { fornecedor: par.fornecedor, modelo: par.modelo } : {}),
+      ...(esforco ? { esforco } : {}),
+    },
+  };
+}
+
+/** Lê o envelope {status, corpo} (ou o corpo solto) e devolve o que a conversa mostra. */
+export function lerRespostaOrbita(env, par = null) {
+  const corpo = env && typeof env === 'object' && 'corpo' in env ? (env.corpo || {}) : (env || {});
+  const status = Number((env && env.status) ?? 200);
+  if (status >= 400 || !corpo || !corpo.resposta) {
+    return { ok: false, erro: (corpo && corpo.error) || 'a IA da Órbita não devolveu resposta' };
+  }
+  const quem = [corpo.fornecedor || (par && par.fornecedor) || 'IA da Órbita', corpo.modelo || (par && par.modelo)]
+    .filter(Boolean).join(' · ');
+  const extras = [];
+  if (corpo.esforco && corpo.esforco.maxTokens) extras.push(`tecto ${corpo.esforco.maxTokens} tokens`);
+  if (corpo.ms) extras.push(`${Math.round(Number(corpo.ms) / 100) / 10} s`);
+  if (Array.isArray(corpo.ferramentas) && corpo.ferramentas.length) extras.push(`${corpo.ferramentas.length} ferramenta(s)`);
+  return { ok: true, texto: String(corpo.resposta), meta: [quem, ...extras].join(' · '), corpo };
+}
+
+/** Os anexos entram no texto da mensagem: a rota leva uma mensagem só. O que não
+    couber é contado — não desaparece em silêncio. */
+export function juntarAnexos(texto, files = [], limite = 7800) {
+  let mensagem = String(texto || '');
+  let cortados = 0;
+  for (const f of files || []) {
+    const bloco = `\n\n--- ${f.name} ---\n${String(f.text || '')}`;
+    if (mensagem.length + bloco.length > limite) { cortados += 1; continue; }
+    mensagem += bloco;
+  }
+  return { mensagem, cortados };
+}
+
 /** As escolhas de @contexto, com os números que o servidor declarou. `terminal` não existe: é dito. */
 export function contextChoices(health) {
   const notes = Number(health?.context?.notes ?? health?.notes ?? 0);
@@ -151,7 +283,8 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   if (!el.card || !el.input || !el.send) return null; // página antiga: não há compositor para ligar
 
   const prefs = loadPrefs(storage);
-  const state = { mode: prefs.mode, model: prefs.model, effort: prefs.effort, auto: prefs.auto, favs: prefs.favs, tab: 'all', files: [], ctx: [], health: null, busy: false, mic: null };
+  const state = { mode: prefs.mode, model: prefs.model, effort: prefs.effort, auto: prefs.auto, favs: prefs.favs, tab: 'all', files: [], ctx: [], health: null, busy: false, mic: null,
+    catalogo: null, catalogoErro: '', catalogoPedido: false }; // 1.51.0 · a IA da Órbita
   const save = () => savePrefs(storage, state);
 
   /* ---------------------------------------------------------------- avisos (toasts) */
@@ -172,22 +305,62 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
        servidor nenhum (a vista publicada, aberta em estático) o problema não é a chave da IA — é não
        haver Órbita a correr. A frase passa a dizer qual das duas é. */
     state.semServidor = !h && porque === 'sem-servidor';
-    if (state.model && h && Array.isArray(h.models) && !h.models.includes(state.model)) state.model = '';
+    /* uma escolha da Órbita (fornecedor|modelo) não se apaga por o CLI ter outros nomes */
+    if (state.model && !dividirModelo(state.model) && h && Array.isArray(h.models) && !h.models.includes(state.model)) state.model = '';
     if (!state.favs.length && h && h.model) state.favs = [h.model];
     renderModelButton(); renderList(); renderEfforts(); renderContextMenu();
-    const engine = h?.ai || null;
-    if (el.pro) {
-      const missing = !engine;
-      el.pro.hidden = !missing;
-      const t = el.pro.querySelector('.mc-pro-t');
-      if (t) t.textContent = state.semServidor
-        ? 'Vista publicada — aqui não há motor de IA. A mesa de trabalho (Mesa, na barra) funciona já neste browser: escreve um lead, um projeto ou uma entrada de dinheiro e fica guardado no teu aparelho.'
-        : missing
-          ? 'Sem motor de IA ligado — este posto não inventa uma resposta. Vê o que falta.'
-          : '';
-    }
+    renderAviso(); // 1.51.0 · o aviso também depende da IA da Órbita, que chega depois
     if (onHealth) onHealth(h);
   }
+  /* ---------------------------------------------------------------- o catálogo da IA da Órbita
+     Uma leitura por sessão (e outra quando o menú abre sem lista). Em produção o caminho
+     directo `/api/ia/modelos` não existe — a mesa fala por `/api/rpc`, com o envelope
+     {status, corpo}. Aqui faz-se o mesmo, e a falha é guardada para ser dita. */
+  async function lerIa(caminho) {
+    const r = await fetch('/api/rpc?caminho=' + encodeURIComponent(caminho), { headers: { accept: 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j && typeof j === 'object' && 'status' in j) {
+      if (j.status >= 400) throw new Error((j.corpo && j.corpo.error) || ('HTTP ' + j.status));
+      return j.corpo;
+    }
+    return j;
+  }
+  async function refreshCatalogo() {
+    if (state.catalogoPedido) return state.catalogo;
+    state.catalogoPedido = true;
+    try {
+      const [modelos, estado] = await Promise.all([
+        lerIa('/ia/modelos'),
+        lerIa('/ia/estado').catch(() => null), // sem o estado mostra-se a lista toda; não inventa nada
+      ]);
+      state.catalogo = modelosDoCatalogo(modelos, estado || {});
+      state.catalogoErro = '';
+    } catch (e) {
+      state.catalogo = null;
+      state.catalogoErro = e && e.message ? e.message : 'sem resposta';
+    }
+    renderModelButton(); renderList(); renderEfforts(); renderAviso();
+    return state.catalogo;
+  }
+
+  /* O aviso do cartão. Três estados, três frases: (1) há motor aqui, (2) não há
+     motor local mas a IA da Órbita responde por /api/rpc, (3) não há motor nenhum.
+     1.51.0 · antes, (2) era contado como (3) — «Vista publicada, aqui não há motor
+     de IA» — quando a IA estava ali, a responder, a um pedido de distância. */
+  function renderAviso() {
+    if (!el.pro) return;
+    const h = state.health;
+    const engine = h?.ai || null;
+    const orbita = (state.catalogo?.modelos || []).length;
+    el.pro.hidden = !!(engine || orbita);
+    const t = el.pro.querySelector('.mc-pro-t');
+    if (!t) return;
+    t.textContent = state.semServidor
+      ? 'Vista publicada — aqui não há motor local. A mesa de trabalho (Mesa, na barra) funciona já neste browser: escreve um lead, um projeto ou uma entrada de dinheiro e fica guardado no teu aparelho.'
+      : 'Sem motor de IA ligado — este posto não inventa uma resposta. Vê o que falta.';
+  }
+
   async function refreshHealth() {
     try {
       const r = await fetch('/api/health', { headers: { accept: 'application/json' } });
@@ -201,6 +374,8 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       const rede = !!(e && (e.name === 'TypeError' || /fetch|network|load failed/i.test(e.message || '')));
       setHealth(null, rede ? 'sem-servidor' : (e && e.message));
     }
+    /* 1.51.0 · haja ou não servidor local, a IA da Órbita pode estar ali: pergunta-se-lhe */
+    refreshCatalogo();
   }
 
   /* ---------------------------------------------------------------- modos */
@@ -227,20 +402,34 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   /* ---------------------------------------------------------------- modelo + esforço */
   const models = () => {
     const h = state.health;
-    if (!h || !Array.isArray(h.models)) return [];
-    return h.models.map(k => ({
+    const doCli = h && Array.isArray(h.models) ? h.models.map(k => ({
       key: k,
       name: k === h.model ? (h.modelName || k) : k.charAt(0).toUpperCase() + k.slice(1),
       provider: 'Anthropic',
+      badge: 'A',
+      motor: 'cli',
       current: k === h.model,
-    }));
+    })) : [];
+    /* os da Órbita vêm depois dos da casa: primeiro o que está debaixo dos pés */
+    const daOrbita = (state.catalogo?.modelos || []).map(m => ({ ...m, motor: 'orbita' }));
+    return [...doCli, ...daOrbita];
   };
+  const rowDe = key => models().find(m => m.key === key) || null;
   function renderModelButton() {
     const h = state.health;
+    const par = state.auto ? null : dividirModelo(state.model);
+    const linha = par ? rowDe(state.model) : null;
     const m = state.auto ? (h?.model || '') : state.model;
-    const name = m ? (m === h?.model ? (h.modelName || m) : m.charAt(0).toUpperCase() + m.slice(1)) : 'sem motor';
+    /* num par da Órbita o nome é o do modelo (o fornecedor vai no distintivo e por baixo) */
+    const curto = par ? par.modelo.split('/').pop() : '';
+    const name = par
+      ? (curto.length > 22 ? curto.slice(0, 21) + '…' : curto)
+      : m ? (m === h?.model ? (h.modelName || m) : m.charAt(0).toUpperCase() + m.slice(1)) : 'sem motor';
     if (el.name) el.name.textContent = name;
-    if (el.badge) { el.badge.textContent = m ? 'A' : '—'; el.badge.title = m ? 'Anthropic' : 'sem motor ligado'; }
+    if (el.badge) {
+      el.badge.textContent = par ? (linha?.badge || '·') : m ? 'A' : '—';
+      el.badge.title = par ? (linha?.provider || par.fornecedor) : m ? 'Anthropic' : 'sem motor ligado';
+    }
     const eff = state.auto ? (h?.effort || '') : state.effort;
     if (el.eff) {
       const label = state.auto ? (eff ? effortLabel(eff) : '') : effortLabel(state.effort);
@@ -266,7 +455,11 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       el.engineNote.hidden = !why;
     }
     if (el.autoNote) el.autoNote.textContent = state.auto
-      ? 'O escritório escolhe' + (h?.modelName ? ' — ' + h.modelName + ' por omissão' : '') + '.'
+      ? (h?.modelName
+        ? 'O escritório escolhe — ' + h.modelName + ' por omissão.'
+        : (state.catalogo?.modelos || []).length
+          ? 'O escritório escolhe — o router da Órbita decide entre os ' + state.catalogo.modelos.length + ' modelos que podem responder.'
+          : 'O escritório escolhe.')
       : 'Escolhido por ti; o Auto fica desligado até voltares a ligá-lo.';
   }
   function renderList() {
@@ -274,7 +467,15 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     const all = models();
     const rows = state.tab === 'fav' ? all.filter(m => state.favs.includes(m.key)) : all;
     if (!all.length) {
-      el.list.innerHTML = '<p class="mc-empty">Sem motor ligado: a lista de modelos vem do servidor e o servidor não respondeu. Nada aqui é inventado.</p>';
+      /* 1.51.0 · três razões diferentes, três frases. «O servidor não respondeu» era
+         dito mesmo quando o servidor respondia e não tinha modelos. */
+      const cat = state.catalogo;
+      const msg = state.catalogoErro
+        ? `Sem lista de modelos: ${esc(state.catalogoErro)}. Nada aqui é inventado.`
+        : cat
+          ? `A IA da Órbita respondeu, mas nenhum fornecedor tem chave: ${cat.semChave} sem chave${cat.desligados ? `, ${cat.desligados} desligado(s)` : ''}. Liga uma chave no Control Center (Mesa → IA) e a lista aparece aqui.`
+          : 'A pedir a lista de modelos à IA da Órbita…';
+      el.list.innerHTML = `<p class="mc-empty">${msg}</p>`;
       return;
     }
     if (!rows.length) {
@@ -284,13 +485,22 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     el.list.innerHTML = rows.map(m => {
       const on = !state.auto && state.model === m.key;
       const fav = state.favs.includes(m.key);
+      const sub = esc(m.provider) + (m.current ? ' · por omissão' : '') + (m.gratis ? ' · grátis' : '') + (m.testado ? ' · provado' : '');
       return `<div class="mc-row" role="menuitemradio" aria-checked="${on}" tabindex="-1" data-model="${esc(m.key)}">
-        <span class="mc-badge" aria-hidden="true">A</span>
-        <span class="mc-rmain"><span class="nm">${esc(m.name)}</span><span class="sub">${esc(m.provider)}${m.current ? ' · por omissão' : ''}</span></span>
+        <span class="mc-badge" aria-hidden="true">${esc(m.badge || '·')}</span>
+        <span class="mc-rmain"><span class="nm">${esc(m.name)}</span><span class="sub">${sub}</span></span>
         ${on ? `<span class="mc-tick" aria-hidden="true">${SVG.check}</span>` : ''}
         <button class="mc-star" type="button" aria-pressed="${fav}" aria-label="${fav ? 'tirar' : 'pôr'} ${esc(m.name)} nos favoritos" data-fav="${esc(m.key)}">${SVG.star}</button>
       </div>`;
     }).join('');
+    /* o que ficou de fora é dito: um fornecedor sem chave não entra na lista para falhar */
+    const cat = state.catalogo;
+    if (cat && (cat.semChave || cat.desligados) && state.tab !== 'fav') {
+      const foot = doc.createElement('p');
+      foot.className = 'mc-empty';
+      foot.textContent = `Fora da lista: ${cat.semChave} fornecedor(es) sem chave${cat.desligados ? ` e ${cat.desligados} desligado(s)` : ''}. A lista mostra só quem pode responder agora.`;
+      el.list.appendChild(foot);
+    }
     el.list.querySelectorAll('.mc-row').forEach(row => {
       row.addEventListener('click', () => { pickModel(row.dataset.model); });
       row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickModel(row.dataset.model); } });
@@ -309,11 +519,15 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   }
   function renderEfforts() {
     if (!el.effortBox) return;
-    const efforts = Array.isArray(state.health?.efforts) ? state.health.efforts : [];
+    const doCli = Array.isArray(state.health?.efforts) ? state.health.efforts : [];
+    /* os níveis da Órbita são reais: viram o tecto de tokens da resposta (api/_ia/rotas.mjs) */
+    const efforts = doCli.length ? doCli : (state.catalogo?.esforcos || []);
     if (!efforts.length) {
       el.effortBox.innerHTML = '<span class="mc-empty">O servidor não declarou níveis de esforço.</span>';
       return;
     }
+    if (!doCli.length && state.catalogo?.nota) el.effortBox.dataset.nota = state.catalogo.nota;
+    el.effortBox.title = doCli.length ? '' : (state.catalogo?.nota || '');
     const keys = ['', ...efforts];
     el.effortBox.innerHTML = keys.map(k => `<button type="button" class="mc-effb${state.effort === k && !state.auto ? ' on' : ''}${k === '' ? ' auto' : ''}" data-eff="${esc(k)}" aria-pressed="${state.effort === k && !state.auto}">${esc(effortLabel(k))}</button>`).join('');
     el.effortBox.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
@@ -327,6 +541,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     closeMenus();
     if (open) return;
     if (!state.health) refreshHealth();
+    else if (!state.catalogo && !state.catalogoErro) refreshCatalogo();
     el.menu.hidden = false;
     el.model.setAttribute('aria-expanded', 'true');
     el.card.classList.add('menuOpen'); // o foco fica no botão: quem usa teclado chega às linhas com Tab
@@ -563,7 +778,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   refreshHealth();
   return {
     state: () => ({ ...state, files: state.files.map(f => f.name) }),
-    setHealth, refreshHealth, toast, focus: () => el.input.focus(),
+    setHealth, refreshHealth, refreshCatalogo, toast, focus: () => el.input.focus(),
     openModelMenu: () => el.model?.click(), openContextMenu: () => el.ctx?.click(),
     openEngineSheet: openModal, startTour: () => tourShow(0), clear,
   };

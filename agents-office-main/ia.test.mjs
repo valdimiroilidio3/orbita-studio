@@ -1208,3 +1208,45 @@ test('rota /ia/estado: a escolha do agente vem achatada (a interface não recebe
   assert.equal(semEscolha.modelo, null);
   assert.equal(semEscolha.escolha, null);
 });
+
+/* ---------- 1.51.0 · o esforço no /ia/chat ---------- */
+test('rota /ia/chat: o esforço escolhido vira o tecto de tokens; um esforço inventado dá 400', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl, pedidos } = fornecedorFalso();
+  const r = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { agente: 'research', mensagem: 'duas linhas', esforco: 'high', fornecedor: 'openrouter', modelo: 'qwen/qwen3-coder:free' },
+    env: envFalso, fetchImpl,
+  });
+  assert.equal(r.status, 200);
+  /* o que se pediu e o que se aplicou, os dois na resposta */
+  assert.deepEqual(r.corpo.esforco, { pedido: 'high', maxTokens: 2400 });
+  /* e foi mesmo assim que o fornecedor foi chamado: não é um rótulo na interface */
+  assert.equal(pedidos.length > 0, true);
+  assert.equal(pedidos[0].corpo.max_tokens, 2400);
+
+  const auto = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { mensagem: 'duas linhas', fornecedor: 'openrouter', modelo: 'qwen/qwen3-coder:free' },
+    env: envFalso, fetchImpl,
+  });
+  assert.equal(auto.status, 200);
+  assert.deepEqual(auto.corpo.esforco, { pedido: null, maxTokens: 1200 }, 'sem escolha, o esforço é o de sempre');
+
+  const inventado = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { mensagem: 'olá', esforco: 'turbo' },
+    env: envFalso, fetchImpl: async () => { throw new Error('não devia chamar o fornecedor'); },
+  });
+  assert.equal(inventado.status, 400);
+  assert.match(inventado.corpo.error, /esforço desconhecido/);
+  assert.deepEqual(inventado.corpo.esforcos, ['low', 'medium', 'high', 'xhigh', 'max']);
+});
+
+test('rota /ia/modelos: diz os níveis de esforço que o servidor sabe aplicar', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, { caminho: '/ia/modelos', metodo: 'GET', env: envFalso });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.corpo.esforcos, ['low', 'medium', 'high', 'xhigh', 'max']);
+  assert.match(r.corpo.esforcoNota, /tecto de tokens/);
+});
