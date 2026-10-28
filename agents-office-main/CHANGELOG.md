@@ -1,3 +1,11 @@
+## 1.51.2 — 28 out 2026 · o aviso também espera pela resposta
+
+Visto na página publicada, ao abrir: durante o instante antes de `/api/health` e
+`/api/rpc` responderem, o cartão mostrava **«Sem motor de IA ligado — este posto
+não inventa uma resposta»**. Era a mesma mentira da 1.50.0, agora com um segundo
+de vida. O aviso passa a aparecer só **depois** de se saber: se houver motor (ou
+a IA da Órbita), não aparece de todo.
+
 ## 1.51.1 — 28 out 2026 · enquanto a lista chega, diz «auto» (não «sem motor»)
 
 Visto na página publicada, a abrir: o botão do modelo escrevia **«sem motor»**
