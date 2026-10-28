@@ -21,6 +21,7 @@ import {
   PALETAS, construirSite, criarSite, listar, obter, publicar, preview, reiniciar, urlSegura, validarBrief,
 } from './api/_artefactos.mjs';
 import { digitalizar, estado, extrairCampos, nifValido, paraLead } from './api/_digitalizar.mjs';
+import { lerPapel } from './api/_ia/papel.mjs';
 import { responder } from './api/_rotas.mjs';
 import { createMemRepo } from './api/_repo.mjs';
 
@@ -335,9 +336,18 @@ test('rotas: /digitalizar/lead devolve a proposta e não escreve no funil', asyn
   assert.match(r.corpo.nota, /POST \/ops\/leads/);
   assert.equal(repo._dados.leads.length, 0);
   assert.equal((await chamar(repo, '/digitalizar/lead', 'POST', {})).status, 400);
-  const semChave = await chamar(repo, '/digitalizar', 'POST', { imagem: 'iVBORw0KGgo=' });
-  assert.equal(semChave.status, 503);
-  assert.equal((await chamar(repo, '/digitalizar/estado')).status, 200);
+  /* 1.46.0 · já não é «sem chave»: a rota tenta mesmo ler com o motor de visão
+     (o OVH lê imagens sem chave nenhuma). Aqui não há rede, por isso a resposta
+     honesta é 502 com o código da falha — antes era 503 «falta ORBITA_OCR_URL»,
+     que era uma função desligada a fingir de configuração. */
+  const semRede = await chamar(repo, '/digitalizar', 'POST', { imagem: 'iVBORw0KGgo=' });
+  assert.equal(semRede.status, 502);
+  assert.equal(semRede.corpo.codigo, 'falha');
+  assert.notEqual(semRede.corpo.ok, true);
+  const estadoD = await chamar(repo, '/digitalizar/estado');
+  assert.equal(estadoD.status, 200);
+  assert.equal(estadoD.corpo.ocr.disponivel, true, 'o motor de visão é um leitor: o estado tem de o dizer');
+  assert.equal(estadoD.corpo.ocr.via, 'visao');
 });
 
 /* ---------- 6 · as salas vêem as ferramentas (MCP) ---------- */
@@ -399,4 +409,88 @@ test('agentes: sem OCR, digitalizar responde com a razão', async () => {
   assert.equal(corpo.ok, false);
   assert.equal(corpo.codigo, 'semchave');
   assert.match(corpo.erro, /ORBITA_OCR_URL/);
+});
+
+/* ---------- 1.46.0 · digitalizar papel com o motor de visão da casa ---------- */
+
+const TEXTO_PAPEL = [
+  'Clínica do Mondego Lda',
+  'NIF 123456789',
+  'Telefone 239 000 000',
+  'Email geral@mondego.pt',
+  'Rua Larga 3, 3000-123 Coimbra',
+].join('\n');
+
+test('papel: a ordem manda transcrever (não interpretar) e leva a imagem como mensagem', async () => {
+  const pedidos = [];
+  const motor = {
+    pedir: async (tipo, mensagens, opcoes) => {
+      pedidos.push({ tipo, mensagens, opcoes });
+      return { texto: TEXTO_PAPEL, modelo: 'Qwen2.5-VL-72B-Instruct', fornec: 'ovh', ms: 413 };
+    },
+  };
+  const r = await lerPapel({ base64: 'iVBORw0KGgo=', mime: 'image/png', motor });
+  assert.equal(r.ok, true);
+  assert.equal(pedidos.length, 1);
+  assert.equal(pedidos[0].tipo, 'visao', 'pediu a cadeia errada');
+  const partes = pedidos[0].mensagens[0].content;
+  assert.equal(partes[0].type, 'text');
+  assert.match(partes[0].text, /LITERALMENTE/);
+  assert.match(partes[0].text, /não inventes/i);
+  assert.deepEqual(partes[1], { type: 'image', mime: 'image/png', base64: 'iVBORw0KGgo=' });
+  assert.equal(r.modelo, 'Qwen2.5-VL-72B-Instruct', 'a resposta tem de dizer quem leu');
+  assert.equal(r.texto.split('\n')[0], 'Clínica do Mondego Lda');
+});
+
+test('papel: quando a imagem não tem texto, é «vazio» — não é uma transcrição inventada', async () => {
+  const motor = { pedir: async () => ({ texto: '[SEM TEXTO]', modelo: 'Qwen2.5-VL-72B-Instruct', fornec: 'ovh' }) };
+  const r = await lerPapel({ base64: 'iVBORw0KGgo=', motor });
+  assert.equal(r.ok, false);
+  assert.equal(r.codigo, 'vazio');
+  assert.equal(r.texto, '');
+  assert.match(r.erro, /texto legível/);
+});
+
+test('rotas: /digitalizar lê o papel pelo motor de visão quando não há serviço de OCR', async () => {
+  const repo = createMemRepo();
+  const vistos = [];
+  const fetchImpl = async (url, opt) => {
+    vistos.push({ url: String(url), corpo: opt?.body ? JSON.parse(opt.body) : null });
+    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: TEXTO_PAPEL } }] }) };
+  };
+  const r = await chamar(repo, '/digitalizar', 'POST', { imagem: 'iVBORw0KGgoAAAANSUhEUg==', mime: 'image/jpeg' }, { fetchImpl });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.ok, true);
+  assert.equal(r.corpo.via, 'visao');
+  /* quem lê é um modelo de visão sem chave: em produção é o `ovh/Qwen2.5-VL-72B`
+     (413 ms medidos); sem provas na base, a cadeia pode começar no OpenCode Zen,
+     que também publica um modelo de visão. O que não pode é ser um modelo cego. */
+  assert.ok(['ovh', 'opencode', 'pollinations'].includes(r.corpo.leitor.fornecedor), r.corpo.leitor.fornecedor);
+  assert.match(r.corpo.leitor.modelo, /vl/i, 'o leitor tem de ser um modelo de visão');
+  const campo = (n) => r.corpo.campos.find((c) => c.campo === n)?.valor || null;
+  assert.equal(campo('nif'), '123456789');
+  assert.equal(campo('email'), 'geral@mondego.pt');
+  assert.equal(campo('telefone'), '+351239000000');
+  /* a imagem foi como data-URL, e não como texto colado no prompt */
+  const partes = vistos[0].corpo.messages[0].content;
+  assert.equal(Array.isArray(partes), true);
+  assert.match(partes[1].image_url.url, /^data:image\/jpeg;base64,/);
+  /* nada foi guardado no funil: a proposta é um gesto separado */
+  assert.equal(repo._dados.leads.length, 0);
+});
+
+test('rotas: /digitalizar mantém o serviço de OCR à frente quando está configurado', async () => {
+  const repo = createMemRepo();
+  const vistos = [];
+  const fetchImpl = async (url) => {
+    vistos.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ texto: TEXTO_PAPEL }) };
+  };
+  const r = await chamar(repo, '/digitalizar', 'POST', { imagem: 'iVBORw0KGgoAAAANSUhEUg==', mime: 'image/jpeg' },
+    { fetchImpl, env: { ORBITA_OCR_URL: 'http://127.0.0.1:9/ocr' } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.via, 'ocr');
+  assert.equal(r.corpo.leitor, null);
+  assert.equal(vistos.length, 1);
+  assert.equal(vistos[0], 'http://127.0.0.1:9/ocr');
 });

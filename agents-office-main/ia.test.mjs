@@ -1055,3 +1055,38 @@ test('Pollinations anónimo: um modelo de comunidade NÃO é provado pela porta 
   }), (e) => e instanceof ErroIA && e.codigo === 'avaria');
   assert.equal(vistos.length, 1, 'o GET devolveria o modelo por omissão — isso não prova este modelo');
 });
+
+/* ---------- 1.46.0 · uma mensagem pode levar uma imagem (digitalizar papel) ---------- */
+test('imagem nas mensagens: cada dialeto recebe a fotografia à sua maneira', async () => {
+  const imagem = 'iVBORw0KGgoAAAANSUhEUg==';
+  const mensagens = [{
+    role: 'user',
+    content: [{ type: 'text', text: 'transcreve' }, { type: 'image', mime: 'image/jpeg', base64: imagem }],
+  }];
+  const corpoDe = async (fornec) => {
+    let visto = null;
+    const fetchImpl = async (url, opt) => {
+      visto = JSON.parse(opt.body);
+      return json({ choices: [{ message: { content: 'ok' } }], content: [{ type: 'text', text: 'ok' }], candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
+    };
+    await falar({ fornec, prov: FORNECEDORES[fornec], chave: 'sk-teste-1234', modelo: 'm', mensagens, fetchImpl });
+    return visto;
+  };
+  const openai = await corpoDe('openrouter');
+  assert.equal(openai.messages[0].content[1].type, 'image_url');
+  assert.match(openai.messages[0].content[1].image_url.url, new RegExp(`^data:image/jpeg;base64,${imagem}$`));
+  const google = await corpoDe('google');
+  assert.equal(google.contents[0].parts[1].inline_data.mime_type, 'image/jpeg');
+  assert.equal(google.contents[0].parts[1].inline_data.data, imagem);
+  const anthropic = await corpoDe('anthropic');
+  assert.equal(anthropic.messages[0].content[1].source.type, 'base64');
+  assert.equal(anthropic.messages[0].content[1].source.data, imagem);
+  /* e uma mensagem de texto simples continua a ser texto simples */
+  const soTexto = await (async () => {
+    let visto = null;
+    const fetchImpl = async (url, opt) => { visto = JSON.parse(opt.body); return json({ choices: [{ message: { content: 'ok' } }] }); };
+    await falar({ fornec: 'openrouter', prov: FORNECEDORES.openrouter, chave: 'sk-teste-1234', modelo: 'm', mensagens: [{ role: 'user', content: 'olá' }], fetchImpl });
+    return visto;
+  })();
+  assert.equal(soTexto.messages[0].content, 'olá');
+});

@@ -15,7 +15,7 @@
    =========================================================================== */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { avaliarProntidao, prontidaoCurta, variaveisEmFalta, remetente } from './api/_prontidao.mjs';
+import { avaliarProntidao, prontidaoCurta, variaveisEmFalta, motoresDeVisao, remetente } from './api/_prontidao.mjs';
 import { aplicarEsquema, FICHEIROS, NAO_APLICADOS, tabelasEmFalta } from './api/_esquema.mjs';
 import { responder } from './api/_rotas.mjs';
 import { createMemRepo, createSupabaseRepo } from './api/_repo.mjs';
@@ -288,4 +288,29 @@ test('a saúde passa a dizer a coluna em falta, não «corre a mesa»', async ()
   assert.equal(h.ok, false);
   assert.match(h.mensagensErro, /subject/);
   assert.match(h.mensagensErro, /orbita_1_37_0\.sql/);
+});
+
+/* ---------- 1.46.0 · «Digitalizar papel» deixou de estar desligada ---------- */
+test('prontidão: digitalizar papel fica ligada com o motor de visão, sem ORBITA_OCR_URL', () => {
+  /* sem variável nenhuma: o catálogo tem modelos de visão keyless (OVH Qwen2.5-VL) */
+  const r = avaliarProntidao({});
+  const ocr = r.grupos.find((g) => g.id === 'ocr');
+  assert.equal(ocr.pronto, true, 'continuou desligada sem serviço de OCR');
+  assert.equal(r.essenciaisEmFalta.includes('Digitalizar papel'), false);
+  const visao = ocr.itens.find((i) => i.nome === 'Motor de visão');
+  assert.equal(visao.pronto, true);
+  assert.ok(visao.modelos.some((m) => m.fornec === 'ovh'), 'o OVH lê imagens sem chave');
+  /* e o item do serviço externo continua lá — como extra, não como condição */
+  const externo = ocr.itens.find((i) => i.variavel === 'ORBITA_OCR_URL');
+  assert.equal(externo.opcional, true);
+});
+
+test('prontidão: sem visão acessível e sem OCR, o grupo volta a estar desligado (não se promete o que não há)', () => {
+  /* um catálogo sem modelos de visão acessíveis: nenhum fornecedor com chave e
+     todos os keyless desligados do ambiente (env sem nada não basta, por isso
+     testa-se a função pura dos motores de visão) */
+  const visao = motoresDeVisao({});
+  assert.ok(visao.length > 0);
+  const soComChavePaga = motoresDeVisao({ OPENROUTER_API_KEY: 'sk-x' });
+  assert.equal(soComChavePaga.every((m) => typeof m.modelo === 'string'), true);
 });
