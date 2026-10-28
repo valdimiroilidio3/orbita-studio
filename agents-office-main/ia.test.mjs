@@ -748,3 +748,61 @@ test('rota /ia/modelos/descobrir: «todos» pergunta a quem se pode e devolve o 
   assert.ok(modelos.includes('openai/gpt-5.4-nano'));
   assert.equal(modelos.includes('meta/muse-spark-1.3'), false);
 });
+
+/* ---------- 1.44.0 · provar modelos em lote ---------- */
+test('provar-modelos: só o que responde é promovido, e passa a entrar na cadeia', async () => {
+  const repo = createMemRepo();
+  const pedidos = [];
+  const fetchImpl = async (url, opt) => {
+    const corpo = JSON.parse(opt.body);
+    pedidos.push(corpo.model);
+    if (String(corpo.model).includes('qwen3-coder')) {
+      return json({ choices: [{ message: { content: 'ok' } }] });
+    }
+    return { ok: false, status: 404, text: async () => JSON.stringify({ error: { message: 'model not found' } }) };
+  };
+  const motor = criarMotor({ repo, env: { OPENROUTER_API_KEY: CHAVE }, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'openrouter', limite: 3 });
+
+  assert.equal(r.testados, 3, 'o tecto não foi respeitado');
+  assert.equal(r.provados, 1);
+  assert.equal(r.resultados.filter((x) => x.ok).length, 1);
+  assert.equal(r.resultados.find((x) => x.ok).modelo.includes('qwen3-coder'), true);
+
+  const cfg = await repo.ia.config.ler();
+  const provados = Object.keys(cfg.testes?.openrouter?.provados || {});
+  assert.equal(provados.length, 1, 'a prova boa não ficou gravada');
+  assert.equal(provados[0].includes('qwen3-coder'), true);
+  assert.equal(provados.some((m) => m.includes('gpt-oss')), false, 'gravou um modelo que falhou');
+
+  /* a prova entra na cadeia: o mesmo modelo aparece nos gratuitos provados */
+  const gr = await motor.gratuitos();
+  assert.equal(gr.modelos.some((m) => m.fornec === 'openrouter' && m.modelo.includes('qwen3-coder')), true);
+});
+
+test('provar-modelos: não gasta pedidos em fornecedores sem acesso nem nos já provados', async () => {
+  const repo = createMemRepo();
+  let chamadas = 0;
+  const fetchImpl = async () => { chamadas += 1; return json({ choices: [{ message: { content: 'ok' } }] }); };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });   // sem chave: só keyless
+  const antes = await motor.provarModelos({ fornec: 'openrouter', limite: 5 });
+  assert.equal(antes.testados, 0, 'tentou um fornecedor sem chave');
+  assert.equal(chamadas, 0);
+
+  /* provar duas vezes o mesmo modelo não repete o pedido (a não ser com `forcar`) */
+  await repo.ia.config.gravar('testes', { llm7: { provados: { 'codestral-latest': { ok: true, ms: 10 } } } });
+  const motor2 = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor2.provarModelos({ fornec: 'llm7', limite: 8 });
+  assert.equal(r.resultados.some((x) => x.modelo === 'codestral-latest'), false, 'voltou a provar o que já estava provado');
+});
+
+test('rota /ia/provar-modelos: GET para verificação, e fornecedor desconhecido é recusado', async () => {
+  const repo = createMemRepo();
+  const fetchImpl = async () => json({ choices: [{ message: { content: 'ok' } }] });
+  const r = await rotasIA(repo, { caminho: '/ia/provar-modelos?fornecedor=llm7&limite=1', metodo: 'GET', env: {}, fetchImpl });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.fornecedor, 'llm7');
+  assert.equal(Array.isArray(r.corpo.resultados), true);
+  const mau = await rotasIA(repo, { caminho: '/ia/provar-modelos', metodo: 'POST', corpo: { fornecedor: 'nao-existe' }, env: {}, fetchImpl });
+  assert.equal(mau.status, 400);
+});

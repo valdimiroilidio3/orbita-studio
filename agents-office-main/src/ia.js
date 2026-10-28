@@ -200,8 +200,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
   const provadosSet = new Set([...(grProvados || []).map((m) => `${m.fornec || m.fornecedor}\u0000${m.modelo}`),
     ...(gr?.medido || []).map((m) => `${m.fornec}\u0000${m.modelo}`)]);
   const cartaoModelos = !catalogo.length ? '' : `<div class="card">
-      <h3 style="margin-top:0">Modelos no motor <span class="ia-sub">· ${catalogo.length} em ${grupos.length} fornecedor(es)</span>
-        ${gr?.modo === 'local' ? '' : '<button class="btn quiet small" data-act="ia-descobrir-todos" style="float:right">Descobrir modelos</button>'}</h3>
+      <h3 style="margin-top:0">Modelos no motor <span class="ia-sub">· ${catalogo.length} em ${grupos.length} fornecedor(es) · ${catalogo.filter((m) => provadosSet.has(`${m.fornec}\u0000${m.modelo}`)).length} provados</span>
+        ${gr?.modo === 'local' ? '' : `<span style="float:right"><button class="btn quiet small" data-act="ia-provar-lote">Provar os por provar</button> <button class="btn quiet small" data-act="ia-descobrir-todos">Descobrir modelos</button></span>`}</h3>
       <p class="ia-sub" style="margin-top:0">Tudo o que a cadeia pode escolher neste momento. «Provado» = há uma resposta registada; «descoberto» = o fornecedor disse que o tem (ainda sem resposta nossa); «com chave» = só existe no tier com chave.</p>
       ${grupos.map((g) => `<details ${g.lista.length > 6 ? '' : 'open'} style="margin-top:8px">
         <summary><b>${esc(g.nome)}</b> <span class="ia-sub">· ${g.lista.length} modelo(s)${g.lista.some((m) => m.descoberto) ? ' · inclui descobertos' : ''}</span></summary>
@@ -500,6 +500,27 @@ export async function accaoIA(nome, el, api) {
       await carregarIA(api);
       paint();
     } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-provar-lote') {
+    /* 1.44.0 · provar em lote o que está «descoberto»/«declarado»: cada modelo
+       leva um pedido curto a sério; só os que respondem passam a «provado» e
+       entram na cadeia. O tecto é da função serverless (60 s), por isso pedimos
+       12 de cada vez e dizemos quantos ficam para a próxima. */
+    try {
+      toast('A provar modelos, um a um… (pode levar meio minuto)');
+      const r = await call('/ia/provar-modelos', 'POST', { limite: 12, concorrencia: 4 });
+      const bons = (r.resultados || []).filter((x) => x.ok).map((x) => `${x.fornec}/${x.modelo}`);
+      if (r.provados) {
+        toast(`${r.provados} de ${r.testados} responderam agora${bons.length ? `: ${bons.slice(0, 4).join(', ')}${bons.length > 4 ? '…' : ''}` : ''}${r.porProvarRestantes ? ` · faltam ${r.porProvarRestantes}` : ''}`);
+      } else {
+        const motivo = (r.resultados || []).find((x) => !x.ok)?.erro || 'sem detalhe';
+        toast(`Nenhum respondeu agora: ${String(motivo).slice(0, 160)}`, true);
+      }
+      await carregarIA(api);
+      paint();
+    } catch (e) { toast(`A prova não correu: ${e.message}`, true); }
     return true;
   }
 

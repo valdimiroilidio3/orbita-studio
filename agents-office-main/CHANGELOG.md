@@ -1,3 +1,26 @@
+## 1.44.0 — 28 out 2026 · «Provar os por provar»: de descoberto a funcional
+
+O 1.43.x descobriu o que os fornecedores têm e filtrou o que não conversa. Ficou a faltar
+o passo que o dono pediu — **«faz com que uma boa parte dos outros também funcionem»**.
+Descobrir não é funcionar: enquanto não houver uma resposta registada, o modelo é uma linha
+bonita na mesa e a cadeia não conta com ele.
+
+- **`POST /ia/provar-modelos`** (também `GET`, para verificação): pega nos modelos declarados
+  e descobertos que ainda não responderam, faz **um pedido curto real a cada um** e grava a prova
+  em `cfg.testes[fornec].provados`. É essa lista que põe o modelo na cadeia (`provasDe`), logo o
+  efeito não é cosmético: o modelo passa a ser escolhido para trabalho.
+- Tecto honesto para caber nos 60 s da função: 12 s por modelo, 4 em paralelo, 16 de cada vez,
+  e a resposta diz quantos ficaram para a próxima chamada (`porProvarRestantes`).
+- Não gasta pedidos em fornecedores sem acesso nem repete os já provados (`forcar: true` repete).
+- **Mesa:** botão «Provar os por provar» no cartão «Modelos no motor», com a contagem
+  «N provados» no cabeçalho; o toast diz quais responderam e quantos faltam.
+
+**O que isto NÃO faz:** não promete que os 158 declarados respondem; um modelo que falha fica
+com o motivo à vista e não é apagado. Só entra o que respondeu, com hora e latência.
+
+**Testes:** 549 (3 novos: promoção só do que responde e entrada na cadeia; nenhum pedido em
+fornecedor sem chave nem em já provado; rota GET e recusa de fornecedor desconhecido).
+
 ## 1.43.1 — 28 out 2026 · a descoberta não enche a cadeia de modelos que não conversam
 
 A descoberta correu em produção e provou o ponto — e mostrou o problema. O OVH devolveu
