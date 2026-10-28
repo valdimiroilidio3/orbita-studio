@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  opcoesDoCatalogo, notaDaLista, parDeModelo, chaveDoPar, etiquetaDoModelo, nomeCurto, DA_CASA,
+  opcoesDoCatalogo, notaDaLista, parDeModelo, parDoPasso, chaveDoPar, etiquetaDoModelo, nomeCurto, DA_CASA,
 } from './src/lista-modelos.js';
 import { modelName, modelId, normModel } from './src/models.js';
 
@@ -117,11 +117,20 @@ test('o painel de tarefas constrói o menu a partir do catálogo, não de uma li
   assert.doesNotMatch(s, /P_\.model\.innerHTML = MODEL_KEYS\.map/, 'a lista fixa já não desenha o menu');
 });
 
+test('a precedência do par é a da casa: tarefa > rotina > agente > escritório', () => {
+  const par = { fornecedor: 'ovh', modelo: 'Qwen3.5-9B' };
+  assert.deepEqual(parDoPasso({ tarefa: 'ovh|Qwen3.5-9B', rotina: 'llm7|x', agente: 'pollinations|openai', escritorio: 'groq|y' }), par);
+  assert.deepEqual(parDoPasso({ tarefa: 'opus', rotina: 'llm7|x' }), { fornecedor: 'llm7', modelo: 'x' }, 'um nome do CLI não trava a rotina');
+  assert.deepEqual(parDoPasso({ tarefa: 'sonnet', agente: 'pollinations|openai' }), { fornecedor: 'pollinations', modelo: 'openai' });
+  assert.equal(parDoPasso({ tarefa: 'sonnet', rotina: 'opus', agente: 'fable', escritorio: 'sonnet' }), null, 'sem par, o CLI decide');
+  assert.equal(parDoPasso(), null);
+});
+
 test('o servidor corre a tarefa no fornecedor escolhido — e diz quem respondeu', () => {
   const s = fonte('serve.mjs');
   assert.match(s, /askOrbita\(/, 'há uma via da IA da Órbita para o passo da tarefa');
   assert.match(s, /criarMotor\(/, 'com o mesmo motor do /api/rpc');
-  assert.match(s, /parDeModelo\(task\?\.model\)/, 'o par escolhido na tarefa ganha à omissão');
+  assert.match(s, /parDoPasso\(/, 'a precedência do par é uma regra só (lista-modelos.js)');
   assert.match(s, /limite: 1/, 'a escolha é uma escolha: um pedido, sem trocar de modelo em silêncio');
   assert.match(s, /modelUsed: par \?/, 'o cartão fica com o par que respondeu');
   assert.doesNotMatch(s, /model: normModel\(model\) \|\| undefined, effort/, 'um par já não é apagado para sonnet');
