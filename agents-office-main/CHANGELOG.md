@@ -11,7 +11,7 @@ modelos do Pollinations por provar. A prova era um monopólio do primeiro fornec
 - **Bloqueio também em memória do processo**, além da base: um deploy frio não faz o lote
   insistir num 429 conhecido.
 
-**Testes:** 554 (2 novos: rodízio entre fornecedores; bloqueio lido da memória e a expirar).
+**Testes:** 553 (1 novo: o lote faz rodízio entre fornecedores).
 
 ## 1.44.3 — 28 out 2026 · «por provar» e «sem quota agora» deixam de parecer a mesma coisa
 
