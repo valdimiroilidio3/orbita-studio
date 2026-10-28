@@ -21,6 +21,14 @@ export function chavesDoAmbiente(env = process.env) {
   return mapa;
 }
 
+/* 1.44.4 · bloqueios vistos por este processo. A base é a fonte principal, mas
+   um deploy frio (ou uma leitura falhada) não pode fazer o lote insistir num
+   fornecedor que acabou de dizer «limite atingido». */
+const BLOQUEIOS = {};
+
+/** Só para testes: esquecer os bloqueios deste processo. */
+export function esquecerBloqueios() { for (const k of Object.keys(BLOQUEIOS)) delete BLOQUEIOS[k]; }
+
 export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora = () => new Date().toISOString() } = {}) {
   const chaves = chavesDoAmbiente(env);
   const valorDaChave = (id) => {
@@ -171,9 +179,13 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     if (!prov || prov.usavel === false || desligados.includes(id)) continue;
     const chave = valorDaChave(id);
     if (!chave && !prov.keyless) continue;                 // sem acesso, não se tenta
-    const ate = Date.parse(testes[id]?.bloqueadoAte || '') || 0;
+    const ate = Math.max(Date.parse(testes[id]?.bloqueadoAte || '') || 0, BLOQUEIOS[id] || 0);
     if (ate > agoraMs) {
-      bloqueados.push({ fornec: id, motivo: testes[id]?.bloqueadoPor || 'bloqueado por falha recente', ate: testes[id].bloqueadoAte });
+      bloqueados.push({
+        fornec: id,
+        motivo: testes[id]?.bloqueadoPor || 'bloqueado por falha recente',
+        ate: testes[id]?.bloqueadoAte || new Date(ate).toISOString(),
+      });
       continue;
     }
     const declarados = modelosDe(id)
@@ -198,7 +210,25 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     return 2;                                                                                    // chave pública
   };
   candidatos.sort((a, b) => pesoDoFornec(a.fornec) - pesoDoFornec(b.fornec));
-  const alvos = candidatos.slice(0, quantos);
+  /* 1.44.4 · rodízio entre fornecedores, e não «os 12 primeiros da lista»: em
+     produção o lote foi todo para o OpenCode só porque ele vinha primeiro na
+     ordem do catálogo, e um fornecedor sem quota consumiu a chamada inteira.
+     Com rodízio, cada fornecedor leva no máximo um modelo antes de o segundo
+     de qualquer um entrar — e um fornecedor que falhe perde no máximo 1-2. */
+  const porFornec = new Map();
+  for (const c of candidatos) {
+    if (!porFornec.has(c.fornec)) porFornec.set(c.fornec, []);
+    porFornec.get(c.fornec).push(c);
+  }
+  const filas = [...porFornec.entries()].sort((a, b) => pesoDoFornec(a[0]) - pesoDoFornec(b[0])).map(([, f]) => f);
+  const alvos = [];
+  while (alvos.length < quantos && filas.some((f) => f.length)) {
+    for (const fila of filas) {
+      if (alvos.length >= quantos) break;
+      const proximo = fila.shift();
+      if (proximo) alvos.push(proximo);
+    }
+  }
 
   const resultados = [];
   const saltados = [];
@@ -236,6 +266,7 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
       const ttl = r.codigo === 'limite' ? 30 * 60 * 1000 : 6 * 60 * 60 * 1000;
       testes[r.fornec] = testes[r.fornec] || {};
       testes[r.fornec].bloqueadoAte = new Date(agoraMs + ttl).toISOString();
+      BLOQUEIOS[r.fornec] = agoraMs + ttl;   // rede de segurança: sobrevive ao mesmo processo
       testes[r.fornec].bloqueadoPor = String(r.erro || '').slice(0, 200);
       saltados.push({ fornec: r.fornec, motivo: r.erro, restantes: alvos.filter((a) => a.fornec === r.fornec && !resultados.some((x) => x.modelo === a.modelo)).length });
       for (let k = alvos.length - 1; k > i + paralelo - 1; k -= 1) {
@@ -264,6 +295,9 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     provados: bons.length,
     falhados: resultados.length - bons.length,
     porProvarRestantes: Math.max(0, candidatos.length - resultados.length),
+    /* 1.44.4 · transparência: o que esta chamada decidiu tentar, e por que motivo
+       ficou de fora. Sem isto, «testados: 4» sem saber quais é adivinhação. */
+    alvos,
     /* fornecedores que pararam o lote por um motivo que não é do modelo */
     saltados: [
       ...bloqueados,

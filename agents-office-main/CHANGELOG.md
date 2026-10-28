@@ -1,3 +1,18 @@
+## 1.44.4 — 28 out 2026 · o lote faz rodízio, e um fornecedor sem quota não o come todo
+
+Diagnóstico em produção, com o `/ia/provar-modelos` já a devolver `saltados`: o lote de 6 saía
+**todo para o OpenCode** (4 tentativas falhadas e o resto cortado), embora haja dezenas de
+modelos do Pollinations por provar. A prova era um monopólio do primeiro fornecedor da lista.
+
+- **Rodízio:** os alvos são escolhidos um por fornecedor de cada vez (por prioridade de chave),
+  em vez de «os N primeiros da lista». Um fornecedor sem quota perde 1-2 tentativas, não o lote.
+- **`alvos` na resposta:** o que esta chamada decidiu tentar. `testados: 4` sem saber quais era
+  adivinhação; agora vê-se.
+- **Bloqueio também em memória do processo**, além da base: um deploy frio não faz o lote
+  insistir num 429 conhecido.
+
+**Testes:** 553 (1 novo: o lote faz rodízio entre fornecedores).
+
 ## 1.44.3 — 28 out 2026 · «por provar» e «sem quota agora» deixam de parecer a mesma coisa
 
 O `/ia/gratuitos` passa a devolver `bloqueios`: os fornecedores que estão de fora por falha
