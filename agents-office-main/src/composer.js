@@ -353,7 +353,11 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     const h = state.health;
     const engine = h?.ai || null;
     const orbita = (state.catalogo?.modelos || []).length;
-    el.pro.hidden = !!(engine || orbita);
+    /* Enquanto não se sabe (nem saúde nem catálogo chegaram), o aviso NÃO aparece:
+       no instante antes das respostas mostrava «Sem motor de IA ligado» — a frase
+       que o dono apontou — quando a IA estava a responder. Só se decide depois. */
+    const decido = state.health !== null || state.catalogo !== null;
+    el.pro.hidden = !decido || !!engine || orbita > 0;
     const t = el.pro.querySelector('.mc-pro-t');
     if (!t) return;
     t.textContent = state.semServidor
