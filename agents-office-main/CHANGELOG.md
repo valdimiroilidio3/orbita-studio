@@ -1,3 +1,43 @@
+## 1.38.0 — 27 out 2026 · mandar mensagens a sério (e o funil a andar)
+
+O dono foi taxativo: «mandar mensagens aos clientes tem de ser real e muito
+funcional». O envio já existia por dentro, mas faltava o que separa «tem código»
+de «funciona»: provas por canal, o funil a mexer, e o WhatsApp a sair sozinho
+quando há chaves.
+
+**1 · Prova do envio, com o fornecedor simulado no contrato real.** Nove testes
+novos: o email sai para `api.resend.com/emails` com o `from` configurado, o
+assunto e o texto; fica `enviada` com `provider`, `provider_id` e `enviada_at`; o
+mesmo envio duas vezes é **409 e não sai um segundo email**; sem
+`RESEND_API_KEY` é **503** e a mensagem continua `aprovada` (não se marca como
+falhada o que não se tentou); uma recusa do fornecedor (422) é **502** com o
+motivo guardado e permite **repetir**; uma falha de rede deixa `erro: rede: …` e
+nunca finge envio; o WhatsApp monta a chamada certa à Graph API (número só com
+dígitos, `messaging_product`) e devolve o `wamid`.
+
+**2 · O funil anda.** Enviar não é responder, mas não pode ficar tudo parado: quem
+estava `novo` passa a `contactado` quando o envio sai. Não se toca em quem já
+respondeu, é reunião, cliente ou perdido — o funil só anda para a frente.
+
+**3 · WhatsApp automático primeiro, link depois.** Ao aprovar uma mensagem de
+WhatsApp, a mesa tenta o envio real; se não houver chaves, diz porquê e abre o
+link `wa.me` como antes. O caminho manual deixou de ser o único — e continua a
+haver um humano a confirmar quando não há credenciais.
+
+**4 · SQL que faltava, versionado (1.37.0).** `supabase/orbita_1_37_0.sql` traz as
+colunas que o envio/recepção usavam e não estavam no esquema (`provider_id`,
+`enviada_at`, `canal_confirmado`, `erro`, `id_externo`, `direction`,
+`recebida_at`, …), o CHECK de estado alargado e os índices. **Tem de ser corrido
+no Supabase** — sem isso, o envio devolve 400 do PostgREST.
+
+**Testes:** 501/501. O fumo da mesa continua verde.
+
+**Limitação declarada:** as provas são contra o contrato dos fornecedores, com
+`fetch` simulado — **nenhum email nem WhatsApp verdadeiro saiu daqui**, porque
+faltam `RESEND_API_KEY`, `ORBITA_FROM_EMAIL`, `WHATSAPP_TOKEN` e
+`WHATSAPP_PHONE_ID`. A primeira mensagem real tem de ser enviada com essas chaves
+e o `provider_id` guardado; só então isto passa de «por provar» a «funcional».
+
 ## 1.37.0 — 27 out 2026 · as respostas voltam, e a mesa vive no teu computador
 
 Três buracos que só se vêem a usar: o cliente respondia e ninguém sabia; a mesa

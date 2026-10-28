@@ -912,6 +912,12 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
         status: 'enviada', enviada_at: agoraIso(), canal_confirmado: canal,
         provider: canal === 'email' ? 'resend' : 'whatsapp-cloud', provider_id: providerId || null, erro: null,
       });
+      /* 1.38.0 · mandar não é responder: quem estava «novo» passa a «contactado».
+         Não se mexe em quem já respondeu, é reunião, cliente ou perdido — o funil
+         só anda para a frente, e quem o faz andar é o cliente, não um envio. */
+      if (lead && lead.status === 'novo') {
+        try { await repo.leads.patch(lead.id, { status: 'contactado', updated_at: agoraIso() }); } catch { /* o envio já aconteceu */ }
+      }
       await repo.atividade.add('mensagem', `mensagem enviada por ${canal}${providerId ? ` (${providerId})` : ''}`);
       return { status: 200, corpo: { ok: true, enviada: true, canal, para, providerId, ms: Date.now() - inicio, message: m2 } };
     }
