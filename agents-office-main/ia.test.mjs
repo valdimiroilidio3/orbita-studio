@@ -1148,3 +1148,63 @@ test('provar-modelos: um arranque a frio lê a memória de «fora» e não a rep
   assert.equal(chamadas, alvos.length, 'gastou pedidos que a memória já evitava');
   limparFora();
 });
+
+/* ---------- 1.50.0 · escolher a IA nesta conversa ---------- */
+test('rota /ia/chat: um modelo pedido é validado e usado; um inventado dá 400 com a razão', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl, pedidos } = fornecedorFalso();
+
+  /* um par que está mesmo no catálogo (openrouter é o que o envFalso tem com chave) */
+  const pedido = { fornecedor: 'openrouter', modelo: 'qwen/qwen3-coder:free' };
+  const r = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { agente: 'research', mensagem: 'em duas linhas, o estado', ...pedido },
+    env: envFalso, fetchImpl,
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.corpo.pedido, pedido, 'a resposta diz o que foi pedido');
+  assert.equal(r.corpo.fornecedor, 'openrouter', 'e quem respondeu');
+  assert.equal(pedidos.length > 0, true);
+
+  const inventado = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { mensagem: 'olá', fornecedor: 'openrouter', modelo: 'modelo-que-nao-existe' },
+    env: envFalso, fetchImpl: async () => { throw new Error('não devia chamar o fornecedor'); },
+  });
+  assert.equal(inventado.status, 400);
+  assert.match(inventado.corpo.error, /não está no catálogo/);
+  assert.equal(Array.isArray(inventado.corpo.fornecedores), true);
+
+  const fornecedorMau = await rotasIA(repo, { caminho: '/ia/chat', metodo: 'POST', corpo: { mensagem: 'olá', fornecedor: 'nao-existe' }, env: envFalso });
+  assert.equal(fornecedorMau.status, 400);
+  assert.match(fornecedorMau.corpo.error, /fornecedor desconhecido/);
+});
+
+test('rota /ia/chat: com só o modelo, o fornecedor vem do catálogo (e um homónimo pede o fornecedor)', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso();
+  const r = await rotasIA(repo, {
+    caminho: '/ia/chat', metodo: 'POST',
+    corpo: { mensagem: 'estado?', modelo: 'z-ai/glm-4.5-air:free' },
+    env: envFalso, fetchImpl,
+  });
+  /* 1.50.0 · este modelo existe só na openrouter (sem chave aqui): a rota não o
+     recusa — diz de que fornecedor é e o router decide com o que há. */
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.pedido.fornecedor, 'openrouter');
+  assert.equal(r.corpo.pedido.modelo, 'z-ai/glm-4.5-air:free');
+});
+
+test('rota /ia/estado: a escolha do agente vem achatada (a interface não recebe um objecto)', async () => {
+  const repo = createMemRepo();
+  await repo.ia.config.gravar('agentes', { research: { modelo: { fornecedor: 'openrouter', modelo: 'anthropic/claude-sonnet-5' } } });
+  const r = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: envFalso });
+  assert.equal(r.status, 200);
+  const research = r.corpo.agentes.find((a) => a.id === 'research');
+  assert.equal(research.modelo, 'anthropic/claude-sonnet-5');
+  assert.equal(research.fornecedor, 'openrouter');
+  assert.deepEqual(research.escolha, { fornecedor: 'openrouter', modelo: 'anthropic/claude-sonnet-5' });
+  const semEscolha = r.corpo.agentes.find((a) => a.id === 'reviewer');
+  assert.equal(semEscolha.modelo, null);
+  assert.equal(semEscolha.escolha, null);
+});

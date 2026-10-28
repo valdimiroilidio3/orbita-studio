@@ -233,6 +233,18 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         medidoEm: null, cadeia: {},
       };
     }
+    /* 1.50.0 · o catálogo para o selector da conversa, também aqui: são os
+       modelos sem chave que este browser conhece, agrupados como o servidor os
+       agrupa. Diz-se que é cópia local — não se inventa uma lista maior. */
+    if (caminhoLimpo === '/ia/modelos') {
+      const porFornec = new Map();
+      for (const g of GRATUITOS_LOCAIS) {
+        if (!porFornec.has(g.fornec)) porFornec.set(g.fornec, { id: g.fornec, nome: g.nome, comChave: false, desligado: false, gratuito: true, catalogo: [], descobertos: [], modo: 'local' });
+        porFornec.get(g.fornec).catalogo.push({ modelo: g.modelo, etiquetas: g.etiquetas, gratuito: true, limites: g.limites });
+      }
+      return { fornecedores: [...porFornec.values()], totalModelosCatalogo: GRATUITOS_LOCAIS.length, modo: 'local',
+        nota: 'cópia local: a lista completa, com os modelos que já responderam, lê-se com o servidor a correr' };
+    }
     if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
     if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
 

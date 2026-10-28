@@ -33,6 +33,10 @@ export async function carregarIA(api) {
     api.S.iaErro = e?.message || 'o servidor não respondeu';
     estado = api.S.ia && Array.isArray(api.S.ia.fornecedores) ? api.S.ia : null;
   }
+  /* 1.50.0 · o catálogo com que a conversa escolhe: a lista real de fornecedores
+     e modelos (não uma lista fixa de três nomes). Se a rota não existir, fica
+     null e o selector diz «automático» — nunca inventa opções. */
+  const modelos = await api.call('/ia/modelos').catch(() => null);
   const [uso, runs, fila, gratuitos] = await Promise.all([
     api.call('/ia/uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     api.call('/ia/runs').catch(() => ({ runs: [] })),
@@ -46,6 +50,7 @@ export async function carregarIA(api) {
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
   api.S.iaGratuitos = gratuitos;
+  api.S.iaModelos = modelos;
   if (!api.S.iaRun && api.S.iaRuns.length) {
     const mais = api.S.iaRuns[0];
     try { api.S.iaRun = await api.call(`/ia/runs/${mais.id}`); } catch { api.S.iaRun = null; }
@@ -244,14 +249,19 @@ export function vistaIA(S, { esc, hhmm, when }) {
 
   const agentes = (ia.agentes || []).map((a) => {
     const opcoes = [];
-    for (const f of ia.fornecedores.filter((x) => x.configurado && !x.desligado)) {
+    for (const f of (ia.fornecedores || []).filter((x) => x.configurado && !x.desligado)) {
       for (const m of (f.modelosDescobertos || f.descobertos || [])) opcoes.push(`${f.id}::${m}`);
     }
-    const escolhido = a.modelo ? `${a.modelo.fornecedor}::${a.modelo.modelo}` : '';
+    /* 1.50.0 · o estado passou a trazer `escolha: { fornecedor, modelo }` (e
+       `modelo` como texto). Aceitam-se as duas formas: a versão antiga mandava
+       um objecto em `modelo`, e uma mesa antiga a falar com um servidor novo
+       não pode rebentar por causa disso. */
+    const escolha = a.escolha || (a.modelo && typeof a.modelo === 'object' ? a.modelo : null);
+    const escolhido = escolha ? `${escolha.fornecedor || ''}::${escolha.modelo || ''}` : '';
     if (escolhido && !opcoes.includes(escolhido)) opcoes.unshift(escolhido);
     return `<tr>
       <td><b>${esc(a.numero)} ${esc(a.nome)}</b><div class="ia-sub">${esc(a.papel)}</div></td>
-      <td class="ia-sub">${esc(a.ferramentas.join(', ') || 'nenhuma')}</td>
+      <td class="ia-sub">${esc((a.ferramentas || []).join(', ') || 'nenhuma')}</td>
       <td>
         <select data-act="ia-preferido" data-id="${a.id}" class="ia-select">
           <option value="">automático (router)</option>
@@ -311,10 +321,58 @@ export function vistaIA(S, { esc, hhmm, when }) {
       <td>${u.latenciaMediaMs != null ? `${u.latenciaMediaMs} ms` : '—'}</td><td>${u.tokens}</td>
     </tr>`).join('');
 
+  /* ---------------- 1.50.0 · a conversa, com a IA à escolha ---------------- */
+  const chat = S.iaChat || { agente: 'research', escolha: '', mensagens: [] };
+  const agentesDoChat = Array.isArray(ia.agentes) ? ia.agentes : [];
+  const modelosDoChat = Array.isArray(S.iaModelos?.fornecedores) ? S.iaModelos.fornecedores : [];
+  const opcoesDeModelo = modelosDoChat
+    .filter((f) => (f.catalogo && f.catalogo.length) || (f.descobertos && f.descobertos.length))
+    .map((f) => {
+      const estado = f.desligado ? 'desligado' : (f.comChave ? 'com chave' : 'sem chave');
+      const modelos = [
+        ...(f.catalogo || []).map((m) => m.modelo),
+        ...(f.descobertos || []).map((d) => (typeof d === 'string' ? d : d.modelo)).filter(Boolean),
+      ];
+      const unicos = [...new Set(modelos)].slice(0, 30);
+      return `<optgroup label="${esc(f.nome || f.id)} · ${esc(estado)}">${unicos.map((m) =>
+        `<option value="${esc(f.id)}|${esc(m)}" ${chat.escolha === `${f.id}|${m}` ? 'selected' : ''}>${esc(m)}</option>`).join('')}</optgroup>`;
+    }).join('');
+  const agenteAtual = agentesDoChat.find((a) => a.id === chat.agente) || agentesDoChat[0] || null;
+  const mensagens = (chat.mensagens || []).map((m) => (m.quem === 'tu'
+    ? `<div class="ia-msg eu"><b>tu</b><div>${esc(m.texto)}</div></div>`
+    : m.quem === 'erro'
+      ? `<div class="ia-msg erro"><b>não respondeu</b><div>${esc(m.texto)}</div></div>`
+      : `<div class="ia-msg ia"><b>${esc(m.agente || 'agente')}</b><div>${esc(m.texto)}</div>
+           <div class="ia-sub">${esc(m.meta || '')}</div></div>`)).join('');
+  const cartaoConversa = `<div class="card">
+    <h3 style="margin-top:0">Conversa <span class="ia-sub">· com a IA que escolheres</span></h3>
+    <p class="ia-sub" style="margin-top:0">Escolhe o agente e o modelo desta conversa. A lista é a real
+      (${modelosDoChat.length} fornecedor(es), ${S.iaModelos?.totalModelosCatalogo || 0} modelos no catálogo); «automático» deixa o router
+      decidir. A escolha vale para esta conversa e pode ser fixada para o agente.</p>
+    <div class="ia-acts" style="gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <select class="ia-select" data-act="ia-chat-mudar" data-qual="agente" ${agentesDoChat.length ? '' : 'disabled'}>
+        ${agentesDoChat.map((a) => `<option value="${esc(a.id)}" ${a.id === chat.agente ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}
+      </select>
+      <select class="ia-select" data-act="ia-chat-mudar" data-qual="escolha" style="min-width:220px">
+        <option value="">automático${agenteAtual?.escolha ? ` (${esc(agenteAtual.escolha.fornecedor || '')}/${esc(agenteAtual.escolha.modelo || '')})` : ''}</option>
+        ${opcoesDeModelo}
+      </select>
+      <button class="btn quiet small" data-act="ia-chat-fixar" title="gravar esta escolha para o agente">Fixar para o agente</button>
+      ${mensagens ? '<button class="btn quiet small" data-act="ia-chat-limpar">Limpar</button>' : ''}
+    </div>
+    ${mensagens ? `<div class="ia-chat" id="iaChatLog">${mensagens}</div>` : '<div class="ia-sub" style="margin-bottom:8px">Ainda sem mensagens nesta conversa.</div>'}
+    <textarea id="iaChatTexto" class="ia-input" rows="2" maxlength="8000" placeholder="Escreve o que precisas — a resposta vem do modelo escolhido, não de um exemplo."></textarea>
+    <div class="ia-acts" style="margin-top:8px;justify-content:flex-end">
+      <button class="btn primary small" data-act="ia-chat-enviar" ${ia.pronto ? '' : 'disabled title="sem motor configurado"'}>Enviar</button>
+    </div>
+    ${ia.pronto ? '' : '<div class="ia-sub">Sem motor configurado, esta conversa não inventa resposta: o botão fica desligado até haver um.</div>'}
+  </div>`;
+
   return `<div class="wrap">
     ${falhaAoLer}
     ${aviso}
 
+    ${cartaoConversa}
     ${cartaoGratuitos}
     ${cartaoModelos}
 
@@ -437,6 +495,85 @@ export function vistaIA(S, { esc, hhmm, when }) {
 export async function accaoIA(nome, el, api) {
   const { call, S, paint, toast } = api;
   const id = el?.dataset?.id;
+
+  /* ---------------- 1.50.0 · a conversa com a IA escolhida ---------------- */
+  const lerChat = () => {
+    S.iaChat = S.iaChat && typeof S.iaChat === 'object' ? S.iaChat : { agente: 'research', escolha: '', mensagens: [] };
+    if (!Array.isArray(S.iaChat.mensagens)) S.iaChat.mensagens = [];
+    return S.iaChat;
+  };
+
+  if (nome === 'ia-chat-mudar') {
+    /* os dois selects da conversa guardam a escolha no estado da mesa: sem isto,
+       mudar de modelo e enviar mandava sempre o «automático» */
+    const chat = lerChat();
+    const qual = el?.dataset?.qual;
+    const valor = String(el?.value || '');
+    if (qual === 'agente') {
+      chat.agente = valor || chat.agente;
+      chat.escolha = '';   // a escolha anterior era do outro agente
+    } else if (qual === 'escolha') {
+      chat.escolha = valor;
+    }
+    paint();
+    return true;
+  }
+
+  if (nome === 'ia-chat-limpar') {
+    const chat = lerChat();
+    chat.mensagens = [];
+    paint();
+    return true;
+  }
+
+  if (nome === 'ia-chat-fixar') {
+    const chat = lerChat();
+    if (!chat.escolha) { toast('Escolhe primeiro um modelo (não «automático») para fixar.', true); return true; }
+    const [fornecedor, ...resto] = chat.escolha.split('|');
+    const modelo = resto.join('|');
+    try {
+      const r = await call('/ia/config', 'PATCH', { agentes: { [chat.agente]: { fornecedor, modelo } } });
+      const guardado = r?.agentes?.[chat.agente]?.modelo;
+      toast(guardado ? `Ficou: ${fornecedor}/${modelo} para ${chat.agente}.` : 'O servidor não confirmou a escolha — vê o Control Center.');
+      await carregarIA(api);
+      paint();
+    } catch (e) { toast(`Não fixei: ${e.message}`, true); }
+    return true;
+  }
+
+  if (nome === 'ia-chat-enviar') {
+    const chat = lerChat();
+    const caixa = document.getElementById('iaChatTexto');
+    const texto = String(caixa?.value || '').trim();
+    if (!texto) { toast('escreve a mensagem', true); return true; }
+    const [fornecedor, ...resto] = (chat.escolha || '').split('|');
+    const modelo = resto.join('|');
+    const historico = chat.mensagens.filter((m) => m.quem !== 'erro').slice(-8)
+      .map((m) => ({ role: m.quem === 'tu' ? 'user' : 'assistant', content: m.texto }));
+    chat.mensagens.push({ quem: 'tu', texto });
+    if (caixa) caixa.value = '';
+    paint();
+    try {
+      const r = await call('/ia/chat', 'POST', {
+        agente: chat.agente, mensagem: texto, historico,
+        ...(fornecedor ? { fornecedor } : {}), ...(modelo ? { modelo } : {}),
+      });
+      chat.mensagens.push({
+        quem: 'ia', agente: chat.agente, texto: r.resposta || '(resposta vazia)',
+        meta: `${r.fornecedor || '?'} / ${r.modelo || '?'} · ${r.ms != null ? `${r.ms} ms` : ''}${r.tentativas > 1 ? ` · ${r.tentativas} tentativas` : ''}${r.pedido ? ` · pedido: ${r.pedido.fornecedor}/${r.pedido.modelo || 'auto'}` : ' · automático'}`,
+      });
+      if (r.ferramentas?.length) {
+        chat.mensagens.push({ quem: 'ia', agente: 'ferramentas', texto: r.ferramentas.map((f) => `${f.ok ? '✓' : '✗'} ${f.nome}: ${f.resumo || ''}`).join(' · '), meta: 'ferramentas executadas' });
+      }
+      await carregarIA(api);
+      paint();
+    } catch (e) {
+      chat.mensagens.push({ quem: 'erro', texto: e.message });
+      paint();
+      toast('Não respondeu — a razão está na conversa.', true);
+    }
+    return true;
+  }
 
   if (nome === 'ia-recarregar') {
     try {

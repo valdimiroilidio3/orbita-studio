@@ -12,6 +12,7 @@ import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (tecl
 import { createForgeTerminal } from './forge.js'; // 27 out 2026: o terminal da oficina de ferramentas
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
+import { explicarFalha, lerCorpo } from './falhas.js'; // 1.50.0: dizer o que falhou, não culpar a IA
 // V7: só o que este ficheiro usa. Saíram sete nomes importados e nunca chamados (TOKENS,
 // PLINTH_H, mat, rbox, makeFloorTitle, makeServerRack, makeMeetingTable) — o tipo de sobra que
 // faz alguém procurar um título de chão que já não existe.
@@ -1299,6 +1300,8 @@ document.querySelectorAll('#rail .mtabs button').forEach(b =>
    tarefa na base de dados, «Planear» pede um plano ao motor sem ferramentas, e o resto é a
    conversa de sempre. O que correu volta por baixo da resposta (modelo · esforço · modo). */
 const CHAT_MODES = ['ask', 'plan', 'build'];
+/* 1.50.0 · a mesma leitura honesta de falhas que a barra de tarefas usa: um 404
+   em HTML nunca mais é explicado como «sem motor de IA» (ver src/falhas.js). */
 function dropWork(id, text) {
   const h = chatHist[id] || [];
   const k = h.findIndex(m => m.who === 'work' && m.text === text);
@@ -1312,9 +1315,17 @@ async function buildFromChat(id, text, m) {
   try {
     const res = await fetch('/api/tasks', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ dept: r.a.dept, text, run: true, model: m.auto ? undefined : (m.model || undefined), effort: m.auto ? undefined : (m.effort || undefined) }) });
-    const st = await res.json().catch(() => ({}));
+    const lido = lerCorpo(await res.text());
     dropWork(id, line);
-    if (!res.ok) throw new Error(st.error || res.statusText);
+    if (!res.ok) {
+      const f = explicarFalha({ status: res.status, texto: lido.texto, json: lido.json, rota: '/api/tasks' });
+      throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+    }
+    const st = lido.json || {};
+    if (!st.id) {
+      const f = explicarFalha({ status: res.status, texto: lido.texto, json: lido.json, rota: '/api/tasks' });
+      throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+    }
     const who = R[st.agent]?.a?.name || st.agent;
     if (spawnEmote && R[st.agent]) spawnEmote(R[st.agent], '📋');
     const mdl = { sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable' }[st.model];
@@ -1323,7 +1334,8 @@ async function buildFromChat(id, text, m) {
     composer?.toast('Tarefa criada no quadro.', 'ok');
   } catch (e) {
     dropWork(id, line);
-    throw new Error('Não foi criada: ' + e.message);
+    const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/tasks', erro: e.message });
+    throw Object.assign(new Error('Não foi criada. ' + f.frase + (f.detalhe ? ' — ' + f.detalhe : '') + ' ' + f.ajuda), { falha: f });
   }
 }
 async function sendChat(text, meta = {}) {
@@ -1359,9 +1371,18 @@ async function sendChat(text, meta = {}) {
   try {
     const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ agent: id, ...chatBody({ text: clean, mode: m.mode, model: m.model, effort: m.effort, auto: m.auto, files: m.files, context: m.context, history: hist }) }) });
-    const j = await res.json().catch(() => ({}));
+    /* 1.50.0 · a mesma leitura honesta da barra: um 404 em HTML não é «sem motor» */
+    const lido = lerCorpo(await res.text());
     dropWork(id, line);
-    if (!res.ok) throw new Error(j.error || res.statusText);
+    if (!res.ok) {
+      const f = explicarFalha({ status: res.status, texto: lido.texto, json: lido.json, rota: '/api/chat' });
+      throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+    }
+    const j = lido.json || {};
+    if (!j.reply) {
+      const f = explicarFalha({ status: res.status, texto: lido.texto, json: lido.json, rota: '/api/chat' });
+      throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+    }
     chatPush(id, { who: 'agent', text: j.reply, meta: metaLine(j, m) });
     if (j.routines && tasks.refresh) tasks.refresh(); // uma rotina foi criada, pausada ou apagada na conversa
     if (j.read) for (const n of j.read.slice(0, 2)) brain.readNote(id, n);
@@ -1369,7 +1390,11 @@ async function sendChat(text, meta = {}) {
     if (j.contextIgnored && j.contextIgnored.length) composer?.toast(`O servidor não conhece @${j.contextIgnored.join(', @')} — não foi enviado.`, 'err');
   } catch (e) {
     dropWork(id, line);
-    chatPush(id, { who: 'agent', text: `Não consigo responder: ${e.message}. Sem um motor de IA ligado, este posto não inventa uma resposta — o painel AO VIVO mostra o trabalho real.` });
+    /* 1.50.0 · a frase diz o que falhou: a rota ausente, o motor, ou a recusa do
+       fornecedor. Antes, tudo caía em «sem motor de IA» — e era mentira sempre
+       que a página estava publicada sem servidor. */
+    const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/chat', erro: e.message });
+    chatPush(id, { who: 'agent', text: `Não consigo responder. ${f.frase}${f.detalhe ? ` — ${f.detalhe}` : ''} ${f.ajuda}` });
     throw e;
   }
 }
