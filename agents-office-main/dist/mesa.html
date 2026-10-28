@@ -703,7 +703,7 @@
       <h3 style="margin-top:0">${i?"A ler o documento\u2026":"Tirar fotografia ou escolher ficheiro"}</h3>
       <p class="ia-sub" style="margin-top:0">Fotografa o papel de frente, com luz, sem sombras por cima do texto. Aceito imagem (PNG, JPEG, WebP, TIFF) e PDF at\xE9 6 MB.</p>
       <input type="file" id="papelFoto" accept="image/*,application/pdf" capture="environment" hidden>
-      <div id="papelCam"${a.papelCamera?"":" hidden"} style="margin-top:var(--s3)">
+      <div id="papelCam" style="margin-top:var(--s3)${a.papelCamera?"":";display:none"}">
         <video id="papelVideo" autoplay playsinline muted style="width:100%;max-width:520px;border-radius:12px;background:#000"></video>
         <div class="acts" style="margin-top:var(--s3)">
           <button class="btn primary" data-act="papel-disparar">Tirar fotografia</button>
