@@ -823,3 +823,26 @@ test('provar-modelos: um limite do fornecedor para o lote na hora (não queima 9
   assert.match(r.saltados[0].motivo, /limite/);
   assert.equal(r.porProvarRestantes > 0, true, 'as restantes ficam contadas para a próxima chamada');
 });
+
+test('provar-modelos: o fornecedor que deu limite fica de fora da chamada seguinte (e expira)', async () => {
+  const repo = createMemRepo();
+  let chamadas = 0;
+  const fetchImpl = async () => { chamadas += 1; return { ok: false, status: 429, text: async () => '{"error":"limite"}' }; };
+  const agoraFixo = new Date('2026-10-28T08:00:00.000Z');
+  const motor = criarMotor({ repo, env: {}, fetchImpl, agora: () => agoraFixo.toISOString() });
+  await motor.provarModelos({ fornec: 'opencode', limite: 2, concorrencia: 1 });
+  assert.equal(chamadas, 1);
+
+  /* segunda chamada, 5 minutos depois: nem um pedido ao mesmo fornecedor */
+  const motor2 = criarMotor({ repo, env: {}, fetchImpl, agora: () => new Date(agoraFixo.getTime() + 5 * 60 * 1000).toISOString() });
+  const r2 = await motor2.provarModelos({ fornec: 'opencode', limite: 2, concorrencia: 1 });
+  assert.equal(chamadas, 1, 'voltou a bater no fornecedor bloqueado');
+  assert.equal(r2.testados, 0);
+  assert.match(r2.saltados[0].motivo, /limite/);
+  assert.equal(r2.saltados[0].ate, '2026-10-28T08:30:00.000Z');
+
+  /* 40 minutos depois o bloqueio expirou: volta a tentar */
+  const motor3 = criarMotor({ repo, env: {}, fetchImpl, agora: () => new Date(agoraFixo.getTime() + 40 * 60 * 1000).toISOString() });
+  await motor3.provarModelos({ fornec: 'opencode', limite: 1, concorrencia: 1 });
+  assert.equal(chamadas, 2, 'o bloqueio não expirou');
+});
