@@ -38,7 +38,11 @@ OpenClaw — construir o lote a partir do workspace (`SOUL/IDENTITY/USER/MEMORY.
 e os diários dos últimos 30 dias), verificar a chave e enviar o lote para a
 Órbita. O runbook está em `docs/IA.md` §16.
 
-**Testes:** 633 (11 novos do Mem0, 1 da capa do Cine: sem chave, chave mascarada, 401/429/rede, junção sem
+Também entra `GET /api/prova-mem0?token=<PROVA_TOKEN>`: escreve, procura por
+sentido, confirma e apaga uma nota em produção — a diferença entre «o ping
+respondeu» e «a memória funciona».
+
+**Testes:** 634 (11 novos do Mem0 + 1 da prova, 1 da capa do Cine: sem chave, chave mascarada, 401/429/rede, junção sem
 repetição, escrita que sobrevive ao Mem0 em baixo, plano vs `confirmar`, rotas).
 
 ## 1.48.2 — 28 out 2026 · a imagem do Cine descarrega-se
