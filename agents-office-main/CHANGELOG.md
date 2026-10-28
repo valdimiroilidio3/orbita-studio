@@ -1,3 +1,20 @@
+## 1.44.1 — 28 out 2026 · a prova aprende onde não vale a pena insistir
+
+A primeira prova em produção (1.44.0, `GET /ia/provar-modelos?limite=12`) deu 2 provados
+reais — `pollinations/openai` (3,3 s) e `pollinations/openai-large` (4,1 s) — e mostrou o
+defeito: **9 das 12 tentativas foram ao OpenCode**, todas com «Free usage limit reached».
+Um limite do fornecedor não se resolve a tentar o modelo seguinte dele.
+
+- **Curto-circuito:** quando o erro é do fornecedor (`limite`, `credito`, `chave`, `semchave`),
+  os modelos restantes desse fornecedor saem do lote e ficam em `saltados` com o motivo.
+- **Prioridade:** chave própria no ambiente → keyless → chave publicada por terceiro. O lote
+  passa a gastar-se onde há quota real.
+- `provasDe` conserva as etiquetas declaradas no catálogo (provar não pode empobrecer o que a
+  cadeia já sabia do modelo).
+- `porProvarRestantes` passa a ser contado pelo que **não** foi tentado.
+
+**Testes:** 550 (1 novo: um 429 a 6 modelos faz 1 pedido, não 6).
+
 ## 1.44.0 — 28 out 2026 · «Provar os por provar»: de descoberto a funcional
 
 O 1.43.x descobriu o que os fornecedores têm e filtrou o que não conversa. Ficou a faltar

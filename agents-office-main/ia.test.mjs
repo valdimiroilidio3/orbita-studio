@@ -806,3 +806,20 @@ test('rota /ia/provar-modelos: GET para verificação, e fornecedor desconhecido
   const mau = await rotasIA(repo, { caminho: '/ia/provar-modelos', metodo: 'POST', corpo: { fornecedor: 'nao-existe' }, env: {}, fetchImpl });
   assert.equal(mau.status, 400);
 });
+
+test('provar-modelos: um limite do fornecedor para o lote na hora (não queima 9 tentativas)', async () => {
+  const repo = createMemRepo();
+  let chamadas = 0;
+  const fetchImpl = async () => {
+    chamadas += 1;
+    return { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: 'Free usage limit reached' } }) };
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'opencode', limite: 6, concorrencia: 1 });
+  assert.equal(r.provados, 0);
+  assert.equal(chamadas, 1, `insistiu ${chamadas} vezes num fornecedor sem quota`);
+  assert.equal(r.saltados.length, 1);
+  assert.equal(r.saltados[0].fornec, 'opencode');
+  assert.match(r.saltados[0].motivo, /limite/);
+  assert.equal(r.porProvarRestantes > 0, true, 'as restantes ficam contadas para a próxima chamada');
+});

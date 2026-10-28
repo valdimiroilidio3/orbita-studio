@@ -175,16 +175,25 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
       candidatos.push({ fornec: id, modelo });
     }
   }
-  /* os declarados de cada fornecedor entram primeiro (já trazem etiquetas), e
-     fornecedores com chave real antes dos keyless lentos: é onde há mais fruta */
-  const ordemFornec = Object.keys(FORNECEDORES).filter((id) => !!(chaves[id] && !String(chaves[id]).startsWith('\u0000')));
-  candidatos.sort((a, b) => {
-    const pa = ordemFornec.indexOf(a.fornec); const pb = ordemFornec.indexOf(b.fornec);
-    return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
-  });
+  /* Prioridade: chave própria no ambiente primeiro (é onde há mais fruta e
+     quota real), depois os keyless, e por fim quem publica a chave — foi o
+     OpenCode que, a 28 out 2026, gastou 9 de 12 tentativas num «free usage
+     limit reached» que nenhuma delas ia passar. */
+  const pesoDoFornec = (id) => {
+    const prov = FORNECEDORES[id];
+    const nome = chaves[id];
+    if (nome && !String(nome).startsWith('\u0000') && String(env[nome] || '').trim()) return 0;  // chave própria
+    if (prov?.keyless) return 1;
+    return 2;                                                                                    // chave pública
+  };
+  candidatos.sort((a, b) => pesoDoFornec(a.fornec) - pesoDoFornec(b.fornec));
   const alvos = candidatos.slice(0, quantos);
 
   const resultados = [];
+  const saltados = [];
+  /* um erro que é do FORNECEDOR (limite, crédito, chave) não se resolve a tentar
+     outro modelo dele: param-se os restantes para não queimar o lote */
+  const falhaDoFornecedor = (codigo) => ['limite', 'credito', 'chave', 'semchave'].includes(String(codigo || ''));
   for (let i = 0; i < alvos.length; i += paralelo) {
     const grupo = alvos.slice(i, i + paralelo);
     const feitos = await Promise.all(grupo.map(async ({ fornec, modelo }) => {
@@ -202,10 +211,22 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         if (!texto) return { fornec, modelo, ok: false, ms, erro: 'respondeu vazio (modelo de raciocínio com pouco espaço de saída?)' };
         return { fornec, modelo, ok: true, ms, resposta: texto.slice(0, 40) };
       } catch (e) {
-        return { fornec, modelo, ok: false, ms: Date.now() - t0, erro: String(e?.message || e).slice(0, 200) };
+        const codigo = e?.codigo || null;
+        return {
+          fornec, modelo, ok: false, ms: Date.now() - t0,
+          codigo, doFornecedor: falhaDoFornecedor(codigo),
+          erro: String(e?.message || e).slice(0, 200),
+        };
       }
     }));
     resultados.push(...feitos);
+    for (const r of feitos) {
+      if (!r.doFornecedor) continue;
+      saltados.push({ fornec: r.fornec, motivo: r.erro, restantes: alvos.filter((a) => a.fornec === r.fornec && !resultados.some((x) => x.modelo === a.modelo)).length });
+      for (let k = alvos.length - 1; k > i + paralelo - 1; k -= 1) {
+        if (alvos[k].fornec === r.fornec) alvos.splice(k, 1);
+      }
+    }
   }
 
   const bons = resultados.filter((r) => r.ok);
@@ -227,7 +248,9 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     testados: resultados.length,
     provados: bons.length,
     falhados: resultados.length - bons.length,
-    porProvarRestantes: Math.max(0, candidatos.length - alvos.length),
+    porProvarRestantes: Math.max(0, candidatos.length - resultados.length),
+    /* fornecedores que pararam o lote por um motivo que não é do modelo */
+    saltados: saltados.filter((x, i, arr) => arr.findIndex((y) => y.fornec === x.fornec) === i),
     resultados,
   };
 };
