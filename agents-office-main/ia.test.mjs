@@ -21,7 +21,7 @@ import { FORNECEDORES, comChave, mascarar, MODELOS, SEM_CHAVE } from './api/_ia/
 import { ErroIA, falar, listarModelos } from './api/_ia/cliente.mjs';
 import { cadeia, diagnostico, falarComFallback, limparFora, orcamento, marcarFora, foraDoAr, eModeloIndisponivel } from './api/_ia/router.mjs';
 import { FERRAMENTAS, INDISPONIVEIS, executar, validar } from './api/_ia/ferramentas.mjs';
-import { criarMotor } from './api/_ia/motor.mjs';
+import { criarMotor, esquecerBloqueios } from './api/_ia/motor.mjs';
 import { correr, lerPlano, normalizarPlano } from './api/_ia/orquestrador.mjs';
 import { rotasIA } from './api/_ia/rotas.mjs';
 import { AGENTES } from './api/_ia/agentes.mjs';
@@ -825,6 +825,7 @@ test('provar-modelos: um limite do fornecedor para o lote na hora (não queima 9
 });
 
 test('provar-modelos: o fornecedor que deu limite fica de fora da chamada seguinte (e expira)', async () => {
+  esquecerBloqueios();   // a memória do processo é partilhada com o teste anterior
   const repo = createMemRepo();
   let chamadas = 0;
   const fetchImpl = async () => { chamadas += 1; return { ok: false, status: 429, text: async () => '{"error":"limite"}' }; };
@@ -858,4 +859,20 @@ test('gratuitos: os bloqueios do fornecedor aparecem (e os expirados não)', asy
   assert.equal(gr.bloqueios.length, 1);
   assert.equal(gr.bloqueios[0].fornec, 'opencode');
   assert.match(gr.bloqueios[0].motivo, /limite/);
+});
+
+test('provar-modelos: o lote faz rodízio entre fornecedores (um só não o consome)', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const vistos = [];
+  const fetchImpl = async (url, opt) => {
+    vistos.push(JSON.parse(opt.body).model);
+    return json({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ limite: 6, concorrencia: 1 });
+  const donos = r.alvos.map((a) => a.fornec);
+  assert.equal(r.alvos.length, 6);
+  assert.equal(new Set(donos.slice(0, 4)).size >= 2, true, `o lote começou todo no mesmo fornecedor: ${donos.join(',')}`);
+  assert.equal(vistos.length, 6);
 });
