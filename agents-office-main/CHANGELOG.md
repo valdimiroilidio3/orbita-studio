@@ -1,3 +1,20 @@
+## 1.52.3 — 28 out 2026 · a comunidade tem grupo próprio (e a versão da prova lê-se do `package.json`)
+
+Com a evidência de `/ia/uso` a funcionar, a lista de produção passou a 37 modelos
+— mas 11 deles eram `community/Marcus-Mok-GH/pt-*` e apareciam **no topo**, com
+nomes como «pt-harbor». São reais e provados, mas não são a lista de trabalho do
+escritório.
+
+- Os `community/…` passam a um terceiro grupo, **no fim**: `Comunidade — 11
+  modelo(s), 11 já responderam`, e a etiqueta mostra a origem
+  (`Marcus-Mok-GH/pt-harbor`), não só o último pedaço.
+- O grupo principal fica limpo e ordenado pela evidência: `grok-4.20 · provado`,
+  `gpt-5.5 · provado`, …
+- `api/_ia/lista.mjs` deixa de escrever a versão à mão — lê-a do `package.json`
+  por `api/_versao.mjs` (a prova dizia 1.52.1 quando o código era outro).
+
+**Testes:** 686.
+
 ## 1.52.2 — 28 out 2026 · «as que aceitaram responder» — com a prova de produção
 
 A 1.52.1 deixou a lista certa mas, em produção, **nenhum modelo aparecia como

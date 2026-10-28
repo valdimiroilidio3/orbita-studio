@@ -11,6 +11,7 @@
    regra mudar, muda nos dois sítios ao mesmo tempo (é o teste que o garante).
    =========================================================================== */
 import { opcoesDoCatalogo, notaDaLista, provasDeUso, provasDeGratuitos, juntarProvas } from '../../src/lista-modelos.js';
+import { VERSAO } from '../_versao.mjs';
 
 /** O que `GET /api/prova-chat?lista=1` devolve — sem inventar nada. */
 export function provaDaLista({ catalogo, estado = null, provas = null, uso = null, gratuitos = null } = {}) {
@@ -18,7 +19,7 @@ export function provaDaLista({ catalogo, estado = null, provas = null, uso = nul
   const evidencia = provas || juntarProvas(provasDeUso(uso), provasDeGratuitos(gratuitos));
   const r = opcoesDoCatalogo(catalogo, estado || {}, evidencia);
   return {
-    versao: '1.52.1',
+    versao: VERSAO,   // lida do package.json — nunca escrita à mão
     grupos: r.grupos.map((g) => ({
       rotulo: g.rotulo,
       quantos: g.opcoes.length,
