@@ -463,3 +463,18 @@ test('padrão: com a chave do Pollinations, a cadeia de cada tipo começa em cas
   assert.equal(anonima.some((m) => m.fornec === 'pollinations' && m.modelo !== 'openai-fast'), false,
     'um modelo do tier com chave entrou na cadeia anónima');
 });
+
+test('estado: o Pollinations diz se está com chave ou só no tier anónimo', async () => {
+  const repo = createMemRepo();
+  const semChave = await criarMotor({ repo, env: {}, fetchImpl: async () => json({}) }).estado();
+  const anon = semChave.fornecedores.find((f) => f.id === 'pollinations');
+  assert.equal(anon.configurado, true, 'o tier anónimo continua a servir');
+  assert.equal(anon.comChaveAgora, false);
+  assert.equal(anon.semChave, true);
+
+  const comChave = await criarMotor({ repo, env: { POLLINATIONS_API_KEY: 'sk-chave-suficiente-1234' }, fetchImpl: async () => json({}) }).estado();
+  const pago = comChave.fornecedores.find((f) => f.id === 'pollinations');
+  assert.equal(pago.comChaveAgora, true);
+  assert.equal(pago.variavel, 'POLLINATIONS_API_KEY');
+  assert.match(pago.chaveMascarada, /^sk-cha…/);
+});
