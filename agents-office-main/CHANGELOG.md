@@ -43,14 +43,27 @@ desta versão: as fixtures de `prontidao.test.mjs` tinham o formato exacto de ch
 (`sb_secret_…`, `tvly-…`, URL Postgres com password). Passaram a `sb_secret_FAKE`, `tvly-FAKE` e
 uma URL sem password — a guarda continua a apanhar chaves a sério, e a suite voltou a verde.
 
-**7 · Tavily e Geoapify.** O Geoapify respondeu a sério (Coimbra → `40.2111874, -8.4291478`,
-`place_id`, `Europe/Lisbon`) e a prontidão local diz «Pesquisa pronto». A **Tavily não ficou
-provada**: a chave dada é recusada (`Unauthorized: missing or invalid API key`), e o único teste
-possível daqui foi GET — a API autentica por `POST` com `Authorization: Bearer`, que este
-ambiente não consegue fazer sem rede de saída. O código já usa POST JSON com Bearer; falta uma
-resposta real para se poder dizer «funciona». **Não está declarada funcional.**
+**7 · Tavily e Geoapify, agora provados em produção.** O Geoapify respondeu a sério (Coimbra →
+`40.2111874, -8.4291478`, `place_id`, `Europe/Lisbon`). A Tavily foi medida **depois do deploy**,
+em produção, pelo `GET /pesquisa/teste?fonte=tavily`: `ok:true`, `status 200`, **«2 resultado(s)
+reais»**, 4,0 s. A suspeita de «chave recusada» era do teste errado — o `GET` com `?api_key=`
+responde `Unauthorized`, e o caminho verdadeiro é o que o código já usava: `POST` com
+`Authorization: Bearer`. A pesquisa web funcionou de ponta a ponta (`/pesquisa/web` → 3 fontes
+reais e resposta curta em 1,8 s).
 
-**8 · Com chave ou só anónimo, dito no estado.** `GET /ia/estado` ganhou `comChaveAgora`: o
+**8 · Deploy e provas em produção (28 out, 07:33 UTC).** `dpl_4tyGn5x9JdmG8LegMNnTkDwZUPGU`,
+`READY` e `PROMOTED`, a partir de `main` `3d008ae`; `orbita-agentes.vercel.app/api/health` →
+`versao: 1.42.0`. `/ia/diagnostico` em produção: **2 de 5 responderam** — `llm7/codestral-latest`
+(1856 ms) e **`pollinations/gpt-5.4-nano-2026-03-17` (3416 ms)**, ambos com a resposta «órbita»;
+é a prova de que a chave do Pollinations vale no tier (`gen.pollinations.ai/v1`). A cadeia de
+`/ia/gratuitos` começa em `pollinations/openai-large` (plano, texto, investigar, revisão) e
+`pollinations/openai` (rápido) — **o padrão é a gratuita**, como pedido.
+O `health` passou a dizer `ok:false` com `mensagensErro: «a base existe mas falta o esquema
+(corre supabase/orbita_mesa.sql)»`: é o 1.41.0 a olhar para as colunas, e a base de produção
+ainda não tem a mesa aplicada. Fica declarado, não escondido — aplicar o SQL exige saber o que
+já lá está (a armadilha do `orbita_schema.sql` descrita abaixo).
+
+**9 · Com chave ou só anónimo, dito no estado.** `GET /ia/estado` ganhou `comChaveAgora`: o
 Pollinations é keyless *e* tem tier, e sem este campo o painel não distinguia os dois motores.
 
 **Testes:** 540 (534 + 6 novos: o padrão do Pollinations, o `listarModelos` do tier, a rota
