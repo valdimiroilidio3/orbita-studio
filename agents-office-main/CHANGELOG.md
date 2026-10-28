@@ -1,3 +1,40 @@
+## 1.46.0 — 28 out 2026 · Digitalizar papel, sem serviço de OCR nenhum
+
+Desde a 1.31.0 que «Digitalizar papel» existia e estava desligada: o pipeline
+estava todo lá (texto → NIF com dígito de controlo → telefone → email → IBAN →
+campos com confiança → proposta de lead), mas o OCR vinha de fora por
+`ORBITA_OCR_URL` — um Tesseract numa máquina que nunca existiu. O `/api/health`
+dizia «falta Digitalizar papel» e tinha razão.
+
+**Agora quem lê o papel é a casa.** Uma fotografia entra como mensagem com imagem
+e o modelo de visão da cadeia transcreve-a. Em produção há um leitor **sem chave
+nenhuma**: `ovh/Qwen2.5-VL-72B-Instruct` (413 ms medidos).
+
+- `api/_ia/papel.mjs` — `lerPapel()`: ordem explícita («transcreve literalmente,
+  não traduzas, não resumas, não inventes»), 4000 tokens, temperatura 0. Sem texto
+  legível responde `[SEM TEXTO]` e **isso é dito** — nunca se devolve uma
+  transcrição inventada com ar de leitura.
+- `cliente.mjs` — as mensagens passam a suportar `content` em partes: imagem em
+  data-URL no OpenAI, `inline_data` no Google, `source.base64` no Anthropic. Texto
+  simples continua a ser texto simples.
+- `api/_digitalizar.mjs` — `lerTexto()` usa o `ORBITA_OCR_URL` quando existe (um
+  OCR dedicado é mais rápido e mais barato para papel impresso) e o motor de visão
+  quando não existe. A resposta diz `via: 'ocr' | 'visao'` e `leitor: { modelo,
+  fornecedor, ms }` — de onde veio o texto é parte do resultado.
+- `api/_rotas.mjs` — `visaoDoPedido()` monta a cadeia de visão sem gastar pedido
+  (lê catálogo, chaves e provas) e `/digitalizar/estado` mostra o leitor real.
+- `_prontidao.mjs` — o grupo «Digitalizar papel» fica **ligado** quando há modelo
+  de visão com acesso, com os nomes dos modelos à vista; `ORBITA_OCR_URL` passou a
+  extra. `/api/health` deixa de a listar como essencial em falta.
+
+**Testes:** 573 (7 novos: transparência da ordem, imagem nas três linguagens,
+«sem texto» não é invenção, leitura ponta a ponta pela rota com o motor de visão,
+OCR externo à frente quando existe, e a prontidão ligada sem variável nenhuma).
+
+**Ainda não há ecrã de câmara na mesa** — a função vive nas rotas (`POST
+/digitalizar`, `/digitalizar/lead`) e na ferramenta dos agentes; o botão de tirar
+fotografia fica para o próximo passo.
+
 ## 1.45.2 — 28 out 2026 · o Pollinations anónimo tem duas portas (e uma estava fechada)
 
 Medido em produção a 28 out, 11h UTC: `POST text.pollinations.ai/openai` respondia

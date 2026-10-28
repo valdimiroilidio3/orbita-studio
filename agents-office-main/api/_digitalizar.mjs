@@ -23,8 +23,9 @@
 
    O que este módulo NÃO faz:
      · não adivinha o que o OCR não leu (campo ausente = ausente);
-     · não manda documentos para fora sem um fornecedor configurado — sem
-       `ORBITA_OCR_URL` a resposta diz exactamente o que falta;
+     · não manda documentos para fora sem um leitor configurado: ou há
+       `ORBITA_OCR_URL`, ou lê o motor de visão da casa (1.46.0) — sem nenhum
+       dos dois a resposta diz exactamente o que falta;
      · não grava nada no funil sozinho. `paraLead` devolve uma proposta; quem
        grava é uma pessoa, com o texto à frente.
    =========================================================================== */
@@ -41,22 +42,30 @@ const arrumar = (s) => String(s ?? '')
   .replace(/\n{3,}/g, '\n\n').trim();
 
 /** O que está configurado, sem revelar chaves nem endereços privados. */
-export function estado(env = process.env) {
+export function estado(env = process.env, { visao = null } = {}) {
   const url = limpo(env.ORBITA_OCR_URL);
+  /* 1.46.0 · o leitor deixou de depender de um serviço de fora: o motor de visão
+     da casa lê a imagem. `disponivel` passa a ser «há leitor», e `via` diz qual.
+     `visao` é o que o servidor sabe do motor (modelos de visão na cadeia); sem
+     isso não se promete nada — a rota passa-o, o teste pode passá-lo. */
+  const temVisao = !!visao?.disponivel;
   return {
     ocr: {
-      disponivel: !!url,
+      disponivel: !!url || temVisao,
+      via: url ? 'ocr' : (temVisao ? 'visao' : null),
       env: 'ORBITA_OCR_URL',
-      motivo: url ? null : 'falta ORBITA_OCR_URL no ambiente — é o serviço que transforma a imagem em texto (Tesseract, PaddleOCR, um sidecar teu).',
-      oQue: 'recebe a imagem em base64 e devolve { texto } ou { text }',
+      motivo: url || temVisao ? null
+        : (visao?.motivo || 'não há leitor: nem ORBITA_OCR_URL, nem um modelo de visão com acesso no catálogo (OVH Qwen2.5-VL, Pollinations, Google, OpenRouter, OpenAI).'),
+      oQue: url ? 'recebe a imagem em base64 e devolve { texto } ou { text }' : 'o modelo de visão transcreve a imagem, linha a linha, sem interpretar',
       limites: { bytesPorDocumento: MAX_BYTES, formatos: [...MIMES] },
-      docs: 'https://github.com/tesseract-ocr/tesseract',
+      docs: url ? 'https://github.com/tesseract-ocr/tesseract' : null,
     },
+    visao: visao || null,
     regras: {
       oQue: 'extrai NIF (com dígito de controlo), telefone português, email, código postal, IBAN, valores em euros e datas',
       precisaDe: 'nada — corre local, sem rede',
     },
-    privacidade: 'o documento só sai da máquina se ORBITA_OCR_URL apontar para fora; os campos extraídos nunca entram no registo de actividade',
+    privacidade: 'o documento vai à imagem: ao serviço de OCR se estiver configurado, senão ao fornecedor de IA que lê imagens — e não fica guardado em lado nenhum; os campos extraídos nunca entram no registo de actividade',
   };
 }
 
@@ -75,9 +84,21 @@ const bytesDe = (base64) => Math.floor((String(base64).length * 3) / 4) - (Strin
  * Pede o texto ao serviço de OCR. Um pedido, com prazo, e nada do documento
  * fica em memória depois da resposta.
  */
-export async function lerTexto({ base64, mime, env = process.env, fetchImpl = fetch, segundos = 45 }) {
+export async function lerTexto({ base64, mime, env = process.env, fetchImpl = fetch, segundos = 60, lerComIA = null }) {
   const url = limpo(env.ORBITA_OCR_URL);
   if (!url) {
+    /* 1.46.0 · sem serviço de OCR, lê o motor de visão da casa. A ordem importa:
+       um OCR dedicado é mais barato e mais rápido para papel impresso; o motor de
+       visão é o que existe quando não há serviço nenhum. */
+    if (typeof lerComIA === 'function') {
+      const r = await lerComIA({ base64, mime });
+      if (!r?.ok) {
+        const e = new Error(r?.erro || 'o motor de visão não conseguiu ler o documento');
+        e.codigo = r?.codigo === 'limite-fornecedor' ? 'limite-fornecedor' : (r?.codigo === 'timeout' ? 'timeout' : 'falha');
+        throw e;
+      }
+      return { texto: arrumar(r.texto), paginas: null, confianca: null, via: 'visao', modelo: r.modelo || null, fornec: r.fornec || null, ms: r.ms ?? null };
+    }
     const e = new Error(estado(env).ocr.motivo);
     e.codigo = 'semchave';
     throw e;
@@ -101,7 +122,7 @@ export async function lerTexto({ base64, mime, env = process.env, fetchImpl = fe
     /* alguns serviços devolvem páginas: junta-se pela ordem, sem inventar quebras */
     const paginas = Array.isArray(j?.paginas) ? j.paginas.map((p) => arrumar(p?.texto || p)).filter(Boolean) : null;
     const final = texto || (paginas ? paginas.join('\n\n') : '');
-    return { texto: final, paginas: paginas ? paginas.length : null, confianca: Number.isFinite(j?.confianca) ? j.confianca : null };
+    return { texto: final, paginas: paginas ? paginas.length : null, confianca: Number.isFinite(j?.confianca) ? j.confianca : null, via: 'ocr', modelo: null, fornec: null, ms: null };
   } catch (e) {
     if (e?.name === 'AbortError') {
       const tempo = new Error(`o OCR não respondeu em ${segundos} s`);
@@ -210,7 +231,7 @@ const novoId = () => {
  * Devolve sempre o mesmo envelope, mesmo quando falha — a interface não tem
  * de adivinhar o que aconteceu.
  */
-export async function digitalizar(args = {}, { env = process.env, fetchImpl = fetch, repo = null, agora = new Date() } = {}) {
+export async function digitalizar(args = {}, { env = process.env, fetchImpl = fetch, repo = null, agora = new Date(), lerComIA = null } = {}) {
   const base = { ok: false, id: null, tipo: 'documento', texto: '', caracteres: 0, campos: [], faltam: [], avisos: [], ms: 0, erro: null, codigo: null, real: true, inferido: false };
   const t0 = Date.now();
   const fim = (extra) => {
@@ -260,7 +281,7 @@ export async function digitalizar(args = {}, { env = process.env, fetchImpl = fe
     if (tamanho > MAX_BYTES) return fim({ codigo: 'parametros', erro: `o documento tem ${Math.round(tamanho / 1024 / 1024)} MB — o máximo é 6 MB` });
     if (mime && !MIMES.has(mime)) return fim({ codigo: 'parametros', erro: `formato não suportado (${mime}) — aceito ${[...MIMES].join(', ')}` });
 
-    const lido = await lerTexto({ base64, mime: mime || 'image/jpeg', env, fetchImpl });
+    const lido = await lerTexto({ base64, mime: mime || 'image/jpeg', env, fetchImpl, lerComIA });
     if (!limpo(lido.texto)) {
       return fim({ codigo: 'vazio', erro: 'o OCR não encontrou texto — a imagem pode estar desfocada, torta ou vazia' });
     }
@@ -277,6 +298,9 @@ export async function digitalizar(args = {}, { env = process.env, fetchImpl = fe
       caracteres: lido.texto.length,
       paginas: lido.paginas,
       confiancaOcr: lido.confianca,
+      /* de onde veio o texto: um serviço de OCR dedicado ou o modelo de visão */
+      via: lido.via || null,
+      leitor: lido.modelo ? { modelo: lido.modelo, fornecedor: lido.fornec, ms: lido.ms ?? null } : null,
       campos,
       faltam,
       tamanhoBytes: tamanho,

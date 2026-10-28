@@ -19,6 +19,8 @@
    Recebe o ambiente e devolve um retrato. Assim prova-se em teste.
    =========================================================================== */
 
+import { MODELOS, comChave } from './_ia/catalogo.mjs';
+
 /** Um item = «basta UMA destas variáveis». A primeira é o nome recomendado. */
 const item = (nome, porque, aliases, { minimo = 0, opcional = false } = {}) => ({ nome, porque, aliases, minimo, opcional });
 
@@ -105,10 +107,31 @@ export const GRUPOS = [
     id: 'ocr',
     nome: 'Digitalizar papel',
     critico: false,
-    porque: 'sem isto a digitalização diz que falta o serviço, em vez de inventar campos',
-    itens: [item('Serviço de OCR', 'um endpoint que devolve o texto da imagem', ['ORBITA_OCR_URL'])],
+    /* 1.46.0 · «Digitalizar papel» deixou de estar desligada: quem lê o papel é o
+       motor de visão da casa (o OVH serve `Qwen2.5-VL-72B-Instruct` sem chave), e
+       `ORBITA_OCR_URL` passou a ser um extra para quem tiver um Tesseract. Antes
+       era o contrário, e por isso a função nunca esteve ligada. */
+    porque: 'lê uma fotografia de papel com o modelo de visão que já cá está; sem chave de IA nem OCR, diz o que falta em vez de inventar campos',
+    itens: [
+      item('Serviço de OCR (opcional)', 'um endpoint próprio que devolve o texto da imagem (Tesseract, PaddleOCR); sem ele, lê o motor de visão', ['ORBITA_OCR_URL'], { opcional: true }),
+    ],
   },
 ];
+
+/**
+ * 1.46.0 · que modelos de VISÃO este ambiente pode usar, sem gastar um pedido.
+ *
+ * `comChave(env)` já sabe quem tem chave e quem é keyless; o catálogo sabe quem
+ * declara a etiqueta `visao`. A interseção é a resposta honesta a «posso ler uma
+ * fotografia?» — nada aqui presume que o fornecedor respondeu, só que há caminho.
+ */
+export function motoresDeVisao(env = {}, limite = 4) {
+  const acessiveis = new Set(comChave(env).map((c) => c.id));
+  return MODELOS
+    .filter((m) => m.gratuito !== false && acessiveis.has(m.fornecedor) && (m.etiquetas || []).includes('visao'))
+    .slice(0, limite)
+    .map((m) => ({ fornec: m.fornecedor, modelo: m.modelo }));
+}
 
 const valor = (env, nome) => String((env && env[nome]) || '').trim();
 
@@ -145,7 +168,25 @@ export function avaliarProntidao(env = {}) {
     /* 1.42.0 · um item `opcional` em falta não deixa o grupo «desligado»: o
        grupo diz se a FUNÇÃO está ligada, não se o extra está preenchido. */
     const exigidos = itens.filter((i) => !i.opcional);
-    const prontoGrupo = exigidos.length ? exigidos.every((i) => i.pronto) : prontos > 0;
+    let prontoGrupo = exigidos.length ? exigidos.every((i) => i.pronto) : prontos > 0;
+    /* 1.46.0 · digitalizar papel não depende de uma variável: depende de haver um
+       modelo de visão com acesso. O item entra calculado, e o grupo fica pronto
+       quando há caminho — com o nome do modelo à vista, para não ser uma promessa. */
+    if (g.id === 'ocr') {
+      const visao = motoresDeVisao(env);
+      const porOCR = itens.some((i) => i.pronto);
+      itens.unshift({
+        nome: 'Motor de visão',
+        opcional: false,
+        pronto: visao.length > 0,
+        variavel: visao.length ? 'catálogo (sem chave)' : 'ORBITA_OCR_URL ou uma chave de IA com visão',
+        alternativas: [],
+        porque: 'lê a imagem e transcreve o texto; é isto que põe «Digitalizar papel» a funcionar sem serviço nenhum',
+        minimo: 0,
+        modelos: visao,
+      });
+      prontoGrupo = porOCR || visao.length > 0;
+    }
     return {
       id: g.id, nome: g.nome, critico: !!g.critico, porque: g.porque,
       pronto: prontoGrupo,

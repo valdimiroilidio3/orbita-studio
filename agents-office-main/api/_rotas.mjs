@@ -204,6 +204,43 @@ export async function sondarServico(id, { env = process.env, fetchImpl = fetch, 
   }
 }
 
+/**
+ * 1.46.0 · O LEITOR DE PAPEL DESTE PEDIDO.
+ *
+ * Antes disto, digitalizar exigia `ORBITA_OCR_URL` — um Tesseract numa máquina
+ * qualquer. Nunca existiu em lado nenhum, e por isso a função estava desligada
+ * desde a 1.31.0 (o `/api/health` dizia «falta Digitalizar papel» e era verdade).
+ * Agora lê o motor de visão que já cá está: `cadeiaPara('visao')` escolhe os
+ * modelos que leem imagens, ordenados pelas provas reais que já temos na base —
+ * em produção isso inclui `ovh/Qwen2.5-VL-72B-Instruct`, sem chave nenhuma.
+ *
+ * Não gasta pedido: só lê catálogo, chaves e provas. Quem chama decide se usa.
+ */
+export async function visaoDoPedido({ repo, env = process.env, fetchImpl = fetch } = {}) {
+  const semNada = {
+    disponivel: false,
+    motivo: 'nenhum modelo de visão com acesso neste ambiente — o catálogo tem OVH Qwen2.5-VL-72B e Qwen3-VL (sem chave), Pollinations, Google, OpenRouter e OpenAI (com chave)',
+    cadeia: [],
+    lerComIA: null,
+  };
+  let motor = null;
+  try {
+    const { criarMotor } = await import('./_ia/motor.mjs');
+    motor = criarMotor({ repo, env, fetchImpl });
+  } catch { return semNada; }
+  let fila = [];
+  try { fila = await motor.cadeiaPara('visao'); } catch { fila = []; }
+  if (!Array.isArray(fila) || !fila.length) return semNada;
+  const { lerPapel } = await import('./_ia/papel.mjs');
+  return {
+    disponivel: true,
+    motivo: null,
+    /* o que a interface pode mostrar: quem vai ler, por esta ordem */
+    cadeia: fila.slice(0, 3).map((x) => ({ fornec: x.fornec, modelo: x.modelo })),
+    lerComIA: ({ base64, mime }) => lerPapel({ base64, mime, motor, limite: 3 }),
+  };
+}
+
 /* ---------- o encaminhador ----------
    27 out 2026: esta marca existe para forçar um pacote de funções novo quando o
    build da Vercel reutiliza cache e continua a servir código antigo. */
@@ -1123,15 +1160,22 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
      A imagem entra, o texto sai de um OCR configurado, os campos saem de regras
      determinísticas. Nada é gravado no funil aqui: `/digitalizar/lead` devolve a
      proposta, e quem a aceitar guarda-a pelas rotas normais de leads. */
+  /* 1.46.0 · quem lê o papel: o motor de visão da casa (não há serviço de OCR
+     configurado em nenhum sítio, e exigir um era o mesmo que não ter a função).
+     O leitor é montado uma vez por pedido e diz de antemão se há cadeia de visão:
+     `cadeiaPara('visao')` não gasta pedido nenhum — só lê o catálogo, as chaves e
+     as provas que já existem na base. */
   if (caminhoLimpo === '/digitalizar/estado' && m === 'GET') {
     const d = await import('./_digitalizar.mjs');
-    return { status: 200, corpo: { ok: true, ...d.estado(env) } };
+    const visao = await visaoDoPedido({ repo, env, fetchImpl });
+    return { status: 200, corpo: { ok: true, ...d.estado(env, { visao }) } };
   }
 
   if (caminhoLimpo === '/digitalizar' && (m === 'POST' || m === 'GET')) {
     const d = await import('./_digitalizar.mjs');
     const fonte = m === 'POST' ? (corpo || {}) : Object.fromEntries(qs.entries());
-    const r = await d.digitalizar(fonte, { env, fetchImpl, repo });
+    const visao = await visaoDoPedido({ repo, env, fetchImpl });
+    const r = await d.digitalizar(fonte, { env, fetchImpl, repo, lerComIA: visao.lerComIA });
     const status = r.ok ? 200
       : r.codigo === 'parametros' ? 400
         : r.codigo === 'semchave' ? 503

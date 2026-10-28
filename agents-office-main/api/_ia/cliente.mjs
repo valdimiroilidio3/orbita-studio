@@ -63,10 +63,31 @@ function cabecalhos(prov, chave) {
 }
 
 /* ---------- tradução de mensagens ---------- */
+
+/* 1.46.0 · uma mensagem pode ter mais do que texto: uma fotografia de papel.
+   O formato interno é `content: [{ type:'text', text }, { type:'image', mime, base64 }]`
+   e cada dialeto recebe o que sabe ler — imagem em data-URL no OpenAI, `inline_data`
+   no Google, `source.base64` no Anthropic. Um `content` em texto continua a ser
+   texto: nada muda para quem nunca manda imagens. */
+const partesDe = (content) => (Array.isArray(content)
+  ? content.map((p) => (p?.type === 'image'
+    ? { tipo: 'imagem', mime: String(p.mime || 'image/jpeg'), base64: String(p.base64 || '') }
+    : { tipo: 'texto', texto: String(p?.text ?? p?.content ?? '') }))
+  : null);
+
 function paraOpenAI(mensagens) {
   return mensagens.map((m) => {
     if (m.role === 'tool') return { role: 'tool', tool_call_id: m.tool_call_id, name: m.name, content: String(m.content ?? '') };
     if (m.role === 'assistant' && m.tool_calls) return { role: 'assistant', content: m.content || null, tool_calls: m.tool_calls };
+    const partes = partesDe(m.content);
+    if (partes) {
+      return {
+        role: m.role,
+        content: partes.map((x) => (x.tipo === 'imagem'
+          ? { type: 'image_url', image_url: { url: `data:${x.mime};base64,${x.base64}` } }
+          : { type: 'text', text: x.texto })),
+      };
+    }
     return { role: m.role, content: String(m.content ?? '') };
   });
 }
@@ -94,6 +115,13 @@ function paraAnthropic(mensagens) {
       resto.push({ role: 'assistant', content });
       continue;
     }
+    const partes = partesDe(m.content);
+    if (partes) {
+      resto.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: partes.map((x) => (x.tipo === 'imagem'
+        ? { type: 'image', source: { type: 'base64', media_type: x.mime, data: x.base64 } }
+        : { type: 'text', text: x.texto })) });
+      continue;
+    }
     resto.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: [{ type: 'text', text: String(m.content ?? '') }] });
   }
   return { sistema, resto };
@@ -117,6 +145,13 @@ function paraGoogle(mensagens) {
         parts.push({ functionCall: { name: c.function?.name, args } });
       }
       contents.push({ role: 'model', parts });
+      continue;
+    }
+    const partes = partesDe(m.content);
+    if (partes) {
+      contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: partes.map((x) => (x.tipo === 'imagem'
+        ? { inline_data: { mime_type: x.mime, data: x.base64 } }
+        : { text: x.texto })) });
       continue;
     }
     contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(m.content ?? '') }] });
