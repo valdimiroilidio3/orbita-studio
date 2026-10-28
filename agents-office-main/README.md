@@ -82,7 +82,7 @@ publicar, pagar, apagar ou alterar só quando tu pedires.
 Além do que estiver ligado no teu Claude Code, o escritório traz o seu próprio servidor MCP —
 `orbita_integrations`, em `mcp-servers/orbita-integrations/` — com **22 ferramentas**: pesquisa
 de empresas (Geoapify, sem duplicados), **pesquisa web em tempo real (Tavily, com fontes e datas)**,
-leitura de páginas, consumo da pesquisa, **criar um site** e **digitalizar documentos**, CRM de leads, rascunhos com Gemini, email aprovado pelo
+leitura de páginas, consumo da pesquisa, **criar um site** e **digitalizar documentos**, CRM de leads, **Cine** (Master Prompt e peças visuais por lead — ver `CINE.md`), , rascunhos com Gemini, email aprovado pelo
 Resend, metadados e commit de um ficheiro no GitHub, link de WhatsApp, fila de conteúdo,
 publicação no Instagram e deploy na Vercel. É arrancado e testado a sério no arranque (`initialize` + `tools/list`)
 e entregue aos agentes por `--mcp-config`; o estado real está em `GET /api/mcp`.

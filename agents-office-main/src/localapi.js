@@ -256,6 +256,27 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/digitalizar') throw falha(503, 'ler papel precisa do servidor: aqui não há motor de visão');
     if (caminhoLimpo === '/digitalizar/lead') throw falha(503, 'sem leitura não há campos para propor um lead');
 
+    /* --- 1.48.0 · Cine: o ecrã existe aqui, o estúdio não ----------------
+       O estúdio precisa de dois lados que não vivem no browser: o motor de IA
+       (para escrever o plano) e a chave do fornecedor de imagem (para gerar).
+       Em vez de um 404 seco, o estado diz isso — e a lista de projectos vem
+       vazia com a razão escrita, para a vista não parecer avariada. */
+    if (caminhoLimpo === '/cine/projetos') return { ok: true, modo: 'local', projetos: [] };
+    if (caminhoLimpo === '/cine/estado') {
+      return {
+        ok: true, modo: 'local',
+        imagem: {
+          via: null, comChave: false, provado: null, modelos: [], limiteBytes: 8 * 1024 * 1024,
+          motivoSemChave: 'no modo local não há chave nenhuma: gerar imagens faz-se no servidor',
+        },
+        video: { disponivel: false, modelos: [], motivo: 'o vídeo vive no servidor (fila de media + worker)', worker: { vivo: false } },
+        formatos: [], estilos: [],
+        arquivo: { projetos: 0, imagens: 0, aprovadas: 0, comMaster: 0 },
+        aviso: 'no modo local não há estúdio: o Master Prompt precisa do motor de IA e a geração precisa do fornecedor de imagem, e nenhum dos dois está neste browser',
+      };
+    }
+    if (caminhoLimpo.startsWith('/cine')) throw falha(503, 'o Cine precisa do servidor: o plano é escrito pelo motor de IA e as imagens vêm do fornecedor, nenhum deles vive neste browser');
+
     /* --- 1.19.0 · memória e estúdio no modo local: dizem que precisam do servidor --- */
     if (caminhoLimpo === '/media/trabalhos') return { trabalhos: [], modo: 'local' };
     if (caminhoLimpo === '/media/estado') {

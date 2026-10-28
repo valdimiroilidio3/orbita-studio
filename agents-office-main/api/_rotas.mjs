@@ -1193,5 +1193,141 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { ok: true, ...proposta, nota: 'proposta — para entrar no funil, confirma o nome e grava com POST /ops/leads' } };
   }
 
+  /* ---- 1.48.0 · O CINE: um lead, um projecto criativo ----------------------
+
+     O pedido: ao abrir uma lead nasce um Master Prompt dela, e dele uma peça
+     visual. O motor está em `_cine.mjs`; aqui só se decide quem pode ver o quê e
+     qual é o código HTTP de cada falha — para a mesa poder dizer a verdade em
+     vez de um «erro» cinzento.
+
+     Nota sobre o que se devolve: as imagens viajam em `data:` dentro do JSON.
+     Não há chave nenhuma nesta resposta, e o browser não fala com o fornecedor.
+     ------------------------------------------------------------------------- */
+  const leadDoCine = async (pedido) => {
+    const id = limpo(pedido?.leadId || seg[2]);
+    if (id) {
+      const l = await repo.leads.byId(id).catch(() => null);
+      if (l) return { lead: l };
+    }
+    /* sem base, aceita-se a ficha que a mesa já tem à mão — mas só para desenhar
+       o plano; gerar continua a precisar de um projecto guardado */
+    const daMesa = pedido?.lead && typeof pedido.lead === 'object' ? pedido.lead : null;
+    if (daMesa && limpo(daMesa.name)) return { lead: { ...daMesa, id: limpo(daMesa.id) || null } };
+    return {
+      erro: {
+        status: 404,
+        corpo: {
+          ok: false, codigo: 'semlead',
+          erro: id ? `não encontrei a lead «${id}» no funil` : 'diz qual é a lead (leadId) ou manda a ficha em `lead`',
+        },
+      },
+    };
+  };
+
+  if (caminhoLimpo === '/cine/estado' && m === 'GET') {
+    const cine = await import('./_cine.mjs');
+    return { status: 200, corpo: await cine.estadoCine({ repo, env }) };
+  }
+
+  if (caminhoLimpo === '/cine/projetos' && m === 'GET') {
+    const cine = await import('./_cine.mjs');
+    return { status: 200, corpo: { ok: true, projetos: await cine.listarProjectos(repo) } };
+  }
+
+  if (caminhoLimpo === '/cine/projeto' && m === 'GET') {
+    const cine = await import('./_cine.mjs');
+    const chave = limpo(qs.get('leadId')) || limpo(qs.get('chave'));
+    if (!chave) return { status: 400, corpo: { ok: false, erro: 'diz qual a lead (leadId)' } };
+    const arquivo = await cine.lerArquivo(repo);
+    const projeto = arquivo.projetos[chave];
+    if (!projeto) return { status: 404, corpo: { ok: false, erro: 'esta lead ainda não tem trabalho de Cine' } };
+    return { status: 200, corpo: { ok: true, projeto } };
+  }
+
+  if (caminhoLimpo === '/cine/abrir' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    const ab = await cine.abrirProjecto(repo, r.lead);
+    if (!ab.ok) return { status: 400, corpo: ab };
+    return {
+      status: 200,
+      corpo: {
+        ok: true, chave: ab.chave, criado: ab.criado, projeto: ab.projeto,
+        analise: cine.analisarLead(r.lead),
+        estilos: cine.ESTILOS, formatos: cine.FORMATOS, modelos: cine.MODELOS_IMAGEM,
+      },
+    };
+  }
+
+  if (caminhoLimpo === '/cine/preparar' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    let motor = null;
+    try {
+      const { criarMotor } = await import('./_ia/motor.mjs');
+      motor = criarMotor({ repo, env, fetchImpl });
+    } catch { motor = null; }
+    const out = await cine.prepararCine(repo, r.lead, corpo?.brief || {}, { motor });
+    if (!out.ok) return { status: 400, corpo: out };
+    return { status: 200, corpo: out };
+  }
+
+  if (caminhoLimpo === '/cine/gerar' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    const chave = limpo(r.lead.id) || limpo(r.lead.name);
+    const quantas = Math.max(1, Math.min(4, Number(corpo?.quantidade) || 1));
+    const travessao = cine.travessaoGeracao({ quantas });
+    if (!travessao.ok) return { status: 429, corpo: { ok: false, codigo: 'travessao', erro: travessao.erro } };
+    const out = await cine.gerarCine(repo, chave, {
+      quantidade: quantas, modelo: corpo?.modelo || null,
+      seed: corpo?.seed ?? null, prompt: corpo?.prompt || null, env, fetchImpl,
+    });
+    const status = out.ok ? 200
+      : out.codigo === 'semprojecto' || out.codigo === 'semmaster' || out.codigo === 'semprompt' ? 409
+        : out.codigo === 'semcreditos' ? 402
+          : out.codigo === 'parametros' ? 400 : 502;
+    return { status, corpo: out };
+  }
+
+  if (caminhoLimpo === '/cine/aprovar' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    const chave = limpo(r.lead.id) || limpo(r.lead.name);
+    const out = await cine.aprovarImagem(repo, chave, limpo(corpo?.imagemId));
+    return { status: out.ok ? 200 : 400, corpo: out };
+  }
+
+  if (caminhoLimpo === '/cine/apagar' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    const chave = limpo(r.lead.id) || limpo(r.lead.name);
+    const imagemId = limpo(corpo?.imagemId);
+    const out = imagemId ? await cine.apagarImagem(repo, chave, imagemId) : await cine.apagarProjecto(repo, chave);
+    return { status: out.ok ? 200 : 400, corpo: out };
+  }
+
+  if (caminhoLimpo === '/cine/video' && m === 'POST') {
+    const cine = await import('./_cine.mjs');
+    const r = await leadDoCine(corpo);
+    if (r.erro) return r.erro;
+    const chave = limpo(r.lead.id) || limpo(r.lead.name);
+    const arquivo = await cine.lerArquivo(repo);
+    const projeto = arquivo.projetos[chave];
+    if (!projeto?.master) {
+      return { status: 409, corpo: { ok: false, codigo: 'semmaster', erro: 'sem Master Prompt não há vídeo: gera o plano primeiro' } };
+    }
+    const out = await cine.gerarVideo({
+      repo, env, pedido: projeto.master.prompts?.video || projeto.master.seccoes?.conceito || '',
+      pipeline: corpo?.pipeline || 'cinematic', tipo: 'video', leadId: chave,
+    });
+    return { status: out.ok ? 202 : 503, corpo: out };
+  }
+
   throw falha(404, `a base ainda não serve «${caminhoLimpo}»`);
 }

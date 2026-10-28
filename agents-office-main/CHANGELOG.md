@@ -1,3 +1,55 @@
+## 1.48.0 — 28 out 2026 · Cine: um lead, um projecto criativo
+
+O pedido foi grande e é o primeiro que muda a natureza do produto: ao abrir uma
+lead nasce um **Master Prompt** dela — conceito, direcção de arte, luz, lente,
+narrativa, restrições — e dele saem peças visuais geradas a sério, guardadas no
+projecto daquela lead. Ecrã novo: `#/cine` e `#/cine/<leadId>`, a que se chega
+pelo cartão **Peça cinematográfica** dentro do lead.
+
+**O que é real.** A geração de imagens é um pedido HTTP verdadeiro ao
+Pollinations, com quatro modelos gratuitos lidos do fornecedor hoje
+(`z-image-turbo`, `flux.1.1-pro`, `mai-image-2.6`, `mai-image-2.6-flash`). Com a
+chave do dono vai pelo `gen.pollinations.ai`; sem ela, pelo tier anónimo — que só
+conhece o `flux`, e a resposta di-lo. Os bytes são conferidos: `content-type`
+tem de ser imagem e o corpo tem de ter tamanho de imagem. Um HTML de erro com
+200 não passa.
+
+**O que continua a não ser possível, e é dito.** Vídeo. Todos os modelos de
+vídeo do fornecedor são `paid_only` (créditos Pollen) e o worker do OpenMontage
+precisa de uma máquina com Python e FFmpeg. `/cine/video` devolve a razão e a
+lista real; o botão fica desactivado. O prompt de vídeo do Master Prompt fica
+guardado, pronto para o dia em que houver caminho.
+
+**O plano tem dois autores, e a mesa sabe qual.** Primeiro a IA (JSON com chaves
+fixas, validado); se ela não responder, faltar uma chave ou devolver lixo, o plano
+é montado por regras e o ecrã escreve «por regras» com o motivo. Nunca se
+apresenta texto determinístico como se fosse da IA.
+
+**Nada é inventado sobre o negócio.** A leitura da lead separa o que se sabe do
+que falta, e o plano proíbe explicitamente prémios, certificados, anos e
+avaliações que não estejam nos dados. Os sectores (saúde, restauração, beleza,
+imobiliário, automóvel, serviços, desporto, comércio, hotelaria, tecnologia)
+trazem o universo visual do ofício — objectos e gestos reais — não adjectivos.
+
+**Design.** Ecrã próprio, não uma página da mesa: hero preto com uma luz que
+respira, tipografia até 54 px, passos com quatro pontos, cartões com uma luz só,
+pílulas de direcção de arte, esqueleto animado enquanto gera (nunca uma imagem de
+exemplo a fazer de resultado), galeria com aprovar/apagar e reprodução por
+semente. Tudo respeita `prefers-reduced-motion`.
+
+**Arquivo sem migração.** O projecto vive em `orbita_ai_config` com a chave
+`cine` — a mesma tabela que a IA já usa, por isso não há esquema novo para
+aplicar em produção. Os bytes das imagens ficam nas duas mais recentes e na
+aprovada; as outras guardam o prompt, o modelo e a semente (com isso a imagem
+volta igual). Tectos: 12 imagens por projecto, 40 entradas de histórico, 60
+projectos.
+
+**Travão.** 12 imagens por 10 minutos por instância, com o tempo de espera
+escrito — cada imagem é um pedido a um serviço alheio.
+
+**Testes:** 617 (27 novos), `mesa.smoke` ✓, `npm run build` ✓. Documentação em
+`CINE.md`.
+
 ## 1.47.5 — 28 out 2026 · o lote de prova não lia a própria memória
 
 Apanhado na chamada seguinte ao deploy da 1.47.4, em produção. O lote devolveu
