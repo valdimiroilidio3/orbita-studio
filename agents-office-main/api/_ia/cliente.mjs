@@ -161,17 +161,37 @@ export async function falar({
       generationConfig: { maxOutputTokens: maxTokens, temperature: temperatura },
     };
   } else if (prov.estilo === 'pollinations') {
-    /* 1.33.0 · o tier anónimo do Pollinations não fala OpenAI: é um GET com o
-       prompt no caminho — `GET /<prompt>?model=…&system=…` — e a resposta vem
-       em texto simples (confirmado a 27 out 2026). Serve para desempatar
-       quando o OVH está em rate limit; não aceita ferramentas, e é lento por
-       desenho (1 pedido/15 s). */
-    const sistema = mensagens.filter((m) => m.role === 'system').map((m) => String(m.content || '')).join('\n').trim();
-    const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
-    const params = new URLSearchParams({ model: modelo, referrer: 'orbita-studio' });
-    if (sistema) params.set('system', sistema.slice(0, 3000));
-    url = `${prov.base}/${encodeURIComponent(String(ultima?.content || '').slice(0, 6000))}?${params}`;
-    corpo = null;
+    /* 1.42.0 · o Pollinations, a sério.
+       Antes disto era sempre o tier anónimo por GET — um prompt no caminho,
+       resposta em texto, sem ferramentas e 1 pedido a cada 15 s. Agora:
+         · com chave (`POLLINATIONS_API_KEY`): `gen.pollinations.ai/v1`, que é
+           OpenAI-compatível, com os modelos do tier e Bearer no cabeçalho;
+         · sem chave: `POST text.pollinations.ai/openai` — também OpenAI-
+           compatível, com o modelo anónimo (`openai-fast`) e ferramentas.
+       O GET antigo fica só como último recurso, para o caso de a rota /openai
+       desaparecer. */
+    const comChave = !!chave && !!prov.baseChave;
+    const pedido = {
+      model: modelo,
+      messages: paraOpenAI(mensagens),
+      max_tokens: maxTokens,
+      temperature: temperatura,
+      ...(ferramentas.length ? { tools: ferramentas.map((f) => ({ type: 'function', function: { name: f.nome, description: f.descricao, parameters: f.parametros } })) } : {}),
+    };
+    if (comChave) {
+      url = `${prov.baseChave}/chat/completions`;
+      corpo = pedido;
+    } else if (!prov.semRotaOpenAI) {
+      url = `${prov.base}/openai`;
+      corpo = { ...pedido, model: modelo || 'openai-fast', referrer: 'orbita-studio' };
+    } else {
+      const sistema = mensagens.filter((m) => m.role === 'system').map((m) => String(m.content || '')).join('\n').trim();
+      const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
+      const params = new URLSearchParams({ model: modelo, referrer: 'orbita-studio' });
+      if (sistema) params.set('system', sistema.slice(0, 3000));
+      url = `${prov.base}/${encodeURIComponent(String(ultima?.content || '').slice(0, 6000))}?${params}`;
+      corpo = null;
+    }
   } else {
     url = `${prov.base}/chat/completions`;
     corpo = {
@@ -243,7 +263,10 @@ export async function listarModelos({ fornec, prov, chave, timeoutMs = 15000, fe
   if (!chave && !prov.keyless) throw new ErroIA(`falta a chave de ${fornec}`, { fornec, codigo: 'semchave' });
   const ctl = new AbortController();
   const relogio = setTimeout(() => ctl.abort(), timeoutMs);
-  const url = prov.estilo === 'anthropic' ? `${prov.base}/v1/models` : `${prov.base}/models`;
+  /* 1.42.0 · no Pollinations a lista muda com o tier: com chave a verdade está
+     em `gen.pollinations.ai/v1/models` (traz `paid_only`, `tools`, contexto). */
+  const baseLista = prov.estilo === 'pollinations' && chave && prov.baseChave ? prov.baseChave : prov.base;
+  const url = prov.estilo === 'anthropic' ? `${prov.base}/v1/models` : `${baseLista}/models`;
   try {
     const r = await fetchImpl(url, { headers: cabecalhos(prov, chave), signal: ctl.signal });
     const texto = await r.text();

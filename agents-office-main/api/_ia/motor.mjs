@@ -13,7 +13,7 @@
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
-import { PROVADOS, catalogoDaCadeia, estadoCurto, resumo as resumoGratuitos } from './gratuitos.mjs';
+import { PROVADOS, catalogoDaCadeia, estadoCurto, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
   const mapa = {};
@@ -150,7 +150,9 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     } = {}) {
       const cfg = await config();
       const desligados = cfg.desligados || [];
-      const pref = preferido || cfg.agentes?.[agente]?.modelo || null;
+      /* 1.42.0 · sem modelo escolhido à mão, o padrão é uma gratuita — e, se o
+         dono deu a chave do Pollinations, é esse (ver preferidoDoAmbiente). */
+      const pref = preferido || cfg.agentes?.[agente]?.modelo || preferidoDoAmbiente(chaves);
       /* quem já passou num teste REAL deste fornecedor vai à frente na cadeia */
       const cfgAgora = await config();
       const usados = {};

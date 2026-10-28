@@ -203,8 +203,30 @@ for (const f of extra.fornecedores) {
   };
 }
 
-/* Etiquetas usadas pelo router e pelos agentes:
-   raciocinio · codigo · texto · rapido · barato · visao · ferramentas · contexto */
+/* 1.42.0 · O POLLINATIONS A SÉRIO (28 out 2026, pedido do dono)
+   O freellmapi só conhecia o tier anónimo (`text.pollinations.ai/<prompt>`, um
+   GET, 1 pedido/15 s). Com uma chave, o Pollinations tem um tier próprio —
+   OpenAI-compatível, em `gen.pollinations.ai/v1`, com modelos que o anónimo não
+   vê (GPT-5.4 Nano, entre outros) e limites melhores. A chave viaja no
+   cabeçalho, como em todos os outros. A base anónima continua a ser o fallback
+   para quem não tem chave: `POST /openai`, que — ao contrário do GET antigo —
+   aceita ferramentas. */
+FORNECEDORES.pollinations = {
+  ...FORNECEDORES.pollinations,
+  baseChave: 'https://gen.pollinations.ai/v1',
+  chave: ['POLLINATIONS_API_KEY', 'POLLINATIONS_TOKEN'],
+  gratuito: true,
+  limites: 'anónimo: 1 pedido/15 s (modelos básicos) · com chave: tier Seed, mais modelos e mais pedidos',
+  nota: 'Sem chave usa o tier anónimo (POST /openai, modelo `openai-fast`). Com POLLINATIONS_API_KEY usa `gen.pollinations.ai/v1` e os modelos do tier: mede-se com /ia/testar.',
+};
+
+/* **Etiquetas usadas pelo router e pelos agentes:
+   raciocinio · codigo · texto · rapido · barato · visao · ferramentas · contexto
+
+   1.42.0 · `soComChave: true` marca um modelo que só existe no tier pago/com
+   conta daquele fornecedor (o `openai` do Pollinations, por exemplo). Sem a
+   chave o router não o põe na cadeia: pedi-lo ao tier anónimo gastava uma
+   tentativa garantidamente falhada. */
 const CATALOGO = [
   /* OpenRouter — os `:free` do README (abril 2026) */
   { fornecedor: 'openrouter', modelo: 'qwen/qwen3-coder:free', etiquetas: ['codigo', 'ferramentas', 'barato'], janela: 262000, preco: [0, 0], gratuito: true },
@@ -239,6 +261,11 @@ const CATALOGO = [
   /* Vercel AI Gateway */
   { fornecedor: 'vercel', modelo: 'openai/gpt-5-mini', etiquetas: ['raciocinio', 'codigo', 'ferramentas'], janela: 400000, preco: [0.25, 2], gratuito: true },
   { fornecedor: 'vercel', modelo: 'anthropic/claude-sonnet-4.5', etiquetas: ['raciocinio', 'codigo', 'ferramentas', 'contexto'], janela: 200000, preco: [3, 15], gratuito: true },
+  /* 1.42.0 · Pollinations com chave (tier Seed): o `openai` é o alias de
+     `openai/gpt-5.4-nano`, que a própria lista do /v1/models marca como não pago.
+     O `openai-fast` (anónimo) já vem do freellmapi, em baixo. */
+  { fornecedor: 'pollinations', modelo: 'openai', etiquetas: ['texto', 'rapido', 'ferramentas', 'visao'], janela: 400000, preco: [0, 0], gratuito: true, soComChave: true, rotulo: 'GPT-5.4 Nano (Pollinations, com chave)' },
+  { fornecedor: 'pollinations', modelo: 'openai-large', etiquetas: ['texto', 'raciocinio', 'ferramentas'], janela: 400000, preco: [0, 0], gratuito: true, soComChave: true, rotulo: 'Pollinations large (com chave)' },
   /* Pagos, com chave própria */
   { fornecedor: 'anthropic', modelo: 'claude-sonnet-5', etiquetas: ['raciocinio', 'codigo', 'ferramentas', 'contexto'], janela: 200000, preco: [3, 15] },
   { fornecedor: 'anthropic', modelo: 'claude-opus-5', etiquetas: ['raciocinio', 'codigo', 'contexto'], janela: 200000, preco: [15, 75] },
