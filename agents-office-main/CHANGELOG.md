@@ -1,3 +1,22 @@
+## 1.44.9 — 28 out 2026 · provar não servia de nada: a cadeia não lia as provas
+
+O `/ia/gratuitos` dizia **43 provados**, mas a cadeia real (o campo `cadeia` do mesmo GET)
+começava, em todos os tipos de trabalho, por `community/CloudCompile/nvidia-nemotron-3-ultra-550b`
+e `community/tomdacatto/tower-…` — modelos descobertos que **nunca responderam a nada**.
+
+A causa: `motor.falar()` e `motor.cadeiaPara()` passavam `provados: PROVADOS` — só os três
+curados escritos à mão. As provas da app (`cfg.testes[fornec].provados`, agora 40 pares) nunca
+chegavam ao router. **Provar não mudava o que o motor escolhia** — a mesma armadilha do «listar
+não é funcionar», escondida na pontuação.
+
+- `provados: provadosActivos({ chaves, desligados, cfg })`: as duas entradas do motor passam a
+  levar tudo o que já respondeu, com o `ms` medido (mais rápido primeiro).
+- Um modelo `descoberto` sem prova passa a valer **−120** na ordenação: continua na lista (é
+  assim que se descobrem novos) mas não passa à frente de quem já respondeu.
+
+**Testes:** 561 (1 novo: com um `community/…` muito bem etiquetado e um provado lento, a cadeia
+começa pelo provado).
+
 ## 1.44.8 — 28 out 2026 · o fornecedor sabe quando um modelo não serve para conversar
 
 Último lote de prova em produção: **9 de 12 provados**, depois **8 de 12**. O lote seguinte deu

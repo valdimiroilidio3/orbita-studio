@@ -941,3 +941,15 @@ test('provar-modelos: um modelo de áudio/tempo-real sai da cadeia e não fica �
   assert.equal(r.resultados[0].doFornecedor, false, 'não pode bloquear o fornecedor inteiro');
   assert.equal(foraDoAr(alvo.fornec, alvo.modelo), true, 'o modelo que não conversa continua a ser tentado');
 });
+
+test('a cadeia põe os provados pela app à frente dos descobertos que nunca responderam', async () => {
+  const repo = createMemRepo();
+  await repo.ia.config.gravar('descobertos', { pollinations: { quando: new Date().toISOString(), modelos: [
+    { id: 'community/alguem/modelo-bonito', janela: 1048576, ferramentas: true, visao: true, raciocinio: true },
+  ] } });
+  await repo.ia.config.gravar('testes', { pollinations: { provados: { 'openai-fast': { ok: true, ms: 900, quando: new Date().toISOString() } } } });
+  const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('sem rede'); } });
+  const c = await motor.cadeiaPara('texto');
+  assert.equal(c[0].modelo, 'openai-fast', `a cadeia começou em ${c[0].fornec}/${c[0].modelo} em vez do modelo que já respondeu`);
+  assert.equal(c.some((x) => x.modelo.includes('community/')), false, 'um modelo nunca provado saltou para a frente');
+});
