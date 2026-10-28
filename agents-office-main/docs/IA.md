@@ -361,3 +361,11 @@ Duas portas, ambas com o mesmo formato (`[{ memory, metadata }]`, o que o
 - **Não há deduplicação semântica local**: o duplicado exacto é recusado, o
   «quase igual» não. É o Mem0 que funde o que lá chega (`infer: true`), e nós
   enviamos com `infer: false` de propósito.
+
+### Provar de fora, não acreditar no ping
+
+`GET /api/prova-mem0?token=<PROVA_TOKEN>` faz a volta completa em produção:
+escreve uma nota marcada, procura-a por sentido (até três tentativas, porque o
+índice do Mem0 não é instantâneo), confirma que voltou e **apaga-a** — no Mem0 e
+na base local. Devolve `escrita`, `procura`, `apagada` e `resultado`, com o
+motivo exacto quando algo falha. Sem o token responde 404, como a `prova1`.

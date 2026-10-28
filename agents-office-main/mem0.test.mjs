@@ -231,3 +231,23 @@ test('rotas: /ia/memoria, /ia/memoria/importar e DELETE mem0:<id> respondem com 
   assert.equal(apagar.status, 200);
   assert.equal(apagar.corpo.apagada, 'r-1a2b3c');
 });
+
+/* ---------- 12 · a prova de ponta a ponta não abre sem token ---------- */
+test('prova-mem0: sem o token certo responde 404 e não toca em nada', async () => {
+  const { default: handler } = await import('./api/prova-mem0.mjs');
+  const guardado = process.env.PROVA_TOKEN;
+  process.env.PROVA_TOKEN = 'token-da-prova';
+  const respostas = [];
+  const res = {
+    status(c) { this._c = c; return this; },
+    json(b) { respostas.push({ codigo: this._c, corpo: b }); return this; },
+    setHeader() {},
+  };
+  try {
+    await handler({ url: '/api/prova-mem0?token=errado', headers: {} }, res);
+    assert.equal(respostas[0].codigo, 404);
+    assert.equal(respostas[0].corpo.error, 'não existe');
+  } finally {
+    if (guardado === undefined) delete process.env.PROVA_TOKEN; else process.env.PROVA_TOKEN = guardado;
+  }
+});
