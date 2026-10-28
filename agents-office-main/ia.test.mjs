@@ -1090,3 +1090,34 @@ test('imagem nas mensagens: cada dialeto recebe a fotografia à sua maneira', as
   })();
   assert.equal(soTexto.messages[0].content, 'olá');
 });
+
+test('provar-modelos: um modelo que o filtro de segurança recusa sai da cadeia (não volta em cada lote)', async () => {
+  esquecerBloqueios();
+  limparFora();
+  const repo = createMemRepo();
+  const fetchImpl = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: { message: 'Request blocked by safety filter: shield' } }) });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'pollinations', limite: 1, concorrencia: 1 });
+  const alvo = r.alvos[0];
+  assert.equal(r.resultados[0].codigo, 'naoConversa');
+  assert.equal(r.resultados[0].doFornecedor, false, 'não pode bloquear o fornecedor inteiro');
+  assert.equal(foraDoAr(alvo.fornec, alvo.modelo), true, 'volta a ser tentado em cada lote');
+  const r2 = await motor.provarModelos({ fornec: 'pollinations', limite: 4, concorrencia: 4 });
+  assert.equal(r2.alvos.some((a) => a.modelo === alvo.modelo), false, 'o modelo recusado voltou a gastar uma tentativa');
+  assert.equal(r2.deFora.some((x) => x.modelo === alvo.modelo), true, 'não se diz por que motivo ele está de fora');
+  limparFora();
+});
+
+test('provar-modelos: «faltam N» conta os que ficaram por provar, não só os que não couberam no lote', async () => {
+  esquecerBloqueios();
+  limparFora();
+  const repo = createMemRepo();
+  /* um 400 de pedido qualquer: falha, mas não é motivo para sair da lista */
+  const fetchImpl = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: { message: 'pedido inválido para este modelo' } }) });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'pollinations', limite: 3, concorrencia: 3 });
+  assert.equal(r.provados, 0);
+  assert.equal(r.testados, 3);
+  assert.equal(r.porProvarRestantes, 3, `com os 3 a falhar, «faltam» disse ${r.porProvarRestantes}`);
+  assert.equal(r.naoTentados, 0, 'todos couberam no lote');
+});

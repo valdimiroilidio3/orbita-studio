@@ -321,7 +321,13 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
            um modelo «por provar»: é um modelo que não conversa. Sai da cadeia 6 h
            e não volta a gastar tentativas. */
         const motivo = String(e?.message || e);
-        const naoConversa = /is an? (audio|realtime|image|video) model|cannot be used on the text endpoint|could not parse the user message content as JSON|TypeSafe request/i.test(motivo);
+        /* 1.47.4 · o mesmo com o filtro de segurança do Pollinations: em produção,
+           28 out 2026, `community/JustScriptzz/minimax-3.1-flash` respondeu 400
+           «Request blocked by safety filter: shield» à sonda «Responde apenas: ok»
+           — e, como 400 de pedido não saía da lista, voltava em cada lote a gastar
+           uma tentativa. Um modelo que recusa a sonda mais inocente que existe não
+           serve o escritório; fica fora 6 h e volta sozinho. */
+        const naoConversa = /is an? (audio|realtime|image|video) model|cannot be used on the text endpoint|could not parse the user message content as JSON|TypeSafe request|blocked by safety filter/i.test(motivo);
         if (naoConversa) codigo = 'naoConversa';
         /* 1.44.5 · num fornecedor keyless, «missing API key» é daquele modelo
            (o tier pago dele), não do fornecedor: bloquear o LLM7 inteiro por
@@ -372,7 +378,16 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     testados: resultados.length,
     provados: bons.length,
     falhados: resultados.length - bons.length,
-    porProvarRestantes: Math.max(0, candidatos.length - resultados.length),
+    /* 1.47.4 · «faltam N» tem de querer dizer o que diz. Antes contava os
+       candidatos que ESTA chamada não chegou a tentar — com limite igual ao
+       número de candidatos dava sempre `0`, mesmo quando os 8 tinham falhado:
+       em produção, 28 out 2026, a mesa escreveu «faltam 0» com 8 modelos por
+       provar. Agora conta os que continuam por provar **e elegíveis** (sem os
+       que já responderam e sem os que o fornecedor mandou calar). */
+    porProvarRestantes: candidatos.filter((c) => !bons.some((b) => b.fornec === c.fornec && b.modelo === c.modelo)
+      && !foraDoAr(c.fornec, c.modelo)).length,
+    /* quantos ficaram para a chamada seguinte por causa do tecto `limite` */
+    naoTentados: Math.max(0, candidatos.length - resultados.length),
     /* 1.44.4 · transparência: o que esta chamada decidiu tentar, e por que motivo
        ficou de fora. Sem isto, «testados: 4» sem saber quais é adivinhação. */
     alvos,
