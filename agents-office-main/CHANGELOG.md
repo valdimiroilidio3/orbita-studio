@@ -1,3 +1,29 @@
+## 1.47.4 — 28 out 2026 · «faltam 0» era mentira, e o modelo bloqueado voltava sempre
+
+Dois defeitos apanhados a correr a prova de modelos **em produção**, na 1.47.3.
+
+**1. «faltam N» contava a coisa errada.** O número era
+`candidatos - tentados nesta chamada`, por isso com um lote do tamanho do
+número de candidatos dava sempre `0`. Em produção, às 15:45, o lote testou 8
+modelos, **nenhum respondeu**, e a resposta trazia `porProvarRestantes: 0` — a
+mesa escreveria «faltam 0» com 8 modelos por provar. Agora conta os que
+continuam por provar e **elegíveis** (sem os já provados e sem os que o
+fornecedor mandou calar); o resto do lote passou a ser `naoTentados`.
+
+**2. Um modelo recusado pelo filtro de segurança ficava para sempre na lista.**
+`community/JustScriptzz/minimax-3.1-flash` respondeu 400 «Request blocked by
+safety filter: shield» à sonda mais inocente que existe («Responde apenas: ok»).
+Como um 400 de pedido não saía da lista, voltava em cada lote a gastar uma
+tentativa. Um modelo que recusa a sonda não serve o escritório: passa a sair 6 h,
+como os de áudio/TypeSafe, e volta sozinho se o fornecedor mudar.
+
+**Provado antes de mexer** (1.47.3 em produção, `/ia/provar-modelos`): os três
+TypeSafe (`vllm-sr/d3`, `microsoft/microsoft-decision-1`,
+`respan/span-01-lite`) já vinham em `deFora` e nenhum voltou a `alvos`; a sonda
+provou mais um modelo (`community/Marcus-Mok-GH/pt-northwind`, 4 004 ms).
+
+**Testes:** 589 (2 novos). `mesa.smoke` ✓.
+
 ## 1.47.3 — 28 out 2026 · o registo diz a verdade, e o ecrã de papel fica como está
 
 Sem alterações de comportamento: sobe a versão para o `main` publicado não ficar

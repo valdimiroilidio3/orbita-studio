@@ -513,10 +513,17 @@ export async function accaoIA(nome, el, api) {
       const r = await call('/ia/provar-modelos', 'POST', { limite: 12, concorrencia: 4 });
       const bons = (r.resultados || []).filter((x) => x.ok).map((x) => `${x.fornec}/${x.modelo}`);
       if (r.provados) {
-        toast(`${r.provados} de ${r.testados} responderam agora${bons.length ? `: ${bons.slice(0, 4).join(', ')}${bons.length > 4 ? '…' : ''}` : ''}${r.porProvarRestantes ? ` · faltam ${r.porProvarRestantes}` : ''}`);
+        /* 1.47.4 · «faltam» passou a contar os que ficaram MESMO por provar (não
+           só os que não couberam no lote) — e diz-se quantos saíram de fora. */
+        const resto = r.porProvarRestantes ? ` · faltam ${r.porProvarRestantes} por provar` : ' · não fica nenhum por provar';
+        const fora = r.deForaQuantos ? ` · ${r.deForaQuantos} de fora` : '';
+        toast(`${r.provados} de ${r.testados} responderam agora${bons.length ? `: ${bons.slice(0, 4).join(', ')}${bons.length > 4 ? '…' : ''}` : ''}${resto}${fora}`);
       } else {
         const motivo = (r.resultados || []).find((x) => !x.ok)?.erro || 'sem detalhe';
-        toast(`Nenhum respondeu agora: ${String(motivo).slice(0, 160)}`, true);
+        const devagar = (r.resultados || []).length && (r.resultados || []).every((x) => !x.ok)
+          ? ` · ${r.porProvarRestantes} continuam por provar${r.deForaQuantos ? `, ${r.deForaQuantos} de fora` : ''}`
+          : '';
+        toast(`Nenhum respondeu agora: ${String(motivo).slice(0, 160)}${devagar}`, true);
       }
       await carregarIA(api);
       paint();
