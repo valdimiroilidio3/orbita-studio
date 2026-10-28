@@ -1022,3 +1022,36 @@ test('descoberta por GET: os modelos que o LLM7 marca como pro não entram nos g
   assert.equal(guardados.find((m) => m.id === 'DeepSeek-V4.1-Flash').pago, true);
   assert.equal(guardados.find((m) => m.id === 'Qwen2.5-Coder-32B').pago, null);
 });
+
+/* ---------- 1.45.2 · as duas portas do tier anónimo do Pollinations ---------- */
+test('Pollinations anónimo: se a porta /openai der 502, a porta GET responde e o texto vale', async () => {
+  const vistos = [];
+  const fetchImpl = async (url, opt) => {
+    vistos.push({ url: String(url), metodo: opt?.method || 'GET' });
+    if (String(url).endsWith('/openai')) {
+      return json({ error: 'Chat Completions provider returned an empty response' }, 502);
+    }
+    return { ok: true, status: 200, text: async () => 'orbita' };
+  };
+  const r = await falar({
+    fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: '', modelo: 'openai',
+    mensagens: [{ role: 'user', content: 'Diz apenas a palavra orbita' }], fetchImpl,
+  });
+  assert.equal(r.texto, 'orbita');
+  assert.equal(vistos.length, 2, 'não tentou a segunda porta');
+  assert.match(vistos[0].url, /\/openai$/);
+  assert.match(vistos[1].url, /text\.pollinations\.ai\/Diz%20apenas.*model=openai/);
+});
+
+test('Pollinations anónimo: um modelo de comunidade NÃO é provado pela porta GET', async () => {
+  const vistos = [];
+  const fetchImpl = async (url) => {
+    vistos.push(String(url));
+    return json({ error: 'provider returned an empty response' }, 502);
+  };
+  await assert.rejects(() => falar({
+    fornec: 'pollinations', prov: FORNECEDORES.pollinations, chave: '', modelo: 'community/alguem/modelo-bonito',
+    mensagens: [{ role: 'user', content: 'olá' }], fetchImpl,
+  }), (e) => e instanceof ErroIA && e.codigo === 'avaria');
+  assert.equal(vistos.length, 1, 'o GET devolveria o modelo por omissão — isso não prova este modelo');
+});

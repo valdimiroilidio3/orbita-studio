@@ -129,6 +129,26 @@ function esquemaFerramentas(ferramentas = []) {
 }
 
 /* ---------- a chamada ---------- */
+/* 1.45.2 · o tier anónimo do Pollinations tem DUAS portas, e elas não caem
+   juntas. A 28 out 2026 (11h UTC) a porta OpenAI (`POST text.pollinations.ai/openai`)
+   respondia 502 «Chat Completions provider returned an empty response» a todos os
+   modelos, enquanto `GET text.pollinations.ai/<prompt>?model=openai` respondia
+   «orbita» em menos de 1 s. O código só conhecia a primeira. Aqui a segunda passa
+   a ser o recurso quando a primeira avaria — mas só para os nomes que a rota GET
+   honra de facto (`GET_POLLINATIONS`): um `community/…` qualquer nunca provaria
+   por esta porta, porque o GET devolveria o modelo por omissão e isso seria mentir
+   na lista dos provados. Sem ferramentas: o GET é só texto. */
+const GET_POLLINATIONS = new Set(['openai-fast', 'openai', 'openai-large']);
+
+function urlGetPollinations(prov, modelo, mensagens) {
+  const sistema = mensagens.filter((m) => m.role === 'system').map((m) => String(m.content || '')).join('\n').trim();
+  const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
+  const params = new URLSearchParams({ model: modelo, referrer: 'orbita-studio' });
+  if (sistema) params.set('system', sistema.slice(0, 3000));
+  const prompt = encodeURIComponent(String(ultima?.content || '').slice(0, 6000));
+  return `${prov.base}/${prompt}?${params}`;
+}
+
 export async function falar({
   fornec, prov, chave, modelo, mensagens, ferramentas = [],
   maxTokens = 1200, temperatura = 0.3, timeoutMs = 45000, fetchImpl = fetch,
@@ -185,11 +205,7 @@ export async function falar({
       url = `${prov.base}/openai`;
       corpo = { ...pedido, model: modelo || 'openai-fast', referrer: 'orbita-studio' };
     } else {
-      const sistema = mensagens.filter((m) => m.role === 'system').map((m) => String(m.content || '')).join('\n').trim();
-      const ultima = [...mensagens].reverse().find((m) => m.role === 'user');
-      const params = new URLSearchParams({ model: modelo, referrer: 'orbita-studio' });
-      if (sistema) params.set('system', sistema.slice(0, 3000));
-      url = `${prov.base}/${encodeURIComponent(String(ultima?.content || '').slice(0, 6000))}?${params}`;
+      url = urlGetPollinations(prov, modelo, mensagens);
       corpo = null;
     }
   } else {
@@ -220,9 +236,33 @@ export async function falar({
   }
   clearTimeout(relogio);
 
-  const texto = await r.text();
+  let texto = await r.text();
   let j = null;
   try { j = texto ? JSON.parse(texto) : null; } catch { j = null; }
+
+  /* 1.45.2 · a porta /openai do tier anónimo caiu (502 em todos os modelos) e a
+     porta GET continuava a responder. Antes de declarar a avaria, tenta-se a
+     outra porta do MESMO serviço — uma vez. */
+  const podeRecurso = prov.estilo === 'pollinations' && !chave && !prov.semRotaOpenAI
+    && GET_POLLINATIONS.has(String(modelo));
+  const avariou = !r.ok
+    ? r.status >= 500
+    : (prov.estilo === 'pollinations' && (!j || !j.choices) && !String(texto || '').trim());
+  if (podeRecurso && avariou) {
+    const ctl2 = new AbortController();
+    const relogio2 = setTimeout(() => ctl2.abort(), Math.min(timeoutMs, 20000));
+    try {
+      const r2 = await fetchImpl(urlGetPollinations(prov, modelo, mensagens), {
+        headers: cabecalhos(prov, chave), signal: ctl2.signal,
+      });
+      const texto2 = await r2.text();
+      if (r2.ok && String(texto2 || '').trim()) {
+        r = r2; texto = texto2; j = null;
+        try { j = texto2 ? JSON.parse(texto2) : null; } catch { j = null; }
+      }
+    } catch { /* a segunda porta também não deu: fica o erro da primeira */ }
+    finally { clearTimeout(relogio2); }
+  }
   if (!r.ok) throw classificar(r.status, j || { message: SEM_APELIDO(texto) }, { fornec, modelo });
 
   const ms = Date.now() - inicio;

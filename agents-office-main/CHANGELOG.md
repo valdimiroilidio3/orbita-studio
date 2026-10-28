@@ -1,3 +1,20 @@
+## 1.45.2 — 28 out 2026 · o Pollinations anónimo tem duas portas (e uma estava fechada)
+
+Medido em produção a 28 out, 11h UTC: `POST text.pollinations.ai/openai` respondia
+**502 «Chat Completions provider returned an empty response» a todos os modelos** —
+16 de 16 tentativas falhadas, incluindo `openai-fast`. No mesmo minuto,
+`GET text.pollinations.ai/<prompt>?model=openai` respondia «orbita» em < 1 s.
+
+O código só conhecia a porta OpenAI. Agora, quando ela avaria (5xx) ou devolve
+vazio, o `falar` tenta **uma vez** a porta GET do mesmo serviço — e só para os
+nomes que essa porta honra (`openai-fast`, `openai`, `openai-large`). Um
+`community/…` nunca é provado por ali: o GET devolveria o modelo por omissão, e
+promover isso a «provado» era mentir na lista. O GET não leva ferramentas (é só
+texto) e o resto do motor já tratava respostas sem `choices`.
+
+**Testes:** 566 (2 novos: recurso pela porta GET; e um modelo de comunidade que
+recusa o recurso).
+
 ## 1.45.1 — 28 out 2026 · os modelos pagos do LLM7 saem da lista, a lista do OVH cresce, descobrir por URL
 
 Encontrado ao continuar a provar modelos em produção:
