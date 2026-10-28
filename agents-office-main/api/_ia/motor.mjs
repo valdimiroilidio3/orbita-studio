@@ -12,7 +12,7 @@
    =========================================================================== */
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
-import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, marcarFora, orcamento } from './router.mjs';
+import { cadeia, diagnostico, exportarFora, falarComFallback, foraDoAr, importarFora, marcarFora, orcamento } from './router.mjs';
 import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, provadosActivos, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
@@ -194,6 +194,7 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
   const agoraMs = Date.parse(agora()) || Date.now();
   const bloqueados = [];
   const ignorados = [];
+  const deFora = [];
   const candidatos = [];
   for (const id of Object.keys(FORNECEDORES)) {
     if (so && id !== so) continue;
@@ -230,6 +231,11 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     const achados = descobertos.filter((m) => m.fornecedor === id).map((m) => m.modelo);
     for (const modelo of [...new Set([...declarados, ...achados])]) {
       if (!forcar && jaProvado(id, modelo)) continue;
+      /* 1.47.0 · não se gasta uma tentativa num modelo que o próprio fornecedor
+         acabou de mandar calar («could not parse the user message content as
+         JSON»). Antes, 3 de 10 tentativas iam sempre para os mesmos três e
+         voltavam com o mesmo erro. */
+      if (!forcar && foraDoAr(id, modelo)) { deFora.push({ fornec: id, modelo }); continue; }
       candidatos.push({ fornec: id, modelo });
     }
   }
@@ -373,6 +379,11 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     /* fornecedores que pararam o lote por um motivo que não é do modelo */
     /* bloqueios que existiam mas não valiam (ver `bloqueioValido`) */
     ignorados,
+    /* 1.47.0 · modelos que o fornecedor já mandou calar («não conversa»): não se
+       tenta outra vez durante 6 h, e diz-se quais — para a lista dos «por provar»
+       não parecer eterna sem razão. */
+    deFora: deFora.slice(0, 12),
+    deForaQuantos: deFora.length,
     saltados: [
       ...bloqueados,
       ...saltados.filter((x, i, arr) => arr.findIndex((y) => y.fornec === x.fornec) === i),

@@ -28,6 +28,7 @@
      · nada aqui inventa quotas nem preços: `medido` diz quando e onde.
    =========================================================================== */
 import { FORNECEDORES, MODELOS } from './catalogo.mjs';
+import { foraDoAr } from './router.mjs';    // 1.47.0: quem já disse «não converso» não se lista
 
 /* Formato igual ao das entradas da cadeia (`fornec`, `modelo`, `etiquetas`) para
    o router poder ordenar as duas origens juntas, sem código especial. */
@@ -251,11 +252,18 @@ export function catalogoDaCadeia(cfg = {}, base = MODELOS) {
  * ou chave do dono) mas ainda não há resposta registada. É a lista honesta do
  * «existe, falta provar» — a interface não deve chamar-lhes funcionais.
  */
-export function porProvar({ chaves = {}, desligados = [], base = MODELOS, provados: provas = [] } = {}) {
+export function porProvar({ chaves = {}, desligados = [], base = MODELOS, provados: provas = [], incluirFora = false } = {}) {
   const provados = new Set([...PROVADOS, ...provas].map((p) => `${p.fornec}\u0000${p.modelo}`));
   return base
     .filter((m) => !provados.has(`${m.fornecedor}\u0000${m.modelo}`))
     .filter((m) => !desligados.includes(m.fornecedor))
+    /* 1.47.0 · um modelo que o fornecedor já recusou por «não é de conversa»
+       (os `TypeSafe` do Pollinations: vllm-sr/d3, microsoft-decision-1,
+       respan/span-01-lite) ficava para sempre na lista dos «por provar» e era
+       tentado em cada lote. Em produção, 28 out 2026, gastou 3 de 10 tentativas
+       duas vezes seguidas e voltou com o mesmo HTTP 400. Fica fora 6 h; se o
+       fornecedor mudar, volta sozinho. */
+    .filter((m) => incluirFora || !foraDoAr(m.fornecedor, m.modelo))
     .filter((m) => {
       const prov = FORNECEDORES[m.fornecedor];
       if (!semCusto(prov)) return false;
