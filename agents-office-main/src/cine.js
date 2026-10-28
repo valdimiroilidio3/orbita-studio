@@ -395,9 +395,11 @@ function vistaLista(S) {
     </header>
     ${S.erro ? `<p class="cine-alerta">${escPadrao(S.erro)}</p>` : ''}
     ${lista.length ? `<div class="cine-grelha">${lista.map((p) => `<a class="cine-mini" href="#/cine/${escPadrao(p.chave)}">
-      ${p.aprovada?.dataUrl ? `<img src="${p.aprovada.dataUrl}" alt="" loading="lazy" decoding="async">` : '<div class="cine-mini-vazio">sem peça aprovada</div>'}
+      ${(p.capa || p.aprovada)?.dataUrl
+        ? `<img src="${(p.capa || p.aprovada).dataUrl}" alt="" loading="lazy" decoding="async">`
+        : '<div class="cine-mini-vazio">ainda sem peça</div>'}
       <div class="cine-mini-txt"><b>${escPadrao(p.lead?.name || p.chave)}</b>
-        <span class="cine-min">${escPadrao([p.lead?.category, p.lead?.city].filter(Boolean).join(' · ') || 'sem nicho')} · ${p.imagens} peça(s)${p.temMaster ? ` · ${p.via === 'ia' ? 'plano por IA' : 'plano por regras'}` : ''}</span>
+        <span class="cine-min">${escPadrao([p.lead?.category, p.lead?.city].filter(Boolean).join(' · ') || 'sem nicho')} · ${p.imagens} peça(s)${p.aprovada ? ' · uma aprovada' : ''}${p.temMaster ? ` · ${p.via === 'ia' ? 'plano por IA' : 'plano por regras'}` : ''}</span>
         ${p.conceito ? `<span class="cine-conceito">${escPadrao(String(p.conceito).slice(0, 110))}…</span>` : ''}
       </div></a>`).join('')}</div>`
       : `<div class="cine-card cine-vazio"><h2>Ainda sem projectos</h2>

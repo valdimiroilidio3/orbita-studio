@@ -1026,9 +1026,9 @@
     </header>
     ${a.erro?`<p class="cine-alerta">${q(a.erro)}</p>`:""}
     ${e.length?`<div class="cine-grelha">${e.map(o=>`<a class="cine-mini" href="#/cine/${q(o.chave)}">
-      ${o.aprovada?.dataUrl?`<img src="${o.aprovada.dataUrl}" alt="" loading="lazy" decoding="async">`:'<div class="cine-mini-vazio">sem pe\xE7a aprovada</div>'}
+      ${(o.capa||o.aprovada)?.dataUrl?`<img src="${(o.capa||o.aprovada).dataUrl}" alt="" loading="lazy" decoding="async">`:'<div class="cine-mini-vazio">ainda sem pe\xE7a</div>'}
       <div class="cine-mini-txt"><b>${q(o.lead?.name||o.chave)}</b>
-        <span class="cine-min">${q([o.lead?.category,o.lead?.city].filter(Boolean).join(" \xB7 ")||"sem nicho")} \xB7 ${o.imagens} pe\xE7a(s)${o.temMaster?` \xB7 ${o.via==="ia"?"plano por IA":"plano por regras"}`:""}</span>
+        <span class="cine-min">${q([o.lead?.category,o.lead?.city].filter(Boolean).join(" \xB7 ")||"sem nicho")} \xB7 ${o.imagens} pe\xE7a(s)${o.aprovada?" \xB7 uma aprovada":""}${o.temMaster?` \xB7 ${o.via==="ia"?"plano por IA":"plano por regras"}`:""}</span>
         ${o.conceito?`<span class="cine-conceito">${q(String(o.conceito).slice(0,110))}\u2026</span>`:""}
       </div></a>`).join("")}</div>`:`<div class="cine-card cine-vazio"><h2>Ainda sem projectos</h2>
         <p>O Cine come\xE7a num lead: abre um e o sistema l\xEA-o, escolhe a direc\xE7\xE3o de arte e escreve o Master Prompt. S\xF3 depois se gera.</p>

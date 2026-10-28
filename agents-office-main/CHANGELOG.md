@@ -1,3 +1,18 @@
+## 1.48.3 — 28 out 2026 · a capa da lista (e o deploy que o Vercel travou)
+
+Apanhado a abrir `#/cine` em produção, já com um projecto gerado: o cartão do
+«Dom Franguito» dizia **«sem peça aprovada»** com uma peça lá dentro. Era verdade
+literal e má informação. A lista passa a mostrar a aprovada quando existe e, se
+não houver, **a mais recente** — e marca «uma aprovada» só quando é esse o caso.
+
+**Sobre este lançamento:** o Vercel respondeu ao deploy da 1.48.2 com
+`Deployment rate limited — retry in 24 hours`. A produção ficou na **1.48.1**,
+que está completa e provada; a 1.48.2 (rota `/api/cine-imagem` e o link
+«guardar») e esta 1.48.3 estão em `main` e prontas, mas **não estão em produção**
+até o limite abrir.
+
+**Testes:** 622 (1 novo).
+
 ## 1.48.2 — 28 out 2026 · a imagem do Cine descarrega-se
 
 Até aqui a imagem só existia dentro do JSON do projecto, em base64: não se podia
