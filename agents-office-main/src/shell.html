@@ -1486,6 +1486,15 @@
   .op-sum b { font-family: var(--serif); font-size: 13px; font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; }
   .op-sum.bad { color: #B4391E; }
   .op-h .sp { flex: 1; }
+  /* 1.40.0 · o pulso da leitura: um ponto que bate quando a base responde (só transform/opacity) */
+  .op-live { display: inline-flex; align-items: center; gap: 5px; font-family: var(--ui); font-size: 8.5px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--grey); white-space: nowrap; }
+  .op-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: 0 0 auto;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .op-live.stale i { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent); }
+  .op-live.bad i { background: var(--risk); box-shadow: 0 0 0 3px color-mix(in srgb, var(--risk) 18%, transparent); }
+  .op-live.bad { color: var(--risk); }
+  @media (prefers-reduced-motion: reduce) { .op-live i { transition: none; } }
   .op-h button { background: none; border: 1px solid var(--hairline); border-radius: 99px; font-family: var(--ui); font-size: 8.5px;
     letter-spacing: .12em; font-weight: 700; color: var(--grey); padding: 3px 8px; cursor: pointer; }
   .op-h button:hover { border-color: var(--ink); color: var(--ink); }
@@ -2485,12 +2494,23 @@
     box-shadow: 0 0 0 .5px rgba(255,255,255,.6) inset, 0 2px 4px rgba(21,20,20,.06),
                 0 18px 44px -18px rgba(21,20,20,.28), 0 56px 100px -48px rgba(21,20,20,.4);
     display: flex; flex-direction: column; overflow: hidden;
-    animation: cfgIn .42s var(--cfg-spring) both; }
+    transform-origin: top right;   /* nasce do botão que o abre, não do meio do ecrã */
+    animation: cfgIn .24s var(--cfg-spring) both; }
   #cfgPanel[hidden] { display: none; }
+  /* 1.40.0: a entrada era .42 s com `filter: blur()` animado — caro e fora do orçamento de UI.
+     Fica em transform+opacity, 240 ms, e sem desfoque (o vidro já lá está). */
   @keyframes cfgIn {
-    from { opacity: 0; transform: translateY(-10px) scale(.982); filter: blur(3px); }
-    to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    from { opacity: 0; transform: translateY(-6px) scale(.97); }
+    to   { opacity: 1; transform: none; }
   }
+  /* o trabalho de cada sala, ao vivo: um ponto que respira enquanto houver alguém a trabalhar */
+  .cfg-now { display: flex; align-items: center; gap: 6px; margin: 2px 0 0; color: var(--grey);
+    font-variant-numeric: tabular-nums; }
+  .cfg-led { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto; background: color-mix(in srgb, var(--ink) 20%, transparent);
+    transition: background-color .3s var(--ease), box-shadow .3s var(--ease), transform .3s var(--ease); }
+  .cfg-now.live .cfg-led { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 16%, transparent);
+    animation: cfgLed 2.4s ease-in-out infinite; }
+  @keyframes cfgLed { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
   /* cabeçalho: título em serifa (a voz da casa) e um ✕ redondo com alvo de 30 px */
   .cfg-head { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 0 14px 0 18px;
@@ -2649,8 +2669,11 @@
   @keyframes cfgShimmer { from { background-position: 130% 0; } to { background-position: -80% 0; } }
 
   @media (prefers-reduced-motion: reduce) {
-    #cfgPanel, .cfg-sec, .cfg-skel, .cfg-st i { animation: none !important; }
-    .cfg-btn, .cfg-r, .cfg-x, .cfg-api, .cfg-sw input, .cfg-sw input::after { transition-duration: .01ms !important; }
+    /* quem pediu menos movimento continua a ver o painel a chegar — só sem deslocação */
+    #cfgPanel { animation: cfgFade .14s linear both !important; }
+    @keyframes cfgFade { from { opacity: 0; } to { opacity: 1; } }
+    .cfg-sec, .cfg-skel, .cfg-st i, .cfg-now.live .cfg-led { animation: none !important; }
+    .cfg-btn, .cfg-r, .cfg-x, .cfg-api, .cfg-sw input, .cfg-sw input::after, .cfg-led { transition-duration: .01ms !important; }
   }
   @media (max-width: 760px) {
     #cfgPanel { top: 54px; left: 8px; right: 8px; width: auto; max-height: 84vh; border-radius: 18px; }
@@ -2660,15 +2683,42 @@
   }
 
   /* os painéis que se afastam (#tpanel e o campo de IA): a escolha fica no browser */
-  .tp-fold { position: absolute; top: 8px; right: 8px; z-index: 3; width: 30px; height: 30px; min-width: 30px;
-    display: grid; place-items: center; background: color-mix(in srgb, var(--cream) 80%, transparent); border: 1px solid var(--hairline);
-    border-radius: 9px; color: var(--grey); font: inherit; font-size: 12px; cursor: pointer; }
-  .tp-fold:hover { border-color: var(--ink); color: var(--ink); }
+  /* 1.40.0 · O BOTÃO «AFASTAR» (pedido 58d: «mais visível e mais elegante»)
+     Era um quadrado de 30 px com um glifo de texto no canto. Passa a ser uma cápsula de
+     38 px de alvo, com ícone desenhado, rótulo em versaletes e um estado que se lê de longe.
+     Só `transform` e `rotate` se mexem — cor e borda mudam, mas não são movimento. */
+  .tp-fold { position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: inline-flex; align-items: center; gap: 6px; height: 38px; min-width: 38px; padding: 0 13px 0 10px;
+    background: color-mix(in srgb, var(--cream) 88%, transparent);
+    -webkit-backdrop-filter: saturate(150%) blur(8px); backdrop-filter: saturate(150%) blur(8px);
+    border: 1px solid var(--hairline); border-radius: 999px;
+    color: var(--ink); font-family: var(--ui); font-size: 9px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; cursor: pointer;
+    box-shadow: 0 1px 1.5px rgba(24,24,24,.07), 0 10px 24px -16px rgba(24,24,24,.6);
+    transition: background-color .16s ease-out, border-color .16s ease-out, color .16s ease-out,
+      box-shadow .2s ease-out, transform .18s cubic-bezier(.2,.8,.2,1); }
+  .tp-fold .tpf-i { display: grid; place-items: center; rotate: 0deg; translate: 0 0;
+    transition: rotate .24s cubic-bezier(.2,.8,.2,1), translate .18s cubic-bezier(.2,.8,.2,1); }
+  .tp-fold[aria-pressed="true"] .tpf-i { rotate: -90deg; }   /* afastado: as setas apontam para cima */
+  .tp-fold:active { transform: scale(.96); }
+  .tp-fold:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  @media (hover: hover) and (pointer: fine) {
+    .tp-fold:hover { background: var(--ink); border-color: var(--ink); color: var(--cream);
+      box-shadow: 0 1px 1.5px rgba(24,24,24,.16), 0 14px 30px -16px rgba(24,24,24,.75); }
+    .tp-fold:hover .tpf-i { translate: 1.5px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tp-fold, .tp-fold .tpf-i { transition-duration: .01ms; }
+    .tp-fold:active { transform: none; }
+  }
   /* o campo de IA recolhe-se a uma linha, no fluxo da conversa (sem tapar a primeira mensagem) */
-  .chat-fold { display: block; margin: 8px 10px 0 auto; height: 28px; padding: 0 11px; background: none;
-    border: 1px solid var(--hairline); border-radius: 8px; color: var(--grey); cursor: pointer;
-    font-family: var(--ui); font-size: 8.5px; letter-spacing: .12em; font-weight: 700; text-transform: uppercase; }
-  .chat-fold:hover { border-color: var(--ink); color: var(--ink); }
+  .chat-fold { display: inline-flex; align-items: center; margin: 8px 10px 0 auto; height: 30px; padding: 0 12px; background: none;
+    border: 1px solid var(--hairline); border-radius: 999px; color: var(--grey); cursor: pointer;
+    font-family: var(--ui); font-size: 8.5px; letter-spacing: .12em; font-weight: 700; text-transform: uppercase;
+    transition: color .16s ease-out, border-color .16s ease-out, transform .18s cubic-bezier(.2,.8,.2,1); }
+  .chat-fold:active { transform: scale(.97); }
+  @media (hover: hover) and (pointer: fine) { .chat-fold:hover { border-color: var(--ink); color: var(--ink); } }
+  @media (prefers-reduced-motion: reduce) { .chat-fold { transition-duration: .01ms; } .chat-fold:active { transform: none; } }
   body.mc-folded .chat-fold { border-color: var(--ink); color: var(--ink); }
   /* fechar a gaveta do posto no telemóvel: um ✕ a sério, com 44 px de alvo */
   #railClose { position: absolute; top: 8px; right: 8px; z-index: 6; width: 34px; height: 34px; display: grid; place-items: center;
@@ -2678,8 +2728,12 @@
   @media (max-width: 640px) { #railClose { width: 44px; height: 44px; } }
   body.tp-folded #tpanel { top: auto; bottom: 18px; right: 18px; width: 214px; padding: 8px; gap: 0; }
   body.tp-folded #tpanel > *:not(.tp-fold) { display: none !important; }
-  body.tp-folded #tpanel .tp-fold { position: static; width: auto; height: 34px; padding: 0 12px;
-    font-family: var(--ui); font-size: 9px; letter-spacing: .14em; font-weight: 700; text-transform: uppercase; }
+  body.tp-folded #tpanel .tp-fold { position: static; width: auto; height: 38px; padding: 0 15px 0 12px;
+    background: var(--ink); border-color: var(--ink); color: var(--cream);
+    box-shadow: 0 1px 2px rgba(20,20,20,.18), 0 14px 30px -18px rgba(20,20,20,.8); }
+  @media (hover: hover) and (pointer: fine) {
+    body.tp-folded #tpanel .tp-fold:hover { background: color-mix(in srgb, var(--ink) 86%, var(--cream)); }
+  }
   body.mc-folded #mChat .m-hint, body.mc-folded #mChat #mc .mc-modes, body.mc-folded #mChat #mc textarea,
   body.mc-folded #mChat #mc .mc-bottom, body.mc-folded #mChat #mc .mc-chips { display: none !important; }
   body.mc-folded #mChat #mc { min-height: 0; padding: 8px 10px; }
@@ -2729,7 +2783,7 @@
     #cfgPanel .cfg-fld input { font-size: 16px; padding: 11px 12px; } /* 16 px evita o zoom do iOS */
     .cfg-btn { padding: 11px 16px; }
     body.tp-folded #tpanel { bottom: 10px; right: 10px; }
-    .tp-fold, .chat-fold { width: 38px; height: 38px; min-width: 38px; }
+    .tp-fold, .chat-fold { min-height: 38px; }
   }
 
   /* quem pediu menos movimento não perde a lista: perde só a entrada */
@@ -2936,7 +2990,11 @@
 </div>
 <!-- 26 out 2026: OPERAÇÃO — leads com nota e razões, mensagens à espera de aprovação, fila e rasto -->
 <div id="opsPanel" hidden>
-  <div class="op-h"><span class="lab">Operação</span><span class="op-sum">a ler…</span><span class="sp"></span>
+  <div class="op-h"><span class="lab">Operação</span><span class="op-sum">a ler…</span>
+    <!-- 1.40.0: a gaveta diz quando leu a base de dados pela última vez. Não é um enfeite:
+         se o servidor calar, o ponto fica vermelho e o texto diz há quanto tempo. -->
+    <span class="op-live" role="status" aria-live="polite"><i aria-hidden="true"></i><span class="op-live-t">a ligar…</span></span>
+    <span class="sp"></span>
     <button class="op-refresh" title="voltar a ler a base de dados">Atualizar</button>
     <button class="op-close" title="fechar (Esc)">✕</button></div>
   <div class="op-clientes"><label for="opClient">Espaço</label><select id="opClient" class="op-stage op-client" aria-label="cliente"></select><button class="op-b" data-act="new-client">+ CLIENTE</button></div>
@@ -3150,7 +3208,7 @@
 <!-- V3.3: the Task Status panel — always on, right side -->
 <div id="tpanel">
   <!-- 29 out 2026: afastar a coluna das tarefas (pedido do dono). A escolha fica guardada. -->
-  <button class="tp-fold" type="button" aria-pressed="false" title="afastar o estado das tarefas — fica um botão, volta com um clique">afastar ▸</button>
+  <button class="tp-fold" type="button" aria-pressed="false" aria-controls="tpanel" title="afastar o estado das tarefas — fica um botão, volta com um clique"><span class="tpf-i" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 3.4 10.2 8l-3.8 4.6"/><path d="M10.6 3.4 14.4 8l-3.8 4.6"/></svg></span><span class="tpf-t">afastar</span></button>
   <div class="tp-cmd">
     <div class="tp-r1">
       <button class="tp-dd" title="departamento"><span class="dot"></span><span class="tp-ddn">MARKETING</span></button>

@@ -204,6 +204,8 @@ export function createConfig({
         <span class="cfg-st s-on"><i></i>${total} ${total === 1 ? 'agente' : 'agentes'}</span>
       </div>
       <p class="cfg-note small">${filas} ${filas === 1 ? 'fila' : 'filas'} · ${livres} ${livres === 1 ? 'lugar livre' : 'lugares livres'} · ${extras.length ? 'sala ampliada pelos agentes novos' : 'na planta original'}</p>
+      <!-- 1.40.0 · o trabalho desta sala AGORA, lido da cena (a mesma conta que acende a luz) -->
+      <p class="cfg-note small cfg-now" data-now="${esc(dept)}"><span class="cfg-led" aria-hidden="true"></span><span data-trabalho="${esc(dept)}">a ler a cena…</span></p>
       <div class="cfg-line">
         <label class="cfg-fld cfg-cor">
           <span class="cfg-k">cor da sala</span>
@@ -317,11 +319,32 @@ export function createConfig({
     </div>`;
   }
 
+  /* ---------- o trabalho, ao segundo (1.40.0) ----------
+     O Centro de Controlo mostra o que cada sala está a fazer AGORA. Escreve-se só no texto do
+     indicador — nunca se repinta o painel, senão o foco e o que estás a escrever iam-se embora.
+     A fonte é a cena (`window.ORBITA.trabalho`), a mesma que acende a luz da sala. */
+  function pintarTrabalho() {
+    const daCena = (typeof window !== 'undefined' && window.ORBITA && window.ORBITA.trabalho) || null;
+    if (!daCena) return;
+    for (const el of document.querySelectorAll('[data-trabalho]')) {
+      const t = daCena(el.getAttribute('data-trabalho')) || {};
+      const live = Number(t.live) || 0;
+      const waiting = Number(t.waiting) || 0;
+      const texto = live
+        ? `${live} a trabalhar${waiting ? ` · ${waiting} à espera do teu OK` : ''}`
+        : waiting ? `${waiting} à espera do teu OK` : 'sem trabalho agora';
+      if (el.textContent !== texto) el.textContent = texto;
+      const linha = el.closest('.cfg-now');
+      if (linha) linha.classList.toggle('live', live > 0);
+    }
+  }
+
   function render() {
     if (!body) return;
     body.innerHTML = themeRow() + centroSection() + apisSection() + notifyRow() + prefsRow();
     if (title) title.textContent = semServidor ? 'sem servidor · só o browser' : 'ligações e preferências';
     wire();
+    pintarTrabalho();
   }
 
   async function loadApis() {
@@ -612,6 +635,9 @@ export function createConfig({
   const open = () => show(true);
   const toggle = () => show(!isOpen);
 
+  /* de 3 em 3 segundos, e só com o painel aberto: 6 textos, sem repintar nada */
+  const relogioTrabalho = setInterval(() => { if (isOpen) pintarTrabalho(); }, 3000);
+  if (relogioTrabalho && typeof relogioTrabalho.unref === 'function') relogioTrabalho.unref();
   panel.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) { e.stopPropagation(); close(); } }, true);
 

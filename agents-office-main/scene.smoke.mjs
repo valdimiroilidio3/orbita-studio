@@ -819,9 +819,34 @@ const resumoCirculacao = (() => {
     ok(doc.body.classList.contains('mc-folded'), 'afastar o campo de IA não mexeu na página');
     const guardado = JSON.parse(win.localStorage.getItem('orbita.paineis') || '{}');
     ok(guardado.tasks === true && guardado.ai === true, 'a escolha dos painéis não ficou guardada');
+    /* 1.40.0: o botão tem de continuar com o ícone desenhado e o rótulo certo nos dois estados */
+    const afastar = doc.querySelector('.tp-fold');
+    ok(!!afastar.querySelector('.tpf-i svg'), 'o botão afastar perdeu o ícone ao alternar');
+    ok((afastar.querySelector('.tpf-t') || {}).textContent === 'estado das tarefas', 'o botão afastar não diz «estado das tarefas» quando está recolhido');
+    ok(afastar.getAttribute('aria-pressed') === 'true', 'o botão afastar não anuncia o estado (aria-pressed)');
     win.CC.paineis.por('tasks', false);
     ok(!doc.body.classList.contains('tp-folded'), 'trazer as tarefas de volta não funcionou');
+    ok((afastar.querySelector('.tpf-t') || {}).textContent === 'afastar' && afastar.getAttribute('aria-pressed') === 'false',
+      'o botão afastar não voltou ao estado inicial');
   }
+
+  /* ---------- a luz que acende (1.40.0) ----------
+     O pedido: «falta iluminação nas coisas deste projecto, ganhando vida (leds a acender
+     realmente)». Passados os 3 s do arranque, cada sala tem de ter a SUA lâmpada na cena,
+     com um valor vindo do modelo puro, e nenhuma pode continuar apagada. */
+  const luzes = typeof office.lights === 'function' ? office.lights() : {};
+  const salasComLuz = Object.keys(luzes);
+  ok(salasComLuz.length === 6, `esperava a luz das 6 salas, encontrei ${salasComLuz.length}`);
+  const modelo = office.lightModel || {};
+  for (const k of salasComLuz) {
+    const l = luzes[k];
+    ok(l.mats > 0, `${k}: a luz da sala não manda em nenhum material que emita`);
+    ok(l.valor > 0.1, `${k}: passado o arranque a sala continua apagada (${l.valor})`);
+    ok(Math.abs(l.intensity - l.valor * 2.1) < 1e-6, `${k}: a lâmpada da cena (${l.intensity}) não segue o modelo (${l.valor})`);
+    ok(l.valor <= (modelo.tecto || 1.42) + 1e-9, `${k}: a luz passou do tecto (${l.valor})`);
+  }
+  ok(typeof office.brainLamp === 'function' && office.brainLamp() > 0.2,
+    'a lâmpada do Cérebro devia estar sempre acesa — é o centro, não uma sala');
 
   // fechar as janelas: o ✕ da gaveta do posto (o telemóvel não tem Esc)
   ok(!!doc.getElementById('railClose'), 'falta o ✕ que fecha a gaveta do posto (telemóvel)');

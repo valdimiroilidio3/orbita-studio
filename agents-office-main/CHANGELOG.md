@@ -1,3 +1,55 @@
+## 1.40.0 — 28 out 2026 · a luz acende, a operação respira, o «afastar» aparece
+
+O dono pediu quatro coisas: «leds a acender realmente», «o campo de operações bem
+funcional e activo», «o Centro de Controlo 100 % funcional ao site mudando
+permanentemente, em tempo real», e «o botão afastar mais visível e mais elegante».
+Nenhuma delas se resolve com um tema novo.
+
+**1 · A luz vem do trabalho (pedido: «falta iluminação, ganhando vida»).**
+Novo módulo puro `src/leds.js` — `alvo`, `respirar`, `acender`, `aproximar`,
+`luzDaSala`, `fimDoArranque` — com os números num sítio só (`LUZ`). Cada uma das
+seis salas ganha uma `PointLight` própria, no alto, e os materiais que já emitiam
+(fitas de LED, aro, ecrã e derrame da porta) passam a ter brilho variável. A
+intensidade lê `deptCount(..., 'live'|'waiting')`: **a sala com três tarefas está
+mais acesa do que a sala vazia**, e isso vê-se. Sem trabalho não há escuridão —
+há um repouso baixo (0,34), porque um escritório apagado é um armazém. Com
+trabalho, a sala acende em 620 ms; quando o trabalho acaba, despede-se devagar
+(1,4 s de propósito). No arranque, as salas acendem uma a uma (95 ms entre cada)
+e o **Cérebro nunca se apaga** — pulsa baixinho, é o centro. Quem pediu menos
+movimento (`prefers-reduced-motion`) recebe a luz sem cintilar e sem respirar.
+
+**2 · Operações ao vivo, e sem apagar o que estás a escrever.** A gaveta lia de
+15 em 15 segundos e **repintava tudo** — levava consigo um lead meio escrito e o
+cursor de quem estava a mudar a fase. Agora: a leitura automática (12 s) **espera
+enquanto houver um formulário aberto ou foco num campo**; quando os dados são os
+mesmos, não repinta nada; e um ponto no cabeçalho diz a verdade — «ao vivo», «há
+12 s», «sem servidor» — em vez de um relógio imaginário. O «Atualizar» e as
+acções lêem sempre: são gestos explícitos.
+
+**3 · Centro de Controlo: cada sala diz o que está a fazer AGORA.** Os cartões
+das seis salas passaram a mostrar o trabalho real da cena
+(`window.ORBITA.trabalho`, a mesma conta que acende a luz), actualizado de 3 em
+3 segundos **sem reconstruir o painel**. A entrada do painel deixou de animar
+`filter: blur` durante 420 ms: nasce do canto de onde é chamada
+(`transform-origin: top right`) em 240 ms, só com `transform` e `opacity`.
+
+**4 · O botão «afastar».** Era um quadrado de 30 px com um glifo de texto. É
+agora uma cápsula de 38 px, com ícone desenhado (duas setas viram-se para cima
+quando está recolhido), rótulo em versaletes e estado `aria-pressed`. Ganha
+contraste no hover (só em `hover: hover`) e assenta num fundo sólido quando está
+recolhido, para não desaparecer sobre a cena clara.
+
+**Testes:** 520/520 — 14 novos: 8 do modelo da luz (`leds.test.mjs`), 4 da gaveta
+viva (`ops-vivo.test.mjs`: guarda de foco, sem repaint sem novidade, «ao vivo» e
+«sem servidor»), 2 do Centro de Controlo ao vivo. O fumo da cena passou a olhar
+para as lâmpadas: seis salas com lâmpada, a intensidade a seguir o modelo e o
+Cérebro sempre aceso. `npm run build` ✓, `mesa.smoke.mjs` ✓.
+
+**Limitação declarada:** o tamanho (profundidade) de uma sala continua a aplicar-se
+no arranque seguinte — a geometria não se reescala a meio sem partir as portas; o
+painel diz isso em vez de fingir. E os testes da luz correm com o WebGL falso do
+`jsdom`: provam a conta e o valor aplicado à cena, não o que os teus olhos vêem.
+
 ## 1.39.0 — 27 out 2026 · todas as gratuitas, provadas com um clique
 
 «Implementa todas as gratuitas» não se cumpre a listar: cumpre-se a provar. O
