@@ -1,6 +1,9 @@
 // Órbita v2 — Three.js isometric office with zoom-driven LOD
 // Far: clean pods + agent counts (Image 1 read). Near: diorama with 3D people + holo screens (Image 2 read).
 import * as THREE from 'three';
+/* 1.40.0 · a luz que acende (pedido: «leds acendendo realmente»). O modelo é
+   puro e testado em `src/leds.js`; aqui só se aplicam os números ao `three`. */
+import { LUZ, luzDaSala, aproximar } from './leds.js';
 /* 1.20.0 · este import vem PRIMEIRO e de propósito: aplica as cores e os agentes
    que o dono configurou (e alarga as salas que precisam) antes de a cena assentar. */
 import './escritorio.js';
@@ -880,7 +883,14 @@ function applyPanels(p = panelPrefs) {
   const cb = document.querySelector('.chat-fold');
   if (cb) { cb.setAttribute('aria-pressed', String(!!p.ai)); cb.textContent = p.ai ? 'abrir campo ▴' : 'recolher campo ▾'; cb.title = p.ai ? 'abrir o campo de IA' : 'afastar o campo de IA — a conversa fica, a caixa recolhe'; }
   const tb = document.querySelector('.tp-fold');
-  if (tb) { tb.setAttribute('aria-pressed', String(!!p.tasks)); tb.textContent = p.tasks ? 'tarefas ▴' : 'afastar ▸'; tb.title = p.tasks ? 'trazer o estado das tarefas' : 'afastar o estado das tarefas — fica um botão, volta com um clique'; }
+  if (tb) {
+    /* 1.40.0: o rótulo vive num `span` próprio — o ícone é desenhado e não se apaga ao escrever */
+    tb.setAttribute('aria-pressed', String(!!p.tasks));
+    const rotulo = tb.querySelector('.tpf-t');
+    const texto = p.tasks ? 'estado das tarefas' : 'afastar';
+    if (rotulo) rotulo.textContent = texto; else if (!tb.querySelector('.tpf-i')) tb.textContent = texto;
+    tb.title = p.tasks ? 'trazer o estado das tarefas' : 'afastar o estado das tarefas — fica um botão, volta com um clique';
+  }
 }
 function setPanel(kind, on) {
   panelPrefs = writePrefs({ ...panelPrefs, [kind]: !!on });
@@ -1892,6 +1902,39 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
    onde há trabalho a sério — e só onde há: `deptCount` lê a base de dados, não um relógio. */
 const ledBusy = {};
 let lastLedSync = 0;
+
+/* ---------- 1.40.0 · A LUZ DE CADA SALA ----------
+   Cada sala ganha uma lâmpada própria (uma `PointLight` no alto) e a lista de
+   materiais que emitem: as fitas da passadeira, o ecrã da entrada e o aro de LED.
+   A intensidade não é decorativa — vem do trabalho real (`deptCount`), com um
+   arranque escalonado quando a página abre e um respirar lento depois. */
+const luzRT = {};
+const ARRANQUE_LUZ = performance.now() + 260;
+DEPT_KEYS.forEach((k, i) => {
+  const mats = [];
+  for (const L of ledRT) {
+    if (L.dept !== k || !L.mat) continue;
+    if (!mats.includes(L.mat)) mats.push(L.mat);
+  }
+  const ent = deptRT[k] && deptRT[k].entrance;
+  if (ent && ent.traverse) {
+    ent.traverse((o) => {
+      const m = o.isMesh && o.material;
+      if (m && m.emissive && !mats.includes(m)) mats.push(m);
+    });
+  }
+  const L = LAYOUT[k];
+  const luz = new THREE.PointLight(new THREE.Color(DEPTS[k].glass), 0, Math.max(L.w, L.d) * 1.5, 2);
+  luz.position.set(0, 3.5, 0);
+  luz.userData.part = 'roomLamp';
+  deptRT[k].group.add(luz);
+  luzRT[k] = { mats, luz, atraso: i * LUZ.atraso, valor: 0 };
+});
+/* o Cérebro respira ao ritmo do átrio: uma luz baixa, que nunca se apaga */
+const luzCerebro = new THREE.PointLight(new THREE.Color(DEPTS.brain ? DEPTS.brain.glass : '#AFB8A6'), 0.4, 26, 2);
+luzCerebro.position.set(0, 4.2, 0);
+if (deptRT.brain && deptRT.brain.group) deptRT.brain.group.add(luzCerebro); else scene.add(luzCerebro);
+let luzCerebroValor = 0.4;
 /* 29 out 2026 (lançamento): quem pediu ao sistema «menos movimento» não quer o vídeo de LED a correr.
    O CSS já respeita a preferência nas transições; a cena passa a abrandar a luz e o tapete para um
    terço da velocidade — continua vivo (é a vida das salas), mas deixa de puxar pelo olho. */
@@ -1910,6 +1953,29 @@ function tickLeds(now, dt) {
     const speed = (L.mat.userData.ledSpeed || 0.06) * (ledBusy[L.dept] ? 2.6 : 1) * (CALMO ? 0.34 : 1);
     tex.offset.x = (tex.offset.x - dt * speed) % 1;
   }
+  tickLuz(now, dt);
+}
+
+/* A luz: alvo vindo do trabalho real → aproximação suave → `emissiveIntensity` e
+   a lâmpada da sala. `aproximar` é independente do fps (ver `src/leds.js`). */
+function tickLuz(now, dt) {
+  const ms = Math.max(0, dt * 1000);
+  for (const k of DEPT_KEYS) {
+    const r = luzRT[k];
+    if (!r) continue;
+    const estado = { live: deptCount(k, 'live'), waiting: deptCount(k, 'waiting') };
+    const alvoLuz = luzDaSala(now, estado, { inicio: ARRANQUE_LUZ, atraso: r.atraso, calmo: CALMO }).valor;
+    r.valor = aproximar(r.valor, alvoLuz, ms);
+    if (r.luz) r.luz.intensity = r.valor * 2.1;
+    for (const m of r.mats) {
+      if (m.userData.baseEI == null) m.userData.baseEI = m.emissiveIntensity == null ? 1 : m.emissiveIntensity;
+      m.emissiveIntensity = m.userData.baseEI * (0.42 + r.valor * 0.9);
+    }
+  }
+  /* o átrio não pisca com o trabalho: pulsa devagar, sempre aceso */
+  const alvoCerebro = 0.42 + (CALMO ? 0 : 0.1 * Math.sin(now / 5200 * Math.PI * 2));
+  luzCerebroValor = aproximar(luzCerebroValor, alvoCerebro, ms, { subir: 900, descer: 900 });
+  if (luzCerebro) luzCerebro.intensity = luzCerebroValor;
 }
 
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
@@ -1938,6 +2004,14 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
     crew: () => crew.state(),
     // a fase da luz (para o teste poder provar que ela ANDA, e não só que existe)
     ledPhase: () => ledRT.reduce((n, l) => n + (l.mat.userData.ledTex ? l.mat.userData.ledTex.offset.x : 0), 0),
+    /* 1.40.0 · a luz de cada sala: o valor que o modelo deu e a intensidade que está
+       mesmo na cena. É daqui que o teste de fumo prova que a luz ACENDE (e não que existe). */
+    lights: () => Object.fromEntries(DEPT_KEYS.map((k) => {
+      const r = luzRT[k] || {};
+      return [k, { valor: r.valor || 0, intensity: r.luz ? r.luz.intensity : 0, mats: (r.mats || []).length }];
+    })),
+    lightModel: LUZ,
+    brainLamp: () => luzCerebroValor,
     circulation: () => ({
       led: ledRT.length,
       ledByDept: Object.fromEntries(DEPT_KEYS.map((k) => [k, ledRT.filter((l) => l.dept === k && !l.mat.userData.belt).length])),
@@ -2021,7 +2095,13 @@ function recolor(dept, cor) {
 }
 
 /* Porta pública para o painel de Configurações (e para a consola, ao inspeccionar). */
-window.ORBITA = Object.assign(window.ORBITA || {}, { recolor });
+window.ORBITA = Object.assign(window.ORBITA || {}, {
+  recolor,
+  /* 1.40.0 · o trabalho real de uma sala, para o Centro de Controlo mostrar o mesmo que a luz
+     acende. Mesma conta (`deptCount`), mesma fonte: nada de números paralelos. */
+  trabalho: (dept) => ({ live: deptCount(dept, 'live'), waiting: deptCount(dept, 'waiting'), done: deptCount(dept, 'done') }),
+  luz: () => Object.fromEntries(Object.entries(luzRT).map(([k, r]) => [k, r.valor])),
+});
 
 let last = performance.now();
 function loop(now) {

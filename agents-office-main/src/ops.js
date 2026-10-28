@@ -17,10 +17,14 @@ export function initOps({ api = '/api' } = {}) {
     body: panel.querySelector('.op-body'), close: panel.querySelector('.op-close'),
     refresh: panel.querySelector('.op-refresh'), note: panel.querySelector('.op-note'),
     client: panel.querySelector('.op-client'), newClient: panel.querySelector('[data-act="new-client"]'),
+    /* 1.40.0: o pulso da leitura (ver «op-live» no shell) */
+    live: panel.querySelector('.op-live'), liveT: panel.querySelector('.op-live-t'),
   };
-  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '', adding: false, composing: null, dossier: {}, learning: null, auto: null, saldo: null, clientes: null, novos: false };
+  const S = { data: null, leads: [], messages: [], queue: null, events: [], tab: 'leads', busy: false, error: '',
+    adding: false, composing: null, dossier: {}, learning: null, auto: null, saldo: null, clientes: null, novos: false,
+    lastOk: 0, sig: '' };
 
-  const open = () => { panel.hidden = false; btn.classList.add('on'); load(); };
+  const open = () => { panel.hidden = false; btn.classList.add('on'); load({ forcar: true }); };
   const close = () => { panel.hidden = true; btn.classList.remove('on'); };
   const toggle = () => (panel.hidden ? open() : close());
 
@@ -30,19 +34,58 @@ export function initOps({ api = '/api' } = {}) {
     return { status: r.status, ...(await r.json().catch(() => ({}))) };
   }
 
-  async function load() {
+  /* 1.40.0 · O QUE ESTÁS A ESCREVER NÃO SE APAGA.
+     A leitura de fundo repintava a gaveta de 15 em 15 segundos — e levava consigo um lead
+     meio escrito, ou o cursor de quem estava a mudar a fase. Agora a leitura automática espera
+     enquanto houver um formulário aberto ou o foco dentro de um campo; o «Atualizar» e as
+     acções continuam a ler sempre. */
+  function ocupadoAEscrever() {
+    if (S.adding || S.composing || S.novos) return true;
+    const a = typeof document !== 'undefined' ? document.activeElement : null;
+    if (!a || !panel.contains(a)) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable === true;
+  }
+  const semMovimento = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+  function bater() {
+    const ponto = P.live && P.live.querySelector('i');
+    if (!ponto || semMovimento() || typeof ponto.animate !== 'function') return;
+    try { ponto.animate([{ transform: 'scale(1)' }, { transform: 'scale(2.4)' }, { transform: 'scale(1)' }], { duration: 460, easing: 'cubic-bezier(.2,.8,.2,1)' }); } catch { /* sem WAAPI */ }
+  }
+  /* o rótulo ao lado do ponto: «ao vivo», «há 12 s», «sem servidor» — nunca um número inventado */
+  function tickVivo() {
+    if (!P.liveT || !P.live) return;
+    const parado = Date.now() - (S.lastOk || 0);
+    P.live.classList.toggle('bad', !!S.error);
+    P.live.classList.toggle('stale', !S.error && S.lastOk > 0 && parado > 30000);
+    let t;
+    if (S.error) t = 'sem servidor';
+    else if (!S.lastOk) t = 'a ligar…';
+    else if (parado < 3000) t = 'ao vivo';
+    else if (parado < 60000) t = `há ${Math.round(parado / 1000)} s`;
+    else t = `há ${Math.round(parado / 60000)} min`;
+    if (P.liveT.textContent !== t) P.liveT.textContent = t;
+  }
+
+  async function load({ forcar = false } = {}) {
+    if (!forcar && ocupadoAEscrever()) { tickVivo(); return; }
     try {
       const [s, l, m, q, e, a, au, sa, cl, en, ev] = await Promise.all([
         get('/ops/summary'), get('/ops/leads?limit=40'), get('/ops/messages?limit=40'), get('/ops/queue'), get('/ops/events?limit=25'),
         get('/ops/aprendizagem'), get('/ops/autonomia'), get('/ops/saldo'), get('/ops/clientes'), get('/ops/ensaio'), get('/ops/evals'),
       ]);
       if (s.error) throw new Error(s.error);
-      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], learning: a, auto: au, saldo: sa, clientes: cl, ensaio: en, evals: ev, error: '' });
+      /* só se repinta o que MUDOU: um repaint sem novidade custa o foco e o texto a quem trabalha */
+      const sig = JSON.stringify([s, l, m, q, e, a, au, sa, cl, en, ev]);
+      const mudou = sig !== S.sig;
+      Object.assign(S, { data: s, leads: l.leads || [], messages: m.messages || [], queue: q, events: e.events || [], learning: a, auto: au, saldo: sa, clientes: cl, ensaio: en, evals: ev, error: '', sig, lastOk: Date.now() });
+      if (!mudou) { tickVivo(); return; }
       paintClients();
     } catch (err) {
       S.error = err.message === 'Failed to fetch' ? 'o servidor não respondeu — a gaveta não inventa números' : err.message;
     }
+    tickVivo();
     paint();
+    if (!S.error) bater();
   }
 
   function paintClients() {
@@ -423,10 +466,18 @@ export function initOps({ api = '/api' } = {}) {
   });
   btn.addEventListener('click', toggle);
   P.close.addEventListener('click', close);
-  P.refresh.addEventListener('click', load);
+  P.refresh.addEventListener('click', () => load({ forcar: true }));
   for (const t of P.tabs) t.addEventListener('click', () => tab(t.dataset.k));
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) close(); });
-  setInterval(() => { if (!panel.hidden) load(); }, 15000);
+  /* 12 s: rápido o bastante para se sentir «ao vivo», discreto o bastante para não pesar.
+     `unref` só existe no Node: nos testes o sinal não fica a segurar o processo aberto. */
+  const relogios = [
+    setInterval(() => { if (!panel.hidden) load(); }, 12000),
+    setInterval(() => { if (!panel.hidden) tickVivo(); }, 1000),
+  ];
+  for (const r of relogios) { if (r && typeof r.unref === 'function') r.unref(); }
 
-  return { open, close, reload: load };
+  /* `parar` existe para quem monta e desmonta a gaveta (testes, e uma página que a destrua) */
+  const parar = () => { for (const r of relogios) clearInterval(r); };
+  return { open, close, reload: load, parar };
 }
