@@ -77,6 +77,10 @@ import {
 import * as auth from './src/ops/auth.mjs';
 import { zipBuffer } from './src/ops/zip.mjs'; // 26 out 2026: SQLite, fila, funil, aprovação e auditoria
 import { normModel, modelFor, modelArgs, modelId, modelName, MODEL_KEYS, DEFAULT_MODEL, normEffort, effortFor, effortName, EFFORT_KEYS } from './src/models.js';
+/* 1.52.0 · a lista de modelos do painel de tarefas cresceu: além de Sonnet · Opus ·
+   Fable, aceita qualquer par fornecedor|modelo da IA da Órbita. É este ficheiro
+   que tem de honrar a escolha — correr a tarefa nesse fornecedor, não em sonnet. */
+import { parDeModelo } from './src/lista-modelos.js';
 import { parseWhen, describe, valid as validWhen, untilText } from './src/when.js';
 
 const cfg = loadConfig();
@@ -99,6 +103,44 @@ const DATA = process.env.ORBITA_DATA_DIR ? path.resolve(process.env.ORBITA_DATA_
    Não é uma base de dados e não finge ser — é o suficiente para a mesa funcionar
    nesta máquina e para o dono poder levar o ficheiro consigo. */
 let mesaRepo = null;
+/* ------------------------------------------------------------------ a IA da Órbita
+   O motor que responde em /api/rpc (api/_ia/motor.mjs) é o mesmo que a tarefa usa
+   quando o dono escolhe um par. A memória do processo é a da mesa (data/mesa.json),
+   por isso uma prova feita na conversa conta para a lista e para a tarefa. */
+let motorOrbita = null;
+async function motorDaOrbita() {
+  if (motorOrbita) return motorOrbita;
+  const { criarMotor } = await import('./api/_ia/motor.mjs');
+  motorOrbita = criarMotor({ repo: repoDaMesa(), env: process.env, fetchImpl: fetch });
+  return motorOrbita;
+}
+/** O par escolhido, na mesma precedência da casa: tarefa > rotina > agente > escritório. */
+const parPara = (task, a) => parDeModelo(task?.model) || parDeModelo(task?.routineModel) || parDeModelo(a?.model) || parDeModelo(cfg.model) || null;
+
+/** Um passo de uma tarefa no fornecedor escolhido. `limite: 1` é de propósito: a
+    escolha é uma escolha — se aquele fornecedor não responder, a tarefa diz o
+    motivo, em vez de trocar de modelo em silêncio. Quem respondeu vai no regresso. */
+async function askOrbita(par, { system, user, maxTokens = 4000, timeout = RUN_TIMEOUT, effort = null }) {
+  const motor = await motorDaOrbita();
+  const tecto = Number(ESCALA_ESFORCO[effort]) || maxTokens;
+  const t0 = Date.now();
+  const r = await motor.pedir('texto', [{ role: 'system', content: system }, { role: 'user', content: user }], {
+    ferramentas: [], maxTokens: tecto, preferido: par, limite: 1, fixo: true,
+    timeoutMs: Math.min(Number(timeout) || RUN_TIMEOUT, 75000),
+  });
+  return {
+    text: String(r.texto || '').trim(),
+    tools: [],                       // a IA da Órbita responde texto; as mãos são as do FORGE desta máquina
+    modelId: r.modelo || par.modelo,
+    fornec: r.fornec || par.fornecedor,
+    modelo: r.modelo || par.modelo,
+    ms: r.ms || Date.now() - t0,
+    esforco: { pedido: effort || null, maxTokens: tecto },
+  };
+}
+/* o esforço vira tecto de tokens (o mesmo mapa de api/_ia/rotas.mjs) */
+const ESCALA_ESFORCO = { low: 600, medium: 1200, high: 2400, xhigh: 4000, max: 6000 };
+
 function repoDaMesa() {
   if (mesaRepo) return mesaRepo;
   const ficheiro = path.join(DATA, 'mesa.json');
@@ -444,6 +486,8 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const user = `Tarefa: ${task.title}\nPedido do proprietário: ${task.text}` + (task.plan?.length ? `\nPlano acordado: ${task.plan.join(' → ')}` : '') + routineLine + modeLine +
     (feedback && mode !== 'approve' ? `\n\nO proprietário reviu a tua versão anterior e pediu alterações: "${feedback}"\nVersão anterior:\n${task.result}` : '');
   const { pick, eff } = pickFor(task, a);
+  /* 1.52.0 · se a escolha é um par da Órbita, o passo corre lá — não no CLI */
+  const par = parPara(task, a);
   // 27 out 2026: as ferramentas que esta sala já forjou correm ANTES de o agente escrever. O que
   // elas leram entra no prompt como dados, não como promessa: o agente escreve sobre números
   // reais (tarefas, notas, documentos) em vez de os inventar.
@@ -451,8 +495,11 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const senseBlock = sensed.filter(x => x.ok).map(x =>
     `--- ${x.id} · ${x.name} · ${x.ms} ms ---\n${JSON.stringify(x.result).slice(0, 900)}`).join('\n');
   const userFull = senseBlock ? `${user}\n\nDADOS DAS TUAS FERRAMENTAS (lidos agora, nesta máquina)\n${senseBlock}` : user;
-  const { text, tools, modelId: ran } = await askX(system, userFull, { model: pick.model, effort: eff.effort });
-  if (!text) throw new Error('O Claude não devolveu nada');
+  const saida = par
+    ? await askOrbita(par, { system, user: userFull, effort: eff.effort || null })
+    : await askX(system, userFull, { model: pick.model, effort: eff.effort });
+  const { text, tools, modelId: ran } = saida;
+  if (!text) throw new Error(par ? `A IA da Órbita (${par.fornecedor} · ${par.modelo}) não devolveu nada` : 'O Claude não devolveu nada');
   // e se o agente pediu uma ferramenta que não tem (linha `FORGE: …`), a oficina forja-a já — uma
   // por tarefa, para que o terminal não seja um dilúvio e o catálogo não encha de duplicados.
   const forged = [];
@@ -465,7 +512,14 @@ async function run(task, feedback, mode) { // mode: undefined (a task from the b
   const result = forged.length
     ? `${text}\n\nOficina: forjei ${forged.map(t => `${t.id} v${t.version} (${t.state === 'active' ? 'activa' : 'em rascunho'}, ${t.examples} prova(s))`).join(' · ')} — está em data/forge/tools/${a.department}/.`
     : text;
-  return { result, read, tools: toolKeys(tools), used: mcp.namesOf(tools), skills: skills.names(a), modelUsed: pick.model, modelFrom: pick.from, modelId: ran, effortUsed: eff.effort || '', effortFrom: eff.from };
+  return {
+    result, read, tools: toolKeys(tools), used: mcp.namesOf(tools), skills: skills.names(a),
+    /* o que foi pedido e quem respondeu, os dois: a tarefa mostra a verdade */
+    modelUsed: par ? `${saida.fornec}|${saida.modelo}` : pick.model,
+    modelFrom: par ? 'owner' : pick.from,
+    modelId: ran, effortUsed: eff.effort || '', effortFrom: eff.from,
+    ...(par ? { fornecUsed: saida.fornec, esforcoTecto: saida.esforco?.maxTokens || null, iaDaOrbita: true } : {}),
+  };
 }
 
 /* ---------- V3.2 (16 Sep) Agent Teams: the lead plans, the desks work at once, the lead writes the final ---------- */
@@ -703,7 +757,7 @@ async function makeRoutine({ dept, text, when, agent, needsOk, model, effort }) 
   loadRoutines();
   const r = await route(dept, taskText);
   const a = agent && AGENTS.find(x => x.id === agent && x.department === dept) ? agent : r.agent;
-  const v = routines.validate({ id: uniqueId(slug(r.title).slice(0, 40), rlist.routines), dept, agent: a, title: r.title, text: taskText, when: w, needsOk: typeof needsOk === 'boolean' ? needsOk : r.needsOk, plan: r.plan, model: normModel(model) || undefined, effort: normEffort(effort) || undefined }, AGENTS, rlist.routines);
+  const v = routines.validate({ id: uniqueId(slug(r.title).slice(0, 40), rlist.routines), dept, agent: a, title: r.title, text: taskText, when: w, needsOk: typeof needsOk === 'boolean' ? needsOk : r.needsOk, plan: r.plan, model: (parDeModelo(model) ? String(model) : normModel(model)) || undefined, effort: normEffort(effort) || undefined }, AGENTS, rlist.routines);
   if (v.problems.length) return { error: v.problems.join('; ') };
   rlist.routines.push(v.routine); routines.save(BRAIN, rlist.routines);
   const out = loadRoutines().find(x => x.id === v.routine.id);
@@ -1355,7 +1409,7 @@ const server = http.createServer(async (req, res) => {
       if (dueAt && dueAt < Date.now() - 60000) return json(res, 400, { error: 'essa hora já passou — escolhe uma que ainda esteja à frente' });
       const r = await route(dept, String(text).trim());
       const asTeam = TEAMS.enabled && (team === true || teams.intent(text)); // V3.2 (16 Sep): TEAM in the bar, or "as a team" in the sentence → the lead owns it and splits it
-      const task = { id: nid(), dept, agent: asTeam ? leadOf(dept).id : r.agent, title: r.title, text: String(text).trim(), plan: r.plan, eta: r.eta, why: asTeam ? `equipa — ${leadOf(dept).name} divide-a pelas secretárias` : r.why, state: 'next', addedAt: Date.now(), by: 'you', model: normModel(model) || undefined, effort: normEffort(effort) || undefined, // model/effort: set on this task (beats routine, agent, office)
+      const task = { id: nid(), dept, agent: asTeam ? leadOf(dept).id : r.agent, title: r.title, text: String(text).trim(), plan: r.plan, eta: r.eta, why: asTeam ? `equipa — ${leadOf(dept).name} divide-a pelas secretárias` : r.why, state: 'next', addedAt: Date.now(), by: 'you', model: (parDeModelo(model) ? String(model) : normModel(model)) || undefined, effort: normEffort(effort) || undefined, // model/effort: set on this task (beats routine, agent, office)
         team: asTeam ? { lead: leadOf(dept).id, asked: team === true ? 'you' : 'text' } : undefined };
       if (dueAt) { task.state = 'scheduled'; task.dueAt = dueAt; task.needsOk = r.needsOk; } // waits for its minute; needsOk decides whether it then waits for the OK
       const list = load(); list.push(task); save(list);

@@ -454,7 +454,9 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       { role: 'user', content: texto },
     ];
     const chamadas = [];
-    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens, preferido: escolhido.preferido });
+    /* 1.52.0 · `fixo`: quem escolheu openrouter/qwen3-coder recebe esse, ou recebe a
+       razão de não ter recebido — não recebe outro em silêncio. */
+    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens, preferido: escolhido.preferido, limite: escolhido.preferido ? 1 : 4, fixo: !!escolhido.preferido });
     for (let volta = 0; volta < 2 && r.chamadas?.length; volta += 1) {
       conversa.push({ role: 'assistant', content: r.texto || '', tool_calls: r.chamadas.map((x) => ({ id: x.id, type: 'function', function: { name: x.nome, arguments: JSON.stringify(x.argumentos || {}) } })) });
       for (const ch of r.chamadas) {

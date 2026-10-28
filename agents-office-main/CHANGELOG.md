@@ -1,3 +1,48 @@
+## 1.52.0 — 28 out 2026 · a lista de modelos da aba de tarefas cresce
+
+O dono: *«lista de modelo na aba tarefas (sonnet,opus,fable) essa lista deve
+aumentar colocando todas as ias que aceitaram responder»*.
+
+A lista era fixa porque `normModel()` só conhecia os três nomes do CLI — e
+qualquer outro era **trocado por sonnet em silêncio**. Não bastava acrescentar
+opções: o servidor tinha de honrar a escolha.
+
+### O que há agora no painel de tarefas
+
+- **Sonnet · Opus · Fable** (o motor desta máquina) **+** todos os pares
+  `fornecedor · modelo` da IA da Órbita que podem responder agora, lidos de
+  `GET /ia/modelos` por `/api/rpc` — em grupos (`<optgroup>`), como no resto do
+  produto. Na página publicada é este o caminho que existe.
+- Só entra quem tem chave (ou não precisa dela) e não está desligado. O que fica
+  de fora é **dito por baixo da lista**: «12 modelo(s) da IA da Órbita · fora da
+  lista: 61 fornecedor(es) sem chave, 2 desligado(s)».
+- A ordem é a da evidência: primeiro quem já respondeu a um pedido real (com a
+  latência medida, quando o servidor local a tem), depois os gratuitos, depois o
+  nome. Cada linha diz «· provado» ou «· grátis».
+- A escolha guarda-se como `fornecedor|modelo` e aparece no cartão da tarefa —
+  «Qwen3.5-9B · OVH AI Endpoints (tecto 2400 tokens)».
+
+### A escolha é uma escolha
+
+Isto estava errado e foi apanhado a testar: o motor somava +1000 pontos ao
+preferido, mas o bónus de «medido em produção» valia +2000 — pedir
+`ovh/Qwen3.5-9B` respondia o LLM7, em silêncio. Agora `pedir(…, {fixo:true})`
+monta uma cadeia de **uma entrada só**: o par escolhido, ou a razão de não ter
+respondido (*«o modelo escolhido não respondeu — ovh/Qwen3.5-9B: …»*). Sem troca
+silenciosa, nem na tarefa nem na conversa.
+
+### Onde corre
+
+- Tarefa com par da Órbita → o passo vai pelo motor da Órbita (`api/_ia/motor.mjs`,
+  o mesmo do `/api/rpc`, com a memória da mesa); os três da casa continuam no CLI.
+- O esforço escolhido vira o tecto de tokens (600 · 1200 · 2400 · 4000 · 6000) e
+  fica escrito na tarefa.
+- Rotinas e tarefas agendadas guardam o par tal e qual (antes, um par virava
+  `undefined` → sonnet).
+
+**Testes:** 679 (11 novos em `lista-modelos.test.mjs`, incluindo o do motor que
+fixa o par e o da falha honesta).
+
 ## 1.51.2 — 28 out 2026 · o aviso também espera pela resposta
 
 Visto na página publicada, ao abrir: durante o instante antes de `/api/health` e

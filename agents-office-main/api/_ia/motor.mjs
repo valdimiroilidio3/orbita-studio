@@ -506,6 +506,11 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     async pedir(tipo, mensagens, {
       ferramentas = [], agente = null, maxTokens = 1200, temperatura = 0.3,
       orc = orcamento(), preferido = null, limite = 4, timeoutMs = null,
+      /* 1.52.0 · `fixo` = a escolha do dono é uma escolha, não uma sugestão. Sem
+         isto, «preferido» valia +1000 pontos e o bónus de «medido em produção»
+         (+2000) passava-lhe à frente: pedia-se OVH/Qwen3.5-9B e respondia o
+         LLM7 — em silêncio. Com `fixo`, a cadeia tem uma entrada só: a dele. */
+      fixo = false,
     } = {}) {
       const cfg = await config();
       const desligados = cfg.desligados || [];
@@ -519,7 +524,15 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         if (t?.ok && t?.usado) usados[`${fornec}/${t.usado}`] = true;
       }
       await restaurarFora();
+      /* a entrada fixa, quando o dono escolheu um par (ou um fornecedor) */
+      const preso = fixo && pref?.fornecedor
+        ? [{
+            fornec: pref.fornecedor, modelo: pref.modelo || null,
+            etiquetas: [], janela: 0, preco: [0, 0], fixo: true,
+          }]
+        : null;
       const resultado = await falarComFallback(tipo, {
+        ...(preso ? { cadeiaFixa: preso } : {}),
         chaves, desligados, preferido: pref, latencias: await latencias(), orc, limite, usados,
         /* 1.32.0 · os gratuitos medidos entram à frente do catálogo
            1.33.0 · e o catálogo passa a incluir o que a descoberta encontrou

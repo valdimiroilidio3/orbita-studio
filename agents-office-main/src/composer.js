@@ -21,6 +21,8 @@
 // Tudo o que o compositor envia volta na resposta do servidor (`model`, `effort`, `mode`,
 // `context`, `files`) e é mostrado por baixo da resposta: o que se lê é o que correu.
 
+import { PAR_SEP, parDeModelo, chaveDoPar } from './lista-modelos.js';
+
 export const MODES = [
   { key: 'plan', name: 'Planear', title: 'Planear: o agente devolve um plano e não executa nada (sem ferramentas)' },
   { key: 'ask', name: 'Perguntar', title: 'Perguntar: conversa, com as notas da empresa' },
@@ -73,20 +75,15 @@ export function packFiles(current, incoming) {
    mesma página (a mesa fala com ela por /api/rpc); o que faltava era o compositor
    saber perguntar-lhe o catálogo. Passa a saber, e a escolha é um par
    fornecedor|modelo — o mesmo que POST /ia/chat valida. */
-export const IA_SEP = '|';
+/* 1.52.0 · a regra do par vive num sítio só (`src/lista-modelos.js`): o painel de
+   tarefas passou a usar a mesma escolha, e duas implementações divergiriam. */
+export const IA_SEP = PAR_SEP;
 
 /** O nome com que a escolha fica guardada: `openrouter|qwen/qwen3-coder:free`. */
-export const chaveDeModelo = (fornecedor, modelo) => `${String(fornecedor || '')}${IA_SEP}${String(modelo || '')}`;
+export const chaveDeModelo = (fornecedor, modelo) => chaveDoPar(fornecedor, modelo);
 
 /** Separa a escolha. `null` quer dizer «não é um par da Órbita» (um nome do CLI). */
-export function dividirModelo(chave) {
-  const s = String(chave || '');
-  const i = s.indexOf(IA_SEP);
-  if (i <= 0 || i === s.length - 1) return null;
-  const fornecedor = s.slice(0, i);
-  const modelo = s.slice(i + 1);
-  return fornecedor && modelo ? { fornecedor, modelo } : null;
-}
+export const dividirModelo = (chave) => parDeModelo(chave);
 
 /** As linhas do menú a partir do que `GET /ia/modelos` devolveu.
     Só entram modelos de fornecedores que podem responder (chave + não desligados);

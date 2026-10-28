@@ -456,3 +456,39 @@ não é entendido por todos os fornecedores, e um botão sem efeito seria ficç�
 
 A segunda faz a conversa a sério, pela função que o `/api/rpc` usa, e devolve
 `quemRespondeu`, `ms`, `esforco` e os primeiros 400 caracteres.
+
+## 19. 1.52.0 · a lista de modelos do painel de tarefas
+
+Antes: `src/models.js` conhecia três nomes (sonnet · opus · fable) e
+`normModel()` devolvia `null` para tudo o resto — o servidor trocava por sonnet
+sem dizer nada. A lista do painel (`src/tasks.js`) era desenhada com esses três.
+
+Agora, `src/lista-modelos.js` (puro, testado) é a única regra:
+
+| função | o que decide |
+|---|---|
+| `parDeModelo(v)` | `openrouter\|qwen/qwen3-coder:free` → `{fornecedor, modelo}`; um nome do CLI → `null` |
+| `chaveDoPar(f, m)` | a forma guardada da escolha |
+| `etiquetaDoModelo(v)` | «Sonnet» · «Qwen3.5-9B · OVH AI Endpoints» (o nome do fornecedor vem de `NOMES_FORNECEDOR`) |
+| `opcoesDoCatalogo(catálogo, estado, provas)` | os grupos do `<select>`: quem pode responder, ordenado pela evidência |
+| `notaDaLista(contagem)` | a frase do que ficou de fora |
+
+Quem pode responder = `comChave` (ou `configurado` no `/ia/estado`) e não
+desligado e não inutilizável. O servidor local passa também as provas de
+`GET /api/ia/gratuitos` (quem já respondeu e quanto demorou) para pôr à frente o
+que é real.
+
+No servidor, `serve.mjs` decide o caminho do passo:
+
+```
+parPara(task, agente)  →  tarefa > rotina > agente > escritório
+  par  → askOrbita(par, {system, user, effort})   (motor da Órbita, fixo)
+  nome → askX(...)                                 (CLI desta máquina)
+```
+
+`motor.pedir(…, {fixo: true})` monta uma cadeia de uma só entrada — a escolha do
+dono, ou o erro com a razão. `/ia/chat` faz o mesmo quando recebe um par.
+
+Provar sem browser: `npm test` inclui `lista-modelos.test.mjs`; a lista real
+pode ser vista com `GET /api/rpc?caminho=/ia/modelos` e o ensaio de
+`GET /api/prova-chat`.

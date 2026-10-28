@@ -28,6 +28,9 @@ import { fmtTime, fmtDate, fmtDateTime, normaliseHour } from './time.js';
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
 /* 1.50.0 · um erro de rede nunca mais é explicado como falta de IA (ver src/falhas.js) */
 import { explicarFalha, lerCorpo, motorNaMesa, ROTA_DA_MESA } from './falhas.js';
+/* 1.52.0 · a lista do painel: os três da casa e todas as IAs da Órbita que
+   aceitaram responder (o dono: «essa lista deve aumentar»). */
+import { opcoesDoCatalogo, notaDaLista, parDeModelo, DA_CASA } from './lista-modelos.js';
 
 // palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
@@ -247,16 +250,84 @@ export function initTasks(ctx) {
   function openBig() { B_.in.value = P_.input.value; B_.in.placeholder = P_.input.placeholder; big.classList.add('on'); mirrorHint(); B_.in.focus(); B_.in.setSelectionRange(B_.in.value.length, B_.in.value.length); }
   function closeBig() { if (!big.classList.contains('on')) return; big.classList.remove('on'); grow(); if (P_.input.value) P_.input.focus(); }
   function mirrorHint() { B_.hint.innerHTML = P_.hint.innerHTML; B_.hint.className = P_.hint.className.replace('tp-hint', 'tp-hint tb-hint'); }
-  // V3.6 (D2): the model menu — Sonnet · Opus · Fable. Shows the office default; change it and it applies to this task (or this routine, with REPEAT on)
+  /* V3.6 (D2) · o menu do modelo — e, desde a 1.52.0, não só Sonnet · Opus · Fable:
+     também todas as IAs da Órbita que podem responder agora (src/lista-modelos.js).
+     A escolha de um par guarda-se como `fornecedor|modelo` e o servidor corre a
+     tarefa por esse fornecedor; os três da casa continuam a correr no motor local. */
   let officeModel = DEFAULT_MODEL, modelTouched = false;
-  P_.model.innerHTML = MODEL_KEYS.map(k => `<option value="${k}">${MODELS[k].name}</option>`).join('');
+  let catalogoTarefas = null;       // o que GET /ia/modelos devolveu (null = ainda não se sabe)
+  let catalogoNota = '';            // a frase honesta do que ficou de fora
+  function pintarMenuModelo() {
+    const valor = P_.model.value;
+    const r = catalogoTarefas
+      ? opcoesDoCatalogo(catalogoTarefas.modelos, catalogoTarefas.estado, catalogoTarefas.provas)
+      : { grupos: [{ rotulo: 'Nesta máquina', opcoes: DA_CASA.map(m => ({ ...m })) }], contagem: { casa: DA_CASA.length, orbita: 0 } };
+    P_.model.innerHTML = r.grupos.map(g => `<optgroup label="${esc(g.rotulo)}">` +
+      g.opcoes.map(o => `<option value="${esc(o.valor)}">${esc(o.etiqueta)}</option>`).join('') + '</optgroup>').join('');
+    /* a escolha sobrevive a um catálogo que chega depois: não se troca o que o dono escolheu */
+    if (valor && [...P_.model.options].some(o => o.value === valor)) P_.model.value = valor;
+    else if (!modelTouched) P_.model.value = officeModel;
+    catalogoNota = catalogoTarefas ? notaDaLista(r.contagem) : '';
+    const nota = panel.querySelector('.tp-r3-note');
+    if (nota && catalogoNota) nota.title = catalogoNota;
+    const fora = panel.querySelector('.tp-model-fora');
+    if (fora) { fora.textContent = catalogoNota; fora.hidden = !catalogoNota; }
+  }
+  pintarMenuModelo();               // já desenha os três da casa; cresce quando a Órbita responder
   P_.model.value = officeModel;
   P_.model.addEventListener('change', () => { modelTouched = P_.model.value !== officeModel; P_.model.classList.toggle('set', modelTouched); updateHint(); });
   P_.model.addEventListener('keydown', e => e.stopPropagation());
-  function setOfficeModel(k) { officeModel = normModel(k) || DEFAULT_MODEL; if (!modelTouched) P_.model.value = officeModel; paintDefaults(); }
+  /* 1.52.0 · o catálogo da IA da Órbita: por /api/rpc (na Vercel é o único
+     caminho), e no servidor local também as provas de /api/ia/gratuitos — para
+     a lista pôr à frente quem já respondeu de verdade. */
+  async function lerIa(caminho) {
+    const r = await fetch(`${API}/rpc?caminho=${encodeURIComponent(caminho)}`, { headers: { accept: 'application/json' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j && typeof j === 'object' && 'status' in j) {
+      if (j.status >= 400) throw new Error((j.corpo && j.corpo.error) || ('HTTP ' + j.status));
+      return j.corpo;
+    }
+    return j;
+  }
+  async function lerGratuitos() {
+    const r = await fetch(`${API}/ia/gratuitos`, { headers: { accept: 'application/json' } });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return j && Array.isArray(j.catalogo) ? j : null;
+  }
+  async function carregarCatalogo() {
+    try {
+      const [modelos, estado, gratuitos] = await Promise.all([
+        lerIa('/ia/modelos'),
+        lerIa('/ia/estado').catch(() => null),
+        lerGratuitos().catch(() => null),
+      ]);
+      /* as provas do servidor local: quem já respondeu e quanto demorou. Na página
+         publicada esta rota não existe — a lista fica pela ordem do catálogo. */
+      const provas = { provados: [], ms: {} };
+      for (const p of (gratuitos?.medido || [])) {
+        if (!p || !p.fornec || !p.modelo) continue;
+        provas.provados.push({ fornec: p.fornec, modelo: p.modelo });
+        if (Number(p.ms) > 0) provas.ms[`${p.fornec}\u0000${p.modelo}`] = Number(p.ms);
+      }
+      catalogoTarefas = { modelos, estado, provas };
+      pintarMenuModelo();
+      return true;
+    } catch (e) {
+      /* diz-se o que falhou, em vez de fingir uma lista completa */
+      catalogoNota = `A lista da IA da Órbita não chegou (${e && e.message ? e.message : 'sem resposta'}): o menu fica nos três desta máquina.`;
+      const fora = panel.querySelector('.tp-model-fora');
+      if (fora) { fora.textContent = catalogoNota; fora.hidden = false; }
+      return false;
+    }
+  }
+  function setOfficeModel(k) { officeModel = parDeModelo(k) ? k : (normModel(k) || DEFAULT_MODEL); if (!modelTouched) P_.model.value = officeModel; paintDefaults(); }
   const chosenModel = () => (modelTouched ? P_.model.value : null);
   function resetModel() { modelTouched = false; P_.model.value = officeModel; P_.model.classList.remove('set'); resetEffort(); }
-  const modelBit = t => t.modelUsed ? ` · ${modelName(t.modelUsed)}${t.effortUsed ? ' ' + t.effortUsed : ''}${t.modelFrom && t.modelFrom !== 'office' ? ' (' + FROM_TEXT[t.modelFrom] + ')' : ''}` : '';
+  const modelBit = t => t.modelUsed
+    ? ` · ${modelName(t.modelUsed)}${t.effortUsed ? ' ' + t.effortUsed : ''}${t.iaDaOrbita && t.esforcoTecto ? ` (tecto ${t.esforcoTecto} tokens)` : ''}${t.modelFrom && t.modelFrom !== 'office' ? ' (' + FROM_TEXT[t.modelFrom] + ')' : ''}`
+    : '';
   // V3.6.1: the EFFORT menu beside the model — AUTO (the model's own; Opus = high) · Low · Medium · High · Extra high · Max. Same precedence as the model.
   let officeEffort = '', effortTouched = false;
   P_.effort.innerHTML = `<option value="">Automático</option>` + EFFORT_KEYS.map(k => `<option value="${k}">${EFFORT_NAME[k]}</option>`).join('');
@@ -281,6 +352,7 @@ export function initTasks(ctx) {
     note.title = 'o que esta tarefa usa se não escolheres outra coisa nos campos acima';
   }
   paintDefaults();
+  if (!catalogoTarefas) carregarCatalogo(); // abre com a lista que houver, e cresce quando a Órbita responder
   // the REPEAT picker (B1): cadence + time; "precisa do meu OK" defaults on (D1)
   let repeat = false;
   P_.cad.innerHTML = [['weekdays', 'Todos os dias úteis'], ['daily', 'todos os dias'], ['mon', 'Mondays'], ['tue', 'Tuesdays'], ['wed', 'Wednesdays'], ['thu', 'Thursdays'], ['fri', 'Fridays'], ['sat', 'Saturdays'], ['sun', 'Sundays'], ['hourly', 'De hora a hora, 9h–17h, dias úteis']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
@@ -490,6 +562,8 @@ export function initTasks(ctx) {
     } catch {
       AI_.state = null;
       if (!tarefasOk) await ligarIaDaMesa();
+      /* 1.52.0 · a lista do modelo cresce com as IAs da Órbita — haja ou não servidor local */
+      carregarCatalogo();
       paintAiButton(); paintAiPop();
     }
   }
@@ -766,14 +840,14 @@ export function initTasks(ctx) {
     if (!t) {
       t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, by: st.by === 'routine' ? 'routine' : 'you', live: true, srv: !!st.routine, sid: st.id,
         routine: st.routine, when: st.when, late: !!st.late, due: st.due, needsOk: !!st.needsOk, addedAt: st.addedAt, changedAt: st.addedAt, last: 'added',
-        model: st.model, modelUsed: st.modelUsed || st.model || undefined, modelFrom: st.modelFrom || (st.model ? 'task' : undefined), effort: st.effort, effortUsed: st.effortUsed, effortFrom: st.effortFrom });
+        model: st.model, modelUsed: st.modelUsed || st.model || undefined, modelFrom: st.modelFrom || (st.model ? 'task' : undefined), effort: st.effort, effortUsed: st.effortUsed, effortFrom: st.effortFrom, fornecUsed: st.fornecUsed, esforcoTecto: st.esforcoTecto, iaDaOrbita: st.iaDaOrbita });
       if (st.state === 'scheduled') { t.state = 'scheduled'; t.dueAt = st.dueAt; t.needsOk = !!st.needsOk; }
       else if (st.state !== 'done') { spawnEmote(R[t.agent], st.routine ? '⏱' : st.dueAt ? '⏱' : '📋'); if (st.routine) feedPush(R[t.agent], '⏱', `Routine fired: ${t.title}${t.late ? ' (atrasada — era para ' + timeStr(t.due) + ')' : ''}`); else if (st.dueAt) feedPush(R[t.agent], '⏱', `Tarefa agendada disparou: ${t.title}`); }
       touch(t, 'added');
     }
     apply(t, st);
   }
-  function copyResult(t, st) { t.result = st.result; t.error = !!st.error; t.read = st.read || []; t.note = st.note; t.tools = st.tools || []; t.used = st.used || []; t.draft = st.draft; t.approved = !!st.approved; if (st.modelUsed) { t.modelUsed = st.modelUsed; t.modelFrom = st.modelFrom; t.effortUsed = st.effortUsed || ''; t.effortFrom = st.effortFrom; } }
+  function copyResult(t, st) { t.result = st.result; t.error = !!st.error; t.read = st.read || []; t.note = st.note; t.tools = st.tools || []; t.used = st.used || []; t.draft = st.draft; t.approved = !!st.approved; if (st.modelUsed) { t.modelUsed = st.modelUsed; t.modelFrom = st.modelFrom; t.effortUsed = st.effortUsed || ''; t.effortFrom = st.effortFrom; } if (st.fornecUsed) t.fornecUsed = st.fornecUsed; if (st.esforcoTecto) t.esforcoTecto = st.esforcoTecto; if (st.iaDaOrbita) t.iaDaOrbita = true; }
   // V3.2 (16 Sep): the server's team state → piece cards on the teammates' desks, notes as 💬, the lead's members list
   const seenNotes = new Set();
   function syncTeam(t, st, quiet) {
@@ -848,7 +922,7 @@ export function initTasks(ctx) {
       const r = await fetch(`${API}/tasks/${t.sid}/${feedback ? 'revise' : 'run'}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(feedback ? { feedback } : {}) });
       if (!r.ok) throw new Error((await r.json()).error || r.statusText);
       const st = await r.json();
-      t.result = st.result; t.error = !!st.error; t.read = st.read || []; t.note = st.note; t.tools = st.tools || []; t.used = st.used || []; if (st.modelUsed) { t.modelUsed = st.modelUsed; t.modelFrom = st.modelFrom; t.effortUsed = st.effortUsed || ''; t.effortFrom = st.effortFrom; }
+      t.result = st.result; t.error = !!st.error; t.read = st.read || []; t.note = st.note; t.tools = st.tools || []; t.used = st.used || []; if (st.modelUsed) { t.modelUsed = st.modelUsed; t.modelFrom = st.modelFrom; t.effortUsed = st.effortUsed || ''; t.effortFrom = st.effortFrom; } if (st.fornecUsed) t.fornecUsed = st.fornecUsed; if (st.esforcoTecto) t.esforcoTecto = st.esforcoTecto; if (st.iaDaOrbita) t.iaDaOrbita = true;
       usageDue = true;
       if (t.tools.length && onTools) onTools(t.agent, t.tools); // the connectors the agent really pulled on light up
       if (brain && !t.error) fetch(API + '/brain').then(r => r.json()).then(g => brain.setGraph(g)).catch(() => {}); // the new note joins the graph
@@ -1166,7 +1240,7 @@ export function initTasks(ctx) {
     if (!(at > Date.now())) return { ok: false, error: 'Escolhe uma hora que ainda esteja à frente.' };
     if (live) {
       try {
-        const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, at, model: normModel(model) || undefined, team: asTeam(text) || undefined }) });
+        const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, at, model: (parDeModelo(model) ? model : normModel(model)) || undefined, team: asTeam(text) || undefined }) });
         const st = await r.json(); if (!r.ok) throw new Error(st.error || r.statusText);
         const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, state: 'scheduled', dueAt: st.dueAt, needsOk: !!st.needsOk, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', team: st.team ? { lead: st.team.lead, members: [] } : undefined });
         touch(t, 'scheduled'); spawnEmote(R[t.agent], '⏱'); feedPush(R[t.agent], '⏱', `Agendada para ${fmtDateTime(at)}: ${t.title}`);
@@ -1175,7 +1249,7 @@ export function initTasks(ctx) {
     }
     const { agent: a } = route(k, text);
     const title = (text.charAt(0).toUpperCase() + text.slice(1)).slice(0, 90);
-    const t = mk({ agent: a.id, title, text, by: 'you', state: 'scheduled', dueAt: at, needsOk: guessOk(text), modelUsed: normModel(model) || officeModel, modelFrom: model ? 'task' : 'office' });
+    const t = mk({ agent: a.id, title, text, by: 'you', state: 'scheduled', dueAt: at, needsOk: guessOk(text), modelUsed: (parDeModelo(model) ? model : normModel(model)) || officeModel, modelFrom: model ? 'task' : 'office' });
     touch(t, 'scheduled'); spawnEmote(R[a.id], '⏱'); feedPush(R[a.id], '⏱', `Agendada para ${fmtDateTime(at)}: ${title}`);
     return { ok: true, task: t };
   }
@@ -1204,5 +1278,6 @@ export function initTasks(ctx) {
   const calendar = initCalendar({ tasks, routines, agentOf, DEPTS, DEPT_KEYS, RT_DEPTS, rtRefuse, create: createScheduled, createRoutine: createRoutineAt, cancelTask: cancelScheduled, rtAct, openAgent: (id, tab) => openAgent && openAgent(id, tab), esc, isLive: () => live, officeModel: () => officeModel, MODEL_KEYS, modelName, business: () => document.title.replace(/ — Órbita$/, ''), currentDept: () => dept });
   return { tick, toggle, open, close, openFor, isOpen, boardWidth, onFocusChange, onStuck, onResolve, calendar, createScheduled, cancelScheduled,
            handleChat, revise, rowHTML, setDept, tasks, panelWidth: () => panel.offsetWidth, isLive: () => live,
-           routines, addRoutine, rtAct, railFor, syncPills, refresh: poll, resolveLive, pendingReject, rejectLive, officeModel: () => officeModel, chosenModel, chosenEffort };
+           routines, addRoutine, rtAct, railFor, syncPills, refresh: poll, resolveLive, pendingReject, rejectLive, officeModel: () => officeModel, chosenModel, chosenEffort,
+           catalogo: () => catalogoTarefas };
 }
