@@ -154,6 +154,23 @@ export function etiquetasDoModelo(id, detalhe = null) {
 }
 
 /**
+ * 1.43.0 · só serve para conversa o que É para conversa.
+ *
+ * A 28 out 2026 a descoberta em produção encheu a lista do OVH com
+ * `whisper-large-v3`, `nvr-tts-en-us`, `bge-m3` e `stable-diffusion-xl`: são
+ * modelos reais do fornecedor, mas não respondem a uma mensagem — cada
+ * tentativa era um pedido perdido no meio da cadeia. Isto filtra pela família
+ * do id (não há metadados melhores em todos os fornecedores). É uma lista de
+ * EXCLUSÃO: na dúvida, deixa passar.
+ */
+const NAO_E_CONVERSA = /(embed|embedding|\bbge\b|\bbge-|\bgte-|rerank|whisper|tts|asr|stt|speech|voice|audio|moderation|guard|safety|stable-diffusion|sdxl|\bflux\b|image|video|dall|reranker|clip|segment|detr|sam2?\b|ocr)/i;
+
+export const eModeloDeConversa = (id) => !!id && !NAO_E_CONVERSA.test(String(id));
+
+/** máx. de modelos descobertos por fornecedor que entram na cadeia */
+const TECTO_POR_FORNECEDOR = 80;
+
+/**
  * O que a descoberta guardou em `POST /ia/modelos/descobrir` (`cfg.descobertos`),
  * já filtrado: só fornecedores sem custo, e — onde o fornecedor declara
  * `paid_only` — só os que NÃO são pagos. Um modelo que a própria API diz ser
@@ -164,10 +181,10 @@ export function descobertosSalvos(cfg = {}) {
   for (const [fornec, guardado] of Object.entries(cfg.descobertos || {})) {
     const prov = FORNECEDORES[fornec];
     if (!semCusto(prov)) continue;
-    const itens = Array.isArray(guardado?.modelos) ? guardado.modelos : [];
+    const itens = (Array.isArray(guardado?.modelos) ? guardado.modelos : []).slice(0, TECTO_POR_FORNECEDOR);
     for (const item of itens) {
       const id = String(typeof item === 'string' ? item : item?.id || '');
-      if (!id) continue;
+      if (!id || !eModeloDeConversa(id)) continue;   // embeddings/TTS/imagem não conversam
       const detalhe = typeof item === 'string' ? null : item;
       if (detalhe?.pago === true) continue;            // o fornecedor diz que é pago
       if (!servicoGratuito(prov) && detalhe?.pago == null && !pareceGratuito(id)) continue;
@@ -191,6 +208,7 @@ export function descobertosGratuitos(cfg = {}) {
     for (const modelo of teste.lista) {
       const id = String(modelo || '');
       if (!id || vistos.has(`${fornec}\u0000${id}`)) continue;
+      if (!eModeloDeConversa(id)) continue;
       /* Num gateway misto (OpenRouter, Requesty…) a lista traz modelos pagos:
          só entram os que se anunciam como gratuitos. Num serviço gratuito
          (LLM7, OVH, OpenCode Zen, Pollinations) a lista é toda dela. */

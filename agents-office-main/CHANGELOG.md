@@ -1,3 +1,17 @@
+## 1.43.1 — 28 out 2026 · a descoberta não enche a cadeia de modelos que não conversam
+
+A descoberta correu em produção e provou o ponto — e mostrou o problema. O OVH devolveu
+`whisper-large-v3`, `nvr-tts-en-us`, `bge-m3`, `stable-diffusion-xl-base-v10`: são modelos reais
+dele, mas **não respondem a uma mensagem**. Cada um seria uma tentativa perdida no meio da
+cadeia, e o utilizador veria «todos os modelos falharam» com um fornecedor a funcionar.
+
+`eModeloDeConversa()` exclui pela família do id (embedding, rerank, whisper/tts/asr, difusão,
+imagem, moderação/guard, ocr). É uma lista de **exclusão**: na dúvida deixa passar, porque perder
+um modelo bom é pior do que tentar um que falha uma vez. Tecto de 80 modelos descobertos por
+fornecedor para a cadeia não crescer sem limite.
+
+**Testes:** 546 (1 novo, com os ids que o OVH devolveu a sério).
+
 ## 1.43.0 — 28 out 2026 · os modelos que o fornecedor tem, e não os que eu escrevi à mão
 
 Pedido: «já colocaste todos os modelos disponíveis? quero que coloques todos no motor, e também
