@@ -59,9 +59,11 @@ export default async function handler(req, res) {
   if (q.get('lista') === '1') {
     const cat = await rotasIA(repo, { caminho: '/ia/modelos', metodo: 'GET', env, fetchImpl: fetch });
     const est = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env, fetchImpl: fetch }).catch(() => null);
+    /* a mesma evidência do painel: o registo de uso (quem respondeu de verdade) */
+    const uso = await rotasIA(repo, { caminho: '/ia/uso?limite=400', metodo: 'GET', env, fetchImpl: fetch }).catch(() => null);
     try {
       const { provaDaLista } = await import('./_ia/lista.mjs');
-      res.status(200).json(provaDaLista({ catalogo: cat.corpo, estado: est?.corpo || null }));
+      res.status(200).json(provaDaLista({ catalogo: cat.corpo, estado: est?.corpo || null, uso: uso?.corpo || null }));
     } catch (e) {
       res.status(200).json({ erro: `a regra da lista não carregou neste deploy: ${e.message}`, catalogo: { fornecedores: cat.corpo?.fornecedores?.length ?? null } });
     }

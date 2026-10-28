@@ -16,7 +16,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  opcoesDoCatalogo, notaDaLista, parDeModelo, parDoPasso, chaveDoPar, etiquetaDoModelo, nomeCurto, provasDeGratuitos, DA_CASA,
+  opcoesDoCatalogo, notaDaLista, parDeModelo, parDoPasso, chaveDoPar, etiquetaDoModelo, nomeCurto,
+  provasDeGratuitos, provasDeUso, juntarProvas, DA_CASA,
 } from './src/lista-modelos.js';
 import { modelName, modelId, normModel } from './src/models.js';
 
@@ -197,9 +198,56 @@ test('a prova de fora calcula a mesma lista que o painel (sem segunda opinião)'
   const cat = catalogo();
   const painel = opcoesDoCatalogo(cat);
   const prova = provaDaLista({ catalogo: cat });
+  /* e com a evidência de produção (a rota faz o mesmo que o painel) */
+  const comUso = provaDaLista({ catalogo: cat, uso: { ultimos: [{ fornecedor: 'ovh', modelo: 'Qwen3.5-9B', ok: true, ms: 1200 }] } });
+  assert.equal(comUso.provasLidas, 1);
+  assert.match(comUso.grupos[1].opcoes[0], /provado/);
   assert.equal(prova.totalNoMenu, painel.grupos.reduce((n, g) => n + g.opcoes.length, 0));
   assert.deepEqual(prova.grupos[0].valores, ['sonnet', 'opus', 'fable']);
   assert.deepEqual(prova.grupos[1].valores, painel.grupos[1].opcoes.map((o) => o.valor));
   assert.deepEqual(prova.contagem, painel.contagem);
   assert.equal(prova.nota, notaDaLista(painel.contagem));
+});
+
+/* ---------- 1.52.2 · a evidência de produção (/ia/uso) ---------- */
+test('as provas de produção vêm do registo de uso: só quem respondeu, com a resposta mais rápida', () => {
+  const uso = { ultimos: [
+    { fornecedor: 'pollinations', modelo: 'openai', ok: true, ms: 3200 },
+    { fornecedor: 'pollinations', modelo: 'openai', ok: true, ms: 1800 },
+    { fornecedor: 'pollinations', modelo: 'x-ai/grok-4.20', ok: true, ms: 5697 },
+    { fornecedor: 'llm7', modelo: 'falhou', ok: false, ms: 100 },
+    { fornecedor: 'x', ok: true, ms: 5 },              // sem modelo: não conta
+  ] };
+  const p = provasDeUso(uso);
+  assert.deepEqual(p.provados, [
+    { fornec: 'pollinations', modelo: 'openai' },
+    { fornec: 'pollinations', modelo: 'x-ai/grok-4.20' },
+  ]);
+  assert.equal(p.ms['pollinations\u0000openai'], 1800, 'guarda a resposta mais rápida, não a última');
+  assert.deepEqual(provasDeUso(null), { provados: [], ms: {} });
+});
+
+test('as duas fontes somam-se sem repetir, e a latência menor ganha', () => {
+  const a = { provados: [{ fornec: 'ovh', modelo: 'Qwen3.5-9B' }], ms: { 'ovh\u0000Qwen3.5-9B': 9000 } };
+  const b = { provados: [{ fornec: 'ovh', modelo: 'Qwen3.5-9B' }, { fornec: 'llm7', modelo: 'x' }], ms: { 'ovh\u0000Qwen3.5-9B': 2000, 'llm7\u0000x': 600 } };
+  const j = juntarProvas(a, b);
+  assert.equal(j.provados.length, 2);
+  assert.equal(j.ms['ovh\u0000Qwen3.5-9B'], 2000);
+  assert.equal(j.ms['llm7\u0000x'], 600);
+  assert.deepEqual(juntarProvas(null, undefined), { provados: [], ms: {} });
+});
+
+test('um modelo descoberto só entra na lista se já respondeu (o resto seria uma lista que falha)', () => {
+  const cat = { fornecedores: [{
+    id: 'pollinations', nome: 'Pollinations', comChave: true, gratuito: true,
+    catalogo: [{ modelo: 'openai', gratuito: true }],
+    descobertos: [{ id: 'x-ai/grok-4.20' }, { id: 'community/nunca-testado' }],
+  }] };
+  const provas = provasDeUso({ ultimos: [
+    { fornecedor: 'pollinations', modelo: 'x-ai/grok-4.20', ok: true, ms: 5697 },
+    { fornecedor: 'pollinations', modelo: 'community/nunca-testado', ok: false, ms: 90 },
+  ] });
+  const valores = opcoesDoCatalogo(cat, {}, provas).grupos[1].opcoes.map((o) => o.valor);
+  assert.deepEqual(valores.sort(), ['pollinations|openai', 'pollinations|x-ai/grok-4.20']);
+  assert.equal(valores.includes('pollinations|community/nunca-testado'), false, 'um modelo que falhou não é oferecido');
 });

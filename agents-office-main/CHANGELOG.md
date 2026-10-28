@@ -1,3 +1,22 @@
+## 1.52.2 — 28 out 2026 · «as que aceitaram responder» — com a prova de produção
+
+A 1.52.1 deixou a lista certa mas, em produção, **nenhum modelo aparecia como
+provado**: as provas vinham de `/api/ia/gratuitos`, que só existe no servidor
+local. Na Vercel a evidência é outra — `GET /ia/uso`, o registo de cada pedido
+real (fornecedor, modelo, `ok`, `ms`).
+
+- `provasDeUso()` lê esse registo: só conta `ok: true`, e guarda **a resposta
+  mais rápida** de cada modelo. `juntarProvas()` soma local + produção sem
+  repetir ninguém (e fica com a latência menor).
+- **Modelos descobertos só entram na lista se já responderam.** O Pollinations
+  lista dezenas de modelos `community/…`; oferecê-las todas seria uma lista que
+  falha. Entram as que têm uma resposta registada — que é literalmente o pedido
+  do dono: «todas as ias que aceitaram responder».
+- A prova de fora (`GET /api/prova-chat?lista=1`) usa a mesma evidência e diz
+  quantas provas leu (`provasLidas`).
+
+**Testes:** 685.
+
 ## 1.52.1 — 28 out 2026 · a lista do painel, provada de fora (e um bug das provas)
 
 A 1.52.0 pôs as IAs da Órbita no campo MODELO da aba de tarefas. Esta versão não
