@@ -13,7 +13,7 @@
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
-import { PROVADOS, catalogoDaCadeia, estadoCurto, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
+import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
   const mapa = {};
@@ -131,8 +131,110 @@ const descobrirSePreciso = async ({ forcar = false, fornec: so = null } = {}) =>
   return feitos;
 };
 
+/**
+ * 1.44.0 · PROVAR MODELOS A SÉRIO, UM A UM — é o que transforma «o fornecedor
+ * diz que tem» em «respondeu».
+ *
+ * O 1.43.0 descobriu dezenas de modelos reais (o Pollinations com chave publica
+ * `openai/gpt-5.4-nano`, `x-ai/grok-4.6`, `moonshotai/kimi-k3`…). Mas descobrir
+ * não é funcionar: até haver uma resposta registada, o modelo fica «descoberto»
+ * e a cadeia não ganha nada com ele. Aqui cada modelo leva um pedido curto
+ * verdadeiro; só os que respondem com texto entram em
+ * `cfg.testes[fornec].provados` — e é essa lista que põe o modelo na cadeia.
+ *
+ * Regras:
+ *   · nada de modelos de conversa: embeddings/TTS/imagem são excluídos na origem;
+ *   · tecto de tempo (12 s por modelo) e paralelismo 4, para caber nos 60 s da
+ *     função serverless; o resto fica para a próxima chamada;
+ *   · um modelo que falha NÃO é apagado de lado nenhum — só não é promovido;
+ *   · `forcar: true` volta a provar os já provados (para medir de novo).
+ */
+const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, forcar = false, timeoutMs = 12000 } = {}) => {
+  const cfg = await config();
+  const testes = JSON.parse(JSON.stringify(cfg.testes || {}));
+  const desligados = cfg.desligados || [];
+  const quantos = Math.max(1, Math.min(16, Number(limite) || 9));
+  const paralelo = Math.max(1, Math.min(6, Number(concorrencia) || 4));
+  const descobertos = descobertosSalvos(cfg);
+
+  const jaProvado = (id, modelo) => !!(testes[id]?.provados?.[modelo] && testes[id].provados[modelo].ok !== false);
+  const candidatos = [];
+  for (const id of Object.keys(FORNECEDORES)) {
+    if (so && id !== so) continue;
+    const prov = FORNECEDORES[id];
+    if (!prov || prov.usavel === false || desligados.includes(id)) continue;
+    const chave = valorDaChave(id);
+    if (!chave && !prov.keyless) continue;                 // sem acesso, não se tenta
+    const declarados = modelosDe(id)
+      .filter((m) => m.gratuito !== false)
+      .map((m) => m.modelo)
+      .filter((m) => eModeloDeConversa(m));
+    const achados = descobertos.filter((m) => m.fornecedor === id).map((m) => m.modelo);
+    for (const modelo of [...new Set([...declarados, ...achados])]) {
+      if (!forcar && jaProvado(id, modelo)) continue;
+      candidatos.push({ fornec: id, modelo });
+    }
+  }
+  /* os declarados de cada fornecedor entram primeiro (já trazem etiquetas), e
+     fornecedores com chave real antes dos keyless lentos: é onde há mais fruta */
+  const ordemFornec = Object.keys(FORNECEDORES).filter((id) => !!(chaves[id] && !String(chaves[id]).startsWith('\u0000')));
+  candidatos.sort((a, b) => {
+    const pa = ordemFornec.indexOf(a.fornec); const pb = ordemFornec.indexOf(b.fornec);
+    return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+  });
+  const alvos = candidatos.slice(0, quantos);
+
+  const resultados = [];
+  for (let i = 0; i < alvos.length; i += paralelo) {
+    const grupo = alvos.slice(i, i + paralelo);
+    const feitos = await Promise.all(grupo.map(async ({ fornec, modelo }) => {
+      const prov = FORNECEDORES[fornec];
+      const chave = valorDaChave(fornec);
+      const t0 = Date.now();
+      try {
+        const r = await falar({
+          fornec, prov, chave, modelo,
+          mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
+          maxTokens: 32, temperatura: 0, timeoutMs, fetchImpl,
+        });
+        const texto = String(r?.texto || '').trim();
+        const ms = Date.now() - t0;
+        if (!texto) return { fornec, modelo, ok: false, ms, erro: 'respondeu vazio (modelo de raciocínio com pouco espaço de saída?)' };
+        return { fornec, modelo, ok: true, ms, resposta: texto.slice(0, 40) };
+      } catch (e) {
+        return { fornec, modelo, ok: false, ms: Date.now() - t0, erro: String(e?.message || e).slice(0, 200) };
+      }
+    }));
+    resultados.push(...feitos);
+  }
+
+  const bons = resultados.filter((r) => r.ok);
+  for (const r of bons) {
+    testes[r.fornec] = testes[r.fornec] || {};
+    testes[r.fornec].provados = { ...(testes[r.fornec].provados || {}), [r.modelo]: { ok: true, ms: r.ms, quando: agora() } };
+  }
+  if (bons.length) {
+    try { await repo.ia.config.gravar('testes', testes); } catch { /* sem base, a prova existe mas não persiste */ }
+    cacheConfig = null;
+  }
+  for (const r of bons) {
+    try {
+      await repo.ia.uso.registar({ fornecedor: r.fornec, modelo: r.modelo, agente: 'teste', tipo: 'teste-modelo', ok: true, ms: r.ms, tokens_in: 0, tokens_out: 0, erro: null });
+    } catch { /* registar é útil, não é bloqueante */ }
+  }
+  return {
+    ok: bons.length > 0,
+    testados: resultados.length,
+    provados: bons.length,
+    falhados: resultados.length - bons.length,
+    porProvarRestantes: Math.max(0, candidatos.length - alvos.length),
+    resultados,
+  };
+};
+
   return {
     descobrirSePreciso,
+    provarModelos,
     chaves,
     /* «pronto» = tem chave, ou não precisa dela (keyless). Nunca confundir
        «pronto» com «funcional»: isso é o teste real. */

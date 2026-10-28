@@ -9,6 +9,7 @@
      GET    /ia/agentes                 — identidade, ferramentas e critérios
      GET    /ia/modelos?fornecedor=     — catálogo (e o que já foi descoberto)
      POST   /ia/modelos/descobrir       — lista real do fornecedor (gasta um pedido)
+     POST   /ia/provar-modelos          — prova modelo a modelo (descobertos incluídos)
      POST   /ia/testar                  — pedido real; só isto marca «funcional»
      POST   /ia/chat                    — conversa com um agente (com ferramentas)
      GET    /ia/runs                    — execuções recentes
@@ -287,6 +288,33 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
         }])),
         /* compatibilidade: quem já lia `modelos` deste POST continua a ler */
         modelos: descobertos[todos ? Object.keys(descobertos)[0] : alvo]?.modelos || [],
+      },
+    };
+  }
+
+  /* 1.44.0 · «faz com que uma boa parte dos outros também funcionem».
+     Descobrir não é funcionar: um modelo descoberto só conta para a cadeia depois
+     de responder a um pedido. Aqui prova-se em lote, model a model, com tecto de
+     tempo. Aceita GET porque é idempotente na prática (só grava provas reais) e
+     assim pode ser chamado de um browser ou de uma verificação rápida. */
+  if (limpo === '/ia/provar-modelos' && (m === 'POST' || m === 'GET')) {
+    const pedido = m === 'GET' ? Object.fromEntries(qs.entries()) : corpoDe(corpo);
+    const fornec = String(pedido.fornecedor || '').trim();
+    if (fornec && !FORNECEDORES[fornec]) return { status: 400, corpo: { error: 'fornecedor desconhecido' } };
+    const r = await motor.provarModelos({
+      fornec: fornec || null,
+      limite: Number(pedido.limite) || 9,
+      concorrencia: Number(pedido.concorrencia) || 4,
+      forcar: pedido.forcar === true || pedido.forcar === '1',
+    });
+    return {
+      status: 200,
+      corpo: {
+        ...r,
+        fornecedor: fornec || 'todos',
+        nota: r.provados
+          ? `${r.provados} modelo(s) responderam agora e entram na cadeia; os restantes continuam «por provar» com o motivo de cada um.`
+          : 'Nenhum respondeu agora. Os motivos estão em cada linha — não se promove nada sem uma resposta real.',
       },
     };
   }
