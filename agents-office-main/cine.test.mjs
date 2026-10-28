@@ -453,3 +453,34 @@ test('vista do cine: no modo local o ecrã diz que precisa do servidor', async (
   const html = vistaCine(api.S, { esc });
   assert.match(html, /Ainda sem projectos/);
 });
+
+test('rotas /cine: GET só serve para verificar — gerar exige `confirmar=1`', async () => {
+  const repo = createMemRepo();
+  const semConfirmar = await responder(repo, { caminho: '/cine/gerar?leadId=l1', metodo: 'GET', env: {} });
+  assert.equal(semConfirmar.status, 400);
+  assert.equal(semConfirmar.corpo.codigo, 'confirmar');
+  assert.match(semConfirmar.corpo.erro, /pedido real/);
+});
+
+test('rotas /cine: o GET de preparar escreve o plano (é o mesmo caminho do botão)', async () => {
+  const repo = createMemRepo({ leads: [{ ...CLINICA, dedupe_key: 'x', created_at: new Date().toISOString() }] });
+  const r = await responder(repo, { caminho: '/cine/preparar?leadId=l1&formato=4:5&objetivo=agenda', metodo: 'GET', env: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.versao.brief.formato, '4:5');
+  assert.equal(r.corpo.versao.brief.objetivo, 'agenda');
+  const proj = await responder(repo, { caminho: '/cine/projeto?leadId=l1', metodo: 'GET', env: {} });
+  assert.equal(proj.status, 200);
+});
+
+test('rotas /cine: com `semBytes=1` a verificação recebe os metadados e não o base64', async () => {
+  const repo = createMemRepo({ leads: [{ ...CLINICA, dedupe_key: 'x', created_at: new Date().toISOString() }] });
+  await responder(repo, { caminho: '/cine/preparar?leadId=l1', metodo: 'GET', env: {} });
+  const r = await responder(repo, {
+    caminho: '/cine/gerar?leadId=l1&confirmar=1&semBytes=1&quantidade=1', metodo: 'GET', env: {},
+    fetchImpl: async () => respostaImagem(),
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.geradas, 1);
+  assert.match(r.corpo.imagens[0].dataUrl, /^\[\d+ bytes image\/jpeg\]$/);
+  assert.equal(r.corpo.imagens[0].dataUrl.includes('base64'), false);
+});

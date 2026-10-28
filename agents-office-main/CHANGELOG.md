@@ -1,3 +1,21 @@
+## 1.48.1 — 28 out 2026 · o Cine deixa-se verificar de fora
+
+A 1.48.0 escreve o plano e gera imagens, mas só se podia provar com um browser e
+um clique. Uma verificação honesta de produção tem de conseguir ver o que a
+produção faz — por isso:
+
+- `GET /cine/preparar?leadId=…&formato=…&estilo=…` escreve o plano (o mesmo
+  caminho do botão) e devolve-o. É idempotente na prática: a mesma lead com a
+  mesma brief dá o mesmo plano por regras;
+- `GET /cine/gerar?leadId=…&confirmar=1&semBytes=1` gera — e **exige
+  `confirmar=1`**, porque cada imagem é um pedido real a um serviço alheio. Sem
+  essa palavra a resposta é 400 a explicar porquê;
+- com `semBytes=1` a resposta traz os metadados da imagem (bytes, mime, ms,
+  semente, via) em vez do base64: nem um `fetch_page` nem um registo ficam com
+  um megabyte de imagem dentro.
+
+**Testes:** 620 (3 novos). Nada muda no ecrã nem no que a mesa faz.
+
 ## 1.48.0 — 28 out 2026 · Cine: um lead, um projecto criativo
 
 O pedido foi grande e é o primeiro que muda a natureza do produto: ao abrir uma

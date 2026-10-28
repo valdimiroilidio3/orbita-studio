@@ -1260,32 +1260,66 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     };
   }
 
-  if (caminhoLimpo === '/cine/preparar' && m === 'POST') {
+  /* 1.48.1 · `GET /cine/preparar?leadId=…` existe para uma verificação externa
+     poder ver o plano que a produção escreve — sem browser e sem sessão de
+     escrita. Escreve o plano no projecto (é o mesmo que o botão faz), e é por
+     isso que a geração, essa, exige `confirmar=1` no GET. A decisão é a mesma
+     que a 1.44.0 tomou para `/ia/provar-modelos`: aceitar GET onde o efeito é
+     idempotente e verificável, recusar onde custa dinheiro sem intenção. */
+  if (caminhoLimpo === '/cine/preparar' && (m === 'POST' || m === 'GET')) {
     const cine = await import('./_cine.mjs');
-    const r = await leadDoCine(corpo);
+    const pedido = m === 'GET' ? Object.fromEntries(qs.entries()) : corpo;
+    const r = await leadDoCine(pedido);
     if (r.erro) return r.erro;
     let motor = null;
     try {
       const { criarMotor } = await import('./_ia/motor.mjs');
       motor = criarMotor({ repo, env, fetchImpl });
     } catch { motor = null; }
-    const out = await cine.prepararCine(repo, r.lead, corpo?.brief || {}, { motor });
+    const brief = m === 'GET'
+      ? Object.fromEntries(['objetivo', 'formato', 'estilo', 'plataforma', 'tom'].filter((k) => qs.get(k)).map((k) => [k, qs.get(k)]))
+      : (corpo?.brief || {});
+    const out = await cine.prepararCine(repo, r.lead, brief, { motor });
     if (!out.ok) return { status: 400, corpo: out };
     return { status: 200, corpo: out };
   }
 
-  if (caminhoLimpo === '/cine/gerar' && m === 'POST') {
+  if (caminhoLimpo === '/cine/gerar' && (m === 'POST' || m === 'GET')) {
     const cine = await import('./_cine.mjs');
-    const r = await leadDoCine(corpo);
+    if (m === 'GET' && qs.get('confirmar') !== '1') {
+      return {
+        status: 400,
+        corpo: {
+          ok: false, codigo: 'confirmar',
+          erro: 'gerar por GET só com `confirmar=1`: cada imagem é um pedido real a um serviço alheio. Sem bytes na resposta (`semBytes=1`), o resto vem igual.',
+        },
+      };
+    }
+    const pedido = m === 'POST' ? (corpo || {}) : {
+      leadId: qs.get('leadId'), quantidade: qs.get('quantidade'), modelo: qs.get('modelo'), seed: qs.get('seed'),
+      prompt: qs.get('prompt'), lead: null,
+    };
+    const r = await leadDoCine(pedido);
     if (r.erro) return r.erro;
     const chave = limpo(r.lead.id) || limpo(r.lead.name);
     const quantas = Math.max(1, Math.min(4, Number(corpo?.quantidade) || 1));
     const travessao = cine.travessaoGeracao({ quantas });
     if (!travessao.ok) return { status: 429, corpo: { ok: false, codigo: 'travessao', erro: travessao.erro } };
     const out = await cine.gerarCine(repo, chave, {
-      quantidade: quantas, modelo: corpo?.modelo || null,
-      seed: corpo?.seed ?? null, prompt: corpo?.prompt || null, env, fetchImpl,
+      quantidade: quantas, modelo: pedido?.modelo || null,
+      seed: pedido?.seed ?? null, prompt: pedido?.prompt || null, env, fetchImpl,
     });
+    /* verificação externa: o base64 de uma imagem não pode ir num `fetch_page`
+       nem num registo — a prova fica nos metadados (bytes, mime, ms, semente) */
+    if (m === 'GET' && qs.get('semBytes') === '1') {
+      out.imagens = (out.imagens || []).map((i) => ({ ...i, dataUrl: i.dataUrl ? `[${i.bytes || 0} bytes ${i.mime || ''}]`.trim() : null }));
+      if (out.projeto) {
+        out.projeto = {
+          ...out.projeto,
+          imagens: (out.projeto.imagens || []).map((i) => ({ ...i, dataUrl: i.dataUrl ? `[${i.bytes || 0} bytes]` : null })),
+        };
+      }
+    }
     const status = out.ok ? 200
       : out.codigo === 'semprojecto' || out.codigo === 'semmaster' || out.codigo === 'semprompt' ? 409
         : out.codigo === 'semcreditos' ? 402
