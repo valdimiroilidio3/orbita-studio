@@ -12,7 +12,7 @@ O `alvos` do 1.44.4 (produção, 9 tentativas) revelou três defeitos meus:
 3. **Insistia em modelos que dão 502 sempre.** O `openai-fast` do Pollinations falhou em todas as
    chamadas. Um `avaria`/`modelo` passa a marcar o par de fora 6 h (mecanismo que já existia).
 
-**Testes:** 556 (2 novos).
+**Testes:** 555 (2 novos).
 
 ## 1.44.4 — 28 out 2026 · o lote faz rodízio, e um fornecedor sem quota não o come todo
 
