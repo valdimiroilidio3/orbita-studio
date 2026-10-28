@@ -1,3 +1,12 @@
+## 1.44.3 — 28 out 2026 · «por provar» e «sem quota agora» deixam de parecer a mesma coisa
+
+O `/ia/gratuitos` passa a devolver `bloqueios`: os fornecedores que estão de fora por falha
+recente deles próprios (limite, chave, crédito), com a hora em que o bloqueio expira e o motivo.
+Sem isto, a mesa mostrava um modelo como «por provar» quando a verdade era «não vale a pena
+bater-lhe agora» — e o botão de prova insistia.
+
+**Testes:** 552.
+
 ## 1.44.2 — 28 out 2026 · um fornecedor sem quota não é tentado outra vez
 
 A prova em produção do 1.44.1 correu três vezes e provou mais quatro modelos reais

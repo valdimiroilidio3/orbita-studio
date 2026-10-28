@@ -400,6 +400,11 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         })),
         descobertoAgora: descobriu,
         descobertoEm: Object.fromEntries(Object.entries(cfg.descobertos || {}).map(([k, v]) => [k, v?.quando || null])),
+        /* 1.44.3 · quem está de fora por falha recente do próprio fornecedor.
+           Sem isto, «por provar» e «não vale a pena agora» pareciam a mesma coisa. */
+        bloqueios: Object.entries(cfg.testes || {})
+          .filter(([, t]) => t?.bloqueadoAte && Date.parse(t.bloqueadoAte) > Date.now())
+          .map(([fornec, t]) => ({ fornec, ate: t.bloqueadoAte, motivo: t.bloqueadoPor || null })),
       };
     },
 
