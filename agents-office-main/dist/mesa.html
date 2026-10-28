@@ -1028,7 +1028,7 @@
     </header>
     ${a.erro?`<p class="cine-alerta">${k(a.erro)}</p>`:""}
     ${e.length?`<div class="cine-grelha">${e.map(o=>`<a class="cine-mini" href="#/cine/${k(o.chave)}">
-      ${o.aprovada?.dataUrl?`<img src="${o.aprovada.dataUrl}" alt="" loading="lazy" decoding="async">`:'<div class="cine-mini-vazio">sem pe\xE7a aprovada</div>'}
+      ${(o.capa||o.aprovada)?.dataUrl?`<img src="${(o.capa||o.aprovada).dataUrl}" alt="" loading="lazy" decoding="async">`:'<div class="cine-mini-vazio">ainda sem pe\xE7a</div>'}
       <div class="cine-mini-txt"><b>${k(o.lead?.name||o.chave)}</b>
         <span class="cine-min">${k([o.lead?.category,o.lead?.city].filter(Boolean).join(" \xB7 ")||"sem nicho")} \xB7 ${o.imagens} pe\xE7a(s)${o.temMaster?` \xB7 ${o.via==="ia"?"plano por IA":"plano por regras"}`:""}</span>
         ${o.conceito?`<span class="cine-conceito">${k(String(o.conceito).slice(0,110))}\u2026</span>`:""}

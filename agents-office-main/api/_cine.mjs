@@ -944,10 +944,18 @@ export async function listarProjectos(repo) {
       conceito: p.master?.seccoes?.conceito || null,
       imagens: (p.imagens || []).filter((i) => !i.falhou).length,
       aprovada: p.aprovada ? ((p.imagens || []).find((i) => i.id === p.aprovada) || null) : null,
+      /* 1.48.3 · a capa da lista: a aprovada se houver; senão a mais recente.
+         Um projecto com peças mas sem aprovação aparecia como «sem peça
+         aprovada» — verdade literal e má informação: havia uma peça ali. */
+      capa: (p.aprovada ? (p.imagens || []).find((i) => i.id === p.aprovada) : (p.imagens || []).find((i) => !i.falhou && i.dataUrl)) || null,
       temMaster: !!p.master,
     }))
     .sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')))
-    .map((p) => ({ ...p, aprovada: p.aprovada ? { id: p.aprovada.id, dataUrl: p.aprovada.dataUrl || null, modelo: p.aprovada.modelo } : null }));
+    .map((p) => ({
+      ...p,
+      capa: p.capa ? { id: p.capa.id, dataUrl: p.capa.dataUrl || null, modelo: p.capa.modelo } : null,
+      aprovada: p.aprovada ? { id: p.aprovada.id, dataUrl: p.aprovada.dataUrl || null, modelo: p.aprovada.modelo } : null,
+    }));
 }
 
 export const _interno = { chavePollinations, aliviarImagens, SETORES, SETOR_GENERICO, MAX_BYTES };

@@ -14,6 +14,11 @@ A escrita é local primeiro e remota depois: se o Mem0 recusar, **a nota fica
 guardada** e a resposta di-lo (`mem0.ok: false`). O Orchestrator passa a receber
 no prompt se a memória que consultou foi semântica ou lexical.
 
+Também entra aqui o que ficou no PR #102: a lista do Cine mostrava
+**«sem peça aprovada»** num projecto com uma peça gerada — verdade literal e má
+informação. A capa passa a ser a aprovada quando existe e, se não houver, a mais
+recente.
+
 Rotas novas ou alteradas:
 
 | rota | o que faz |
@@ -33,7 +38,7 @@ OpenClaw — construir o lote a partir do workspace (`SOUL/IDENTITY/USER/MEMORY.
 e os diários dos últimos 30 dias), verificar a chave e enviar o lote para a
 Órbita. O runbook está em `docs/IA.md` §16.
 
-**Testes:** 632 (11 novos: sem chave, chave mascarada, 401/429/rede, junção sem
+**Testes:** 633 (11 novos do Mem0, 1 da capa do Cine: sem chave, chave mascarada, 401/429/rede, junção sem
 repetição, escrita que sobrevive ao Mem0 em baixo, plano vs `confirmar`, rotas).
 
 ## 1.48.2 — 28 out 2026 · a imagem do Cine descarrega-se

@@ -511,3 +511,17 @@ test('cine: a imagem serve-se como imagem (bytes, tipo e nome), não embrulhada 
   assert.equal(sem.extra.semente, img.seed);
   assert.match(sem.erro, /duas mais recentes/);
 });
+
+test('cine: a lista mostra a peça mais recente mesmo sem aprovação (a capa não é um vazio)', async () => {
+  const repo = createMemRepo();
+  await prepararCine(repo, CLINICA, {}, { motor: null });
+  await gerarCine(repo, 'l1', { quantidade: 1, fetchImpl: async () => respostaImagem() });
+  let lista = await listarProjectos(repo);
+  assert.equal(lista[0].aprovada, null, 'ainda não há aprovação');
+  assert.ok(lista[0].capa?.dataUrl, 'a capa tem de ser a peça que existe, não um vazio');
+
+  const arquivo = await lerArquivo(repo);
+  await aprovarImagem(repo, 'l1', arquivo.projetos.l1.imagens[0].id);
+  lista = await listarProjectos(repo);
+  assert.equal(lista[0].capa.id, lista[0].aprovada.id, 'com aprovação, a capa passa a ser a aprovada');
+});
