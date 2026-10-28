@@ -846,3 +846,16 @@ test('provar-modelos: o fornecedor que deu limite fica de fora da chamada seguin
   await motor3.provarModelos({ fornec: 'opencode', limite: 1, concorrencia: 1 });
   assert.equal(chamadas, 2, 'o bloqueio não expirou');
 });
+
+test('gratuitos: os bloqueios do fornecedor aparecem (e os expirados não)', async () => {
+  const repo = createMemRepo();
+  await repo.ia.config.gravar('testes', {
+    opencode: { bloqueadoAte: new Date(Date.now() + 60 * 60 * 1000).toISOString(), bloqueadoPor: 'limite de utilização em opencode' },
+    keka: { bloqueadoAte: new Date(Date.now() - 60 * 60 * 1000).toISOString(), bloqueadoPor: 'velho' },
+  });
+  const motor = criarMotor({ repo, env: {}, fetchImpl: async () => { throw new Error('sem rede'); } });
+  const gr = await motor.gratuitos();
+  assert.equal(gr.bloqueios.length, 1);
+  assert.equal(gr.bloqueios[0].fornec, 'opencode');
+  assert.match(gr.bloqueios[0].motivo, /limite/);
+});
