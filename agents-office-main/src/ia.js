@@ -371,13 +371,24 @@ export function vistaIA(S, { esc, hhmm, when }) {
       <h3 style="margin-top:0">Memória <span class="ia-sub">· plugins do Graft (Apache-2.0)</span></h3>
       ${ia.memoria?.erro
         ? `<div class="ia-faixa bad">${esc(ia.memoria.erro)}</div>`
-        : `<p class="ia-sub" style="margin-top:0">${ia.memoria?.total || 0} notas · ${ia.memoria?.usos || 0} consultas registadas.
-             A procura é por palavras (lexical), não por embeddings — o resultado di-lo. O Orchestrator consulta a memória antes de planear e escreve uma nota no fim de cada execução concluída.</p>
+        : `${(() => {
+            const m = ia.memoria?.mem0 || {};
+            const marca = m.ligada ? 'ok' : (m.configurada ? 'bad' : 'warn');
+            const titulo = m.ligada
+              ? `Memória semântica ligada (Mem0) · chave ${esc(m.chave || '')}${m.ms ? ` · ${m.ms} ms` : ''}`
+              : m.configurada
+                ? `Mem0 configurado mas a não responder: ${esc(m.porque || 'sem resposta')}`
+                : `Memória semântica desligada — ${esc(m.porque || 'falta MEM0_API_KEY')}`;
+            return `<div class="ia-faixa ${marca}">${titulo}</div>`;
+          })()}
+           <p class="ia-sub" style="margin-top:0">${ia.memoria?.total || 0} notas locais · ${ia.memoria?.usos || 0} consultas registadas.
+             A camada local procura por palavras; a do Mem0 procura por sentido. O Orchestrator consulta as duas antes de planear e escreve uma nota no fim de cada execução concluída — localmente e, havendo chave, também no Mem0.</p>
            ${(ia.memoria?.etiquetas || []).length ? `<div style="margin-bottom:8px">${ia.memoria.etiquetas.map((e) => etiqueta(`${esc(e.etiqueta)} · ${e.notas}`, '')).join(' ')}</div>` : ''}
            <div class="ia-acts" style="gap:6px;flex-wrap:wrap">
              <input id="iaMemBusca" class="ia-input" style="flex:1;min-width:180px" placeholder="procurar na memória…" />
              <button class="btn quiet small" data-act="ia-memoria-procurar">Procurar</button>
              <button class="btn quiet small" data-act="ia-memoria-auditar">Auditar</button>
+             ${ia.memoria?.mem0?.ligada ? `<button class="btn quiet small" data-act="ia-memoria-enviar">Enviar as notas para o Mem0</button>` : ''}
            </div>
            <div id="iaMemResultado" class="ia-sub" style="margin-top:8px"></div>
            <details style="margin-top:10px"><summary class="ia-sub">Guardar uma nota</summary>
@@ -595,8 +606,11 @@ export async function accaoIA(nome, el, api) {
     try {
       const r = await call('/ia/memoria/procurar', 'POST', { consulta, limite: 8 });
       if (!alvo) return true;
+      const comoProcurou = r.modo === 'mem0+lexical'
+        ? 'semântica (Mem0) + lexical'
+        : `lexical${r.mem0?.configurada ? (r.mem0?.motivo ? ` — o Mem0 falhou: ${esc(r.mem0.motivo)}` : '') : ''}`;
       alvo.innerHTML = r.achados.length
-        ? `<b>${r.achados.length} nota(s)</b> · procura ${esc(r.modo)}<ul style="margin:6px 0 0 16px">${r.achados.map((n) => `<li><b>${esc(n.titulo)}</b> ${n.pontos ? etiqueta(`pontos ${n.pontos}`, '') : ''}<div class="ia-sub">${esc(String(n.texto).slice(0, 240))}</div></li>`).join('')}</ul>`
+        ? `<b>${r.achados.length} nota(s)</b> · procura ${esc(comoProcurou)}<ul style="margin:6px 0 0 16px">${r.achados.map((n) => `<li><b>${esc(n.titulo)}</b> ${etiqueta(n.origem === 'mem0' ? 'mem0' : 'local', '')} ${n.pontos ? etiqueta(`pontos ${n.pontos}`, '') : ''}<div class="ia-sub">${esc(String(n.texto).slice(0, 240))}</div></li>`).join('')}</ul>`
         : `Nada parecido com «${esc(consulta)}» — a memória tem um buraco, não uma resposta.`;
     } catch (e) { toast(e.message, true); }
     return true;
@@ -611,6 +625,21 @@ export async function accaoIA(nome, el, api) {
       toast(r.resumo || 'nota guardada');
       const t = document.getElementById('iaMemTitulo'); if (t) t.value = '';
       const x = document.getElementById('iaMemTexto'); if (x) x.value = '';
+      await carregarIA(api); paint();
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-memoria-enviar') {
+    const alvo = document.getElementById('iaMemResultado');
+    try {
+      const seguir = await call('/ia/memoria/importar', 'POST', { origem: 'locais', confirmar: true });
+      if (alvo) {
+        alvo.innerHTML = `<b>${seguir.importados || 0} de ${seguir.total || 0} nota(s) no Mem0</b>`
+          + (seguir.falhados ? ` · <span class="ia-sub">${seguir.falhados} falharam: ${esc((seguir.erros || []).map((e) => e.erro).join(' · '))}</span>` : '')
+          + `<div class="ia-sub">o local não foi tocado: o Mem0 recebe uma cópia para a procura por sentido.</div>`;
+      }
+      toast(seguir.nota || 'enviado');
       await carregarIA(api); paint();
     } catch (e) { toast(e.message, true); }
     return true;

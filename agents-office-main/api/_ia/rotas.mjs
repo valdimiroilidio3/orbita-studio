@@ -23,12 +23,14 @@
      GET    /ia/uso                     — pedidos, latência, erros, tokens
      PATCH  /ia/config                  — desligar fornecedores, modelo por agente
      1.19.0
-     GET    /ia/memoria                 — estado da memória (plugins do Graft)
-     POST   /ia/memoria                 — guardar uma nota
-     POST   /ia/memoria/procurar        — procurar (lexical; o modo vai na resposta)
+     GET    /ia/memoria                 — estado da memória (local + Mem0, com a razão)
+     POST   /ia/memoria                 — guardar uma nota (local e Mem0)
+     POST   /ia/memoria/procurar        — procurar (o `modo` diz lexical ou mem0+lexical)
      POST   /ia/memoria/aprender        — ingestão em lote (plano → confirmar)
      GET    /ia/memoria/auditar         — duplicados, notas curtas, paradas
-     DELETE /ia/memoria/:id             — apagar uma nota
+     DELETE /ia/memoria/:id             — apagar uma nota (aceita `mem0:<id>`)
+     1.49.0
+     POST   /ia/memoria/importar        — lote para o Mem0 (formato do OpenClaw, plano → confirmar)
      GET    /media/estado               — estúdio: worker vivo? pipelines?
      GET    /media/trabalhos            — fila e resultados
      POST   /media/trabalhos            — pedir um vídeo/imagem/áudio/animação/3D
@@ -44,6 +46,7 @@ import { FERRAMENTAS, INDISPONIVEIS, executar as executarFerramenta, paraModelo 
 import { criarMotor } from './motor.mjs';
 import { correr } from './orquestrador.mjs';
 import * as memoria from './memoria.mjs';
+import * as mem0 from './mem0.mjs';
 import * as media from './media.mjs';
 import { TIPOS } from './router.mjs';
 
@@ -69,8 +72,8 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
        tiver (SQL por correr), diz-se em vez de rebentar a página toda. */
     let resumoMemoria = null;
     try {
-      const e = await memoria.estado(repo);
-      resumoMemoria = { total: e.total, usos: e.usos, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5) };
+      const e = await memoria.estado(repo, { env, fetchImpl });
+      resumoMemoria = { total: e.total, usos: e.usos, modo: e.modo, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5), mem0: e.mem0 };
     } catch (e) { resumoMemoria = { erro: `a memória ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
     let estudio = null;
     try { estudio = await media.estado(repo, env); } catch (e) { estudio = { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
@@ -444,17 +447,28 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
 
   /* ---------------- 1.19.0 · memória (Graft) ---------------- */
   if (limpo === '/ia/memoria' && m === 'GET') {
-    return { status: 200, corpo: await memoria.estado(repo) };
+    return { status: 200, corpo: await memoria.estado(repo, { env, fetchImpl }) };
   }
 
   if (limpo === '/ia/memoria' && m === 'POST') {
-    const r = await memoria.guardar(repo, corpoDe(corpo));
+    const r = await memoria.guardar(repo, corpoDe(corpo), { env, fetchImpl });
     return { status: r.ok ? 201 : 400, corpo: r.ok ? r : { error: r.erro } };
   }
 
   if (limpo === '/ia/memoria/procurar' && m === 'POST') {
     const c = corpoDe(corpo);
-    return { status: 200, corpo: await memoria.procurar(repo, { consulta: c.consulta, projeto: c.projeto || null, limite: Number(c.limite) || 8 }) };
+    return { status: 200, corpo: await memoria.procurar(repo, { consulta: c.consulta, projeto: c.projeto || null, limite: Number(c.limite) || 8, env, fetchImpl }) };
+  }
+
+  if (limpo === '/ia/memoria/importar' && m === 'POST') {
+    const c = corpoDe(corpo);
+    const r = await memoria.importar(repo, {
+      itens: Array.isArray(c.itens) ? c.itens : null,
+      origem: c.origem || null,
+      confirmar: !!c.confirmar,
+      env, fetchImpl,
+    });
+    return { status: r.ok ? 200 : 400, corpo: r.ok ? r : { error: r.erro, mem0: r.mem0 } };
   }
 
   if (limpo === '/ia/memoria/aprender' && m === 'POST') {
@@ -468,6 +482,12 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   }
 
   if (seg[1] === 'memoria' && seg.length === 3 && m === 'DELETE') {
+    /* 1.49.0 · `mem0:<id>` apaga a memória semântica; o resto apaga a nota local. */
+    if (String(seg[2]).startsWith('mem0:')) {
+      const cfg = mem0.config(env);
+      const r = await mem0.apagar(cfg, seg[2], { fetchImpl });
+      return { status: r.ok ? 200 : 400, corpo: r.ok ? r : { error: r.motivo } };
+    }
     await repo.ia.memoria.apagar(seg[2]);
     return { status: 200, corpo: { ok: true, apagada: seg[2] } };
   }

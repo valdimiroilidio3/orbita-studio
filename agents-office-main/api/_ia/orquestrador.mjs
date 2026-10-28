@@ -130,13 +130,19 @@ export async function correr({
       /* 1.19.0 · antes de planear, ouvir a memória (plugins do Graft): notas
          parecidas poupam raciocínio e evitam repetir decisões antigas. */
       let notas = [];
+      let comoProcurou = 'lexical';
       try {
         const { procurar } = await import('./memoria.mjs');
-        notas = (await procurar(repo, { consulta: objetivo, limite: 5 })).achados || [];
+        const r = await procurar(repo, { consulta: objetivo, limite: 5, env });
+        notas = r.achados || [];
+        comoProcurou = r.modo || 'lexical';
       } catch { notas = []; }
+      /* 1.49.0 · com Mem0 configurado a procura é semântica e o prompt di-lo —
+         o modelo merece saber se o que recebe é «por sentido» ou «por palavras». */
+      const deOnde = comoProcurou === 'mem0+lexical' ? 'procura semântica (Mem0) sobre a lexical' : 'procura lexical, por palavras';
       const blocoMemoria = notas.length
-        ? `\n\nNotas da memória que podem ser próximas (procura lexical; confirma antes de usar):\n${notas.map((n) => `- ${n.titulo}: ${String(n.texto).slice(0, 300)}`).join('\n')}`
-        : '\n\nA memória não tem nada parecido com este objectivo.';
+        ? `\n\nNotas da memória que podem ser próximas (${deOnde}; confirma antes de usar):\n${notas.map((n) => `- ${n.titulo}: ${String(n.texto).slice(0, 300)}`).join('\n')}`
+        : `\n\nA memória não tem nada parecido com este objectivo (${deOnde}).`;
       const planoR = await motor.pedir('plano', [
         { role: 'system', content: `${promptDe('orchestrator')}\n\nResponde SÓ com um objecto JSON, sem prosa, neste formato:\n{\"passos\":[{\"agente\":\"research|design|frontend|backend|qa|creative|reviewer\",\"titulo\":\"...\",\"instrucao\":\"...\",\"criterio\":\"...\"}],\"limites\":[\"o que não é possível nesta instalação\"]}` },
         { role: 'user', content: `Objectivo do dono:\n${objetivo}\n\nContexto real da mesa agora: ${JSON.stringify(contextoMesa.dados || {})}${blocoMemoria}\n\nFerramentas que existem: ${Object.keys(FERRAMENTAS).join(', ')}.\nNÃO existem: ${INDISPONIVEIS.map((i) => i.id).join(', ')}.` },
@@ -252,7 +258,7 @@ Responde SÓ com JSON: {"decisao":"aprovado|com_ressalvas|rejeitado","justificac
         etiquetas: ['execucao', ...agentesUsados],
         fonte: `execução ${run.id}`,
         projeto: 'orbita',
-      });
+      }, { env });
     } catch { /* memória é um extra: não parte o trabalho */ }
 
     return fim;
