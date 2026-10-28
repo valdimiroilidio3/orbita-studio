@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
-  opcoesDoCatalogo, notaDaLista, parDeModelo, parDoPasso, chaveDoPar, etiquetaDoModelo, nomeCurto, DA_CASA,
+  opcoesDoCatalogo, notaDaLista, parDeModelo, parDoPasso, chaveDoPar, etiquetaDoModelo, nomeCurto, provasDeGratuitos, DA_CASA,
 } from './src/lista-modelos.js';
 import { modelName, modelId, normModel } from './src/models.js';
 
@@ -168,4 +168,38 @@ test('quando o modelo escolhido não responde, a razão é dele — não se troc
       return true;
     },
   );
+});
+
+/* ---------- 1.52.1 · as provas e a prova de fora ---------- */
+test('as provas do servidor local são lidas nas duas formas (catalogo e modelos)', () => {
+  /* a rota local (1.32.0) responde com `modelos`; a da mesa, com `catalogo`. Ler só
+     uma das formas fazia a ordem por evidência nunca se aplicar no `npm start`. */
+  const local = { ok: true, modelos: [{ fornec: 'llm7', modelo: 'codestral-latest', ms: 1500 }, { fornec: 'ovh', modelo: 'gpt-oss-120b' }] };
+  const p1 = provasDeGratuitos(local);
+  assert.deepEqual(p1.provados, [{ fornec: 'llm7', modelo: 'codestral-latest' }, { fornec: 'ovh', modelo: 'gpt-oss-120b' }]);
+  assert.equal(p1.ms['llm7\u0000codestral-latest'], 1500);
+
+  const mesa = { catalogo: [{ fornec: 'ovh', modelo: 'Qwen3.5-9B', ms: 8644 }] };
+  const p2 = provasDeGratuitos(mesa);
+  assert.deepEqual(p2.provados, [{ fornec: 'ovh', modelo: 'Qwen3.5-9B' }]);
+  assert.equal(p2.ms['ovh\u0000Qwen3.5-9B'], 8644);
+
+  /* as duas juntas não repetem ninguém */
+  const ambas = provasDeGratuitos({ modelos: [{ fornec: 'llm7', modelo: 'x', ms: 10 }], medido: [{ fornec: 'llm7', modelo: 'x', ms: 10 }] });
+  assert.equal(ambas.provados.length, 1);
+
+  assert.deepEqual(provasDeGratuitos(null), { provados: [], ms: {} });
+  assert.deepEqual(provasDeGratuitos({ nada: true }), { provados: [], ms: {} });
+});
+
+test('a prova de fora calcula a mesma lista que o painel (sem segunda opinião)', async () => {
+  const { provaDaLista } = await import('./api/_ia/lista.mjs');
+  const cat = catalogo();
+  const painel = opcoesDoCatalogo(cat);
+  const prova = provaDaLista({ catalogo: cat });
+  assert.equal(prova.totalNoMenu, painel.grupos.reduce((n, g) => n + g.opcoes.length, 0));
+  assert.deepEqual(prova.grupos[0].valores, ['sonnet', 'opus', 'fable']);
+  assert.deepEqual(prova.grupos[1].valores, painel.grupos[1].opcoes.map((o) => o.valor));
+  assert.deepEqual(prova.contagem, painel.contagem);
+  assert.equal(prova.nota, notaDaLista(painel.contagem));
 });

@@ -30,7 +30,7 @@ import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EF
 import { explicarFalha, lerCorpo, motorNaMesa, ROTA_DA_MESA } from './falhas.js';
 /* 1.52.0 · a lista do painel: os três da casa e todas as IAs da Órbita que
    aceitaram responder (o dono: «essa lista deve aumentar»). */
-import { opcoesDoCatalogo, notaDaLista, parDeModelo, DA_CASA } from './lista-modelos.js';
+import { opcoesDoCatalogo, notaDaLista, parDeModelo, provasDeGratuitos, DA_CASA } from './lista-modelos.js';
 
 // palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
@@ -293,10 +293,12 @@ export function initTasks(ctx) {
   async function lerGratuitos() {
     const r = await fetch(`${API}/ia/gratuitos`, { headers: { accept: 'application/json' } });
     if (!r.ok) return null;
-    const j = await r.json().catch(() => null);
-    return j && Array.isArray(j.catalogo) ? j : null;
+    return await r.json().catch(() => null);
   }
+  let catalogoAPedido = false;   // 1.52.1 · um pedido de cada vez: `connect()` e o arranque pediam duas vezes
   async function carregarCatalogo() {
+    if (catalogoAPedido) return false;
+    catalogoAPedido = true;
     try {
       const [modelos, estado, gratuitos] = await Promise.all([
         lerIa('/ia/modelos'),
@@ -305,12 +307,7 @@ export function initTasks(ctx) {
       ]);
       /* as provas do servidor local: quem já respondeu e quanto demorou. Na página
          publicada esta rota não existe — a lista fica pela ordem do catálogo. */
-      const provas = { provados: [], ms: {} };
-      for (const p of (gratuitos?.medido || [])) {
-        if (!p || !p.fornec || !p.modelo) continue;
-        provas.provados.push({ fornec: p.fornec, modelo: p.modelo });
-        if (Number(p.ms) > 0) provas.ms[`${p.fornec}\u0000${p.modelo}`] = Number(p.ms);
-      }
+      const provas = provasDeGratuitos(gratuitos);
       catalogoTarefas = { modelos, estado, provas };
       pintarMenuModelo();
       return true;
@@ -320,6 +317,8 @@ export function initTasks(ctx) {
       const fora = panel.querySelector('.tp-model-fora');
       if (fora) { fora.textContent = catalogoNota; fora.hidden = false; }
       return false;
+    } finally {
+      catalogoAPedido = false;   // uma falha pode ser tentada outra vez ao abrir o painel
     }
   }
   function setOfficeModel(k) { officeModel = parDeModelo(k) ? k : (normModel(k) || DEFAULT_MODEL); if (!modelTouched) P_.model.value = officeModel; paintDefaults(); }

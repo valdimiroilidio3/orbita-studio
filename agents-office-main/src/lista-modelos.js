@@ -141,6 +141,28 @@ export function opcoesDoCatalogo(catalogo, estado = {}, provas = {}) {
   return { grupos, contagem: { casa: DA_CASA.length, orbita: opcoes.length, semChave, desligados, inuteis }, nomes };
 }
 
+/* 1.52.1 · as provas do servidor local, em qualquer das duas formas que a rota
+   já devolveu: `catalogo` (Vercel/1.43+) e `modelos` (o resumo local, 1.32+).
+   Antes, ler só `catalogo` fazia a lista ignorar as provas em silêncio — e a
+   ordem por evidência nunca se aplicava no `npm start`. */
+export function provasDeGratuitos(resposta) {
+  const j = resposta && typeof resposta === 'object' ? resposta : null;
+  const lista = j && (Array.isArray(j.catalogo) ? j.catalogo : Array.isArray(j.modelos) ? j.modelos : null);
+  const provados = [], ms = {};
+  for (const p of lista || []) {
+    if (!p || !p.fornec || !p.modelo) continue;
+    provados.push({ fornec: p.fornec, modelo: p.modelo });
+    if (Number(p.ms) > 0) ms[`${p.fornec}\u0000${p.modelo}`] = Number(p.ms);
+  }
+  /* e o que veio em `medido` (a lista curada) também conta */
+  for (const p of (j && Array.isArray(j.medido) ? j.medido : [])) {
+    if (!p || !p.fornec || !p.modelo) continue;
+    if (!provados.some((x) => x.fornec === p.fornec && x.modelo === p.modelo)) provados.push({ fornec: p.fornec, modelo: p.modelo });
+    if (Number(p.ms) > 0 && !ms[`${p.fornec}\u0000${p.modelo}`]) ms[`${p.fornec}\u0000${p.modelo}`] = Number(p.ms);
+  }
+  return { provados, ms };
+}
+
 /** O par que governa um passo, na mesma precedência da casa:
     tarefa > rotina > agente > escritório. `null` = nenhum par escolhido (o CLI). */
 export function parDoPasso({ tarefa, rotina, agente, escritorio } = {}) {

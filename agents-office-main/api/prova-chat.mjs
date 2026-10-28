@@ -2,6 +2,7 @@
    1.51.0 · PROVA DA CONVERSA — 28 out 2026
 
    `GET /api/prova-chat?token=<PROVA_TOKEN>&fornecedor=&modelo=&esforco=&pergunta=`
+   `GET /api/prova-chat?lista=1`  — o menu do painel de tarefas, calculado de fora
 
    Uma conversa a sério, em produção, pela mesma função que o `/api/rpc` usa
    (`rotasIA` → `POST /ia/chat`): o mesmo catálogo, a mesma validação do par
@@ -49,6 +50,23 @@ export default async function handler(req, res) {
   const env = envDoPedido(req);
   const repo = createSupabaseRepo(base);
   const saida = { versao: '1.51.0', rota: '/ia/chat', pedido: { fornecedor: corpo.fornecedor || null, modelo: corpo.modelo || null, esforco: corpo.esforco || null } };
+
+  /* ---- a LISTA do painel, calculada aqui (`?lista=1`) ------------------
+     1.52.1 · o painel de tarefas constrói o menu do modelo no browser. Esta
+     leitura mostra, de fora, exactamente o que ele vai mostrar: os grupos, os
+     modelos que podem responder, os que ficam de fora e a nota. É o mesmo
+     código (`src/lista-modelos.js`), não uma segunda opinião. */
+  if (q.get('lista') === '1') {
+    const cat = await rotasIA(repo, { caminho: '/ia/modelos', metodo: 'GET', env, fetchImpl: fetch });
+    const est = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env, fetchImpl: fetch }).catch(() => null);
+    try {
+      const { provaDaLista } = await import('./_ia/lista.mjs');
+      res.status(200).json(provaDaLista({ catalogo: cat.corpo, estado: est?.corpo || null }));
+    } catch (e) {
+      res.status(200).json({ erro: `a regra da lista não carregou neste deploy: ${e.message}`, catalogo: { fornecedores: cat.corpo?.fornecedores?.length ?? null } });
+    }
+    return;
+  }
 
   /* ---- o ENSAIO: o catálogo real, a escolha validada, o esforço aplicado ---- */
   if (!comToken) {
