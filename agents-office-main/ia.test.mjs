@@ -929,3 +929,15 @@ test('provar-modelos: um modelo de raciocínio tem segunda oportunidade com mais
   assert.equal(r.resultados[0].tentativas, 2);
   assert.equal(r.provados, 1);
 });
+
+test('provar-modelos: um modelo de áudio/tempo-real sai da cadeia e não fica «por provar»', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const fetchImpl = async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ error: { message: 'Model "openai/gpt-transcribe" is a audio model and cannot be used on the text endpoint.' } }) });
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'pollinations', limite: 1, concorrencia: 1 });
+  const alvo = r.alvos[0];
+  assert.equal(r.resultados[0].codigo, 'naoConversa');
+  assert.equal(r.resultados[0].doFornecedor, false, 'não pode bloquear o fornecedor inteiro');
+  assert.equal(foraDoAr(alvo.fornec, alvo.modelo), true, 'o modelo que não conversa continua a ser tentado');
+});
