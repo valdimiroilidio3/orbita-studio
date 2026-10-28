@@ -1,3 +1,35 @@
+## 1.39.0 — 27 out 2026 · todas as gratuitas, provadas com um clique
+
+«Implementa todas as gratuitas» não se cumpre a listar: cumpre-se a provar. O
+catálogo já tinha os modelos; o que faltava era o caminho entre «existe» e
+«respondeu» — e o escritório a arrancar sem chave nenhuma.
+
+**1 · `POST /ia/provar-gratuitas`.** Percorre os fornecedores que **não pedem
+chave nova** — os keyless (LLM7, OVH, Pollinations) e os que publicam a chave
+(OpenCode Zen) —, faz um pedido real a cada um (até três modelos por fornecedor,
+tecto de 6 fornecedores por chamada) e grava o resultado na mesma prova que
+`/ia/testar` usa. Só o que responde passa a `funcional`; o que falha fica com o
+motivo escrito, um por um. Sem resposta real, a resposta é `ok: false`.
+
+**2 · Um botão, não uma tabela.** No cartão «IA gratuita» do Control Center há
+agora **«Provar todas as sem chave»**. Carrega-se, corre, e a lista deixa de ter
+«por provar».
+
+**3 · O escritório arranca sem chave — provado.** Um teste corre o motor real do
+escritório (`providers.mjs`) com o ambiente limpo de chaves: o motor activo é a
+cadeia gratuita (`gratis`), o `ask` devolve texto, o `modelId` diz **quem**
+respondeu (`llm7/codestral-latest`) e `tools` vem vazio — porque esta cadeia
+escreve e não mexe. É isto que faz a diferença entre «há uma IA configurada nesta
+máquina» e «as salas conseguem começar a trabalhar».
+
+**Testes:** 506/506 (5 novos: prova keyless com `fetch` falso, falha com motivo,
+tecto respeitado, escolha explícita de fornecedores, e o arranque do escritório
+sem chaves). Fumo da mesa verde; `check.mjs` 94/95 (falta Chromium).
+
+**Limitação declarada:** o `fetch` é falso e o contrato é o real. A prova de rede
+acontece em produção no momento em que se carrega no botão — e o resultado fica
+gravado em `/ia/gratuitos`, não numa frase deste registo.
+
 ## 1.38.0 — 27 out 2026 · mandar mensagens a sério (e o funil a andar)
 
 O dono foi taxativo: «mandar mensagens aos clientes tem de ser real e muito
