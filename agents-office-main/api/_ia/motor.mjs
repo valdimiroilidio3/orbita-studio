@@ -181,6 +181,14 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
   const paralelo = Math.max(1, Math.min(6, Number(concorrencia) || 4));
   const descobertos = descobertosSalvos(cfg);
 
+  /* 1.47.5 · o lote de prova é quem MAIS precisa da memória de «fora» — e era o
+     único que não a restaurava (só `falar` chamava `restaurarFora`). Em produção,
+     28 out 2026, às 15:48, um arranque a frio depois do deploy voltou a tentar os
+     três TypeSafe do Pollinations, o `gpt-5-nano` e as `atrium-*` já recusados,
+     gastando as 6 tentativas do lote todas em modelos que já se sabia estarem
+     fora. A memória estava gravada na base; ninguém a lia. */
+  await restaurarFora();
+
   /* 1.44.5 · os curados da lista (PROVADOS) também já responderam: sem isto,
      a prova voltava a tentar `codestral-latest` e `gpt-oss-120b` em cada lote —
      viu-se em produção a 28 out 2026, 3 das 9 tentativas foram repetições. */

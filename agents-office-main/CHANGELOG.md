@@ -1,3 +1,23 @@
+## 1.47.5 — 28 out 2026 · o lote de prova não lia a própria memória
+
+Apanhado na chamada seguinte ao deploy da 1.47.4, em produção. O lote devolveu
+`deFora: []`, `deForaQuantos: 0` — e gastou as **6 tentativas** a repetir
+exactamente os modelos que ele próprio tinha mandado calar 3 minutos antes
+(`vllm-sr/d3`, `microsoft/microsoft-decision-1`, `respan/span-01-lite`,
+`openai/gpt-5-nano`, as `atrium-*`).
+
+A causa: a memória de «fora» (6 h, gravada na base desde a 1.32.0) era
+restaurada em `falar()` e **nunca** em `provarModelos()`. Em serverless cada
+invocação começa num processo novo, por isso o lote arrancava sempre com a
+memória vazia e pagava outra vez os mesmos erros — o mesmo defeito que a 1.32.0
+tinha corrigido para a cadeia normal, agora no sítio onde se prova em lote.
+
+Uma linha: `await restaurarFora()` antes de escolher os alvos. O teste novo
+semeia a base com três modelos fora de hora e exige que o lote não os tente —
+e, para não ser um teste de fachada, foi corrido **com a linha tirrada**: falha.
+
+**Testes:** 590 (1 novo, provado nos dois sentidos).
+
 ## 1.47.4 — 28 out 2026 · «faltam 0» era mentira, e o modelo bloqueado voltava sempre
 
 Dois defeitos apanhados a correr a prova de modelos **em produção**, na 1.47.3.
