@@ -910,3 +910,22 @@ test('provar-modelos: um 502 marca o modelo de fora (6 h) para não voltar a ser
   const c = cadeia('texto', { chaves: { pollinations: SEM_CHAVE }, limite: 20 });
   assert.equal(c.some((x) => x.fornec === alvo.fornec && x.modelo === alvo.modelo), false);
 });
+
+test('provar-modelos: um modelo de raciocínio tem segunda oportunidade com mais tokens', async () => {
+  esquecerBloqueios();
+  const repo = createMemRepo();
+  const orcamentos = [];
+  const fetchImpl = async (url, opt) => {
+    const corpo = JSON.parse(opt.body);
+    orcamentos.push(corpo.max_tokens);
+    /* primeiro pedido: vazio (gastou tudo a pensar); segundo: responde */
+    const texto = corpo.max_tokens > 64 ? 'ok' : '';
+    return json({ choices: [{ message: { content: texto } }] });
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'ovh', limite: 1, concorrencia: 1 });
+  assert.deepEqual(orcamentos.slice(0, 2), [64, 900], 'não deu a segunda oportunidade com espaço para pensar');
+  assert.equal(r.resultados[0].ok, true);
+  assert.equal(r.resultados[0].tentativas, 2);
+  assert.equal(r.provados, 1);
+});

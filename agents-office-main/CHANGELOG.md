@@ -1,3 +1,17 @@
+## 1.44.7 — 28 out 2026 · um modelo que pensa precisa de espaço para pensar
+
+A prova em produção do 1.44.6 deu mais dois modelos reais — `pollinations/deepseek-v4.1-flash`
+(3,9 s) e `ovh/Mistral-Small-3.2-24B-Instruct-2506` (4,0 s) — e revelou um defeito meu: **4 das
+10 falhas eram do OVH a responder vazio**, e não era o modelo. Era o meu pedido, com 32 tokens de
+saída: um modelo de raciocínio gasta-os a pensar e devolve texto nenhum.
+
+- **Dois orçamentos:** 64 tokens primeiro (barato), e se voltar vazio, 900 (espaço para pensar) —
+  dentro do mesmo tecto de 12 s por modelo.
+- A resposta diz `tentativas` por modelo, e a frase de falha já não adivinha: diz com quantos
+  tokens se tentou.
+
+**Testes:** 559 (1 novo).
+
 ## 1.44.6 — 28 out 2026 · ler a base antes de lhe mexer (e acabar com a mensagem que mentia)
 
 O `health` andava a dizer «a base existe mas falta o esquema (corre supabase/orbita_mesa.sql)». Fui
