@@ -10,7 +10,7 @@
 import { createLocalApi } from './localapi.js';
 import { vistaIA, accaoIA, carregarIA, pararSeguimento, abrirRun } from './ia.js';
 /* 1.47.0 · digitalizar papel: a câmara, a transcrição e a proposta de lead */
-import { vistaPapel, carregarPapel, accaoPapel, ligarPapel } from './papel.js';
+import { vistaPapel, carregarPapel, accaoPapel, ligarPapel, fecharCamera } from './papel.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -1721,6 +1721,7 @@ function start() {
     S.route = parseHash();
     S.pick = null;
     if (S.route.name !== 'ia') pararSeguimento();
+    if (S.route.name !== 'papel') fecharCamera();
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'papel' && !S.papelEstado) { try { await carregarPapel(apiMesa); } catch (e) { toast(e.message, true); } }
@@ -1733,7 +1734,7 @@ function start() {
     main().scrollIntoView({ block: 'start' });
   });
   ligarImportacao();
-  ligarPapel(apiMesa);
+  ligarPapel(apiMesa, { rota: () => S.route.name });
   boot(true);
 }
 
