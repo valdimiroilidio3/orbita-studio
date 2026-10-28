@@ -167,7 +167,7 @@ export function etiquetasDoModelo(id, detalhe = null) {
  * do id (não há metadados melhores em todos os fornecedores). É uma lista de
  * EXCLUSÃO: na dúvida, deixa passar.
  */
-const NAO_E_CONVERSA = /(embed|embedding|\bbge\b|\bbge-|\bgte-|rerank|whisper|tts|asr|stt|speech|voice|audio|moderation|guard|safety|stable-diffusion|sdxl|\bflux\b|image|video|dall|reranker|clip|segment|detr|sam2?\b|ocr)/i;
+const NAO_E_CONVERSA = /(embed|embedding|\bbge\b|\bbge-|\bgte-|rerank|transcribe|realtime|whisper|tts|asr|stt|speech|voice|audio|moderation|guard|safety|stable-diffusion|sdxl|\bflux\b|image|video|dall|reranker|clip|segment|detr|sam2?\b|ocr)/i;
 
 export const eModeloDeConversa = (id) => !!id && !NAO_E_CONVERSA.test(String(id));
 

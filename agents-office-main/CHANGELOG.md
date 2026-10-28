@@ -1,3 +1,17 @@
+## 1.44.8 — 28 out 2026 · o fornecedor sabe quando um modelo não serve para conversar
+
+Último lote de prova em produção: **9 de 12 provados**, depois **8 de 12**. O lote seguinte deu
+0 — e com razão. Os que sobravam eram `openai/gpt-transcribe`, `gpt-realtime-2.1`,
+`mai-transcribe-2`, `vllm-sr/d3`: o próprio Pollinations respondeu, com todas as letras,
+«is a audio model and cannot be used on the text endpoint» e «could not parse the user message
+content as JSON».
+
+- Quando a resposta diz isso, o modelo recebe `codigo: 'naoConversa'`, **sai da cadeia 6 h** e
+  deixa de contar como «por provar». Não bloqueia o fornecedor — é o modelo, não o serviço.
+- `eModeloDeConversa()` passa a excluir `transcribe` e `realtime` na descoberta, para nem entrarem.
+
+**Testes:** 560 (1 novo).
+
 ## 1.44.7 — 28 out 2026 · um modelo que pensa precisa de espaço para pensar
 
 A prova em produção do 1.44.6 deu mais dois modelos reais — `pollinations/deepseek-v4.1-flash`

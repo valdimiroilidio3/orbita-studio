@@ -278,14 +278,22 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         }
         return { fornec, modelo, ok: true, ms, tentativas, resposta: texto.slice(0, 40) };
       } catch (e) {
-        const codigo = e?.codigo || null;
+        let codigo = e?.codigo || null;
+        /* 1.44.8 · o fornecedor diz, com todas as letras, que o modelo não serve
+           para o endpoint de texto («is a audio model», «is a realtime model»,
+           «could not parse … TypeSafe request»). Isso não é uma falha de rede nem
+           um modelo «por provar»: é um modelo que não conversa. Sai da cadeia 6 h
+           e não volta a gastar tentativas. */
+        const motivo = String(e?.message || e);
+        const naoConversa = /is an? (audio|realtime|image|video) model|cannot be used on the text endpoint|could not parse the user message content as JSON|TypeSafe request/i.test(motivo);
+        if (naoConversa) codigo = 'naoConversa';
         /* 1.44.5 · num fornecedor keyless, «missing API key» é daquele modelo
            (o tier pago dele), não do fornecedor: bloquear o LLM7 inteiro por
            causa de um modelo tirava o `codestral-latest` da cadeia 6 h. */
         const doFornecedor = falhaDoFornecedor(codigo) && !(codigo === 'chave' && prov.keyless);
         /* um modelo que dá 502/404 repetidamente sai da cadeia 6 h (mecanismo que
            já existia para os modelos indisponíveis): não vale a pena tentá-lo */
-        if (codigo === 'avaria' || codigo === 'modelo') marcarFora(fornec, modelo, Date.now());
+        if (codigo === 'avaria' || codigo === 'modelo' || codigo === 'naoConversa') marcarFora(fornec, modelo, Date.now());
         return {
           fornec, modelo, ok: false, ms: Date.now() - t0,
           codigo, doFornecedor,
