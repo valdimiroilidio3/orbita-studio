@@ -155,7 +155,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
   ].filter(([id]) => (grCadeia[id] || []).length);
   const cartaoGratuitos = !gr ? '' : `<div class="card">
       <h3 style="margin-top:0">IA gratuita <span class="ia-sub">· ${gr.total} provados · ${gr.totalPorProvar} por provar</span>
-        ${gr.modo === 'local' ? '' : '<button class="btn quiet small" data-act="ia-provar-todas" style="float:right">Provar todas as sem chave</button>'}</h3>
+        ${gr.modo === 'local' ? '' : '<span style="float:right"><button class="btn quiet small" data-act="ia-descobrir-todos">Descobrir modelos</button> <button class="btn quiet small" data-act="ia-provar-todas">Provar todas as sem chave</button></span>'}</h3>
       <p class="ia-sub" style="margin-top:0">${esc(gr.estado?.frase || 'sem medição')}${gr.medidoEm ? ` · medido em ${esc(gr.medidoEm)}` : ''}</p>
       ${grProvados.length ? `<table class="ia-tab">
         <thead><tr><th>Modelo</th><th>Fornecedor</th><th>Medido</th><th>Serve para</th></tr></thead>
@@ -181,6 +181,47 @@ export function vistaIA(S, { esc, hhmm, when }) {
       ${trabalhos.length ? `<div class="ia-sub" style="margin-top:10px"><b>Por tipo de trabalho</b> (a ordem em que seriam tentados):</div>
         ${trabalhos.map(([id, nome]) => `<div class="ia-sub" style="margin-top:2px"><b>${nome}</b> · ${(grCadeia[id] || []).map((x) => esc(`${x.fornec}/${x.modelo}`)).join(' → ')}</div>`).join('')}` : ''}
       ${gr.nota ? `<div class="ia-sub" style="margin-top:8px">${esc(gr.nota)}</div>` : ''}
+    </div>`;
+
+  /* 1.43.0 · «todos os modelos» — o pedido foi explícito: a mesa mostrava um
+     contador e não a lista. Aqui está a lista real do que o motor pode usar
+     AGORA (declarado + descoberto nos fornecedores), com o estado honesto de
+     cada um: provado, descoberto, ou só declarado. Nada aparece como
+     «funcional» sem uma resposta registada. */
+  const catalogo = gr?.catalogo || [];
+  const porFornecedor = new Map();
+  for (const m of catalogo) {
+    if (!porFornecedor.has(m.fornec)) porFornecedor.set(m.fornec, []);
+    porFornecedor.get(m.fornec).push(m);
+  }
+  const grupos = [...porFornecedor.entries()]
+    .map(([fornec, lista]) => ({ fornec, nome: lista[0]?.fornecedor || fornec, lista }))
+    .sort((a, b) => b.lista.length - a.lista.length);
+  const provadosSet = new Set([...(grProvados || []).map((m) => `${m.fornec || m.fornecedor}\u0000${m.modelo}`),
+    ...(gr?.medido || []).map((m) => `${m.fornec}\u0000${m.modelo}`)]);
+  const cartaoModelos = !catalogo.length ? '' : `<div class="card">
+      <h3 style="margin-top:0">Modelos no motor <span class="ia-sub">· ${catalogo.length} em ${grupos.length} fornecedor(es)</span>
+        ${gr?.modo === 'local' ? '' : '<button class="btn quiet small" data-act="ia-descobrir-todos" style="float:right">Descobrir modelos</button>'}</h3>
+      <p class="ia-sub" style="margin-top:0">Tudo o que a cadeia pode escolher neste momento. «Provado» = há uma resposta registada; «descoberto» = o fornecedor disse que o tem (ainda sem resposta nossa); «com chave» = só existe no tier com chave.</p>
+      ${grupos.map((g) => `<details ${g.lista.length > 6 ? '' : 'open'} style="margin-top:8px">
+        <summary><b>${esc(g.nome)}</b> <span class="ia-sub">· ${g.lista.length} modelo(s)${g.lista.some((m) => m.descoberto) ? ' · inclui descobertos' : ''}</span></summary>
+        <table class="ia-tab" style="margin-top:6px">
+          <thead><tr><th>Modelo</th><th>Serve para</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${g.lista.map((m) => {
+            const provado = provadosSet.has(`${m.fornec}\u0000${m.modelo}`);
+            const estado = provado ? etiqueta('provado', 'ok')
+              : m.soComChave ? etiqueta('com chave', 'warn')
+              : m.descoberto ? etiqueta('descoberto', '')
+              : etiqueta('declarado', '');
+            return `<tr class="${provado ? 'ia-ok' : ''}">
+              <td class="ia-mono">${esc(m.modelo)}${m.janela ? `<div class="ia-sub">${Math.round(m.janela / 1000)}k de contexto</div>` : ''}</td>
+              <td>${(m.etiquetas || []).map((e) => etiqueta(esc(e), '')).join(' ')}</td>
+              <td>${estado}${m.semChave ? ' <span class="ia-sub">sem chave</span>' : ''}</td>
+              <td class="ia-acts">${provado || gr?.modo === 'local' ? '' : `<button class="btn quiet small" data-act="ia-provar" data-fornec="${esc(m.fornec)}" data-modelo="${esc(m.modelo)}">Provar</button>`}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </details>`).join('')}
     </div>`;
 
   const linhaFornecedor = (f) => {
@@ -275,6 +316,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
     ${aviso}
 
     ${cartaoGratuitos}
+    ${cartaoModelos}
 
     <div class="card">
       <h3 style="margin-top:0">Um trabalho, de ponta a ponta</h3>
@@ -443,6 +485,18 @@ export async function accaoIA(nome, el, api) {
     try {
       const r = await call('/ia/modelos/descobrir', 'POST', { fornecedor: id });
       toast(`${id}: ${r.quantos} modelos descobertos.`);
+      await carregarIA(api);
+      paint();
+    } catch (e) { toast(e.message, true); }
+    return true;
+  }
+
+  if (nome === 'ia-descobrir-todos') {
+    try {
+      toast('A perguntar aos fornecedores que modelos têm…');
+      const r = await call('/ia/modelos/descobrir', 'POST', { fornecedor: 'todos' });
+      const lista = (r.actualizados || []).map((x) => `${x.fornec} (${x.quantos})`).join(', ');
+      toast(`Descobertos ${r.quantos} modelos no total${lista ? ` · agora: ${lista}` : ' · já estavam em cache (6 h)'}.`);
       await carregarIA(api);
       paint();
     } catch (e) { toast(e.message, true); }

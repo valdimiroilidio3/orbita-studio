@@ -259,6 +259,51 @@ export async function falar({
 }
 
 /* ---------- descoberta de modelos (a verdade, não o catálogo) ---------- */
+/**
+ * 1.43.0 · a lista COM o que o fornecedor diz de cada modelo.
+ *
+ * `listarModelos` devolve só ids porque é disso que o teste precisa. Mas o
+ * catálogo do Pollinations traz `paid_only`, `tools`, `reasoning` e o contexto
+ * — sem isso não se distingue um modelo do tier gratuito de um que só existe
+ * para quem paga, e a descoberta enchia a cadeia com modelos impossíveis.
+ * Aqui fica tudo o que se sabe ler, sem inventar: o que o fornecedor não disser
+ * vem `null`.
+ */
+export async function listarModelosDetalhados({ fornec, prov, chave, timeoutMs = 15000, fetchImpl = fetch }) {
+  if (!chave && !prov.keyless) throw new ErroIA(`falta a chave de ${fornec}`, { fornec, codigo: 'semchave' });
+  const ctl = new AbortController();
+  const relogio = setTimeout(() => ctl.abort(), timeoutMs);
+  const baseLista = prov.estilo === 'pollinations' && chave && prov.baseChave ? prov.baseChave : prov.base;
+  const url = prov.estilo === 'anthropic' ? `${prov.base}/v1/models` : `${baseLista}/models`;
+  try {
+    const r = await fetchImpl(url, { headers: cabecalhos(prov, chave), signal: ctl.signal });
+    const texto = await r.text();
+    let j = null;
+    try { j = texto ? JSON.parse(texto) : null; } catch { j = null; }
+    if (!r.ok) throw classificar(r.status, j || {}, { fornec, modelo: '(lista)' });
+    const cru = Array.isArray(j) ? j : (j?.data || j?.models || []);
+    return cru.map((m) => {
+      const id = String(m?.id || m?.name || '').replace(/^models\//, '');
+      if (!id) return null;
+      return {
+        id,
+        /* `paid_only` só existe onde o fornecedor o declara (Pollinations). Em
+           todos os outros `pago: null` = «não se sabe», e não se presume nada. */
+        pago: typeof m?.paid_only === 'boolean' ? m.paid_only : null,
+        ferramentas: typeof m?.tools === 'boolean' ? m.tools : null,
+        raciocinio: typeof m?.reasoning === 'boolean' ? m.reasoning : null,
+        janela: Number(m?.context_length) || null,
+        visao: Array.isArray(m?.input_modalities) ? m.input_modalities.includes('image') : null,
+      };
+    }).filter(Boolean).slice(0, 400);
+  } catch (e) {
+    if (e instanceof ErroIA) throw e;
+    throw new ErroIA(`sem ligação a ${fornec}: ${e.message}`, { fornec, codigo: e?.name === 'AbortError' ? 'tempo' : 'rede', retentavel: true });
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
 export async function listarModelos({ fornec, prov, chave, timeoutMs = 15000, fetchImpl = fetch }) {
   if (!chave && !prov.keyless) throw new ErroIA(`falta a chave de ${fornec}`, { fornec, codigo: 'semchave' });
   const ctl = new AbortController();

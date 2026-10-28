@@ -718,3 +718,33 @@ test('rota /ia/diagnostico: só keyless e sem rede diz a verdade (nenhum respond
   assert.match(r.corpo.motores[0].erro, /openai-fast/);
   assert.equal(r.corpo.motores[0].comChave, false);
 });
+
+/* ---------- 9 · descobrir modelos de todos os fornecedores (1.43.0) ---------- */
+test('rota /ia/modelos/descobrir: «todos» pergunta a quem se pode e devolve o resumo', async () => {
+  const repo = createMemRepo();
+  const vistos = [];
+  const fetchImpl = async (url) => {
+    vistos.push(String(url));
+    if (String(url).includes('gen.pollinations.ai')) {
+      return json({ data: [
+        { id: 'openai/gpt-5.4-nano', paid_only: false, tools: true, context_length: 400000 },
+        { id: 'meta/muse-spark-1.3', paid_only: true },
+      ] });
+    }
+    return json({ data: [{ id: 'codestral-latest' }] });
+  };
+  const r = await rotasIA(repo, {
+    caminho: '/ia/modelos/descobrir', metodo: 'POST', corpo: { fornecedor: 'todos' },
+    env: { POLLINATIONS_API_KEY: 'sk-chave-suficiente-1234' }, fetchImpl,
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.ok, true);
+  assert.ok(r.corpo.quantos > 0);
+  assert.ok(r.corpo.guardados.pollinations.quantos === 2);
+  assert.ok(vistos.some((u) => u.includes('gen.pollinations.ai')), 'não perguntou ao Pollinations');
+  /* e o que ficou guardado alimenta a cadeia — sem os pagos */
+  const g = await rotasIA(repo, { caminho: '/ia/gratuitos', metodo: 'GET', env: {}, fetchImpl });
+  const modelos = (g.corpo.catalogo || []).filter((m) => m.fornec === 'pollinations').map((m) => m.modelo);
+  assert.ok(modelos.includes('openai/gpt-5.4-nano'));
+  assert.equal(modelos.includes('meta/muse-spark-1.3'), false);
+});
