@@ -673,7 +673,7 @@ function leadMessageCard(m) {
     <div class="acts">${acts}</div>
     <div class="hint" id="leadNote">${m.status === 'ensaio' ? 'Modo ensaio ligado: esta mensagem não sai. Aprovar promove-a a rascunho a sério.'
       : m.status === 'enviada' ? `Saiu${m.enviada_at ? ` em ${esc(when(m.enviada_at))}` : ''}${m.provider ? ` por ${esc(m.provider)}` : ''}${m.provider_id ? ` · ${esc(m.provider_id)}` : ''}${m.confirmada === 'humano' ? ' (confirmada à mão)' : ''}.`
-      : 'Nada sai sem o teu OK. O email sai pela Resend quando a chave estiver no servidor; o WhatsApp abre na app e confirma-se aqui — quem confirma é uma pessoa.'}</div>
+      : 'Nada sai sem o teu OK. Com as chaves no servidor, o email sai pela Resend e o WhatsApp pela Cloud API; sem elas, o WhatsApp abre na app e confirma-se aqui — quem confirma é uma pessoa.'}</div>
   </div>`;
 }
 
@@ -1260,9 +1260,17 @@ async function act(name, el, ev) {
       await call(`/ops/messages/${encodeURIComponent(id)}/approve`, 'POST', {});
       const lead = m?.lead || S.lead || {};
       if ((m?.channel || 'whatsapp') === 'whatsapp') {
+        /* 1.38.0 · com WHATSAPP_TOKEN + WHATSAPP_PHONE_ID o WhatsApp sai sozinho.
+           Sem chaves, a mesa não inventa: abre o link e espera que uma pessoa
+           confirme. O caminho automático é tentado primeiro, não o contrário. */
         const link = waLink(lead.phone, m?.body);
-        if (link) { window.open(link, '_blank', 'noopener'); toast('Aprovada. Abre o WhatsApp e envia — depois carrega em «Já enviei».'); }
-        else toast('Aprovada, mas o lead não tem telefone: não há link de WhatsApp.', true);
+        let auto = null;
+        try { auto = await call(`/ops/messages/${encodeURIComponent(id)}/send`, 'POST', {}); } catch (e) { auto = { erro: e.message }; }
+        if (auto?.enviada) toast(`WhatsApp enviado (${auto.providerId || 'sem id do fornecedor'}) · ${auto.para}.`);
+        else if (link) {
+          window.open(link, '_blank', 'noopener');
+          toast(`Aprovada. Envio automático indisponível (${auto?.erro || 'sem chaves'}) — abre o WhatsApp e envia; depois «Já enviei».`);
+        } else toast('Aprovada, mas o lead não tem telefone: não há link de WhatsApp.', true);
       } else {
         try {
           await call(`/ops/messages/${encodeURIComponent(id)}/send`, 'POST', {});
