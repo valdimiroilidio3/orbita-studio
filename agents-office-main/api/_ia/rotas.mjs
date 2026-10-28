@@ -10,6 +10,8 @@
      GET    /ia/modelos?fornecedor=     — catálogo (e o que já foi descoberto)
      POST   /ia/modelos/descobrir       — lista real do fornecedor (gasta um pedido)
      POST   /ia/provar-modelos          — prova modelo a modelo (descobertos incluídos)
+     GET    /ia/bloqueios?ver=1         — quem está bloqueado e porquê
+     POST   /ia/bloqueios/limpar        — tira bloqueios antigos (com o motivo à vista)
      POST   /ia/testar                  — pedido real; só isto marca «funcional»
      POST   /ia/chat                    — conversa com um agente (com ferramentas)
      GET    /ia/runs                    — execuções recentes
@@ -315,6 +317,33 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
         nota: r.provados
           ? `${r.provados} modelo(s) responderam agora e entram na cadeia; os restantes continuam «por provar» com o motivo de cada um.`
           : 'Nenhum respondeu agora. Os motivos estão em cada linha — não se promove nada sem uma resposta real.',
+      },
+    };
+  }
+
+  /* 1.45.0 · tirar bloqueios antigos: um bloqueio escrito por engano (ou por uma
+     avaria passageira) mantinha o fornecedor fora da cadeia até expirar. Aceita
+     GET para se poder limpar de fora, e diz o que limpou. */
+  if ((limpo === '/ia/bloqueios' || limpo === '/ia/bloqueios/limpar') && (m === 'POST' || m === 'GET' || m === 'DELETE')) {
+    const pedido = m === 'GET' ? Object.fromEntries(qs.entries()) : corpoDe(corpo);
+    const so = String(pedido.fornecedor || '').trim() || null;
+    if (so && !FORNECEDORES[so]) return { status: 400, corpo: { error: 'fornecedor desconhecido' } };
+    if (m === 'GET' && pedido.ver === '1') {
+      const cfg = await motor.config();
+      return { status: 200, corpo: { ok: true, bloqueios: Object.entries(cfg.testes || {})
+        .filter(([, t]) => t?.bloqueadoAte)
+        .map(([fornec, t]) => ({ fornec, ate: t.bloqueadoAte, motivo: t.bloqueadoPor || null })) } };
+    }
+    const limpos = await motor.limparBloqueios({ so });
+    return {
+      status: 200,
+      corpo: {
+        ok: true,
+        limpos,
+        quantos: limpos.length,
+        nota: limpos.length
+          ? `${limpos.length} bloqueio(s) retirado(s). Os modelos continuam «por provar» até uma resposta real.`
+          : 'não havia bloqueios por limpar',
       },
     };
   }

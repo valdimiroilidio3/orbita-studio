@@ -1,3 +1,20 @@
+## 1.45.0 — 28 out 2026 · bloqueios que não deviam existir, e a lista local a dizer a verdade
+
+Três erros encontrados ao continuar a provar modelos:
+
+1. **Um bloqueio inválido mantinha o LLM7 fora da cadeia.** Em produção, `llm7` estava bloqueado
+   até às 14:12 com «Missing API key» — um bloqueio escrito antes do 1.44.5, que só devia valer
+   para o modelo do tier pago. A regra nova: **um fornecedor keyless nunca fica bloqueado por
+   falta de chave** (`bloqueioValido`); o bloqueio inválido é ignorado e apagado sozinho.
+2. **Não havia como tirar um bloqueio** quando ele era engano. `GET /ia/bloqueios?ver=1` diz quem
+   está de fora e porquê; `POST /ia/bloqueios/limpar` retira (todos, ou um com `fornecedor`).
+3. **A mesa em modo local dizia «a lista é a mesma do servidor»** com 4 modelos, quando o
+   servidor tem dezenas com prova. Agora diz que é uma cópia pequena e que a lista verdadeira se
+   lê no servidor. A cópia passa a ter os que respondem de forma estável (`openai`, `openai-large`,
+   `Qwen3.8-27B`, `Mistral-Nemo`) em vez de um `openai-fast` que dá 502.
+
+**Testes:** 563 (2 novos: bloqueio inválido ignorado e limpo; rota de bloqueios a ver e limpar).
+
 ## 1.44.9 — 28 out 2026 · provar não servia de nada: a cadeia não lia as provas
 
 O `/ia/gratuitos` dizia **43 provados**, mas a cadeia real (o campo `cadeia` do mesmo GET)
