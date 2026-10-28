@@ -71,9 +71,13 @@ export function provasDe(cfg = {}) {
     for (const [modelo, p] of Object.entries(teste?.provados || {})) {
       if (!modelo || !p || p.ok === false) continue;
       const ms = Number.isFinite(p.ms) ? p.ms : null;
+      /* um modelo que já estava no catálogo conserva as etiquetas que o
+         fornecedor declarou (o `openai-large` é `raciocinio`+`ferramentas`):
+         provar não pode empobrecer o que a cadeia sabe sobre ele. */
+      const noCatalogo = MODELOS.find((m) => m.fornecedor === fornec && m.modelo === modelo);
       saida.push({
         fornec, modelo,
-        etiquetas: etiquetasDoId(modelo),
+        etiquetas: (noCatalogo?.etiquetas?.length ? noCatalogo.etiquetas : etiquetasDoId(modelo)),
         janela: 131072, preco: [0, 0],
         keyless: !!prov.keyless, chavePublica: !!prov.chavePublica,
         ms, ok: 1, erros: 0,
