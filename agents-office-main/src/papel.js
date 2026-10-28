@@ -75,6 +75,11 @@ export function encolherFoto(dataUrl, { maxLado = MAX_LADO, qualidade = 0.85 } =
    botão que dispara. Se o browser não deixar (permissão, sem câmara, contexto
    inseguro), a vista volta ao ficheiro — e diz que voltou, em vez de ficar morta.
 
+   Uma armadilha apanhada em produção (1.47.2): o bloco da câmara estava com o
+   atributo `hidden`, mas o `display:flex` de `.acts` ganha ao `[hidden]` do
+   browser — apareciam «Tirar fotografia» e «Fechar câmara» com a câmara fechada.
+   Agora o esconder é `display:none` na própria marca, que não perde para nada.
+
    Duas armadilhas que isto evita:
      · repintar a página destrói o `<video>` e o fluxo fica aceso na barra do
        browser — por isso se guarda o fluxo aqui e se desliga ao sair;
@@ -315,7 +320,7 @@ export function vistaPapel(S, { esc = String } = {}) {
       <h3 style="margin-top:0">${ocupado ? 'A ler o documento…' : 'Tirar fotografia ou escolher ficheiro'}</h3>
       <p class="ia-sub" style="margin-top:0">Fotografa o papel de frente, com luz, sem sombras por cima do texto. Aceito imagem (PNG, JPEG, WebP, TIFF) e PDF até 6 MB.</p>
       <input type="file" id="papelFoto" accept="image/*,application/pdf" capture="environment" hidden>
-      <div id="papelCam"${S.papelCamera ? '' : ' hidden'} style="margin-top:var(--s3)">
+      <div id="papelCam" style="margin-top:var(--s3)${S.papelCamera ? '' : ';display:none'}">
         <video id="papelVideo" autoplay playsinline muted style="width:100%;max-width:520px;border-radius:12px;background:#000"></video>
         <div class="acts" style="margin-top:var(--s3)">
           <button class="btn primary" data-act="papel-disparar">Tirar fotografia</button>

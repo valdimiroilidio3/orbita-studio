@@ -1,3 +1,17 @@
+## 1.47.2 — 28 out 2026 · a câmara fechada aparecia à frente do papel
+
+Apanhado a verificar a 1.47.1 **em produção**, não em teste: em `/app#/papel`, com
+a câmara fechada, apareciam «Tirar fotografia» e «Fechar câmara» a seguir ao
+título. A causa é velha e silenciosa: o bloco tinha o atributo `hidden`, mas
+`.acts` define `display:flex`, e uma regra de autor ganha ao `[hidden]` do
+browser. O atributo estava lá e não escondia nada.
+
+Agora o esconder é `display:none` na própria marca, e há um teste que lê a marca
+`#papelCam` e falha se o atributo voltar (ou se o `display:none` desaparecer com
+a câmara fechada).
+
+**Testes:** 586 (1 novo). `mesa.smoke` ✓.
+
 ## 1.47.1 — 28 out 2026 · a câmara ao vivo no ecrã de papel (e o site já não se proíbe de a usar)
 
 A 1.47.0 tinha o ecrã, mas no computador «Abrir câmara» abria uma janela de

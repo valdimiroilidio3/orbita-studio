@@ -208,3 +208,17 @@ test('câmara: o site publicado não pode proibir a câmara a si próprio', asyn
   assert.match(politica.value, /camera=\(self\)/, 'com «camera=()» a câmara ao vivo fica bloqueada no site');
   assert.doesNotMatch(politica.value, /camera=\(\)/);
 });
+
+test('papel: com a câmara fechada, os botões dela não aparecem (o `hidden` perde para a CSS)', async () => {
+  const api = apiFalsa({ respostas: { '/digitalizar/estado': ESTADO } });
+  await carregarPapel(api);
+  const marca = (html) => (html.match(/<div id="papelCam"[^>]*>/) || [''])[0];
+  const fechada = marca(vistaPapel(api.S, { esc }));
+  assert.match(fechada, /display:none/, 'com a câmara fechada o bloco tem de estar escondido a sério');
+  assert.doesNotMatch(fechada, /\bhidden\b/, 'o atributo hidden perde para o display:flex do .acts');
+  api.S.papelCamera = true;
+  const aberta = vistaPapel(api.S, { esc });
+  assert.doesNotMatch(marca(aberta), /display:none/);
+  assert.match(aberta, /papel-disparar/);
+  assert.match(aberta, /id="papelVideo"/);
+});
