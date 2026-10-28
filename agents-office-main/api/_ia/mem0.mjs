@@ -196,8 +196,19 @@ export async function adicionar(cfg, { texto, titulo = null, metadados = {}, use
     ms,
   });
   if (!r.ok) return { ok: false, configurada: true, motivo: r.motivo || motivoDeEstado(r.estado, r.texto), estado: r.estado, ms: r.ms };
-  const id = (Array.isArray(r.json) ? r.json[0] && r.json[0].id : r.json && r.json.id) || null;
-  return { ok: true, configurada: true, id, evento: (r.json && r.json.message) || null, ms: r.ms };
+  /* A resposta do `POST /v1/memories/` muda de forma: às vezes `[{id}]`, às
+     vezes `{results:[{id}]}`, e quando a extracção é assíncrona vem só um
+     `event_id`. Procuramos o id em todos os sítios plausíveis e devolvemos
+     também o evento — sem id não se pode apagar o que se criou. */
+  const corpo = r.json;
+  const id = (Array.isArray(corpo) ? corpo[0] && corpo[0].id : null)
+    || (corpo && corpo.id)
+    || (corpo && corpo.results && corpo.results[0] && corpo.results[0].id)
+    || (corpo && corpo.memory_id)
+    || (corpo && corpo.memories && corpo.memories[0] && corpo.memories[0].id)
+    || null;
+  const evento = (corpo && (corpo.event_id || corpo.eventId)) || null;
+  return { ok: true, configurada: true, id, evento, ms: r.ms };
 }
 
 /** Lista o que está no Mem0 (para o estado e para a auditoria). */

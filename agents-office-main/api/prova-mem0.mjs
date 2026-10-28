@@ -63,8 +63,29 @@ export default async function handler(req, res) {
       await new Promise((r) => setTimeout(r, 1500));
     }
 
-    const apagar = await mem0.apagar(cfg, saida.escrita.id);
-    saida.apagada = { ok: apagar.ok, id: apagar.apagada || null, erro: apagar.ok ? null : apagar.motivo };
+    /* Apagar pelo que a procura encontrou, não só pelo id da escrita: quando o
+       Mem0 responde com um `event_id` (extracção assíncrona) não há id na
+       resposta, e uma prova que deixa lixo no projecto não é uma prova. */
+    const aApagar = new Set();
+    if (saida.escrita.id) aApagar.add(saida.escrita.id);
+    for (const a of procura?.achados || []) {
+      if (String(a.texto).includes(marca)) aApagar.add(String(a.id).replace(/^mem0:/, ''));
+    }
+    /* e uma varredura das notas recentes: apanha provas antigas que ficaram */
+    const recentes = await mem0.listar(cfg, { limite: 100 });
+    for (const m of recentes.memorias || []) {
+      if (String(m.texto).includes('Prova da memória semântica prova-') || String(m.texto).includes(marca)) {
+        aApagar.add(String(m.id).replace(/^mem0:/, ''));
+      }
+    }
+
+    const apagadas = [];
+    const falhasAoApagar = [];
+    for (const id of aApagar) {
+      const r = await mem0.apagar(cfg, id);
+      if (r.ok) apagadas.push(r.apagada); else falhasAoApagar.push({ id, erro: r.motivo });
+    }
+    saida.apagada = { ok: falhasAoApagar.length === 0, quantas: apagadas.length, ids: apagadas, falhas: falhasAoApagar };
 
     /* a nota local também fica limpa: esta prova não é conteúdo do dono */
     try {

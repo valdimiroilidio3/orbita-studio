@@ -251,3 +251,20 @@ test('prova-mem0: sem o token certo responde 404 e não toca em nada', async () 
     if (guardado === undefined) delete process.env.PROVA_TOKEN; else process.env.PROVA_TOKEN = guardado;
   }
 });
+
+/* ---------- 13 · o id vem em várias formas (sem id não se apaga) ---------- */
+test('mem0: o id da escrita é encontrado nas três formas que o Mem0 devolve', async () => {
+  const cfg = mem0.config(envComChave);
+  const casos = [
+    { corpo: [{ id: 'a1b2c3' }], esperado: 'a1b2c3' },
+    { corpo: { results: [{ id: 'd4e5f6' }] }, esperado: 'd4e5f6' },
+    { corpo: { message: 'processing', event_id: 'ev-1' }, esperado: null },
+  ];
+  for (const { corpo, esperado } of casos) {
+    const r = await mem0.adicionar(cfg, { texto: 'Um texto suficientemente longo.', fetchImpl: fetchFalso(resp(corpo)) });
+    assert.equal(r.ok, true);
+    assert.equal(r.id, esperado);
+  }
+  const comEvento = await mem0.adicionar(cfg, { texto: 'Um texto suficientemente longo.', fetchImpl: fetchFalso(resp({ event_id: 'ev-1' })) });
+  assert.equal(comEvento.evento, 'ev-1', 'o evento fica registado quando não há id');
+});
