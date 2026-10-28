@@ -30,7 +30,7 @@ import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EF
 import { explicarFalha, lerCorpo, motorNaMesa, ROTA_DA_MESA } from './falhas.js';
 /* 1.52.0 · a lista do painel: os três da casa e todas as IAs da Órbita que
    aceitaram responder (o dono: «essa lista deve aumentar»). */
-import { opcoesDoCatalogo, notaDaLista, parDeModelo, provasDeGratuitos, DA_CASA } from './lista-modelos.js';
+import { opcoesDoCatalogo, notaDaLista, parDeModelo, provasDeGratuitos, provasDeUso, juntarProvas, DA_CASA } from './lista-modelos.js';
 
 // palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
@@ -300,14 +300,16 @@ export function initTasks(ctx) {
     if (catalogoAPedido) return false;
     catalogoAPedido = true;
     try {
-      const [modelos, estado, gratuitos] = await Promise.all([
+      const [modelos, estado, gratuitos, uso] = await Promise.all([
         lerIa('/ia/modelos'),
         lerIa('/ia/estado').catch(() => null),
         lerGratuitos().catch(() => null),
+        /* 1.52.2 · a evidência que existe na página publicada: quem já respondeu */
+        lerIa('/ia/uso?limite=400').catch(() => null),
       ]);
-      /* as provas do servidor local: quem já respondeu e quanto demorou. Na página
-         publicada esta rota não existe — a lista fica pela ordem do catálogo. */
-      const provas = provasDeGratuitos(gratuitos);
+      /* as provas: no servidor local vêm de /ia/gratuitos; na página publicada, do
+         registo de uso (/ia/uso) — as duas juntas, sem repetir ninguém. */
+      const provas = juntarProvas(provasDeGratuitos(gratuitos), provasDeUso(uso));
       catalogoTarefas = { modelos, estado, provas };
       pintarMenuModelo();
       return true;

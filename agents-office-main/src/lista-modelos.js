@@ -93,7 +93,17 @@ export function opcoesDoCatalogo(catalogo, estado = {}, provas = {}) {
     if (s.estado === 'inutilizavel' || f.estado === 'inutilizavel') { inuteis += 1; continue; }
     const pode = f.comChave === true || s.configurado === true || s.comChaveAgora === true;
     if (!pode) { semChave += 1; continue; }
-    for (const x of f.catalogo || []) {
+    /* 1.52.2 · o catálogo declarado + os modelos que o fornecedor listou (descobertos)
+       — mas destes só entram os que JÁ RESPONDERAM: o Pollinations lista dezenas e
+       oferecê-las todas seria uma lista que falha. A prova é a evidência de /ia/uso. */
+    const candidatos = [
+      ...(f.catalogo || []),
+      ...(f.descobertos || [])
+        .map((x) => (typeof x === 'string' ? x : (x && x.id)))
+        .filter((id) => id && provados.has(`${f.id}\u0000${id}`))
+        .map((id) => ({ modelo: id, gratuito: !!f.gratuito, descoberto: true })),
+    ];
+    for (const x of candidatos) {
       const modelo = typeof x === 'string' ? x : (x && x.modelo);
       if (!modelo) continue;
       const chave = chaveDoPar(f.id, modelo);
@@ -159,6 +169,41 @@ export function provasDeGratuitos(resposta) {
     if (!p || !p.fornec || !p.modelo) continue;
     if (!provados.some((x) => x.fornec === p.fornec && x.modelo === p.modelo)) provados.push({ fornec: p.fornec, modelo: p.modelo });
     if (Number(p.ms) > 0 && !ms[`${p.fornec}\u0000${p.modelo}`]) ms[`${p.fornec}\u0000${p.modelo}`] = Number(p.ms);
+  }
+  return { provados, ms };
+}
+
+/* 1.52.2 · a evidência que existe em PRODUÇÃO: `GET /ia/uso` guarda cada pedido
+   real (fornecedor, modelo, ok, ms). Um modelo que respondeu ali respondeu mesmo
+   — é a melhor prova que o painel pode ter, e é a que o dono pediu («as ias que
+   aceitaram responder»). Só contam as linhas com `ok: true`. */
+export function provasDeUso(resposta) {
+  const linhas = Array.isArray(resposta?.ultimos) ? resposta.ultimos : (Array.isArray(resposta) ? resposta : []);
+  const provados = [], ms = {};
+  const vistos = new Set();
+  for (const l of linhas) {
+    if (!l || !l.fornecedor || !l.modelo || l.ok !== true) continue;
+    const k = `${l.fornecedor}\u0000${l.modelo}`;
+    if (!vistos.has(k)) { vistos.add(k); provados.push({ fornec: l.fornecedor, modelo: l.modelo }); }
+    const v = Number(l.ms) || 0;
+    if (v > 0 && (!ms[k] || v < ms[k])) ms[k] = v;   // a resposta mais rápida que se viu
+  }
+  return { provados, ms };
+}
+
+/** Duas fontes de provas (local: /ia/gratuitos · produção: /ia/uso) somam-se sem repetir. */
+export function juntarProvas(...fontes) {
+  const provados = [], ms = {}, vistos = new Set();
+  for (const f of fontes) {
+    for (const p of (f && f.provados) || []) {
+      if (!p || !p.fornec || !p.modelo) continue;
+      const k = `${p.fornec}\u0000${p.modelo}`;
+      if (!vistos.has(k)) { vistos.add(k); provados.push({ fornec: p.fornec, modelo: p.modelo }); }
+    }
+    for (const [k, v] of Object.entries((f && f.ms) || {})) {
+      const n = Number(v) || 0;
+      if (n > 0 && (!ms[k] || n < ms[k])) ms[k] = n;
+    }
   }
   return { provados, ms };
 }
