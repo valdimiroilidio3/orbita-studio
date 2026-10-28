@@ -11,7 +11,7 @@
      · esconder um erro atrás de texto bonito.
    =========================================================================== */
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
-import { ErroIA, falar, listarModelos } from './cliente.mjs';
+import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, importarFora, orcamento } from './router.mjs';
 import { PROVADOS, catalogoDaCadeia, estadoCurto, preferidoDoAmbiente, resumo as resumoGratuitos } from './gratuitos.mjs';
 
@@ -88,7 +88,51 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
     return { ...r, ferramentasPedidas: r.chamadas };
   }
 
+/**
+ * 1.43.0 · DESCOBRIR OS MODELOS QUE O FORNECEDOR TEM, E USÁ-LOS.
+ *
+ * O problema que isto resolve: o catálogo escrito à mão tem 158 modelos e
+ * só 3 do Pollinations. O tier com chave publica dezenas, o LLM7 e o OVH
+ * também têm os seus. Sem os perguntar, a cadeia trabalha com uma fracção
+ * do que já está pago/aberto.
+ *
+ * Regras, para não voltar a ser um problema:
+ *   · só se pergunta a fornecedores que se podem listar (chave, chave
+ *     pública ou keyless) — nunca a quem não tem chave;
+ *   · uma pergunta a cada 6 h por fornecedor (o resultado fica na base);
+ *     não há chamadas repetidas;
+ *   · uma falha é silenciosa: descoberta é extra, não é caminho crítico.
+ */
+const descobrirSePreciso = async ({ forcar = false, fornec: so = null } = {}) => {
+  const TTL = 6 * 60 * 60 * 1000;
+  const cfg = await config();
+  const salvos = { ...(cfg.descobertos || {}) };
+  const feitos = [];
+  const t0 = Date.now();
+  for (const id of Object.keys(FORNECEDORES)) {
+    if (so && id !== so) continue;
+    const prov = FORNECEDORES[id];
+    if (!prov || prov.usavel === false) continue;
+    const chave = valorDaChave(id);
+    if (!chave && !prov.keyless) continue;
+    const quando = Date.parse(salvos[id]?.quando || '') || 0;
+    if (!forcar && quando && t0 - quando < TTL) continue;
+    try {
+      const modelos = await listarModelosDetalhados({ fornec: id, prov, chave, fetchImpl });
+      if (!modelos.length) continue;
+      salvos[id] = { modelos, quando: agora() };
+      feitos.push({ fornec: id, quantos: modelos.length });
+    } catch { /* silencioso de propósito: ver o comentário acima */ }
+  }
+  if (feitos.length) {
+    await repo.ia.config.gravar('descobertos', salvos);
+    cacheConfig = null;
+  }
+  return feitos;
+};
+
   return {
+    descobrirSePreciso,
     chaves,
     /* «pronto» = tem chave, ou não precisa dela (keyless). Nunca confundir
        «pronto» com «funcional»: isso é o teste real. */
@@ -190,12 +234,29 @@ export function criarMotor({ repo, env = process.env, fetchImpl = fetch, agora =
 
     /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora. */
     async gratuitos() {
+      /* antes de responder ao que há, pergunta aos fornecedores o que têm —
+         com a cache de 6 h, isto é uma chamada por fornecedor a cada 6 h */
+      const descobriu = await descobrirSePreciso().catch(() => []);
       const cfg = await config();
       const r = resumoGratuitos({ chaves, desligados: cfg.desligados || [], latencias: await latencias(), cfg });
       return {
         ...r,
         estado: estadoCurto({ chaves, desligados: cfg.desligados || [], cfg }),
         medido: PROVADOS.map((p) => ({ fornec: p.fornec, modelo: p.modelo, ms: p.ms, ok: p.ok, erros: p.erros, medido: p.medido, fonte: p.fonte })),
+        /* 1.43.0 · o catálogo utilizável AGORA (declarado + descoberto), para a
+           mesa poder mostrar todos os modelos em vez de um contador */
+        catalogo: catalogoDaCadeia(cfg).map((m) => ({
+          fornec: m.fornecedor,
+          fornecedor: FORNECEDORES[m.fornecedor]?.nome || m.fornecedor,
+          modelo: m.modelo,
+          etiquetas: m.etiquetas || ['texto'],
+          janela: m.janela || 0,
+          semChave: !chaves[m.fornecedor] || String(chaves[m.fornecedor]).startsWith('\u0000'),
+          descoberto: !!m.descoberto,
+          soComChave: !!m.soComChave,
+        })),
+        descobertoAgora: descobriu,
+        descobertoEm: Object.fromEntries(Object.entries(cfg.descobertos || {}).map(([k, v]) => [k, v?.quando || null])),
       };
     },
 

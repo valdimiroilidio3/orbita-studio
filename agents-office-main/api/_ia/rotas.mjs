@@ -253,16 +253,42 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   }
 
   if (limpo === '/ia/modelos/descobrir' && m === 'POST') {
-    const fornecedor = String(corpoDe(corpo).fornecedor || '');
-    if (!FORNECEDORES[fornecedor]) return { status: 400, corpo: { error: 'fornecedor desconhecido' } };
-    const chaveNome = motor.chaves[fornecedor];
-    if (!chaveNome) return { status: 400, corpo: { error: `falta ${FORNECEDORES[fornecedor].chave.join(' ou ')} no ambiente` } };
-    const { listarModelos } = await import('./cliente.mjs');
-    const modelos = await listarModelos({ fornec: fornecedor, prov: FORNECEDORES[fornecedor], chave: String(env[chaveNome]), fetchImpl });
+    const pedido = corpoDe(corpo);
+    /* 1.43.0 · `fornecedor: 'todos'` pergunta a todos os que se podem listar
+       (chave, chave pública ou keyless). É o botão «Descobrir modelos»: sem
+       ele, o catálogo ficava nos 158 declarados à mão e o tier do Pollinations
+       — que já está pago — nunca era usado. */
+    const alvo = String(pedido.fornecedor || '');
+    const todos = alvo === 'todos' || alvo === '*' || alvo === '';
+    if (!todos && !FORNECEDORES[alvo]) return { status: 400, corpo: { error: 'fornecedor desconhecido' } };
+    if (!todos) {
+      const prov = FORNECEDORES[alvo];
+      const chaveNome = motor.chaves[alvo];
+      if (!chaveNome && !prov.keyless && !prov.chavePublica) {
+        return { status: 400, corpo: { error: `falta ${(prov.chave || []).join(' ou ')} no ambiente` } };
+      }
+    }
+    /* a força é explícita: `remoto` só se pedires (a cache de 6 h serve o resto) */
+    const feitos = await motor.descobrirSePreciso({ forcar: pedido.forcar === true, fornec: todos ? null : alvo });
     const cfg = await motor.config();
-    const descobertos = { ...(cfg.descobertos || {}), [fornecedor]: { modelos, quando: new Date().toISOString() } };
-    await repo.ia.config.gravar('descobertos', descobertos);
-    return { status: 200, corpo: { ok: true, fornecedor, modelos, quantos: modelos.length } };
+    const descobertos = cfg.descobertos || {};
+    const quantos = Object.values(descobertos).reduce((n, x) => n + (Array.isArray(x?.modelos) ? x.modelos.length : 0), 0);
+    return {
+      status: 200,
+      corpo: {
+        ok: true,
+        fornecedor: todos ? 'todos' : alvo,
+        /* o que mudou AGORA (a cache pode ter servido o resto) */
+        actualizados: feitos,
+        quantos,                                   // total guardado, somando fornecedores
+        guardados: Object.fromEntries(Object.entries(descobertos).map(([id, x]) => [id, {
+          quantos: Array.isArray(x?.modelos) ? x.modelos.length : 0,
+          quando: x?.quando || null,
+        }])),
+        /* compatibilidade: quem já lia `modelos` deste POST continua a ler */
+        modelos: descobertos[todos ? Object.keys(descobertos)[0] : alvo]?.modelos || [],
+      },
+    };
   }
 
   /* ---------------- teste real ---------------- */

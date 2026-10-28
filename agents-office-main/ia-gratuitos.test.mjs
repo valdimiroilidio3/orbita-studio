@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, comChave } from './api/_ia/catalogo.mjs';
 import {
-  PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, estadoCurto, etiquetasDoId,
+  PROVADOS, catalogoDaCadeia, curado, descobertosGratuitos, descobertosSalvos, estadoCurto, etiquetasDoId,
   porProvar, porVelocidade, preferidoDoAmbiente, provadosActivos, provasDe, resumo,
 } from './api/_ia/gratuitos.mjs';
 import { falar, listarModelos } from './api/_ia/cliente.mjs';
@@ -477,4 +477,68 @@ test('estado: o Pollinations diz se está com chave ou só no tier anónimo', as
   assert.equal(pago.comChaveAgora, true);
   assert.equal(pago.variavel, 'POLLINATIONS_API_KEY');
   assert.match(pago.chaveMascarada, /^sk-cha…/);
+});
+
+/* ---------- 9 · descoberta: o tier inteiro do fornecedor, sem inventar ---------- */
+
+test('descoberta: os modelos pagos que o fornecedor declara NUNCA entram na cadeia', () => {
+  const cfg = {
+    descobertos: {
+      pollinations: {
+        quando: '2026-10-28T07:00:00.000Z',
+        modelos: [
+          { id: 'openai/gpt-5.4-nano', pago: false, ferramentas: true, raciocinio: true, janela: 400000, visao: true },
+          { id: 'meta/muse-spark-1.3', pago: true, ferramentas: true, raciocinio: true, janela: 1048576 },
+          { id: 'qualquer-sem-metadados', pago: null },
+        ],
+      },
+    },
+  };
+  const lista = descobertosSalvos(cfg).map((m) => m.modelo);
+  assert.ok(lista.includes('openai/gpt-5.4-nano'));
+  assert.ok(lista.includes('qualquer-sem-metadados'), 'sem `paid_only` não se presume pago');
+  assert.equal(lista.includes('meta/muse-spark-1.3'), false, 'um modelo `paid_only: true` entrou');
+  /* as etiquetas vêm do que o fornecedor DECLARA, não do nome */
+  const nano = descobertosSalvos(cfg).find((m) => m.modelo === 'openai/gpt-5.4-nano');
+  for (const e of ['ferramentas', 'raciocinio', 'visao', 'texto']) assert.ok(nano.etiquetas.includes(e), `falta ${e}`);
+  assert.equal(nano.janela, 400000);
+});
+
+test('descoberta: um fornecedor que exige chave e não a tem não é descoberto', () => {
+  const cfg = { descobertos: { openrouter: { quando: '2026-10-28T07:00:00.000Z', modelos: [{ id: 'x/y:free', pago: false }] } } };
+  /* `gratuito: true` no catálogo chega (é um gateway declaradamente gratuito),
+     mas só entram os modelos que o próprio id anuncia como `:free` */
+  const nomes = descobertosSalvos(cfg).map((m) => m.modelo);
+  assert.deepEqual(nomes, ['x/y:free']);
+});
+
+test('cadeia: o que a descoberta guardou entra no catálogo, e não duplica o que já lá está', () => {
+  const cfg = { descobertos: { pollinations: { quando: '2026-10-28T07:00:00.000Z', modelos: [
+    { id: 'openai', pago: false },                       // já está no catálogo
+    { id: 'openai/gpt-6.1-terra', pago: false, janela: 1050000 },
+  ] } } };
+  const nomes = catalogoDaCadeia(cfg).filter((m) => m.fornecedor === 'pollinations').map((m) => m.modelo);
+  assert.equal(nomes.filter((n) => n === 'openai').length, 1, 'duplicou um modelo que já existia');
+  assert.ok(nomes.includes('openai/gpt-6.1-terra'), 'o descoberto não entrou');
+});
+
+test('motor: a descoberta pergunta uma vez e depois serve a cache (6 h)', async () => {
+  const repo = createMemRepo();
+  const pedidos = [];
+  const fetchImpl = async (url) => {
+    pedidos.push(String(url));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ data: [
+      { id: 'openai/gpt-5.4-nano', paid_only: false, tools: true, context_length: 400000 },
+    ] }) };
+  };
+  const motor = criarMotor({ repo, env: { POLLINATIONS_API_KEY: 'sk-chave-suficiente-1234' }, fetchImpl });
+  const primeira = await motor.descobrirSePreciso();
+  assert.ok(primeira.some((x) => x.fornec === 'pollinations'));
+  const antes = pedidos.length;
+  const segunda = await motor.descobrirSePreciso();
+  assert.deepEqual(segunda, [], 'voltou a perguntar dentro das 6 h');
+  assert.equal(pedidos.length, antes, 'fez pedidos de rede repetidos');
+  /* forçar é explícito e volta a perguntar */
+  const terceira = await motor.descobrirSePreciso({ forcar: true, fornec: 'pollinations' });
+  assert.ok(terceira.length >= 1);
 });

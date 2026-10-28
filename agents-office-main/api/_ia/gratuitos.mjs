@@ -134,6 +134,54 @@ export const pareceGratuito = (id) => /(^|[-:/_])free($|[-:/_])/i.test(String(id
  * descoberto nunca é escolhido por acidente. Continuam por provar — quem prova
  * é o primeiro pedido real, e o router marca de parte o que falhar.
  */
+/**
+ * 1.43.0 · etiquetas a partir do que o fornecedor DECLARA (não do nome).
+ *
+ * O `etiquetasDoId` adivinha pelo id; quando a lista traz `tools`, `reasoning`,
+ * `context_length` e as modalidades, isso é facto e vale mais do que a
+ * adivinha. Só se acrescenta o que o fornecedor afirmou.
+ */
+export function etiquetasDoModelo(id, detalhe = null) {
+  const base = etiquetasDoId(id);
+  if (!detalhe) return base;
+  const t = new Set(base);
+  if (detalhe.ferramentas === true) t.add('ferramentas');
+  if (detalhe.raciocinio === true) t.add('raciocinio');
+  if (detalhe.visao === true) t.add('visao');
+  if (!t.size) t.add('texto');
+  if (!t.has('texto')) t.add('texto');
+  return [...t];
+}
+
+/**
+ * O que a descoberta guardou em `POST /ia/modelos/descobrir` (`cfg.descobertos`),
+ * já filtrado: só fornecedores sem custo, e — onde o fornecedor declara
+ * `paid_only` — só os que NÃO são pagos. Um modelo que a própria API diz ser
+ * pago nunca entra na cadeia como se fosse gratuito.
+ */
+export function descobertosSalvos(cfg = {}) {
+  const saida = [];
+  for (const [fornec, guardado] of Object.entries(cfg.descobertos || {})) {
+    const prov = FORNECEDORES[fornec];
+    if (!semCusto(prov)) continue;
+    const itens = Array.isArray(guardado?.modelos) ? guardado.modelos : [];
+    for (const item of itens) {
+      const id = String(typeof item === 'string' ? item : item?.id || '');
+      if (!id) continue;
+      const detalhe = typeof item === 'string' ? null : item;
+      if (detalhe?.pago === true) continue;            // o fornecedor diz que é pago
+      if (!servicoGratuito(prov) && detalhe?.pago == null && !pareceGratuito(id)) continue;
+      saida.push({
+        fornecedor: fornec, modelo: id,
+        etiquetas: etiquetasDoModelo(id, detalhe),
+        janela: Number(detalhe?.janela) || 131072, preco: [0, 0], gratuito: true, descoberto: true,
+        rotulo: `${id} (${prov.nome}, descoberto)`,
+      });
+    }
+  }
+  return saida;
+}
+
 export function descobertosGratuitos(cfg = {}) {
   const saida = [];
   const vistos = new Set();
@@ -161,7 +209,18 @@ export function descobertosGratuitos(cfg = {}) {
 
 /** O catálogo que a cadeia usa: o de sempre + o que a descoberta encontrou. */
 export function catalogoDaCadeia(cfg = {}, base = MODELOS) {
-  const extra = descobertosGratuitos(cfg).filter((d) => !base.some((m) => m.fornecedor === d.fornecedor && m.modelo === d.modelo));
+  /* 1.43.0 · duas fontes de descoberta: a lista guardada pelo teste
+     (`cfg.testes[x].lista`, só ids) e a lista detalhada de `/ia/modelos/descobrir`
+     (`cfg.descobertos`, com `paid_only`/`tools`). A segunda é a que permite usar
+     o tier inteiro do Pollinations sem declarar modelo a modelo no código. */
+  const vistos = new Set(base.map((m) => `${m.fornecedor}\u0000${m.modelo}`));
+  const extra = [];
+  for (const d of [...descobertosGratuitos(cfg), ...descobertosSalvos(cfg)]) {
+    const chave = `${d.fornecedor}\u0000${d.modelo}`;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    extra.push(d);
+  }
   return [...base, ...extra];
 }
 

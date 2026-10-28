@@ -1,3 +1,44 @@
+## 1.43.0 — 28 out 2026 · os modelos que o fornecedor tem, e não os que eu escrevi à mão
+
+Pedido: «já colocaste todos os modelos disponíveis? quero que coloques todos no motor, e também
+na página mesa» e «faz com que uma boa parte dos outros também funcionem, para o sistema render
+mais». O problema não era falta de fornecedores — eram **158 modelos declarados** e **3** do
+Pollinations, quando o tier com chave publica dezenas. O sistema estava a usar uma fracção do que
+já tinha pago.
+
+**1 · Descoberta automática, com cache de 6 h.** `motor.descobrirSePreciso()` pergunta a lista
+real a **todos** os fornecedores que se podem listar (chave, chave pública ou keyless) e guarda-a
+na base (`cfg.descobertos`). Pergunta **uma vez a cada 6 h por fornecedor** — não há pedidos
+repetidos, e uma falha é silenciosa porque descoberta é extra, não caminho crítico. Roda ao abrir
+`/ia/gratuitos` (é o que a mesa lê) e no botão novo «Descobrir modelos» (`POST
+/ia/modelos/descobrir` com `fornecedor: 'todos'`).
+
+**2 · `paid_only` respeitado.** A lista do tier do Pollinations diz, modelo a modelo, se é pago.
+`descobertosSalvos()` só deixa entrar `paid_only === false`; sem essa marca (todos os outros
+fornecedores) não se presume nada. Um modelo pago nunca entra na cadeia como gratuito.
+
+**3 · Etiquetas do que é afirmado, não do nome.** `etiquetasDoModelo()` usa `tools`, `reasoning`,
+as modalidades de entrada e o contexto que a própria lista declara; o `etiquetasDoId()` continua a
+ser a adivinha para quem não declara nada. Assim um modelo de visão descoberto não fica «texto».
+
+**4 · `listarModelosDetalhados()`.** Nova função no cliente: devolve `{id, pago, ferramentas,
+raciocinio, janela, visao}` em vez de só ids. O `listarModelos()` antigo fica igual — não parti
+nada de quem já o usava.
+
+**5 · A mesa passa a mostrar os modelos, não um contador.** Cartão novo «Modelos no motor»:
+todos os modelos utilizáveis agora, agrupados por fornecedor, com etiquetas, contexto, e o estado
+honesto de cada um — `provado` (há resposta registada), `descoberto` (o fornecedor disse que o
+tem), `com chave`, ou `declarado`. Cada linha tem «Provar», que faz **um** pedido curto real.
+O cartão «IA gratuita» ganhou o botão «Descobrir modelos».
+
+**O que isto NÃO faz:** não inventa quotas nem chaves. Os fornecedores sem chave continuam a
+aparecer como `sem chave`, e os modelos descobertos aparecem como `descoberto` até responderem.
+Um catálogo maior não é a mesma coisa que um catálogo funcional — é por isso que cada linha diz
+em que estado está.
+
+**Testes:** 545 (540 + 5: `paid_only` fora da cadeia, fornecedor com chave fechada, catálogo sem
+duplicados, cache de 6 h a não repetir pedidos, e a rota «todos» de ponta a ponta).
+
 ## 1.42.0 — 28 out 2026 · as gratuitas a sério: Pollinations com chave, padrão gratuito, `/ia/diagnostico`
 
 Pedido: «coloca IAs a sério no motor e as APIs; o padrão será uma gratuita» e «usa também
