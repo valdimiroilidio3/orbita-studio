@@ -408,3 +408,51 @@ do fornecedor) ou um fornecedor desconhecido; se só vier o modelo, o fornecedor
 é resolvido pelo catálogo — e um nome que exista em dois fornecedores pede que
 se diga qual. A resposta traz sempre `fornecedor`, `modelo` e `pedido`, para a
 interface poder mostrar quem respondeu de facto (o fallback pode escolher outro).
+
+## 18. 1.51.0 · escolher a IA no chat, e o esforço que muda alguma coisa
+
+### O compositor do escritório
+
+Antes: a lista vinha de `GET /api/health` → `models` (Sonnet/Opus/Fable, os do
+CLI local). Na página publicada não há CLI, portanto a lista ficava vazia e o
+botão dizia «sem motor» — mesmo com a IA da Órbita a responder a `/ia/estado`
+naquela mesma página.
+
+Agora `src/composer.js`:
+
+| peça | o que faz |
+|---|---|
+| `modelosDoCatalogo(corpo, estado)` | linhas do menú a partir de `GET /ia/modelos`; só quem tem chave e não está desligado; conta os outros |
+| `chaveDeModelo` / `dividirModelo` | a escolha guarda-se como `fornecedor|modelo` e volta a abrir-se; um nome do CLI (`sonnet`) nunca é confundido com um par |
+| `agenteDaOrbita(agente)` | o posto do escritório (35) → o papel da IA da Órbita (8), por sala e por posto |
+| `corpoDaOrbita` / `lerRespostaOrbita` | o pedido no envelope `/api/rpc` e a leitura da resposta (quem respondeu, ms, tecto, ferramentas) |
+| `juntarAnexos` | os anexos entram na mensagem; o que não couber é contado |
+
+O caminho da conversa decide-se assim: se a escolha é um par da Órbita → vai por
+`/api/rpc` → `/ia/chat`; se não há motor local (`health.models` vazio) mas há
+catálogo → também, em automático; caso contrário, o `/api/chat` de sempre.
+
+### O esforço
+
+`POST /ia/chat` aceita `esforco` e devolve `esforco: {pedido, maxTokens}`.
+`ESFORCOS` em `api/_ia/rotas.mjs`:
+
+| pedido | tecto de tokens |
+|---|---|
+| `low` | 400 |
+| `medium` (omissão) | 1200 |
+| `high` | 2400 |
+| `xhigh` | 4000 |
+| `max` | 6000 |
+
+Um valor inventado dá `400` com a lista. `GET /ia/modelos` publica `esforcos` e
+uma nota a dizer que é um tecto de tokens (não é «raciocínio»: esse parâmetro
+não é entendido por todos os fornecedores, e um botão sem efeito seria ficção).
+
+### Provar
+
+    GET /api/prova-chat                     # ensaio: catálogo + validação (0 pedidos)
+    GET /api/prova-chat?token=…&fornecedor=ovh&modelo=Qwen3.5-9B&esforco=high
+
+A segunda faz a conversa a sério, pela função que o `/api/rpc` usa, e devolve
+`quemRespondeu`, `ms`, `esforco` e os primeiros 400 caracteres.

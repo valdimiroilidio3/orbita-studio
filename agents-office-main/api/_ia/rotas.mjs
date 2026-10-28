@@ -58,6 +58,24 @@ export function ehRotaIA(caminho) {
 }
 
 /** O que a interface pediu para ESTA conversa: { fornecedor, modelo } ou null. */
+/* 1.51.0 · o esforço, dito por inteiro. O motor da Órbita não tem um botão de
+   «raciocínio» que todos os fornecedores entendam (o `reasoning_effort` é da
+   OpenAI e o OpenRouter muda de regras por modelo). O que existe — e é real —
+   é o tecto de tokens da resposta. Por isso o esforço escolhido vira
+   `maxTokens`, e a resposta diz os dois: o que se pediu e o que se aplicou.
+   Inventar «esforço máximo» sem mexer em nada seria a simulação que o dono
+   proibiu (pedido 19). */
+export const ESFORCOS = { low: 400, medium: 1200, high: 2400, xhigh: 4000, max: 6000 };
+
+export function tokensDoEsforco(esforco) {
+  const k = String(esforco || '').trim().toLowerCase();
+  if (!k || k === 'auto') return { pedido: null, maxTokens: null };
+  if (!(k in ESFORCOS)) {
+    return { erro: `esforço desconhecido: «${k}»`, esforcos: Object.keys(ESFORCOS) };
+  }
+  return { pedido: k, maxTokens: ESFORCOS[k] };
+}
+
 export function escolhaDeModelo(modelo, fornecedor) {
   const mod = String(modelo || '').trim();
   let forn = String(fornecedor || '').trim();
@@ -296,7 +314,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
         descobertos: descobertos[id]?.modelos || [],
         descobertosEm: descobertos[id]?.quando || null,
       }));
-    return { status: 200, corpo: { fornecedores, totalModelosCatalogo: MODELOS.length } };
+    return { status: 200, corpo: { fornecedores, totalModelosCatalogo: MODELOS.length, esforcos: Object.keys(ESFORCOS), esforcoNota: 'o esforço é o tecto de tokens da resposta: baixo 400 · médio 1200 · alto 2400 · muito alto 4000 · máximo 6000' } };
   }
 
   /* 1.45.1 · também por GET, com `?fornecedor=&forcar=1`. A descoberta é a
@@ -426,6 +444,9 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
        400 com a razão, em vez de cair em silêncio noutro fornecedor. */
     const escolhido = escolhaDeModelo(c.modelo, c.fornecedor);
     if (escolhido.erro) return { status: 400, corpo: { error: escolhido.erro, fornecedores: escolhido.fornecedores } };
+    const esforco = tokensDoEsforco(c.esforco ?? c.effort);
+    if (esforco.erro) return { status: 400, corpo: { error: esforco.erro, esforcos: esforco.esforcos } };
+    const maxTokens = esforco.maxTokens || 1200;
     const permitidas = AGENTES[agente].ferramentas.filter((f) => FERRAMENTAS[f]);
     const conversa = [
       { role: 'system', content: promptDe(agente) },
@@ -433,7 +454,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       { role: 'user', content: texto },
     ];
     const chamadas = [];
-    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens: 1200, preferido: escolhido.preferido });
+    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens, preferido: escolhido.preferido });
     for (let volta = 0; volta < 2 && r.chamadas?.length; volta += 1) {
       conversa.push({ role: 'assistant', content: r.texto || '', tool_calls: r.chamadas.map((x) => ({ id: x.id, type: 'function', function: { name: x.nome, arguments: JSON.stringify(x.argumentos || {}) } })) });
       for (const ch of r.chamadas) {
@@ -441,12 +462,13 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
         chamadas.push({ nome: ch.nome, ok: !!res.ok, resumo: res.resumo || res.erro || '', precisaAprovacao: !!res.precisaAprovacao });
         conversa.push({ role: 'tool', tool_call_id: ch.id, name: ch.nome, content: JSON.stringify(res.dados ?? { ok: res.ok, resumo: res.resumo, erro: res.erro }) });
       }
-      r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens: 1200 });
+      r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens });
     }
     return { status: 200, corpo: {
       agente, resposta: r.texto, modelo: r.modelo, fornecedor: r.fornec,
       pedido: escolhido.pedido,   // null = automático; o que respondeste vem acima
       tentativas: r.tentativas, ms: r.ms, uso: r.uso, ferramentas: chamadas,
+      esforco: { pedido: esforco.pedido, maxTokens },   // o que se pediu e o que se aplicou
     } };
   }
 
