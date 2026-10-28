@@ -247,15 +247,36 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
       const chave = valorDaChave(fornec);
       const t0 = Date.now();
       try {
-        const r = await falar({
-          fornec, prov, chave, modelo,
-          mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
-          maxTokens: 32, temperatura: 0, timeoutMs, fetchImpl,
-        });
-        const texto = String(r?.texto || '').trim();
+        /* 1.44.7 · dois orçamentos, não um. Um modelo de raciocínio gasta os
+           primeiros tokens a pensar e devolve texto vazio: em produção, 4 de 10
+           tentativas ao OVH falharam só porque o pedido tinha 32 tokens de saída.
+           O primeiro pedido é curto (barato); se voltar vazio, repete-se com
+           espaço para ele pensar, dentro do mesmo tecto de tempo. */
+        let texto = '';
+        let ultimo = null;
+        let tentativas = 0;
+        for (const orcamento of [64, 900]) {
+          const gasto = Date.now() - t0;
+          const restante = timeoutMs - gasto;
+          if (restante < 1500) break;                 // não vale a pena começar outro
+          tentativas += 1;
+          ultimo = await falar({
+            fornec, prov, chave, modelo,
+            mensagens: [{ role: 'user', content: 'Responde apenas: ok' }],
+            maxTokens: orcamento, temperatura: 0,
+            timeoutMs: Math.min(timeoutMs, restante), fetchImpl,
+          });
+          texto = String(ultimo?.texto || '').trim();
+          if (texto) break;
+        }
         const ms = Date.now() - t0;
-        if (!texto) return { fornec, modelo, ok: false, ms, erro: 'respondeu vazio (modelo de raciocínio com pouco espaço de saída?)' };
-        return { fornec, modelo, ok: true, ms, resposta: texto.slice(0, 40) };
+        if (!texto) {
+          return {
+            fornec, modelo, ok: false, ms, tentativas,
+            erro: `respondeu vazio com ${tentativas === 1 ? '64' : '64 e 900'} tokens de saída (modelo de raciocínio que não devolve texto)`,
+          };
+        }
+        return { fornec, modelo, ok: true, ms, tentativas, resposta: texto.slice(0, 40) };
       } catch (e) {
         const codigo = e?.codigo || null;
         /* 1.44.5 · num fornecedor keyless, «missing API key» é daquele modelo
