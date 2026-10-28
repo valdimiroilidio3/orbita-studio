@@ -222,3 +222,22 @@ test('papel: com a câmara fechada, os botões dela não aparecem (o `hidden` pe
   assert.match(aberta, /papel-disparar/);
   assert.match(aberta, /id="papelVideo"/);
 });
+
+test('papel: a câmara fechada está mesmo escondida no DOM (jsdom, com a CSS do .acts)', async () => {
+  const { JSDOM } = await import('jsdom');
+  const api = apiFalsa({ respostas: { '/digitalizar/estado': ESTADO } });
+  await carregarPapel(api);
+  /* a CSS real da mesa dá display:flex a .acts — é essa regra que pode ganhar ao
+     atributo `hidden`; por isso se testa com ela aplicada */
+  const css = '<style>.acts{display:flex} .hint{display:block}</style>';
+  const comDom = (html) => {
+    const dom = new JSDOM(`<body>${css}${html}</body>`);
+    return { dom, el: dom.window.document.getElementById('papelCam') };
+  };
+  const fechada = comDom(vistaPapel(api.S, { esc }));
+  assert.equal(fechada.dom.window.getComputedStyle(fechada.el).display, 'none',
+    'com a câmara fechada o bloco aparece — a CSS ganhou ao que o esconde');
+  api.S.papelCamera = true;
+  const aberta = comDom(vistaPapel(api.S, { esc }));
+  assert.notEqual(aberta.dom.window.getComputedStyle(aberta.el).display, 'none');
+});
