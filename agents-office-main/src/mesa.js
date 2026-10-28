@@ -1705,8 +1705,8 @@ function start() {
     act(b.dataset.act, b, e);
   });
   document.addEventListener('change', async e => {
-    const daIA = e.target.closest('[data-act="ia-preferido"]');
-    if (daIA) { await accaoIA('ia-preferido', daIA, apiMesa); return; }
+    const daIA = e.target.closest('[data-act="ia-preferido"],[data-act="ia-chat-mudar"]');
+    if (daIA) { await accaoIA(daIA.dataset.act, daIA, apiMesa); return; }
     const sel = e.target.closest('[data-act="papel"]');
     if (!sel) return;
     try {

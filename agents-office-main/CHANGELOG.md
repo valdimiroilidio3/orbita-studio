@@ -1,3 +1,51 @@
+## 1.50.0 — 28 out 2026 · a IA escolhe-se, e o erro diz a verdade
+
+Duas queixas do dono, uma causa comum: o escritório publicado na Vercel responde
+a `/api/health` (é uma função a sério) mas **não tem** `/api/tasks` nem
+`/api/chat` — essas rotas só existem no `serve.mjs`. O código fazia `res.json()`
+sobre a página de erro em HTML e concluía «Sem um motor de IA ligado». Duas
+mentiras numa: o motor podia estar bom, e a IA existe — na mesa, com seis
+fornecedores prontos.
+
+### O erro deixou de mentir (`src/falhas.js`)
+
+Quatro falhas, quatro frases — e nenhuma delas culpa a IA sem motivo:
+
+| o que aconteceu | o que a barra diz agora |
+|---|---|
+| a rota não existe (HTML no lugar de JSON) | «Esta página está publicada sem o servidor das tarefas» + onde criar o trabalho |
+| o servidor disse que falta motor/chave | «O servidor respondeu: não há motor de IA a responder» + o que ele disse |
+| o servidor recusou | a razão dele, sem reescrever |
+| não se chegou ao servidor | «Não cheguei ao servidor» + `npm start` |
+
+A barra passou também a **confirmar a rota que usa** (`GET /api/tasks`) antes de
+marcar o escritório como «AO VIVO» — antes bastava o `/api/health`. Sem essa
+rota, o selo diz `SEM SERVIDOR LOCAL`/`MESA · 6 FORNECEDOR(ES)` e criar tarefa
+explica o que fazer, com link para a mesa.
+
+### Escolher a IA, onde se trabalha
+
+- **Mesa → AI → Conversa** (novo cartão): agente + modelo, com a lista **real**
+  de `/ia/modelos` (fornecedor, estado da chave, catálogo), «automático» como
+  opção, e «Fixar para o agente» (grava em `PATCH /ia/config`). A resposta mostra
+  sempre **quem respondeu** (`fornecedor / modelo · ms`), e a falha fica na
+  conversa em vez de desaparecer num toast.
+- **`/ia/chat` aceita `fornecedor` + `modelo`**: validados contra o catálogo —
+  um modelo inventado dá `400` com a razão e a lista do fornecedor; um modelo
+  que existe noutro fornecedor é resolvido pelo catálogo (e um nome homónimo
+  pede o fornecedor). O que respondeu vem na resposta (`fornecedor`, `modelo`,
+  `pedido`).
+- **Barra de tarefas**: quando não há `/api/ai` (Vercel), o painel do motor
+  deixa de dizer «SEM IA» e mostra a IA da Órbita lida por `/api/rpc`
+  (`/ia/estado`) — quem está pronto, quem tem chave, quem está desligado — com o
+  caminho para escolher na mesa. Onde há servidor local, tudo continua como era
+  (TESTAR/USAR, gratuitas, `data/ai.json`).
+- **`/ia/estado`** devolve a escolha do agente achatada (`modelo`, `fornecedor`,
+  `escolha`) — o painel mostrava `[object Object]` quando havia escolha.
+
+**Testes:** 653 (8 de `falhas.test.mjs`, 3 do selector na vista, 3 da rota
+`/ia/chat`, 1 do `/ia/estado`).
+
 ## 1.49.0 — 28 out 2026 · Mem0: a memória passa a procurar por sentido
 
 A memória da Órbita era uma camada só, lexical. Agora são duas — e cada uma diz

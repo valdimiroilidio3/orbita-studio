@@ -369,3 +369,42 @@ escreve uma nota marcada, procura-a por sentido (até três tentativas, porque o
 índice do Mem0 não é instantâneo), confirma que voltou e **apaga-a** — no Mem0 e
 na base local. Devolve `escrita`, `procura`, `apagada` e `resultado`, com o
 motivo exacto quando algo falha. Sem o token responde 404, como a `prova1`.
+
+## 17. 1.50.0 · escolher a IA, e um erro que não mente
+
+### O que estava errado
+
+O escritório publicado na Vercel é a página estática (`dist/index.html`). A
+Vercel serve `/api/health` (função a sério) mas **não** serve `/api/tasks` nem
+`/api/chat` — essas só existem no `serve.mjs`, no computador do dono. O código
+perguntava `/api/health`, via `ok:true`, marcava o escritório como «ao vivo», e
+depois fazia `res.json()` sobre a página de erro em HTML. O erro aparecia como
+
+> «Não foi criada: Unexpected token 'T', "The page c"... Sem um motor de IA
+> ligado, o escritório não finge que a tarefa existe.»
+
+Duas coisas erradas: a rota não existia, e a IA existe (na mesa, com seis
+fornecedores prontos naquele momento).
+
+### Como está agora
+
+`src/falhas.js` decide a frase a partir do que veio (HTML/JSON/status). Nunca
+diz «sem motor» a menos que o servidor o tenha dito. A barra confirma
+`GET /api/tasks` antes de prometer o escritório; sem essa rota, o selo diz
+`SEM SERVIDOR LOCAL` (ou `MESA · n FORNECEDOR(ES)` quando a mesa responde) e
+qualquer tentativa de criar trabalho explica o que fazer e onde.
+
+### Escolher a IA
+
+| onde | o que dá para escolher | como fica guardado |
+|---|---|---|
+| Mesa → AI → Conversa | agente + modelo do catálogo real, por mensagem | «Fixar para o agente» → `PATCH /ia/config` |
+| `POST /ia/chat` | `fornecedor` + `modelo` (validados) | nada: vale para essa mensagem |
+| Barra de tarefas (servidor local) | motor CLI/API (TESTAR/USAR) e gratuitas | `data/ai.json` |
+| Barra de tarefas (sem servidor) | leitura da IA da Órbita via `/api/rpc` | na mesa |
+
+`POST /ia/chat` recusa com `400` um modelo fora do catálogo (e devolve a lista
+do fornecedor) ou um fornecedor desconhecido; se só vier o modelo, o fornecedor
+é resolvido pelo catálogo — e um nome que exista em dois fornecedores pede que
+se diga qual. A resposta traz sempre `fornecedor`, `modelo` e `pedido`, para a
+interface poder mostrar quem respondeu de facto (o fallback pode escolher outro).

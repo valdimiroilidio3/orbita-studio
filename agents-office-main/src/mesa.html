@@ -211,6 +211,16 @@
     font-size: var(--t-sm, 14px); line-height: 1.5; border: 1px solid; }
   .ia-faixa.ok { background: #EDF9F1; border-color: #CBE9D5; color: #1F5B37; }
   .ia-faixa.bad { background: #FDF3EC; border-color: #F3D9C6; color: #7A4115; }
+  /* 1.50.0 · a conversa da IA: mensagens com quem falou e o que respondeu */
+  .ia-chat { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto;
+    padding: 10px 12px; margin: 0 0 10px; border: 1px solid var(--line); border-radius: var(--r2, 12px);
+    background: var(--paper-2, rgba(0,0,0,.02)); }
+  .ia-msg { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; line-height: 1.5; max-width: 78ch; }
+  .ia-msg b { font-family: var(--ui); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .ia-msg.eu { align-self: flex-end; align-items: flex-end; text-align: right; }
+  .ia-msg.eu div { background: var(--ink); color: var(--paper); padding: 8px 12px; border-radius: 12px; }
+  .ia-msg.ia div { background: #fff; border: 1px solid var(--line); padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; }
+  .ia-msg.erro div { background: #FDF3EC; border: 1px solid #F3D9C6; color: #7A4115; padding: 8px 12px; border-radius: 12px; }
   .ia-faixa code { background: rgba(0,0,0,.06); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
   .ia-sub { font-size: var(--t-xs, 12px); opacity: .72; line-height: 1.45; }
   .ia-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

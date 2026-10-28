@@ -57,6 +57,34 @@ export function ehRotaIA(caminho) {
   return String(caminho || '').split('?')[0].startsWith('/ia');
 }
 
+/** O que a interface pediu para ESTA conversa: { fornecedor, modelo } ou null. */
+export function escolhaDeModelo(modelo, fornecedor) {
+  const mod = String(modelo || '').trim();
+  let forn = String(fornecedor || '').trim();
+  if (!mod && !forn) return { preferido: null, pedido: null };
+  const fornecedores = Object.keys(FORNECEDORES);
+  if (mod && !forn) {
+    /* sem fornecedor explícito: procura o modelo no catálogo (e, se for único,
+       aceita-o; se houver dois fornecedores com o mesmo nome, pede o fornecedor) */
+    const donos = MODELOS.filter((m) => m.modelo === mod).map((m) => m.fornecedor);
+    const unicos = [...new Set(donos)];
+    if (!unicos.length) return { erro: `o modelo «${mod}» não está no catálogo`, fornecedores };
+    if (unicos.length > 1) return { erro: `«${mod}» existe em ${unicos.join(', ')} — diz também o fornecedor`, fornecedores: unicos };
+    forn = unicos[0];
+  }
+  if (!FORNECEDORES[forn]) return { erro: `fornecedor desconhecido: «${forn}»`, fornecedores };
+  if (mod) {
+    const existe = MODELOS.some((m) => m.fornecedor === forn && m.modelo === mod);
+    if (!existe) {
+      return {
+        erro: `«${mod}» não está no catálogo de ${forn}`,
+        fornecedores: MODELOS.filter((m) => m.fornecedor === forn).map((m) => m.modelo).slice(0, 40),
+      };
+    }
+  }
+  return { preferido: { fornecedor: forn, modelo: mod || null }, pedido: { fornecedor: forn, modelo: mod || null } };
+}
+
 export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch } = {}) {
   const limpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
   const seg = limpo.split('/').filter(Boolean);
@@ -82,7 +110,19 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       ...estado,
       memoria: resumoMemoria,
       estudio,
-      agentes: LISTA.map((a) => ({ id: a.id, numero: a.numero, nome: a.nome, papel: a.papel, ferramentas: a.ferramentas, tipos: a.tipos, criterios: a.criterios, modelo: cfg.agentes?.[a.id]?.modelo || null })),
+      agentes: LISTA.map((a) => {
+        /* 1.50.0 · `cfg.agentes[x].modelo` é `{ fornecedor, modelo }`. A interface
+           mostrava o objecto em bruto; agora vão os três campos separados. */
+        const esc = cfg.agentes?.[a.id]?.modelo || null;
+        const par = esc && typeof esc === 'object' ? esc : (esc ? { modelo: String(esc) } : null);
+        return {
+          id: a.id, numero: a.numero, nome: a.nome, papel: a.papel,
+          ferramentas: a.ferramentas, tipos: a.tipos, criterios: a.criterios,
+          modelo: par?.modelo || null,
+          fornecedor: par?.fornecedor || null,
+          escolha: par ? { fornecedor: par.fornecedor || null, modelo: par.modelo || null } : null,
+        };
+      }),
       ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({ id, descricao: f.descricao, destrutiva: !!f.destrutivo })),
       tipos: TIPOS,
       desligados: cfg.desligados || [],
@@ -381,6 +421,11 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     const texto = String(c.mensagem || c.texto || '').trim();
     if (!texto) return { status: 400, corpo: { error: 'falta a mensagem' } };
     if (texto.length > 8000) return { status: 413, corpo: { error: 'mensagem demasiado longa (máx. 8000 caracteres)' } };
+    /* 1.50.0 · escolher a IA nesta conversa, e não só nas configurações. O par
+       fornecedor+modelo é validado contra o catálogo: um modelo inventado dá
+       400 com a razão, em vez de cair em silêncio noutro fornecedor. */
+    const escolhido = escolhaDeModelo(c.modelo, c.fornecedor);
+    if (escolhido.erro) return { status: 400, corpo: { error: escolhido.erro, fornecedores: escolhido.fornecedores } };
     const permitidas = AGENTES[agente].ferramentas.filter((f) => FERRAMENTAS[f]);
     const conversa = [
       { role: 'system', content: promptDe(agente) },
@@ -388,7 +433,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       { role: 'user', content: texto },
     ];
     const chamadas = [];
-    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens: 1200 });
+    let r = await motor.pedir((AGENTES[agente].tipos || ['texto'])[0], conversa, { ferramentas: paraModelo(permitidas), agente, maxTokens: 1200, preferido: escolhido.preferido });
     for (let volta = 0; volta < 2 && r.chamadas?.length; volta += 1) {
       conversa.push({ role: 'assistant', content: r.texto || '', tool_calls: r.chamadas.map((x) => ({ id: x.id, type: 'function', function: { name: x.nome, arguments: JSON.stringify(x.argumentos || {}) } })) });
       for (const ch of r.chamadas) {
@@ -400,6 +445,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     }
     return { status: 200, corpo: {
       agente, resposta: r.texto, modelo: r.modelo, fornecedor: r.fornec,
+      pedido: escolhido.pedido,   // null = automático; o que respondeste vem acima
       tentativas: r.tentativas, ms: r.ms, uso: r.uso, ferramentas: chamadas,
     } };
   }

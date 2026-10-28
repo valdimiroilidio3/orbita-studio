@@ -1207,6 +1207,11 @@
     border-top-color: var(--ink); animation: tpspin .8s linear infinite; flex: none; }
   @keyframes tpspin { to { transform: rotate(360deg); } }
   .tp-hint.err { color: #B4391E; }
+  /* 1.50.0 · a ajuda por baixo do erro: o que fazer, não só o que falhou */
+  .tp-ajuda { margin-top: 3px; font-family: var(--ui); font-size: 9px; letter-spacing: .04em; line-height: 1.45;
+    color: var(--grey); text-transform: none; }
+  .tp-ajuda a { color: inherit; text-decoration: underline; }
+  .tp-ai.mesa { color: var(--ink); border-color: var(--hairline); }
   .tp-row.live .tp-st { border-color: #1E9070; }
   .tp-row.live.done { cursor: pointer; opacity: .9; }
   .tp-row.live.done:hover { border-color: var(--ink); }

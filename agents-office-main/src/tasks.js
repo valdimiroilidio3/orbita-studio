@@ -26,6 +26,8 @@ import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
 import { fmtTime, fmtDate, fmtDateTime, normaliseHour } from './time.js';
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
+/* 1.50.0 · um erro de rede nunca mais é explicado como falta de IA (ver src/falhas.js) */
+import { explicarFalha, lerCorpo, motorNaMesa, ROTA_DA_MESA } from './falhas.js';
 
 // palavras que encaminham uma tarefa escrita para o agente certo dentro da sala
 const KEYS = {
@@ -85,6 +87,10 @@ export function initTasks(ctx) {
   // LIVE mode (served by serve.mjs): the bar routes through Claude, agents produce real
   // deliverables saved as notes in the brain, and tasks persist. Opened as a file it stays demo.
   let live = false;
+  /* 1.50.0 · `/api/health` existe na Vercel e `/api/tasks` não. Sem esta bandeira
+     a barra dizia «sem motor de IA» quando o problema era a rota não existir. */
+  let tarefasOk = false;
+  let aiDaMesa = null; // o retrato da IA da Órbita (via /api/rpc), quando não há servidor local
   const API = '/api';
   const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 
@@ -295,6 +301,33 @@ export function initTasks(ctx) {
      nesta máquina (CLIs no PATH, chaves no ambiente, servidores locais a responder), o que falta e
      porquê. Aqui vê-se, testa-se com um turno a sério, e troca-se a quente (POST /api/ai/switch). */
   const AI_ = { state: null, busy: false, gratuitas: null };
+
+  /* 1.50.0 · quando esta publicação não tem a rota das tarefas, a barra não pode
+     ficar muda nem mentir: diz o que falta e onde o trabalho existe mesmo. */
+  function explicarSemServidor() {
+    const f = explicarFalha({ status: 404, texto: '<html>', rota: '/api/tasks' });
+    const mesa = aiDaMesa?.disponivel ? ` Na mesa há ${esc(aiDaMesa.frase)}.` : '';
+    say(`Não foi criada. <b>${esc(f.frase)}</b> — ${esc(f.detalhe)}.${mesa}`
+      + `<div class="tp-ajuda">${esc(f.ajuda)} <a href="${ROTA_DA_MESA}">abrir a mesa →</a></div>`, 'err');
+  }
+
+  /* 1.50.0 · sem servidor local a IA não desaparece: lê-se a da Órbita pela mesa.
+     `/api/rpc` existe na Vercel e `/api/ai` não — era por isso que o painel dizia
+     «SEM IA» com seis fornecedores a responder em produção. */
+  async function ligarIaDaMesa() {
+    try {
+      const r = await fetch(`${API}/rpc`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ caminho: '/ia/estado', metodo: 'GET', corpo: null }),
+      });
+      const lido = lerCorpo(await r.text());
+      const e = lido.json && lido.json.status === 200 ? lido.json.corpo : null;
+      if (!e || !Array.isArray(e.fornecedores)) { aiDaMesa = null; return null; }
+      aiDaMesa = { ...motorNaMesa(e), estado: e };
+      paintAiButton(); paintAiPop();
+      return aiDaMesa;
+    } catch { aiDaMesa = null; return null; }
+  }
   const aiLabel = () => {
     const a = AI_.state?.active;
     if (!a) return { text: 'SEM IA', dead: true, title: 'Nenhum motor de IA disponível — clica para ver o que falta' };
@@ -303,9 +336,18 @@ export function initTasks(ctx) {
   };
   function paintAiButton() {
     if (!P_.ai) return;
+    if (!AI_.state && aiDaMesa) {
+      /* não há motor LOCAL; há a IA da Órbita, e o botão di-lo em vez de fingir vazio */
+      P_.ai.textContent = aiDaMesa.disponivel ? `MESA · ${aiDaMesa.quantos}` : 'MESA · SEM FORNECEDOR';
+      P_.ai.title = `esta página não tem servidor local (sem /api/ai) — na mesa: ${aiDaMesa.frase}. Escolhe e usa a IA em ${ROTA_DA_MESA}`;
+      P_.ai.classList.remove('dead');
+      P_.ai.classList.add('mesa');
+      return;
+    }
     const l = aiLabel();
     P_.ai.textContent = l.text; P_.ai.title = l.title;
     P_.ai.classList.toggle('dead', l.dead);
+    P_.ai.classList.remove('mesa');
   }
   function aiRowHTML(p) {
     const act = AI_.state?.active?.id === p.id;
@@ -404,6 +446,30 @@ export function initTasks(ctx) {
     if (!P_.aiPop) return;
     const st = AI_.state;
     const now = P_.aiPop.querySelector('.now');
+    if (!st && aiDaMesa) {
+      /* a lista real da Órbita, em leitura: aqui não se troca (a troca é do
+         servidor local), mas vê-se quem está pronto, quem tem chave e quem está
+         desligado — e o caminho para escolher. */
+      const fs = (aiDaMesa.estado?.fornecedores || []);
+      now.textContent = `MESA · ${aiDaMesa.frase.toUpperCase()}`;
+      now.classList.toggle('dead', !aiDaMesa.disponivel);
+      P_.aiPop.querySelector('.ai-list').innerHTML = fs.length
+        ? fs.map((f) => {
+            const pronto = f.configurado && !f.desligado;
+            const estado = f.desligado ? 'desligado' : (f.configurado ? 'pronto' : 'sem chave');
+            const teste = f.ultimoTeste ? (f.ultimoTeste.ok ? ` · testado OK ${f.ultimoTeste.ms || ''}ms` : ' · último teste falhou') : '';
+            return `<div class="ai-row ${pronto ? 'ok' : 'dead'}">
+              <span class="ai-dot"></span>
+              <div><div class="ai-n">${esc(f.nome || f.id)}<span class="ai-k">${esc(estado)}</span>${f.semChave ? '<span class="ai-k" title="também trabalha sem chave">SEM CHAVE POR DESENHO</span>' : ''}</div>
+              <div class="ai-why">${esc(f.variavel || (f.semChave ? 'não precisa de chave' : 'falta a variável'))}${esc(teste)}</div></div>
+              <div class="ai-bt"></div></div>`;
+          }).join('')
+        : `<div class="ai-more">a mesa respondeu sem fornecedores — vê ${ROTA_DA_MESA}</div>`;
+      const el = P_.aiPop.querySelector('#aiMore');
+      if (el) el.innerHTML = `<div class="ai-cap">Esta página está publicada sem servidor local: aqui não há motores CLI para trocar. A IA da Órbita (a que corre na mesa) tem <b>${esc(aiDaMesa.frase)}</b>.</div>
+        <div class="ai-foot">Escolhe o fornecedor e o modelo na mesa → <a href="${ROTA_DA_MESA}">AI · Control Center</a></div>`;
+      return;
+    }
     if (!st) { now.textContent = 'A LER…'; now.classList.remove('dead'); P_.aiPop.querySelector('.ai-list').innerHTML = `<div class="ai-more">a perguntar ao servidor…</div>`; return; }
     const a = st.active;
     now.textContent = a ? `AGORA · ${String(a.label).toUpperCase()}${a.tools ? '' : ' · SÓ TEXTO'}` : 'NENHUM MOTOR DISPONÍVEL';
@@ -414,10 +480,18 @@ export function initTasks(ctx) {
   async function loadAi(refresh = false) {
     try {
       const r = await fetch(`${API}/ai${refresh ? '?refresh=1' : ''}`);
-      AI_.state = await r.json();
-      if (AI_.state) AI_.state.tested = AI_.state.tested || {};
+      const lido = lerCorpo(await r.text());
+      /* 1.50.0 · na Vercel `/api/ai` não existe e o `r.json()` lançava; o painel
+         ficava mudo («SEM IA»). Agora: JSON válido ou cai para a mesa. */
+      if (!r.ok || !lido.json || !Array.isArray(lido.json.providers)) throw new Error('sem rota /api/ai');
+      AI_.state = lido.json;
+      AI_.state.tested = AI_.state.tested || {};
       paintAiButton(); paintAiPop();
-    } catch { AI_.state = null; paintAiButton(); }
+    } catch {
+      AI_.state = null;
+      if (!tarefasOk) await ligarIaDaMesa();
+      paintAiButton(); paintAiPop();
+    }
   }
   async function testAi(id) {
     AI_.state.tested = { ...(AI_.state?.tested || {}), [id]: { ok: false, ms: 0, text: 'a testar…' } };
@@ -545,6 +619,7 @@ export function initTasks(ctx) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
     const rt = routineIntent(title);
     if (rt) { await submitRoutine(rt, title); return; }
+    if (live && !tarefasOk) { explicarSemServidor(); return; }
     if (live) {
       const text = title, k = dept;
       P_.input.value = ''; P_.input.disabled = true; P_.add.disabled = true;
@@ -553,8 +628,19 @@ export function initTasks(ctx) {
       try {
         const mdl = chosenModel();
         const r = await fetch(API + '/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dept: k, text, model: mdl || undefined, effort: effortSend(), team: team || undefined }) });
-        if (!r.ok) throw new Error((await r.json()).error || r.statusText);
-        const st = await r.json();
+        /* 1.50.0 · ler o corpo com cuidado: uma página de erro em HTML não é JSON
+           e o `r.json()` rebentava com «Unexpected token 'T'». */
+        const lido = lerCorpo(await r.text());
+        if (!r.ok) {
+          const f = explicarFalha({ status: r.status, texto: lido.texto, json: lido.json, rota: '/api/tasks' });
+          if (f.tipo === 'sem-servidor') tarefasOk = false;
+          throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+        }
+        const st = lido.json;
+        if (!st || !st.agent) {
+          const f = explicarFalha({ status: r.status, texto: lido.texto, json: lido.json, rota: '/api/tasks' });
+          throw Object.assign(new Error(f.detalhe || f.frase), { falha: f });
+        }
         const t = mk({ agent: st.agent, title: st.title, text: st.text, plan: st.plan, why: st.why, by: 'you', live: true, sid: st.id, model: st.model, modelUsed: st.model || officeModel, modelFrom: st.model ? 'task' : 'office', effort: st.effort,
           team: st.team ? { lead: st.team.lead, members: [] } : undefined });
         resetModel(); resetTeam();
@@ -562,8 +648,12 @@ export function initTasks(ctx) {
         say(st.team ? `Added — <b>${agentOf(t.agent).name}</b> ficou com ela e está a dividi-la pela equipa` : `Added — <b>${agentOf(t.agent).name}</b> ficou com ela${st.why ? ' · ' + esc(st.why) : ''}`);
         setTimeout(() => { if (!P_.input.value) P_.hint.classList.remove('on'); }, 7000);
       } catch (e) {
-        // sem motor de IA a tarefa não é inventada localmente: fica dito o que falta
-        say(`Não foi criada: ${esc(e.message)}. Sem um motor de IA ligado, o escritório não finge que a tarefa existe.`, 'err');
+        /* 1.50.0 · a frase depende do que falhou. Antes, qualquer erro (incluindo
+           um 404 em HTML) era explicado como «sem motor de IA» — duas vezes
+           errado: o motor podia estar bom e o problema era outro. */
+        const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/tasks', erro: e.message });
+        say(`Não foi criada. <b>${esc(f.frase)}</b>${f.detalhe ? ` — ${esc(f.detalhe)}` : ''}`
+          + `<div class="tp-ajuda">${esc(f.ajuda)}</div>`, 'err');
       }
       P_.input.disabled = false; P_.add.disabled = false; P_.input.blur(); // hand the keys back to the office
       return;
@@ -778,10 +868,27 @@ export function initTasks(ctx) {
       const h = await (await fetch(API + '/health')).json();
       if (!h.ok) return;
       live = true; setOfficeModel(h.model); setOfficeEffort(h.effort);
+      /* 1.50.0 · o `/api/health` responde na Vercel e a `/api/tasks` não existe
+         lá: confirmar a rota que a barra usa antes de prometer seja o que for. */
+      let listaTarefas = null;
+      try {
+        const r = await fetch(API + '/tasks');
+        const lido = lerCorpo(await r.text());
+        if (Array.isArray(lido.json)) { listaTarefas = lido.json; tarefasOk = true; }
+      } catch { tarefasOk = false; }
+      if (!tarefasOk) await ligarIaDaMesa();
       if (h.teams) { teamsCfg = { enabled: h.teams.enabled !== false, max: h.teams.max || 4 }; P_.team.hidden = !teamsCfg.enabled; }
       const mode = panel.querySelector('.tp-mode');
+      if (mode && !tarefasOk) {
+        /* não há rota das tarefas nesta publicação: o selo diz isso, e onde é que
+           a IA e o trabalho existem de verdade. «SEM MOTOR DE IA» era falso. */
+        mode.hidden = false;
+        mode.textContent = aiDaMesa?.disponivel ? `MESA · ${aiDaMesa.quantos} FORNECEDOR(ES)` : 'SEM SERVIDOR LOCAL';
+        mode.classList.remove('live'); mode.classList.add('off');
+        mode.title = `esta página não tem a rota das tarefas (/api/tasks) — ${aiDaMesa?.disponivel ? aiDaMesa.frase : 'a IA da Órbita lê-se na mesa'}. O trabalho cria-se em ${ROTA_DA_MESA} ou com «npm start».`;
+      }
       // o selo diz o motor que está mesmo a responder — e se não houver nenhum, diz isso
-      if (mode) {
+      if (mode && tarefasOk) {
         const a = h.ai || null;
         const name = a ? String(a.label || a.id).toUpperCase() : 'SEM MOTOR';
         mode.hidden = false;
@@ -793,7 +900,7 @@ export function initTasks(ctx) {
           : `${h.name} · nenhum motor de IA disponível nesta máquina — vê o painel de motores (AI.md)`;
       }
       if (brain) { try { brain.setGraph(await (await fetch(API + '/brain')).json()); } catch {} }
-      const list = await (await fetch(API + '/tasks')).json();
+      const list = listaTarefas || [];
       for (const st of list) {
         if (!agentOf(st.agent)) continue;
         if (st.state === 'done') {
