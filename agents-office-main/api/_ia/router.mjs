@@ -310,7 +310,11 @@ export async function falarComFallback(tipo, {
       if (!valeTentarOutro) continue;   // chave recusada / pedido inválido: passa ao próximo modelo
     }
   }
-  const e = new Error(`todos os modelos falharam para «${tipo}»: ${erros.map((x) => `${x.fornec}/${x.modelo} — ${x.erro}`).join(' · ')}`);
+  /* 1.52.0 · quando a cadeia tem uma entrada só, a frase não pode dizer «todos os
+     modelos falharam»: o dono escolheu UM, e é esse que não respondeu. */
+  const e = new Error(fila.length === 1
+    ? `o modelo escolhido não respondeu — ${erros.map((x) => `${x.fornec}/${x.modelo}: ${x.erro}`).join(' · ')}`
+    : `todos os modelos falharam para «${tipo}»: ${erros.map((x) => `${x.fornec}/${x.modelo} — ${x.erro}`).join(' · ')}`);
   e.codigo = 'todosfalharam';
   e.erros = erros;
   throw e;

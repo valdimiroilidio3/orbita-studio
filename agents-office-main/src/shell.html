@@ -1127,6 +1127,12 @@
   .tp-tools > button:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; border-radius: 4px; }
   .tp-tools > button.on { background: var(--ink); color: var(--cream); }
   .tp-tools > button[hidden] { display: none; }
+  /* 1.52.0 · a nota da lista de modelos (fornecedores sem chave, desligados) */
+  .tp-model-fora {
+    margin: 6px 0 0; padding: 0 2px; font-size: 10.5px; line-height: 1.45;
+    color: var(--ink-dim, #9aa3ad); letter-spacing: .01em;
+  }
+  .tp-model-fora[hidden] { display: none; }
   .tp-r3-note {
     font-size: 9px; letter-spacing: .02em; color: var(--grey); opacity: .8;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
@@ -3252,6 +3258,8 @@
       </div>
       <span class="tp-r3-note">o padrão do escritório, a menos que mudes</span>
     </div>
+    <!-- 1.52.0 · o que está na lista do modelo e o que ficou de fora (e porquê) -->
+    <div class="tp-model-fora" hidden></div>
   </div>
   <div class="tp-rep-row" hidden>
     <select class="tp-cad" title="com que frequência"></select>
