@@ -1068,6 +1068,28 @@
  ],
  "modelos": [
   {
+   "plataforma": "ovh",
+   "modelo": "Qwen3.5-9B",
+   "rotulo": "Qwen3.5-9B (OVH)",
+   "inteligencia": null,
+   "velocidade": null,
+   "tamanho": null,
+   "rpm": null,
+   "rpd": null,
+   "tpm": null,
+   "tpd": null,
+   "orcamento": "anónimo ~2 pedidos/min por IP (freellmapi)",
+   "contexto": 262144,
+   "migracao": "lista real de /v1/models do OVH (28 out 2026)",
+   "etiquetas": [
+    "texto",
+    "rapido",
+    "codigo",
+    "contexto"
+   ],
+   "buraco": "janela grande e rápido, mas é um 9B: não serve para raciocínio longo"
+  },
+  {
    "plataforma": "cerebras",
    "modelo": "gpt-oss-120b",
    "rotulo": "GPT-OSS 120B (Cerebras)",
