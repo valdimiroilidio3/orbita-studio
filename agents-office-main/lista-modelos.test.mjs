@@ -53,7 +53,7 @@ test('só entra quem pode responder agora — e o que fica de fora é contado', 
   assert.equal(valores.some((v) => v.startsWith('openrouter|')), false, 'sem chave não entra');
   assert.equal(valores.some((v) => v.startsWith('vercel|')), false, 'desligado não entra');
   assert.equal(valores.some((v) => v.startsWith('aclide|')), false, 'inutilizável não entra');
-  assert.deepEqual(r.contagem, { casa: 3, orbita: 3, semChave: 1, desligados: 1, inuteis: 1 });
+  assert.deepEqual(r.contagem, { casa: 3, orbita: 3, comunidade: 0, semChave: 1, desligados: 1, inuteis: 1 });
   const nota = notaDaLista(r.contagem);
   assert.match(nota, /3 modelo\(s\) da IA da Órbita/);
   assert.match(nota, /1 fornecedor\(es\) sem chave/);
@@ -250,4 +250,28 @@ test('um modelo descoberto só entra na lista se já respondeu (o resto seria um
   const valores = opcoesDoCatalogo(cat, {}, provas).grupos[1].opcoes.map((o) => o.valor);
   assert.deepEqual(valores.sort(), ['pollinations|openai', 'pollinations|x-ai/grok-4.20']);
   assert.equal(valores.includes('pollinations|community/nunca-testado'), false, 'um modelo que falhou não é oferecido');
+});
+
+/* ---------- 1.52.3 · a comunidade tem grupo próprio, no fim ---------- */
+test('os modelos community/… ficam num grupo próprio — não encabeçam a lista com nomes estranhos', () => {
+  const cat = { fornecedores: [{
+    id: 'pollinations', nome: 'Pollinations', comChave: true, gratuito: true,
+    catalogo: [{ modelo: 'openai', gratuito: true }],
+    descobertos: [
+      { id: 'community/Marcus-Mok-GH/pt-harbor' },
+      { id: 'x-ai/grok-4.20' },
+    ],
+  }] };
+  const provas = provasDeUso({ ultimos: [
+    { fornecedor: 'pollinations', modelo: 'community/Marcus-Mok-GH/pt-harbor', ok: true, ms: 3000 },
+    { fornecedor: 'pollinations', modelo: 'x-ai/grok-4.20', ok: true, ms: 4000 },
+  ] });
+  const r = opcoesDoCatalogo(cat, {}, provas);
+  assert.equal(r.grupos.length, 3);
+  assert.match(r.grupos[1].rotulo, /IA da Órbita — 2 modelo\(s\), 1 já responderam/);
+  assert.equal(r.grupos[1].opcoes[0].valor, 'pollinations|x-ai/grok-4.20', 'o provado «normal» vai à frente');
+  assert.match(r.grupos[2].rotulo, /Comunidade — 1 modelo/);
+  assert.equal(r.grupos[2].opcoes[0].valor, 'pollinations|community/Marcus-Mok-GH/pt-harbor');
+  assert.match(r.grupos[2].opcoes[0].etiqueta, /Marcus-Mok-GH\/pt-harbor · provado/, 'mostra a origem, não só o último pedaço');
+  assert.equal(r.contagem.comunidade, 1);
 });

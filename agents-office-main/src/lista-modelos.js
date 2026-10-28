@@ -115,7 +115,7 @@ export function opcoesDoCatalogo(catalogo, estado = {}, provas = {}) {
         etiqueta: `${nomeCurto(modelo)} · ${f.nome || f.id}`,
         fornecedor: f.id,
         modelo,
-        gratis: !!(x && typeof x === 'object' ? x.gratuito : f.gratuito),
+        gratis: (x && typeof x === 'object' && 'gratuito' in x) ? !!x.gratuito : !!f.gratuito,
         provado: provados.has(`${f.id}\u0000${modelo}`),
         latencia,
       });
@@ -137,18 +137,32 @@ export function opcoesDoCatalogo(catalogo, estado = {}, provas = {}) {
     return 0;
   });
 
+  /* 1.52.2 · os modelos `community/…` de um fornecedor (o Pollinations tem dezenas,
+     gerados pela comunidade) são reais e provados, mas não são a lista de trabalho
+     do escritório: ficam num grupo próprio, no fim, em vez de encabeçarem a lista
+     com nomes como «pt-harbor». */
+  const daComunidade = opcoes.filter((m) => m.modelo.startsWith('community/'));
+  const principais = opcoes.filter((m) => !m.modelo.startsWith('community/'));
+
   const grupos = [{ rotulo: 'Nesta máquina', opcoes: DA_CASA.map((m) => ({ ...m })) }];
-  if (opcoes.length) {
-    const provadosN = opcoes.filter((m) => m.provado || m.latencia).length;
+  if (principais.length) {
+    const provadosN = principais.filter((m) => m.provado || m.latencia).length;
     grupos.push({
-      rotulo: `IA da Órbita — ${opcoes.length} modelo(s)${provadosN ? `, ${provadosN} já responderam` : ''}`,
-      opcoes: opcoes.map((m) => ({
+      rotulo: `IA da Órbita — ${principais.length} modelo(s)${provadosN ? `, ${provadosN} já responderam` : ''}`,
+      opcoes: principais.map((m) => ({
         valor: m.valor,
         etiqueta: m.etiqueta + (m.provado || m.latencia ? ' · provado' : m.gratis ? ' · grátis' : ''),
       })),
     });
   }
-  return { grupos, contagem: { casa: DA_CASA.length, orbita: opcoes.length, semChave, desligados, inuteis }, nomes };
+  if (daComunidade.length) {
+    const provadosC = daComunidade.filter((m) => m.provado || m.latencia).length;
+    grupos.push({
+      rotulo: `Comunidade — ${daComunidade.length} modelo(s)${provadosC ? `, ${provadosC} já responderam` : ''}`,
+      opcoes: daComunidade.map((m) => ({ valor: m.valor, etiqueta: m.modelo.replace(/^community\//, '') + (m.provado || m.latencia ? ' · provado' : '') })),
+    });
+  }
+  return { grupos, contagem: { casa: DA_CASA.length, orbita: opcoes.length, comunidade: daComunidade.length, semChave, desligados, inuteis }, nomes };
 }
 
 /* 1.52.1 · as provas do servidor local, em qualquer das duas formas que a rota
