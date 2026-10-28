@@ -1121,3 +1121,30 @@ test('provar-modelos: «faltam N» conta os que ficaram por provar, não só os 
   assert.equal(r.porProvarRestantes, 3, `com os 3 a falhar, «faltam» disse ${r.porProvarRestantes}`);
   assert.equal(r.naoTentados, 0, 'todos couberam no lote');
 });
+
+test('provar-modelos: um arranque a frio lê a memória de «fora» e não a repete (1.47.5)', async () => {
+  esquecerBloqueios();
+  limparFora();
+  const repo = createMemRepo();
+  /* a base já sabe que estes modelos foram recusados há uma hora */
+  await repo.ia.config.gravar('fora', {
+    'pollinations/vllm-sr/d3': { at: Date.now() - 60 * 60 * 1000, motivo: 'TypeSafe request' },
+    'pollinations/microsoft/microsoft-decision-1': { at: Date.now() - 60 * 60 * 1000, motivo: 'TypeSafe request' },
+    'pollinations/respan/span-01-lite': { at: Date.now() - 60 * 60 * 1000, motivo: 'TypeSafe request' },
+  });
+  /* em produção estes três vieram da descoberta do Pollinations, não do catálogo */
+  await repo.ia.config.gravar('descobertos', { pollinations: { quando: new Date().toISOString(), modelos: [
+    { id: 'vllm-sr/d3' }, { id: 'microsoft/microsoft-decision-1' }, { id: 'respan/span-01-lite' },
+  ] } });
+  let chamadas = 0;
+  const fetchImpl = async () => { chamadas += 1; return json({ choices: [{ message: { content: 'ok' } }] }); };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const r = await motor.provarModelos({ fornec: 'pollinations', limite: 3, concorrencia: 3 });
+  const alvos = r.alvos.map((a) => a.modelo);
+  assert.equal(alvos.some((m) => m === 'vllm-sr/d3'), false, 'voltou a gastar uma tentativa num TypeSafe já recusado');
+  assert.equal(alvos.some((m) => m === 'microsoft/microsoft-decision-1'), false);
+  assert.equal(alvos.some((m) => m === 'respan/span-01-lite'), false);
+  assert.equal(r.deForaQuantos >= 3, true, 'não se diz que estão de fora');
+  assert.equal(chamadas, alvos.length, 'gastou pedidos que a memória já evitava');
+  limparFora();
+});
