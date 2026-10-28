@@ -236,6 +236,26 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
     if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
 
+    /* --- 1.47.0 · digitalizar papel: neste browser não há olhos ---
+       O ecrã existe em qualquer sítio (a mesa publicada é estática), mas ler a
+       imagem precisa do motor de visão, que vive no servidor. Em vez de um 404
+       seco, o estado diz porque não dá — e a vista escreve isso por palavras. */
+    if (caminhoLimpo === '/digitalizar/estado') {
+      return {
+        ok: true, modo: 'local',
+        ocr: {
+          disponivel: false, via: null, env: 'ORBITA_OCR_URL', motivo: null,
+          oQue: 'no servidor, o motor de visão transcreve a fotografia; aqui não há motor',
+          limites: { bytesPorDocumento: 6 * 1024 * 1024, formatos: ['image/png', 'image/jpeg', 'image/webp', 'image/tiff', 'application/pdf'] },
+        },
+        visao: { disponivel: false, motivo: 'a leitura faz-se no servidor — este browser não tem chaves nem motor', cadeia: [] },
+        regras: { oQue: 'extrai NIF, telefone, email, código postal, IBAN, valores e datas — mas só de texto que já exista', precisaDe: 'um leitor' },
+        privacidade: 'nada é enviado para fora a partir deste browser',
+      };
+    }
+    if (caminhoLimpo === '/digitalizar') throw falha(503, 'ler papel precisa do servidor: aqui não há motor de visão');
+    if (caminhoLimpo === '/digitalizar/lead') throw falha(503, 'sem leitura não há campos para propor um lead');
+
     /* --- 1.19.0 · memória e estúdio no modo local: dizem que precisam do servidor --- */
     if (caminhoLimpo === '/media/trabalhos') return { trabalhos: [], modo: 'local' };
     if (caminhoLimpo === '/media/estado') {

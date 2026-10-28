@@ -9,6 +9,8 @@
 // mostrada por palavras; e nenhum número aparece sem vir da base de dados.
 import { createLocalApi } from './localapi.js';
 import { vistaIA, accaoIA, carregarIA, pararSeguimento, abrirRun } from './ia.js';
+/* 1.47.0 · digitalizar papel: a câmara, a transcrição e a proposta de lead */
+import { vistaPapel, carregarPapel, accaoPapel, ligarPapel } from './papel.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -52,6 +54,7 @@ const IC = {
   campanhas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',
   conversas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-8 8 8.4 8.4 0 0 1-3.3-.7L4 20.5l1.2-4.3A8 8 0 1 1 20 12Z"/></svg>',
   saldo: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  papel: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 12h8"/></svg>',
   enviar: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',
   tick: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',
   chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
@@ -67,6 +70,7 @@ const IC = {
 const NAV = [
   { k: 'hoje', label: 'Hoje', ic: 'hoje' },
   { k: 'leads', label: 'Leads', ic: 'leads' },
+  { k: 'papel', label: 'Papel', ic: 'papel' },
   { k: 'projetos', label: 'Projetos', ic: 'pastas' },
   { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
   { k: 'agentes', label: 'Agentes', ic: 'agentes' },
@@ -209,7 +213,7 @@ function toast(msg, bad = false) {
 function parseHash() {
   const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const known = ['hoje', 'leads', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
+  const known = ['hoje', 'leads', 'papel', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -353,6 +357,7 @@ async function boot(full = true) {
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
     if (S.route.name === 'ia') await carregarIA(apiMesa);
+    if (S.route.name === 'papel' && !S.papelEstado) await carregarPapel(apiMesa);
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
     S.error = '';
   } catch (e) { S.error = e.message; }
@@ -1205,6 +1210,7 @@ function paint() {
     return;
   }
   pintar(S.route.name === 'hoje' ? viewHoje()
+    : S.route.name === 'papel' ? vistaPapel(S, { esc })
     : S.route.name === 'leads' ? viewLeads()
       : S.route.name === 'lead' ? viewLead()
         : S.route.name === 'projetos' ? viewProjetos()
@@ -1228,6 +1234,8 @@ async function act(name, el, ev) {
   const id = el?.dataset.id;
   // 1.18.0 · o Control Center da IA trata das suas próprias acções
   if (String(name).startsWith('ia-')) { await accaoIA(name, el, apiMesa); return; }
+  /* 1.47.0 · papel: abrir câmara, preparar lead, guardar */
+  if (String(name).startsWith('papel-') && await accaoPapel(name, el, apiMesa)) return;
   const note = () => $('#leadNote');
   const setNote = (msg, bad) => { const n = note(); if (n) { n.textContent = msg; n.classList.toggle('bad', !!bad); } else toast(msg, bad); };
   try {
@@ -1715,6 +1723,7 @@ function start() {
     if (S.route.name !== 'ia') pararSeguimento();
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'papel' && !S.papelEstado) { try { await carregarPapel(apiMesa); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'agentes') { try { await loadAgentes(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'contas') { try { await loadContas(); } catch (e) { toast(e.message, true); } }
@@ -1724,6 +1733,7 @@ function start() {
     main().scrollIntoView({ block: 'start' });
   });
   ligarImportacao();
+  ligarPapel(apiMesa);
   boot(true);
 }
 

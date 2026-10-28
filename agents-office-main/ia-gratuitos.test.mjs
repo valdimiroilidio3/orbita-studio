@@ -21,7 +21,7 @@ import { falar, listarModelos } from './api/_ia/cliente.mjs';
 import {
   cadeia, exportarFora, falarComFallback, foraDoAr, importarFora, limparFora, marcarFora,
 } from './api/_ia/router.mjs';
-import { criarMotor } from './api/_ia/motor.mjs';
+import { criarMotor, esquecerBloqueios } from './api/_ia/motor.mjs';
 import { createMemRepo } from './api/_repo.mjs';
 import { responder } from './api/_rotas.mjs';
 
@@ -551,4 +551,45 @@ test('descoberta: embeddings, TTS e imagem ficam de fora (não conversam)', () =
   ] } } };
   assert.deepEqual(descobertosSalvos(cfg).map((m) => m.modelo), ['Qwen3.5-397B-A17B']);
   assert.equal(eModeloDeConversa('llama-3.3-70b-versatile'), true, 'um modelo normal não pode ser excluído');
+});
+
+/* ---------- 1.47.0 · quem já disse «não converso» não volta a gastar uma tentativa ---------- */
+test('por provar: um modelo que o fornecedor recusou («TypeSafe») sai da lista 6 h', () => {
+  const base = [
+    { fornecedor: 'pollinations', modelo: 'vllm-sr/d3', etiquetas: [], descoberto: true },
+    { fornecedor: 'pollinations', modelo: 'openai-fast', etiquetas: [] },
+  ];
+  assert.deepEqual(porProvar({ chaves: {}, base }).map((m) => m.modelo), ['vllm-sr/d3', 'openai-fast']);
+  marcarFora('pollinations', 'vllm-sr/d3', 'could not parse the user message content as JSON');
+  assert.deepEqual(porProvar({ chaves: {}, base }).map((m) => m.modelo), ['openai-fast'],
+    'o modelo que não conversa continua a ser oferecido como «por provar»');
+  /* e a lista completa continua acessível, para quem quiser ver o que ficou de fora */
+  assert.equal(porProvar({ chaves: {}, base, incluirFora: true }).length, 2);
+  limparFora();
+});
+
+test('provar: um modelo marcado «não conversa» não consome o lote, e a resposta diz porquê', async () => {
+  esquecerBloqueios(); limparFora();
+  const repo = createMemRepo();
+  await repo.ia.config.gravar('descobertos', {
+    pollinations: { quando: new Date().toISOString(), modelos: [{ id: 'vllm-sr/d3' }, { id: 'stealth/glyph-cluster' }] },
+  });
+  const pedidos = [];
+  const fetchImpl = async (url, opt) => {
+    const corpo = JSON.parse(opt.body);
+    pedidos.push(corpo.model);
+    if (String(corpo.model).includes('vllm-sr')) {
+      return { ok: false, status: 400, text: async () => JSON.stringify({ error: { message: 'vllm-sr/d3 could not parse the user message content as JSON. The last user message\'s content must be the native TypeSafe request as JSON' } }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'ok' } }] }) };
+  };
+  const motor = criarMotor({ repo, env: {}, fetchImpl });
+  const primeira = await motor.provarModelos({ fornec: 'pollinations', limite: 4, concorrencia: 2 });
+  assert.ok(primeira.testados >= 1);
+  /* a segunda chamada não volta a tentar o que acabou de dizer que não conversa */
+  const antes = pedidos.filter((m) => m === 'vllm-sr/d3').length;
+  await motor.provarModelos({ fornec: 'pollinations', limite: 4, concorrencia: 2 });
+  const depois = pedidos.filter((m) => m === 'vllm-sr/d3').length;
+  assert.equal(depois, antes, 'voltou a gastar uma tentativa no mesmo modelo de TypeSafe');
+  limparFora();
 });

@@ -1,3 +1,37 @@
+## 1.47.0 — 28 out 2026 · o ecrã de papel, e os modelos que não conversam deixam de gastar tentativas
+
+Duas coisas que faltavam, e um erro que estava a comer o tempo das provas.
+
+**1. O ecrã onde se digitaliza.** A 1.46.0 pôs a leitura a funcionar no servidor;
+faltava o sítio. Na mesa, ao lado de *Leads*, passa a haver **Papel**:
+
+- tira a fotografia (`capture="environment"` — abre logo a câmara de trás no
+  telemóvel) ou aceita um ficheiro; encolhe a imagem no browser antes de enviar
+  (4–8 MB de telemóvel passam a ~300 KB, e o limite do servidor é 6 MB);
+- mostra a transcrição **literal**, os campos com a confiança de cada um e o que
+  **não** foi encontrado («Não encontrei: telefone, email»), e diz quem leu
+  (modelo, fornecedor, milissegundos);
+- «Preparar lead» devolve a proposta — **nada é gravado** até se carregar em
+  «Guardar no funil», e o nome está num campo editável antes disso;
+- sem leitor, diz porquê em vez de mostrar um botão que não faz nada;
+- no modo local (a mesa publicada sem `/api`) explica que a leitura precisa do
+  servidor — em vez do 404 seco que apanhava antes.
+
+**2. Os modelos que não conversam deixaram de ser tentados.** Em produção, os
+três `TypeSafe` do Pollinations (`vllm-sr/d3`, `microsoft/microsoft-decision-1`,
+`respan/span-01-lite`) voltavam em cada lote: 3 de 10 tentativas, duas vezes
+seguidas, sempre com o mesmo HTTP 400. Já eram marcados «fora» 6 h pelo router,
+mas nem a lista dos «por provar» nem o `provarModelos` olhavam para essa marca.
+Agora olham, e a resposta diz quantos ficaram de fora e porquê (`deFora`).
+
+**Provado em produção neste turno:** `openai-fast` (Pollinations, 4,5 s),
+`mistral-Nemo-Instruct-2407`, `gpt-oss:20b` e `nemotron-3-nano:30b` (LLM7),
+`stealth/glyph-cluster` (Pollinations, 7,1 s) — **43 → 50 modelos com resposta
+registada**.
+
+**Testes:** 582 (9 novos: 7 do ecrã de papel, 2 de «quem não conversa não volta»).
+`mesa.smoke` ✓.
+
 ## 1.46.0 — 28 out 2026 · Digitalizar papel, sem serviço de OCR nenhum
 
 Desde a 1.31.0 que «Digitalizar papel» existia e estava desligada: o pipeline
