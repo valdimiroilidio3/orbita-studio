@@ -1,3 +1,17 @@
+## 1.52.4 — 29 out 2026 · o cartão diz quem respondeu (também quando é um par)
+
+A lista já oferecia 40 modelos, mas o cartão de confirmação do modo CONSTRUIR
+tinha um mapa fixo de três nomes. Com um par da IA da Órbita escolhido, o cartão
+escrevia «modelo do escritório» — falso: tinha corrido a IA escolhida.
+
+- `src/main.js` deixa de ter `{ sonnet, opus, fable }` à mão e usa `modelName()`,
+  a mesma função do quadro, das rotinas e da nota do Cérebro. Um par passa a
+  aparecer como `Qwen3.5-9B · OVH AI Endpoints`; um modelo da casa, como `Sonnet`.
+- Um teste lê o ficheiro publicado: o mapa fixo não pode voltar, e `modelName()`
+  tem de responder pelos dois mundos.
+
+**Testes:** 687.
+
 ## 1.52.3 — 28 out 2026 · a comunidade tem grupo próprio (e a versão da prova lê-se do `package.json`)
 
 Com a evidência de `/ia/uso` a funcionar, a lista de produção passou a 37 modelos
