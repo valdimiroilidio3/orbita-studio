@@ -110,6 +110,7 @@ test('o esquema aplica-se pela ordem certa, um ficheiro por transacção', async
   /* e o desenho do SQLite não entra — está lá, com a razão, mas não se aplica */
   assert.ok(NAO_APLICADOS['orbita_schema.sql'].includes('company_name'));
   assert.ok(!FICHEIROS.includes('orbita_schema.sql'), 'o desenho da migração do SQLite não pode ser aplicado');
+  assert.ok(FICHEIROS.includes('orbita_1_53_2.sql'), 'a coluna do resultado das tarefas entra pelo /api/setup');
 });
 
 test('um erro a meio faz rollback e para — não deixa meia base', async () => {
