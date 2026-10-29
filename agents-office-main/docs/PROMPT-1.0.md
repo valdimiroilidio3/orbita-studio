@@ -1,5 +1,9 @@
 # PROMPT · Órbita Studio 1.0 — a publicação oficial
 
+> **O alvo operacional é `docs/ALVO-1.0.md`** — a lista fechada de itens, por
+> ordem, com prova exigida. Este documento diz *porquê*; aquele diz *o quê*.
+> Quando os dois divergirem, vale o ALVO.
+
 > Este é o documento a entregar a quem for fazer a 1.0 (eu, outro agente, ou o
 > dono a trabalhar sozinho). Está escrito como um prompt: missão, regras, estado
 > real, definição de pronto e frentes com critérios verificáveis.
