@@ -286,3 +286,26 @@ test('rotas: consentimento desligado é 409, não um 500', async () => {
     (e) => { assert.equal(e.status, 409); assert.match(e.message, /ORBITA_PERMITIR_CONSENTIMENTO/); return true; },
   );
 });
+
+/* ---------- 1.53.0 · os serviços com sonda não podem colidir com os fornecedores de IA ----------
+   A lista `/platform/apis` usa o prefixo `ia:` quando o id existe nos dois sítios, e o
+   `/platform/testar` muda de caminho (pedido de chat em vez de sonda HTTP) só por causa disso.
+   Um serviço que entre na lista com o id de um fornecedor aparece DUAS vezes na loja. */
+test('catálogo do servidor: ids únicos e nenhum é também um fornecedor de IA', async () => {
+  const { SERVICOS } = await import('./api/_rotas.mjs');
+  const { FORNECEDORES } = await import('./api/_ia/catalogo.mjs');
+  const ids = SERVICOS.map((s) => s.id);
+  assert.equal(new Set(ids).size, ids.length, `id repetido em SERVICOS: ${ids.join(', ')}`);
+  const chat = (id, f) => (f?.tipo ? f.tipo === 'chat' : true);
+  const colisoes = ids.filter((id) => FORNECEDORES[id] && chat(id, FORNECEDORES[id]));
+  /* `vercel` é o único par assumido (o serviço e o «Vercel AI Gateway»): a lista desempata com o
+     prefixo `ia:`. Qualquer outro par novo tem de ser pensado, não herdado em silêncio. */
+  assert.deepEqual(colisoes, ['vercel'], 'estes ids são de IA e de serviço ao mesmo tempo: a loja mostrava-os dois');
+  for (const s of SERVICOS) {
+    assert.ok(s.name, `${s.id}: sem nome`);
+    // `vercel-connect` não tem variável própria: autentica por OIDC e tem o seu `sondar`.
+    assert.ok(s.env.length || typeof s.sondar === 'function', `${s.id}: sem variável e sem caminho próprio`);
+    assert.equal(typeof s.sonda === 'function' || typeof s.sonda === 'string' || typeof s.sondar === 'function', true,
+      `${s.id}: está na lista e não tem como ser testado`);
+  }
+});
