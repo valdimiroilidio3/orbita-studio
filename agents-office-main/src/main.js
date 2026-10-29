@@ -91,6 +91,12 @@ import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — ba
 import { initToday } from './today.js'; // 26 out 2026: o ecrã HOJE — decidir, o que aconteceu, o que vem
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
+/* 1.52.4 · o cartão da tarefa diz quem respondeu. Havia aqui um mapa fixo
+   `{ sonnet, opus, fable }` e, quando o modelo era um par da IA da Órbita
+   (`fornecedor|modelo`), o cartão escrevia «modelo do escritório» — falso: tinha
+   corrido a IA escolhida. `modelName()` já conhece os dois mundos (é a mesma
+   função que o quadro e as rotinas usam). */
+import { modelName } from './models.js';
 import { initBrain } from './brain.js';
 /* 29 out 2026 · PEDIDO: «configurações reais, tema claro↔escuro, notificações reais, afastar o campo
    de IA e o estado das tarefas, e fechar as janelas no telemóvel». Três módulos, cada um com o seu
@@ -1328,7 +1334,9 @@ async function buildFromChat(id, text, m) {
     }
     const who = R[st.agent]?.a?.name || st.agent;
     if (spawnEmote && R[st.agent]) spawnEmote(R[st.agent], '📋');
-    const mdl = { sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable' }[st.model];
+    /* o servidor devolve o modelo que ficou na tarefa: `sonnet|opus|fable` ou o par
+       `fornecedor|modelo` da IA da Órbita. `modelName()` sabe ler os dois. */
+    const mdl = st.model ? modelName(st.model) : null;
     chatPush(id, { who: 'agent', text: `Tarefa criada — «${st.title}» ficou com ${who}${st.why ? ' (' + st.why + ')' : ''}. Está no quadro com o id ${st.id} e já está a correr; o resultado cai aqui e na nota do Cérebro.`, meta: 'Construir · ' + (mdl || 'modelo do escritório') });
     if (tasks.refresh) tasks.refresh();
     composer?.toast('Tarefa criada no quadro.', 'ok');

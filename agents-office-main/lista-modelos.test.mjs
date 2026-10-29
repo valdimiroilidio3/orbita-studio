@@ -275,3 +275,15 @@ test('os modelos community/… ficam num grupo próprio — não encabeçam a li
   assert.match(r.grupos[2].opcoes[0].etiqueta, /Marcus-Mok-GH\/pt-harbor · provado/, 'mostra a origem, não só o último pedaço');
   assert.equal(r.contagem.comunidade, 1);
 });
+
+/* ---------- 1.52.4 · o cartão da tarefa criada diz quem respondeu ---------- */
+test('o cartão «Tarefa criada» lê o modelo por modelName — um par não vira «modelo do escritório»', () => {
+  const main = readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+  assert.match(main, /import \{ modelName \} from '\.\/models\.js'/, 'tem de usar a função partilhada, não um mapa local');
+  assert.doesNotMatch(main, /\{ sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable' \}/, 'o mapa fixo dos três voltou');
+  assert.match(main, /const mdl = st\.model \? modelName\(st\.model\) : null/);
+  // e a função responde pelos dois mundos, com o nome do fornecedor à frente
+  assert.equal(modelName('sonnet'), 'Sonnet');
+  assert.equal(modelName('ovh|Qwen3.5-9B'), 'Qwen3.5-9B · OVH AI Endpoints');
+  assert.equal(modelName('pollinations|community/Marcus-Mok-GH/pt-harbor'), 'pt-harbor · Pollinations');
+});
