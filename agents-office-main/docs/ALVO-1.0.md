@@ -101,7 +101,16 @@ construir por cima.
 
 ## 5 · As frentes, ao detalhe
 
-### A1 · A Porta — `1.54.0` 🔴 *(primeira, inegociável)*
+### A1 · A Porta — `1.54.0` ✅ **FEITO** *(falta o que está no fim)*
+
+**Estado (29 out 2026, 1.54.0):** `/auth/eu` deixou de responder «dono» a quem
+pede. Contas, sessões, papéis verificados no servidor, 401 sem cookie, 403 por
+papel, 429 às cinco tentativas, recuperação por email, cookies `HttpOnly`.
+Migração `supabase/orbita_1_54_0.sql`. 23 testes novos em `conta.test.mjs`.
+
+**O que falta para fechar o critério 2 (conta nasce sozinha com email de
+confirmação):** confirmação de email no registo, 2FA opcional, renovação de
+sessão por uso. É a vaga **1.54.1**.
 
 **Problema medido.** `GET /api/rpc?caminho=/auth/eu` devolve
 `role: 'owner'`, `admin: true`, todos os perms, **a quem pedir**.
@@ -321,6 +330,20 @@ caminhos (local e publicado). São costuras para a 2.0.
 Sem estas cinco respostas, A1, A2, A5 e A10 avançam na mesma. As outras esperam.
 
 ---
+
+## 8b · PRIMEIRO PASSO DEPOIS DE CADA DEPLOY DA PORTA
+
+A 1.54.0 fecha a produção **até existir uma conta**. Depois do deploy:
+
+1. Aplicar a migração (`/api/setup?token=…&so=orbita_1_54_0.sql` ou SQL Editor).
+2. Abrir `/app` → o ecrã diz «Criar a primeira conta».
+3. Preencher nome, email, palavra-passe (12+) e **colar o `SETUP_TOKEN`** no
+   campo que apareceu.
+4. A partir daí, `/api/rpc?caminho=/ops/leads` responde **401** sem cookie.
+   É essa a prova do critério 1.
+
+Se algo correr mal, `ORBITA_AUTH=aberta` na Vercel reabre a porta com aviso à
+vista — e a interface diz que está aberta. Não é uma solução, é uma saída.
 
 ## 9 · Primeira coisa a fazer, agora
 

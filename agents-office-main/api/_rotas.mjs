@@ -13,6 +13,7 @@
 import { VERSAO } from './_versao.mjs';
 import { remetente } from './_prontidao.mjs';   // 1.41.0: o «from» do correio, com um nome só
 import { criarECorrer, correrDeNovo } from './_tarefas.mjs';   // 1.53.2: as tarefas correm a sério
+import { avaliarPorta } from './_porta.mjs';   // 1.54.0: a porta (contas, sessões, papéis)
 
 
 const TIPOS_PROJETO = [
@@ -286,8 +287,24 @@ export async function visaoDoPedido({ repo, env = process.env, fetchImpl = fetch
    build da Vercel reutiliza cache e continua a servir código antigo. */
 const MARCA_FUNCOES = 'rpc-1.23.0';
 export const marcaDasFuncoes = () => MARCA_FUNCOES;
-export async function responder(repo, { caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch, importarConect = null, headers = {}, corpoBruto = null }) {
+export async function responder(repo, {
+  caminho, metodo = 'GET', corpo = null, env = process.env, fetchImpl = fetch,
+  importarConect = null, headers = {}, corpoBruto = null,
+  /* 1.54.0 · a porta. `null` = decide-se sozinha: dormente em memória (testes e
+     modo local), fechada quando há base de dados ligada. */
+  seguranca = null, ip = null,
+}) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
+
+  /* ---- 1.54.0 · A PORTA, antes de tudo o resto ----
+     Sem sessão válida não se lê nem se escreve nada; `/auth/*` é público, e o
+     worker de media usa o seu próprio token. Ver `_porta.mjs`. */
+  const porta = await avaliarPorta(repo, {
+    caminho, metodo, corpo, env, headers, fetchImpl, seguranca,
+    ip: ip || String(headers['x-forwarded-for'] || '').split(',')[0].trim() || null,
+  });
+  if (porta.resposta) return porta.resposta;
+  const conta = porta.conta || null;
 
   /* ---- 1.18.0 · tudo o que é IA vive em api/_ia (fornecedores, router, agentes)
          e, desde 1.19.0, também a memória e o estúdio de media ---- */
@@ -813,16 +830,9 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     throw falha(501, 'as chaves vivem nas variáveis de ambiente da Vercel (Settings → Environment Variables): esta instalação não as pode escrever pela interface');
   }
 
-  /* ---- quem és tu ---- */
-  if (caminhoLimpo === '/auth/eu') {
-    return { status: 200, corpo: {
-      user: { id: 'base', name: 'Dono', email: '', role: 'owner', roleLabel: 'base de dados' },
-      modo: 'base', perms: { ver: true, escrever: true, aprovar: true, admin: true, write: true, approve: true },
-    } };
-  }
-  if (caminhoLimpo === '/auth/entrar' || caminhoLimpo === '/auth/sair' || caminhoLimpo === '/auth/primeiro-dono') {
-    return { status: 200, corpo: { ok: true, modo: 'base' } };
-  }
+  /* ---- 1.54.0 · quem és tu: o que restou depois da porta ----
+     Os `/auth/*` são servidos em `_porta.mjs` (antes daqui). Uma sessão válida
+     chega nesta linha com `conta` preenchida; o modo local chega com `null`. */
 
   /* ---- health: a prova de que a base responde ---- */
   if (caminhoLimpo === '/health') {
@@ -1096,8 +1106,8 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
       modo: 'base',
     } };
   }
-  if (caminhoLimpo === '/ops/utilizadores') return { status: 200, corpo: { utilizadores: [], papeis: [] } };
-  if (caminhoLimpo === '/ops/sessoes') return { status: 200, corpo: { sessoes: [] } };
+  /* 1.54.0 · utilizadores, papéis e sessões são servidos em `_porta.mjs`, com a
+     sessão do dono na mão. Aqui já não há lista vazia a fingir de resposta. */
   if (caminhoLimpo === '/ops/stop') return { status: 200, corpo: { ok: true, parado: !!corpo?.stop } };
   /* ---- 1.29.0 · a pesquisa global da mesa, a sério ----
      Antes esta rota devolvia sempre `{ query, grupos: [] }`: a caixa «Pesquisar

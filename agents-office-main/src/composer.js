@@ -170,6 +170,17 @@ export function corpoDaOrbita({ agente = 'research', mensagem = '', historico = 
 export function lerRespostaOrbita(env, par = null) {
   const corpo = env && typeof env === 'object' && 'corpo' in env ? (env.corpo || {}) : (env || {});
   const status = Number((env && env.status) ?? 200);
+  /* 1.54.0 · a porta fechada não é uma avaria da IA: é falta de sessão. A frase
+     é de gente e diz onde se entra — a conversa não se perde, espera por ti. */
+  if (status === 401 || status === 403) {
+    return {
+      ok: false,
+      erro: status === 403
+        ? 'a tua conta não tem permissão para falar com a IA (pede a um dono que te suba o papel)'
+        : 'a Órbita está fechada: entra em /app para continuar',
+      precisaEntrar: status === 401,
+    };
+  }
   if (status >= 400 || !corpo || !corpo.resposta) {
     return { ok: false, erro: (corpo && corpo.error) || 'a IA da Órbita não devolveu resposta' };
   }

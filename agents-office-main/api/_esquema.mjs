@@ -32,6 +32,8 @@ export const FICHEIROS = [
   /* 1.53.2 · `resultado` e `modelo` em orbita_tasks. É idempotente: numa base
      que já as tenha, não faz nada. */
   'orbita_1_53_2.sql',
+  /* 1.54.0 · a porta: contas e sessões. Idempotente também. */
+  'orbita_1_54_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -50,9 +52,12 @@ export const COLUNAS_EXIGIDAS = {
      conclui na mesma (o resultado vai para a Atividade), mas o cartão não o
      mostra — e o `/api/setup` passa a dizer que faltam. */
   orbita_tasks: ['resultado', 'modelo'],
+  /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
+  orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira'],
+  orbita_sessoes: ['conta_id', 'token_hash', 'expira', 'revogada'],
 };
 
-export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas'];
+export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes'];
 
 /** Lê um ficheiro do esquema. Existe separado para o teste poder injectar outro `fs`. */
 export function lerFicheiro(nome, { fs = fsPadrao, raiz = new URL('../supabase/', import.meta.url) } = {}) {
