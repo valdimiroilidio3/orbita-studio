@@ -53,6 +53,9 @@
     background: radial-gradient(120% 90% at 50% 30%, #B6B3A8 45%, #8F8C83 100%);
   }
   #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  /* 1.53.2 · arrastar no vazio roda a câmara: o cursor diz isso antes de se tentar */
+  #scene.girando { cursor: grabbing; }
+  #scene:hover { cursor: grab; }
   #hud { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
 
   /* top bar */
@@ -2948,7 +2951,7 @@
 <datalist id="hours24"><option value="00:00"></option><option value="01:00"></option><option value="02:00"></option><option value="03:00"></option><option value="04:00"></option><option value="05:00"></option><option value="06:00"></option><option value="07:00"></option><option value="08:00"></option><option value="09:00"></option><option value="10:00"></option><option value="11:00"></option><option value="12:00"></option><option value="13:00"></option><option value="14:00"></option><option value="15:00"></option><option value="16:00"></option><option value="17:00"></option><option value="18:00"></option><option value="19:00"></option><option value="20:00"></option><option value="21:00"></option><option value="22:00"></option><option value="23:00"></option></datalist>
 <!-- 26 out 2026: a cena é uma imagem para quem não a vê. O nome acessível diz o que é;
      a descrição (#sceneHelp) diz onde está o resto — e o resto é a lista do escritório. -->
-<canvas id="scene" role="img" aria-label="Escritório isométrico com seis salas em volta de um cérebro central e trinta e cinco agentes" aria-describedby="sceneHelp"></canvas>
+<canvas id="scene" role="img" aria-label="Escritório isométrico com seis salas em volta de um cérebro central e quarenta e sete agentes — arrasta no vazio para rodar a câmara" aria-describedby="sceneHelp"></canvas>
 <p id="sceneHelp" class="sr-only">Uma vista 3D de um escritório: seis salas à volta de um cérebro central, cada uma com o seu chão de vidro colorido e as suas secretárias com agentes. Tudo o que aqui se vê também está escrito em texto: prime a tecla L, ou a ligação «Saltar para a lista do escritório», para abrir a lista das salas e dos agentes e os percorrer com Tab e Enter.</p>
 <div id="hud"></div>
 <div id="topbar">

@@ -569,6 +569,10 @@
   .cine-fig { margin: 0; border-radius: 18px; overflow: hidden; background: #F4F4F7; position: relative; }
   .cine-fig img { width: 100%; display: block; aspect-ratio: 4 / 3; object-fit: cover; transition: transform .6s var(--ease); }
   .cine-fig:hover img { transform: scale(1.035); }
+  /* 1.53.2 · o vídeo composto: leitor com cantos redondos e a mesma linguagem das peças */
+  .cine-fig-video { margin: 0 0 var(--s2); border-radius: 18px; overflow: hidden; background: #0b0d10; }
+  .cine-fig-video video { width: 100%; display: block; aspect-ratio: 16 / 9; background: #0b0d10; }
+  .cine-fig-video figcaption { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: 10px 14px; background: #F4F4F7; }
   .cine-fig.aprovada { outline: 2px solid rgba(18,128,94,.55); outline-offset: 2px; }
   .cine-fig figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: #fff; flex-wrap: wrap; }
   .cine-sem-bytes { aspect-ratio: 4 / 3; display: grid; place-content: center; gap: 4px; text-align: center; color: var(--faint); font-size: var(--t-xs); padding: var(--s3); }

@@ -165,7 +165,26 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   }
 
   /* ---------- endpoints ---------- */
-  function rota(caminho, metodo, corpo) {
+
+  /* 1.53.2 · a ponte do modo local para o servidor da Órbita. Devolve sempre
+     `{ ok }` — nunca rebenta a interface por o servidor não estar lá. */
+  async function correrNoServidor(corpo) {
+    try {
+      const r = await fetch('/api/rpc', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ caminho: '/ops/tarefas', metodo: 'POST', corpo }),
+      });
+      if (!r.ok) return { ok: false, erro: `o servidor respondeu ${r.status}` };
+      const dados = await r.json();
+      if (!dados?.tarefa) return { ok: false, erro: dados?.error || 'o servidor não devolveu tarefa' };
+      return { ok: true, tarefa: dados.tarefa, execucao: dados.execucao || null };
+    } catch (e) {
+      return { ok: false, erro: e?.message || 'sem resposta' };
+    }
+  }
+
+  async function rota(caminho, metodo, corpo) {
     const d = ler();
     const [, ...resto] = caminho.replace(/^\/+/, '').split('/');
     const seg = resto.map((x) => decodeURIComponent(x)); // os pedaços já descodificados
@@ -444,7 +463,11 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       return { project, qa: null, files: [], historico: [] };
     }
 
-    /* --- tarefas: criadas, mas sem motor não se inventa um resultado --- */
+    /* --- tarefas: 1.53.2 · ou correm no servidor, ou dizem porque não ---
+       O modo local não tem motor de IA dentro do browser. O que pode fazer (e
+       faz) é entregar a tarefa ao servidor da Órbita — `/api/rpc` — e devolver
+       o resultado real que ele trouxer. Só quando essa ponte não existe é que a
+       tarefa falha, e então a frase diz exactamente isso. */
     if (caminhoLimpo === '/ops/tarefas' && metodo === 'GET') {
       return { tarefas: [...d.tarefas].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100),
         tipos: TIPOS_TAREFA, departamentos: DEPARTAMENTOS };
@@ -452,23 +475,41 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ops/tarefas' && metodo === 'POST') {
       const tipo = limpo(corpo?.kind);
       if (!TIPOS_TAREFA[tipo]) throw falha(400, 'tipo de tarefa desconhecido');
-      const tarefa = { id: novoId('t'), kind: tipo, entityId: limpo(corpo.entityId), entidade: limpo(corpo.entidade),
-        state: 'failed', error: 'sem motor de IA ligado a este browser — a tarefa fica registada, mas não foi executada',
-        created_at: new Date(agora()).toISOString(), finished_at: new Date(agora()).toISOString() };
-      d.tarefas.push(tarefa); escrever(d, 'tarefa', `${TIPOS_TAREFA[tipo].label}: sem motor`); gravar(d);
-      return { tarefa };
+      const criada = { id: novoId('t'), kind: tipo, entityId: limpo(corpo.entityId), entidade: limpo(corpo.entidade),
+        state: 'running', error: null,
+        created_at: new Date(agora()).toISOString(), finished_at: null };
+      d.tarefas.push(criada); gravar(d);
+      const remoto = await correrNoServidor(corpo);
+      if (!remoto.ok) {
+        Object.assign(criada, { state: 'failed', finished_at: new Date(agora()).toISOString(),
+          error: `o modo local não tem motor de IA dentro do browser e não alcançou o servidor da Órbita (${remoto.erro}). Publica a mesa ou abre-a em orbita-agentes.vercel.app para as tarefas correrem.` });
+        escrever(d, 'tarefa', `${TIPOS_TAREFA[tipo].label}: sem motor local`); gravar(d);
+        return { tarefa: criada };
+      }
+      Object.assign(criada, remoto.tarefa || {}, { id: criada.id, created_at: criada.created_at });
+      escrever(d, 'tarefa', `${TIPOS_TAREFA[tipo].label}: ${criada.state === 'succeeded' ? 'concluída' : 'não passou'}`); gravar(d);
+      return { tarefa: criada, execucao: remoto.execucao || null };
     }
     if (/^\/ops\/tarefas\/[^/]+\/correr$/.test(caminhoLimpo) && metodo === 'POST') {
       const id = seg[seg.length - 2];
       const t = d.tarefas.find((x) => x.id === id);
       if (!t) throw falha(404, 'tarefa não encontrada');
-      return { ok: false, error: 'sem motor de IA ligado a este browser' };
+      const remoto = await correrNoServidor({ kind: t.kind, entityId: t.entityId, entidade: t.entidade, aprovacao: false });
+      if (!remoto.ok) {
+        Object.assign(t, { state: 'failed', error: `não alcançou o servidor da Órbita (${remoto.erro})` });
+        gravar(d);
+        return { ok: false, error: t.error, tarefa: t };
+      }
+      Object.assign(t, remoto.tarefa || {}, { id: t.id });
+      gravar(d);
+      return { ok: !!remoto.tarefa && remoto.tarefa.state === 'succeeded', tarefa: t, execucao: remoto.execucao || null };
     }
     if (/^\/ops\/tarefas\/[^/]+\/(aprovar|rejeitar)$/.test(caminhoLimpo) && metodo === 'POST') {
       const id = seg[seg.length - 2];
       const t = d.tarefas.find((x) => x.id === id);
       if (!t) throw falha(404, 'tarefa não encontrada');
       t.state = seg[seg.length - 1] === 'aprovar' ? 'succeeded' : 'cancelled';
+      t.finished_at = new Date(agora()).toISOString();
       gravar(d);
       return { ok: true, tarefa: t };
     }
@@ -508,7 +549,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     modo: 'local',
     async call(caminho, metodo = 'GET', corpo) {
       // igual ao servidor: a resposta é JSON e o erro traz o estado HTTP
-      try { return rota(caminho, metodo, corpo); }
+      try { return await rota(caminho, metodo, corpo); }
       catch (e) { throw Object.assign(e, { local: true }); }
     },
     /* cópia de segurança: um browser não é uma base de dados */

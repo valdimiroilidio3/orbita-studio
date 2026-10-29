@@ -384,9 +384,15 @@ test('vista do cine: com plano mostra as secções, os estilos e o vídeo por fa
   assert.match(html, /Restrições/);
   assert.match(html, /data-act="cine-gerar"/);
   assert.match(html, /data-act="cine-estilo"/);
-  assert.match(html, /Vídeo cinematográfico/);
-  assert.match(html, /ainda não há como/);
-  assert.match(html, /data-act="cine-video"[^>]*disabled/, 'o botão do vídeo não pode estar activo sem caminho real');
+  assert.match(html, /<h2 id="cine-v1">Vídeo<\/h2>|Vídeo cinematográfico/);
+  /* 1.53.2 · o dono escolheu a opção C: dois motores, um botão. O botão deixou
+     de estar cinzento — compõe-se no browser e, se houver worker, vai à fila do
+     OpenMontage. O que NÃO se faz é prometer um vídeo sem peças aprovadas. */
+  assert.doesNotMatch(html, /ainda não há como/, 'a frase morta não pode voltar');
+  assert.doesNotMatch(html, /data-act="cine-video"[^>]*disabled/, 'o botão do vídeo não pode ficar cinzento');
+  assert.match(html, /compõe-se aqui|OpenMontage/, 'o cartão diz qual dos dois motores vai trabalhar');
+  assert.match(html, /não se inventa um vídeo|peça\(s\) aprovada\(s\)/i, 'sem peças, a frase é clara');
+  assert.match(html, /não é um render de Veo ou Kling/i, 'não se passa por um render de Veo/Kling');
 });
 
 test('vista do cine: a preparar, o que se mostra é um esqueleto — nunca uma imagem de exemplo', async () => {

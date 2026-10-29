@@ -12,6 +12,7 @@
    =========================================================================== */
 import { VERSAO } from './_versao.mjs';
 import { remetente } from './_prontidao.mjs';   // 1.41.0: o «from» do correio, com um nome só
+import { criarECorrer, correrDeNovo } from './_tarefas.mjs';   // 1.53.2: as tarefas correm a sério
 
 
 const TIPOS_PROJETO = [
@@ -26,6 +27,10 @@ const TIPOS_TAREFA = {
   briefing: { label: 'Escrever o briefing' },
   codigo: { label: 'Gerar o código' },
   qa: { label: 'Auditoria de qualidade' },
+};
+/** A que sala cada tipo de tarefa pertence — para o filtro da mesa não mentir. */
+const DEPARTAMENTOS_POR_TIPO = {
+  investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia',
 };
 const DEPARTAMENTOS = [
   { id: 'comando', nome: 'Comando' }, { id: 'prospeccao', nome: 'Prospecção' },
@@ -1027,29 +1032,36 @@ export async function responder(repo, { caminho, metodo = 'GET', corpo = null, e
     return { status: 200, corpo: { project: projeto, qa: null, files: [], historico: [] } };
   }
 
-  /* ---- tarefas: sem motor, dizem que não correram ---- */
+  /* ---- tarefas: criam-se E correm (1.53.2) ----------------------------------
+     O que aqui estava: `state: 'failed'` à nascença, com a frase «sem motor de
+     IA ligado a esta base». O dono leu-a e respondeu «nas tarefas nada
+     funciona» — com razão. Agora o trabalho é feito: ver `_tarefas.mjs`. */
   if (caminhoLimpo === '/ops/tarefas' && m === 'GET') {
+    const todas = await repo.tarefas.list(100);
+    const fdept = limpo(qs.get('departamento'));
+    const festado = limpo(qs.get('estado'));
     return { status: 200, corpo: {
-      tarefas: await repo.tarefas.list(100), tipos: TIPOS_TAREFA, departamentos: DEPARTAMENTOS,
+      tarefas: todas.filter((t) => (!festado || t.state === festado) && (!fdept || (DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando') === fdept)),
+      tipos: TIPOS_TAREFA, departamentos: DEPARTAMENTOS,
     } };
   }
   if (caminhoLimpo === '/ops/tarefas' && m === 'POST') {
-    const tipo = limpo(corpo?.kind);
-    if (!TIPOS_TAREFA[tipo]) throw falha(400, 'tipo de tarefa desconhecido');
-    const tarefa = await repo.tarefas.insert({
-      kind: tipo, entity_id: limpo(corpo.entityId) || null, entidade: limpo(corpo.entidade) || null,
-      state: 'failed', error: 'sem motor de IA ligado a esta base — a tarefa fica registada, mas não foi executada',
-      finished_at: agoraIso(),
-    });
-    await repo.atividade.add('tarefa', `${TIPOS_TAREFA[tipo].label}: sem motor`);
-    return { status: 201, corpo: { tarefa } };
+    if (!TIPOS_TAREFA[limpo(corpo?.kind)]) throw falha(400, 'tipo de tarefa desconhecido');
+    return criarECorrer({ repo, corpo, env, fetchImpl, TIPOS: TIPOS_TAREFA });
   }
   if (seg[0] === 'ops' && seg[1] === 'tarefas' && seg.length === 4 && m === 'POST') {
     const t = await repo.tarefas.byId(seg[2]);
     if (!t) throw falha(404, 'tarefa não encontrada');
-    if (seg[3] === 'correr') return { status: 200, corpo: { ok: false, error: 'sem motor de IA ligado a esta base' } };
+    if (seg[3] === 'correr') return correrDeNovo({ repo, tarefa: t, env, fetchImpl });
     if (seg[3] === 'aprovar' || seg[3] === 'rejeitar') {
-      const t2 = await repo.tarefas.patch(t.id, { state: seg[3] === 'aprovar' ? 'succeeded' : 'cancelled' });
+      /* aprovar uma tarefa à espera fecha-a como feita; rejeitar fecha-a como
+         cancelada. Uma tarefa que ainda não tem resultado não pode ser aprovada
+         em nome de um trabalho que não aconteceu. */
+      if (seg[3] === 'aprovar' && t.state === 'awaiting_approval' && !t.resultado) {
+        return correrDeNovo({ repo, tarefa: t, env, fetchImpl });
+      }
+      const t2 = await repo.tarefas.patch(t.id, { state: seg[3] === 'aprovar' ? 'succeeded' : 'cancelled', finished_at: agoraIso() });
+      await repo.atividade.add('tarefa', `${TIPOS_TAREFA[t.kind]?.label || t.kind}: ${seg[3] === 'aprovar' ? 'aprovada' : 'rejeitada'} por ti`).catch(() => null);
       return { status: 200, corpo: { ok: true, tarefa: t2 } };
     }
   }
