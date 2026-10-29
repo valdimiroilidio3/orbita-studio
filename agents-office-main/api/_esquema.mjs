@@ -27,7 +27,12 @@
 import fsPadrao from 'node:fs';
 
 /** A ordem em que o esquema se aplica. A ordem É o contrato. */
-export const FICHEIROS = ['orbita_mesa.sql', 'orbita_ia.sql', 'orbita_1_37_0.sql'];
+export const FICHEIROS = [
+  'orbita_mesa.sql', 'orbita_ia.sql', 'orbita_1_37_0.sql',
+  /* 1.53.2 · `resultado` e `modelo` em orbita_tasks. É idempotente: numa base
+     que já as tenha, não faz nada. */
+  'orbita_1_53_2.sql',
+];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
 export const NAO_APLICADOS = {
@@ -41,6 +46,10 @@ export const NAO_APLICADOS = {
 export const COLUNAS_EXIGIDAS = {
   orbita_messages: ['subject', 'to', 'from', 'provider', 'enviada_at', 'recebida_at', 'direction', 'id_externo'],
   orbita_leads: ['responded_at', 'rating', 'reviews', 'score_reasons', 'consent'],
+  /* 1.53.2 · onde fica o texto que a tarefa produziu. Sem estas duas, a tarefa
+     conclui na mesma (o resultado vai para a Atividade), mas o cartão não o
+     mostra — e o `/api/setup` passa a dizer que faltam. */
+  orbita_tasks: ['resultado', 'modelo'],
 };
 
 export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas'];
