@@ -8,7 +8,7 @@
      ícone, um nome quando é partilhada, e a hipótese de ser vista SEM servidor (o Órbita corre na
      máquina de quem o usa; a versão publicada é a vista do escritório, e di-lo em vez de fingir
      que tem base de dados). Os ficheiros vêm de `assets/brand/` e são copiados pelo `build.mjs`. -->
-<meta name="description" content="Um escritório isométrico 3D onde 35 agentes de IA trabalham em seis salas em volta de um Cérebro: tarefas reais, notas reais, e a circulação dos chefes entre a sala e o átrio.">
+<meta name="description" content="Um escritório isométrico 3D onde 47 agentes de IA trabalham em seis salas em volta de um Cérebro: tarefas reais, notas reais, e a circulação dos chefes entre a sala e o átrio.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FDFFF8">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -17,14 +17,14 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Órbita Agentes">
 <meta property="og:title" content="Órbita Agentes — o escritório de agentes">
-<meta property="og:description" content="Seis salas, 35 agentes e um Cérebro no centro. Cada agente tem nome, função e um lugar; o trabalho passa de sala em sala por seis pontes.">
+<meta property="og:description" content="Seis salas, 47 agentes e um Cérebro no centro. Cada agente tem nome, função e um lugar; o trabalho passa de sala em sala por seis pontes.">
 <meta property="og:image" content="/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="pt_PT">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Órbita Agentes — o escritório de agentes">
-<meta name="twitter:description" content="Seis salas, 35 agentes e um Cérebro no centro. O trabalho passa de sala em sala por seis pontes.">
+<meta name="twitter:description" content="Seis salas, 47 agentes e um Cérebro no centro. O trabalho passa de sala em sala por seis pontes.">
 <meta name="twitter:image" content="/og.png">
 <style>
   :root {
@@ -176,6 +176,16 @@
     transition: all .4s var(--ease);
   }
   #zoomCtl button:hover { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  /* 1.53.0: os botões da câmara. Redondos como os outros, mas o do ângulo é uma pastilha —
+     é o único que mostra estado, e o estado precisa de largura para «NE · 90°». */
+  #zoomCtl button.cam { font-size: 15px; letter-spacing: .02em; }
+  #zoomCtl button.wide {
+    width: 56px; border-radius: 99px; font-size: 10.5px; font-weight: 650;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--grey);
+  }
+  #zoomCtl button.wide:hover { color: var(--cream); }
+  #zoomCtl button.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  #zoomCtl button.cam:hover { box-shadow: 0 10px 26px rgba(21,20,20,.18); }
 
   /* dept badges — zoom-out layer */
   .badge {
@@ -3296,6 +3306,14 @@
   <button id="zOut" title="reduzir (−)">−</button>
   <button id="zHome" title="visão geral (0)">⌂</button>
   <button id="zIndex" title="lista do escritório (L)" aria-label="lista do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></button>
+  <!-- 1.53.0 · os ângulos da câmara: rodar um quarto de volta ([ e ]), e a vista aérea (9).
+       O rótulo do meio não é decoração — diz em que vista se está. -->
+  <button id="zLeft" class="cam" title="rodar para a esquerda ([ ou Shift+scroll)" aria-label="rodar a câmara para a esquerda">‹</button>
+  <button id="zAngle" class="cam wide" title="rodar a câmara (], 0 endireita; Alt+arrastar e Shift+scroll também rodam)">NE</button>
+  <button id="zRight" class="cam" title="rodar para a direita (] ou Shift+scroll)" aria-label="rodar a câmara para a direita">›</button>
+  <button id="zAerea" class="cam" title="vista aérea (9; Alt+arrastar inclina)" aria-label="vista aérea">◍</button>
+  <!-- 1.53.0 · a loja de apps: as integrações que ligam mesmo, num sítio só -->
+  <button id="zApps" title="apps e integrações (A)" aria-label="apps e integrações"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z"/></svg></button>
   <!-- 27 out 2026: o terminal da oficina também tem de ser encontrável sem saber atalhos -->
   <button id="zTerm" title="terminal da oficina (F)" aria-label="terminal da oficina"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 3.4h10.8v9.2H2.6z"/><path d="M4.6 6.4 6.8 8l-2.2 1.6M8.2 9.9h3.2"/></svg></button>
 </div>

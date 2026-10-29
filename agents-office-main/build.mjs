@@ -71,7 +71,7 @@ copyFileSync('assets/brand/og.png', 'dist/og.png');
 writeFileSync('dist/manifest.webmanifest', JSON.stringify({
   name: 'Órbita Agentes',
   short_name: 'Órbita',
-  description: 'Um escritório isométrico 3D com seis salas, 35 agentes e um Cérebro no centro.',
+  description: 'Um escritório isométrico 3D com seis salas, 47 agentes e um Cérebro no centro.',
   start_url: '/',
   scope: '/',
   display: 'standalone',

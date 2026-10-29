@@ -1,6 +1,6 @@
 // Órbita — o que está a acontecer, agora, em cada posto de trabalho.
 //
-// O escritório 3D já sabia desenhar 35 agentes e 35 monitores. O que não sabia era *o que* mostrar:
+// O escritório 3D já sabia desenhar os agentes e os monitores. O que não sabia era *o que* mostrar:
 // cada ecrã repetia três linhas de exemplo. Isto liga cada monitor ao trabalho que a base de dados
 // já guarda — tarefas, jobs, projetos, QA e a cadeia de eventos — e nada mais.
 //

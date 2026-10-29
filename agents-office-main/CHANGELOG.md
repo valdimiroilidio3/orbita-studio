@@ -1,3 +1,72 @@
+## 1.53.0 — 29 out 2026 · a loja de apps, 47 agentes e uma câmara que roda
+
+O pedido foi grande e em duas partes. Primeiro: «quero que implementes mais
+agentes e IAs / quero que mudes o visual … design da Apple, espelho … e faça os
+campos de conexão assim como as imagens, esse visual para conectar e deve
+conectar mesmo a todos esses apps». Depois: «liquid glass … visual de outro
+mundo, vibe muito moderna» e «arrastar e mover, scroll para os lados, outros
+ângulos da câmera».
+
+**O escritório tem 47 agentes.** Eram 35. Entraram doze, em seis salas que
+também ficaram mais fundas (emails e finanças a 32 m, as outras a 40 m — a
+última fila não come a entrada): `atend`/`plan` (correio), `radar`/`partners`
+(vendas), `renew`/`upsell` (operações), `motion`/`brand` (finanças), `sec`/`perf`
+(entrega), `seo`/`mailmkt` (marketing). Cada um tem nome, função, aparência
+própria (`style.variant` único — 47 de 47) e uma identidade com o que faz.
+`officeProblems()` e `lookProblems()` ficam vazios: nenhum agente em cima de
+outro, nenhuma mesa fora da sala.
+
+**A loja de apps (`A`, `#zApps`).** 52 serviços em oito secções com contagem
+(Programação 11, Design 3, Produtividade 12 …), cada cartão com o estado à
+direita, tal como nas imagens: `✓ Conectado`, `Conectar`, ou o motivo honesto
+(`OAuth`, `Local`, `Sem API`). Liquid glass assente nos tokens que já existiam
+(`--glass*`) — sem paleta paralela.
+
+O que se liga, liga mesmo:
+
+- `Conectar` abre o campo da chave e «Guardar e testar» faz `POST
+  /api/platform/key`; o `.env` é reescrito, relido, e o serviço é sondado. A
+  resposta mostra o `HTTP` e os `ms` reais, e a folha fica 1600 ms aberta para
+  se ler.
+- O `↻` ao lado de um `Conectado` volta a provar a ligação
+  (`POST /api/platform/testar`, novo no servidor local). Antes, o botão
+  `Testar` só existia no papel: a rota não existia em `serve.mjs`.
+- Onde a chave não se pode escrever (o site publicado), a resposta 501 é
+  mostrada por palavras, com o nome da variável a definir na Vercel. Nunca
+  «guardado».
+- OAuth (Canva, Drive, Zapier), local (Obsidian, Prisma, 1Password) e sem API
+  (Paper, Aave) dizem o que são **antes** de se clicar. Não há «conectado»
+  inventado.
+- `+ Adicionar personalizado` grava um serviço novo em
+  `data/api/providers.json` (`POST /api/platform/custom`), que passa a
+  aparecer na lista com os restantes.
+- No servidor de produção, 17 serviços novos ganharam sonda real (Sentry, Neon,
+  Netlify, Render, Linear, Figma, PostHog, Todoist, Trello, Notion, Airtable,
+  Slack, Discord, Telegram, OpenAI, Anthropic, Gemini): testar sem chave diz
+  qual falta.
+
+**A câmara.** `src/camera.js` é a conta pura: yaw (roda), inclinação (0.45
+rasante … 2.2 a pino), `direcaoDaCamara()` sempre unitária. Quatro vistas a 90°
+(NE, NO, SO, SE), uma aérea, animação de 380 ms. `[` e `]` rodam, `9` sobe,
+`0` (e a vista geral) voltam à isométrica de sempre — quem nunca tocou em nada
+continua a ver exactamente o que via. Arrastar com Alt (ou botão do meio) roda;
+Shift+scroll roda; o resto continua a mover e a ampliar. Os botões dizem os
+gestos no `title`, senão ninguém os descobre.
+
+**A prova de que liga mesmo.** Nesta máquina, com o servidor a correr: `+ Adicionar
+personalizado` criou um serviço («Sonda Local», sonda `http://127.0.0.1:4765/api/health`);
+`Guardar e testar` escreveu a chave no `.env`, releu-o e fez o pedido verdadeiro —
+`{"ok":true,"status":200,"ms":13}`; o `↻` voltou a provar — `{"ok":true,"status":200,"ms":3}`.
+O mesmo `Testar` sem chave responde `falta FIGMA_TOKEN no ambiente`, e um id inventado,
+`não conheço o serviço «zzz»`. (Aqui dentro o `github` responde
+`fetch failed: UNABLE_TO_VERIFY_LEAF_SIGNATURE`: é o proxy TLS desta máquina, não o GitHub —
+o erro real, dito como é.)
+
+**Testes:** 713 (eram 687). Novos: `camera.test.mjs` (13) e `apps.test.mjs`
+(12), mais `probeId` em `platform.test.mjs`. `a11y.test.mjs` passou a ler os
+agentes reais: o espelho dizia «35 agentes» e passava, porque a lista falsa
+tinha 35 escritos à mão.
+
 ## 1.52.4 — 29 out 2026 · o cartão diz quem respondeu (também quando é um par)
 
 A lista já oferecia 40 modelos, mas o cartão de confirmação do modo CONSTRUIR

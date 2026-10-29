@@ -7,6 +7,20 @@
 // Sobrou o que é verdade: o papel de cada agente.
 
 export const IDENTITY = {
+  /* 1.53.0 · os doze lugares novos (47 no total). Função e descrição na mesma voz dos outros:
+     o que fazem, para quem, e onde acaba a responsabilidade deles. */
+  atend: { role: 'Primeira resposta e triagem', does: 'Lê o que chega — correio, formulários, mensagens —, classifica por urgência e por dono, e responde ao que é simples sem esperar por ninguém.' },
+  plan: { role: 'Agenda e prioridades do dia', does: 'Monta o dia da casa: o que tem de sair hoje, quem está bloqueado, o que pode esperar, e o que já passou do prazo.' },
+  motion: { role: 'Movimento e animação', does: 'Dá movimento ao que está parado: transições de interface, animações de marca e vídeos curtos, sempre dentro do design system do projeto.' },
+  brand: { role: 'Identidade e marca', does: 'Guarda a marca: logótipo, cores, tipografia, tom e regras de uso, e verifica que cada peça que sai as cumpre.' },
+  radar: { role: 'Oportunidades no mercado', does: 'Varre sinais de procura — concursos, pedidos públicos, empresas a crescer — e entrega oportunidades com contacto e motivo.' },
+  partners: { role: 'Parceiros e alianças', does: 'Encontra quem pode vender ou entregar com a Órbita — agências, freelancers, fornecedores — e prepara a primeira conversa.' },
+  renew: { role: 'Renovações de contratos', does: 'Sabe quando cada contrato acaba e o que é preciso para renovar: resultados provados, proposta de continuidade e datas.' },
+  upsell: { role: 'Pacotes e crescimento de conta', does: 'Lê o que cada cliente já usa e propõe o passo seguinte com número: manutenção, campanhas, novos módulos.' },
+  sec: { role: 'Segurança e acessos', does: 'Controla quem entra onde: chaves, permissões, acessos a repositórios e a base, e revoga o que deixou de ser preciso.' },
+  perf: { role: 'Desempenho e custos', does: 'Vigia o que custa dinheiro: latência, erros, uso de API e de base de dados, e diz o que cortar antes de aparecer na fatura.' },
+  seo: { role: 'Pesquisa e visibilidade', does: 'Trabalha o que traz gente do Google: intenção de pesquisa, títulos, estrutura, ligações internas e páginas que já trazem tráfego.' },
+  mailmkt: { role: 'Email marketing', does: 'Escreve e envia as sequências de correio: boas-vindas, nutrição, reativação e oferta — com consentimento registado e métricas por envio.' },
   enzo: { role: 'Dados de contacto e enriquecimento', does: 'Completa cada empresa da lista com decisor, cargo, e-mail, telemóvel, LinkedIn e dimensão, e remove o que não se consegue verificar.' },
   lexi: { role: 'Planeamento de publicações', does: 'Mantém o calendário editorial e a fila de aprovações: o que sai, em que canal, em que dia, e o que está bloqueado.' },
   ona: { role: 'Onboarding e relação inicial', does: 'Acompanha cada cliente novo desde o sim até ao primeiro resultado: boas-vindas, acessos, expectativas, pontos de contacto e handoff para a Engenharia.' },

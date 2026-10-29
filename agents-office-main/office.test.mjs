@@ -166,8 +166,8 @@ test('LAYOUT e DEPTS descrevem o mesmo escritório', () => {
   assert.equal(new Set(posicoes).size, posicoes.length, 'dois pods no mesmo sítio');
 });
 
-test('35 agentes, todos numa sala conhecida, um chefe por sala', () => {
-  assert.equal(AGENTS.length, 35);
+test('47 agentes, todos numa sala conhecida, um chefe por sala', () => {
+  assert.equal(AGENTS.length, 47);
   const ids = AGENTS.map((a) => a.id);
   assert.equal(new Set(ids).size, ids.length, 'há ids repetidos');
   for (const a of AGENTS) {
@@ -180,7 +180,7 @@ test('35 agentes, todos numa sala conhecida, um chefe por sala', () => {
     assert.ok(sala.length >= 4, `${k}: sala com pouca gente (${sala.length})`);
     assert.equal(sala.filter((a) => a.lead).length, 1, `${k}: tem de haver um chefe de sala`);
   }
-  assert.equal(AGENTS.map((a) => a.dept).filter((d) => DEPT_KEYS.includes(d)).length, 35);
+  assert.equal(AGENTS.map((a) => a.dept).filter((d) => DEPT_KEYS.includes(d)).length, 47);
 });
 
 test('duas pessoas não se sentam na mesma secretária', () => {
@@ -529,17 +529,17 @@ test('as preferências do compositor sobrevivem com bom senso (e não rebentam c
    mantém a coloração da roupa, cabelo diferente para cada agente (35), alguns com chapéu, alguns
    serão mulheres» — e, na mesma frase, «mexendo realmente o mouse e digitando nos teclados».
 
-   O que se prova aqui é o que se pode provar sem olhos: que são 35 e diferentes, que a cor vem
+   O que se prova aqui é o que se pode provar sem olhos: que são 47 e diferentes, que a cor vem
    mesmo da sala, que o fato é formal, e que a PONTA DOS DEDOS fica no ponto exacto onde está a
    tecla (e o rato). Esta última é a diferença entre «o ombro oscila» e «a mão digita». */
 
-test('35 agentes, 35 aparências — e a tabela é verificada, não sorteada', () => {
+test('47 agentes, 47 aparências — e a tabela é verificada, não sorteada', () => {
   assert.deepEqual(lookProblems(), []);
-  assert.equal(LOOK_STATS.total, 35);
+  assert.equal(LOOK_STATS.total, 47);
   const sig = AGENTS.map((a) => lookFor(a).signature);
-  assert.equal(new Set(sig).size, 35, 'há dois agentes com o mesmo cabelo/chapéu');
+  assert.equal(new Set(sig).size, 47, 'há dois agentes com o mesmo cabelo/chapéu');
   const cabelos = AGENTS.map((a) => `${lookFor(a).style}.${lookFor(a).variant}`);
-  assert.equal(new Set(cabelos).size, 35, 'o pedido foi «cabelo diferente para cada agente»');
+  assert.equal(new Set(cabelos).size, 47, 'o pedido foi «cabelo diferente para cada agente»');
   assert.ok(LOOK_STATS.women >= 8, `mulheres a menos (${LOOK_STATS.women})`);
   assert.ok(LOOK_STATS.hats >= 5, `chapéus a menos (${LOOK_STATS.hats})`);
   assert.ok(LOOK_STATS.beards >= 4, `barbas a menos (${LOOK_STATS.beards})`);
@@ -563,7 +563,7 @@ test('a tabela apanha um erro: um agente sem aparência, ou dois iguais', () => 
   const doppel = Object.assign({}, LOOK_TABLE, { imail: { ...LOOK_TABLE.imail, style: 'slick', variant: 0, hat: 'none' } });
   // (a tabela é congelada; o teste compara assinaturas directamente)
   assert.equal(doppel.imail.style, 'slick');
-  assert.ok(LOOK_STATS.signatures.length === 35);
+  assert.ok(LOOK_STATS.signatures.length === AGENTS.length, 'uma assinatura por agente, nem mais nem menos');
 });
 
 test('o fato é a cor da sala: mesmo matiz, mais fundo, e a gravata acende com o vidro', () => {
