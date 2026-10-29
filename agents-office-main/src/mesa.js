@@ -92,7 +92,7 @@ const S = {
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
-  eu: null, needLogin: false, authEstado: null, primeiraConta: false, contas: null, sessoes: [],
+  eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, contas: null, sessoes: [],
   /* 1.18.0 · Control Center da IA */
   ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
 };
@@ -944,6 +944,10 @@ function viewProjeto() {
 function viewLogin() {
   const primeira = S.primeiraConta;
   const estado = S.authEstado || {};
+  /* 1.54.0 · a porta: se a instalação pede o token de criação, o campo aparece
+     (e diz onde está), em vez de o botão falhar sem explicação. */
+  const exigeToken = !!(primeira && estado.exigeToken);
+  const aRecuperar = !!S.aRecuperar;
   return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
     <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
     <div class="card">
@@ -954,13 +958,18 @@ function viewLogin() {
       <div class="form" style="grid-template-columns:1fr">
         ${primeira ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
         <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="">
-        <input class="in" id="lgPass" type="password" placeholder="${primeira ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira ? 'new-password' : 'current-password'}">
-        ${primeira ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
-        <button class="btn primary" data-act="${primeira ? 'criar-primeira-conta' : 'entrar'}">${primeira ? 'Criar conta e entrar' : 'Entrar'}</button>
+        ${aRecuperar ? '<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação"><input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password"><input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova">' : ''}
+        ${!aRecuperar ? `<input class="in" id="lgPass" type="password" placeholder="${primeira ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira ? 'new-password' : 'current-password'}">` : ''}
+        ${primeira && !aRecuperar ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
+        ${exigeToken ? '<input class="in" id="lgToken" type="password" placeholder="SETUP_TOKEN da instalação" aria-label="token de instalação">' : ''}
+        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar conta e entrar' : 'Entrar'}</button>
+        ${!primeira && !aRecuperar ? '<button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button>' : ''}
       </div>
-      <div class="hint" id="leadNote">${primeira
-        ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.'
-        : 'Sem conta, pede a um dono que crie uma em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e pode ser fechada a qualquer momento.'}</div>
+      <div class="hint" id="leadNote">${aRecuperar
+        ? 'O link vale 30 minutos e uma vez só. Ao guardar, todas as sessões antigas desta conta fecham.'
+        : primeira
+          ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.' + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables) para criar a primeira conta.' : '')
+          : 'Sem conta, pede a um dono que crie uma em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e pode ser fechada a qualquer momento.'}</div>
       ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
       ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
     </div>
@@ -1422,13 +1431,39 @@ async function act(name, el, ev) {
       if (!email || !pass) { toast('Diz o email e a palavra-passe.', true); return; }
       if (name === 'criar-primeira-conta') {
         if (pass !== String($('#lgPass2')?.value || '')) { toast('As palavras-passe não são iguais.', true); return; }
-        await call('/auth/primeiro-dono', 'POST', { email, password: pass, name: String($('#lgNome')?.value || '').trim() });
+        await call('/auth/primeiro-dono', 'POST', {
+          email, password: pass, name: String($('#lgNome')?.value || '').trim(),
+          token: String($('#lgToken')?.value || '').trim(),
+        });
         toast('Conta criada. Bem-vindo ao Órbita.');
       } else {
         await call('/auth/entrar', 'POST', { email, password: pass });
       }
       S.needLogin = false; S.primeiraConta = false;
       await boot(true);
+      return;
+    }
+    if (name === 'abrir-recuperar') {
+      const email = String($('#lgEmail')?.value || '').trim();
+      if (!email) { toast('Escreve primeiro o teu email no campo de cima.', true); return; }
+      try {
+        const r = await call('/auth/recuperar', 'POST', { email });
+        toast(r.nota ? `Pedido registado, mas ${r.nota}` : 'Se houver conta com esse email, o link de recuperação segue para lá.', !!r.nota);
+        S.aRecuperar = true; paint();
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    if (name === 'redefinir-palavra') {
+      const token = String($('#rgToken')?.value || '').trim();
+      const nova = String($('#lgPass')?.value || '');
+      if (!token) { toast('Cola o token que veio no email.', true); return; }
+      if (nova !== String($('#lgPass2')?.value || '')) { toast('As palavras-passe não são iguais.', true); return; }
+      try {
+        await call('/auth/redefinir', 'POST', { token, password: nova });
+        S.aRecuperar = false; S.needLogin = false; S.primeiraConta = false;
+        toast('Palavra-passe nova guardada. Entraste.');
+        await boot(true);
+      } catch (e) { toast(e.message, true); }
       return;
     }
     if (name === 'voltar-modo-local') { S.needLogin = false; S.primeiraConta = false; await boot(true); return; }

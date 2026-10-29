@@ -1,3 +1,62 @@
+## 1.54.0 — 29 out 2026 · A PORTA · a Órbita deixa de ser de quem chega primeiro
+
+Até aqui, em produção:
+
+```
+GET /api/rpc?caminho=/auth/eu
+→ {"user":{"role":"owner"},"perms":{"admin":true,…}}
+```
+
+Isto respondia **a quem pedisse**, sem cookie, sem conta, sem nada.
+`/auth/entrar` respondia `{ok:true}` sem olhar à palavra-passe. A mesa tinha um
+ecrã de entrada bonito a fingir de porta. Quem chegasse ao endereço era dono.
+
+Agora a porta existe, e é do servidor:
+
+- **`api/_conta.mjs` (novo)** — papéis com níveis (`dono` 3, `gestor` 2,
+  `operador` 1, `leitor` 0) e permissões (`read/write/approve/admin`); palavras-passe
+  em **scrypt** com sal próprio (o mesmo formato que o Órbita local já usava — há
+  um teste que abre o hash de um no outro); tokens de sessão de 32 bytes, dos quais
+  a base **só guarda o sha256**; cookies `HttpOnly; Secure; SameSite=Lax`.
+- **`api/_porta.mjs` (novo)** — `/auth/eu`, `/auth/primeiro-dono`,
+  `/auth/entrar`, `/auth/sair`, `/auth/recuperar`, `/auth/redefinir`; e a
+  **guarda**: sem sessão, `/ops/*` e `/ia/*` devolvem **401** com um corpo que a
+  mesa já sabia ler (`{error:'entra', mode:'sessao'}`). Com sessão, cada pedido
+  exige a permissão certa — um `leitor` não escreve, um `operador` não aprova,
+  só um `dono` administra contas. **A interface esconder botões é cortesia; a
+  recusa é do servidor.**
+- **Contas e sessões** deixam de ser listas vazias: `/ops/utilizadores` mostra
+  quem entra (nunca o hash), cria, muda papéis e desactiva; `/ops/sessoes` mostra
+  as sessões abertas, qual é a actual, e fecha-as à mão. Um dono não se desactiva
+  a si próprio nem deixa a instalação sem donos.
+- **Cinco tentativas falhadas** fecham a porta 15 minutos (429) — mesmo com a
+  palavra-passe certa a seguir. A frase de erro é a mesma para «email não existe»
+  e «palavra-passe errada»: não se enumeram emails.
+- **Recuperação**: link de uso único, 30 minutos, guardado em hash; ao guardar a
+  palavra-passe nova, **todas as sessões antigas fecham**. Sem `RESEND_API_KEY` o
+  link não sai por email — e a resposta diz isso, em vez de fingir que enviou.
+- **A primeira conta** cria-se uma vez, em `/auth/primeiro-dono`, e fica dona.
+  Com `SETUP_TOKEN` no ambiente, o token é exigido (o campo aparece no ecrã de
+  entrada, com a explicação). Em produção é este o primeiro passo depois do deploy.
+- **`supabase/orbita_1_54_0.sql` (novo)** — `orbita_contas` e `orbita_sessoes`,
+  com RLS e só `service_role`. Entra pela lista do `/api/setup`.
+- **A conversa não morre na porta**: no escritório 3D, uma resposta 401 passa a
+  dizer «entra em /app e volta — a conversa fica à tua espera», em vez de
+  «o servidor respondeu: entra».
+- **Modo local / testes**: em memória a porta fica **dormente** por desenho (764
+  testes antigos continuam a correr sem contas). Está escrito no código e no
+  teste — é uma decisão, não um esquecimento. Em produção (base de dados ligada)
+  fecha. `ORBITA_AUTH=aberta` abre-a e a interface mostra o aviso.
+
+**O que continua a não ser:** não há confirmação de email no registo (a conta
+nasce activa), não há 2FA, e a sessão não é renovada por uso (expira em 12 h).
+O critério 1 da 1.0 está cumprido; o 2 está a meio.
+
+**Testes:** 787 (eram 764). Novo `conta.test.mjs` (23): 401 sem cookie em cinco
+rotas, 403 por papel, 429 às cinco tentativas, sessão revogada no servidor,
+expiração, hash sem sal repetido, token só em sha256, e a costura do
+`rpc.mjs` (cabeçalhos a entrar, `Set-Cookie` a sair).
+
 ## 1.53.2 — 29 out 2026 · o vídeo sai e as tarefas correm
 
 Duas coisas que estavam escritas como «não dá» e passaram a acontecer.

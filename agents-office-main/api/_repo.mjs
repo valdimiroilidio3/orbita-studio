@@ -143,6 +143,44 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       };
     },
 
+    /* ---- 1.54.0 · a porta: contas e sessões ----
+       `hash` só sai daqui por `porEmail`/`porId`, que o login usa; nenhuma rota
+       pública os devolve (ver `publico()` em `_conta.mjs`). */
+    contas: {
+      async listar() {
+        return (await pedir('orbita_contas?select=id,email,nome,papel,activo,criado,ultimo_acesso&order=criado.asc&limit=200')) || [];
+      },
+      async contar() {
+        const r = await pedir('orbita_contas?select=id&limit=1');
+        return (Array.isArray(r) ? r.length : 0);
+      },
+      async porEmail(email) {
+        return um(await pedir(`orbita_contas?select=*&email=eq.${q(String(email || '').trim().toLowerCase())}&limit=1`));
+      },
+      async porId(id) { return um(await pedir(`orbita_contas?select=*&id=eq.${q(id)}&limit=1`)); },
+      async criar(c) { return um(await pedir('orbita_contas', { method: 'POST', body: c, prefer: 'return=representation' })); },
+      async actualizar(id, campos) {
+        return um(await pedir(`orbita_contas?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' }));
+      },
+    },
+    sessoes: {
+      async criar(s) { return um(await pedir('orbita_sessoes', { method: 'POST', body: s, prefer: 'return=representation' })); },
+      async porHash(h) {
+        return um(await pedir(`orbita_sessoes?select=*&token_hash=eq.${q(h)}&limit=1`));
+      },
+      async listar(limite = 50) {
+        return (await pedir(`orbita_sessoes?select=*&order=criado.desc&limit=${Math.min(200, limite)}`)) || [];
+      },
+      async actualizar(id, campos) {
+        return um(await pedir(`orbita_sessoes?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' }));
+      },
+      async revogar(id) {
+        return um(await pedir(`orbita_sessoes?id=eq.${q(id)}`, {
+          method: 'PATCH', body: { revogada: new Date().toISOString() }, prefer: 'return=representation',
+        }));
+      },
+    },
+
     leads: {
       async list(limit = 200) {
         return (await pedir(`orbita_leads?select=*&order=created_at.desc&limit=${Math.min(500, limit)}`)) || [];
@@ -305,6 +343,7 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [],
+    contas: [], sessoes: [],
     iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [],
     ...JSON.parse(JSON.stringify(seed)),
   };
@@ -315,6 +354,21 @@ export function createMemRepo(seed = {}) {
     tipo: 'memoria',
     _dados: d,
     async health() { return { ok: true, base: 'memoria', faltam: [], mensagensProntas: true }; },
+    contas: {
+      async listar() { return [...d.contas]; },
+      async contar() { return d.contas.length; },
+      async porEmail(email) { return d.contas.find((c) => c.email === String(email || '').trim().toLowerCase()) || null; },
+      async porId(i) { return d.contas.find((c) => c.id === i) || null; },
+      async criar(c) { const nova = { id: id('u'), criado: agora(), activo: true, ultimo_acesso: null, ...c }; d.contas.push(nova); return nova; },
+      async actualizar(i, campos) { const c = d.contas.find((x) => x.id === i); if (!c) return null; Object.assign(c, campos); return c; },
+    },
+    sessoes: {
+      async criar(x) { const nova = { id: id('ss'), criado: agora(), revogada: null, ...x }; d.sessoes.push(nova); return nova; },
+      async porHash(h) { return d.sessoes.find((x) => x.token_hash === h) || null; },
+      async listar(limite = 50) { return [...d.sessoes].sort((a, b) => String(b.criado).localeCompare(String(a.criado))).slice(0, limite); },
+      async actualizar(i, campos) { const x = d.sessoes.find((y) => y.id === i); if (!x) return null; Object.assign(x, campos); return x; },
+      async revogar(i) { const x = d.sessoes.find((y) => y.id === i); if (!x) return null; x.revogada = agora(); return x; },
+    },
     leads: {
       async list(limit = 200) { return [...d.leads].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
       async byId(i) { return d.leads.find((l) => l.id === i) || null; },

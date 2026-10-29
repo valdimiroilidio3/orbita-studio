@@ -143,8 +143,11 @@ test('`?so=` aplica um só, e um nome errado é recusado com a lista', async () 
 });
 
 test('o que falta da mesa é dito pelo nome', () => {
-  assert.deepEqual(tabelasEmFalta(['orbita_leads', 'orbita_messages']), ['orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas']);
-  assert.deepEqual(tabelasEmFalta(['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas']), []);
+  assert.deepEqual(tabelasEmFalta(['orbita_leads', 'orbita_messages']), ['orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes']);
+  assert.deepEqual(tabelasEmFalta(['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas']), ['orbita_contas', 'orbita_sessoes'],
+    /* 1.54.0 · sem a porta a base não serve para publicar — e o nome aparece */
+  );
+  assert.deepEqual(tabelasEmFalta(['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes']), []);
 });
 
 /* ---------- 3 · a rota de prontidão e a saúde ---------- */

@@ -1527,7 +1527,9 @@ async function sendChatOrbita(id, texto, m, par, _queda = null) {
         chatPush(id, { who: 'agent', text: `A escolha (${par.fornecedor} · ${par.modelo}) não respondeu: ${out.erro}. Vou tentar outro motor.`, meta: 'escolha falhou · a tentar o automático' });
         return sendChatOrbita(id, texto, { ...m, __tentouAuto: true }, null, _queda);
       }
-      chatPush(id, { who: 'agent', text: `Não consigo responder. O servidor respondeu: ${out.erro}.${par ? ` A escolha foi ${par.fornecedor} · ${par.modelo}.` : ''}` });
+      chatPush(id, { who: 'agent', text: out.precisaEntrar
+        ? 'Não consigo responder porque a Órbita está fechada sem sessão. Abre <a href="/app/">/app</a>, entra com a tua conta e volta aqui — a conversa fica à tua espera.'
+        : `Não consigo responder. O servidor respondeu: ${out.erro}.${par ? ` A escolha foi ${par.fornecedor} · ${par.modelo}.` : ''}` });
       composer?.toast(out.erro, 'err');
       return;
     }

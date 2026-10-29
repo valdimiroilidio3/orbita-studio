@@ -73,7 +73,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    const r = await responder(repo, { caminho, metodo, corpo, env: envDoPedido(req) });
+    /* 1.54.0 · a porta precisa de ver o cookie e de poder pôr o seu: os cabeçalhos
+       do pedido entram, e o `Set-Cookie` da sessão sai por aqui. Sem esta linha,
+       entrar funcionava na base e não no browser. */
+    const r = await responder(repo, {
+      caminho, metodo, corpo, env: envDoPedido(req),
+      headers: req.headers || {},
+      ip: String((req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip'])) || '').split(',')[0].trim() || null,
+    });
+    const cookie = r.cabecalhos && r.cabecalhos['Set-Cookie'];
+    if (cookie) res.setHeader('Set-Cookie', cookie);
     res.status(200).json({ status: r.status, corpo: r.corpo });
   } catch (e) {
     const estado = e.status || 500;
