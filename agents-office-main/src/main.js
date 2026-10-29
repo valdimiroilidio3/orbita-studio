@@ -30,6 +30,14 @@ import { createCrew } from './crew.js'; // 28 out 2026: a circulação (chefes a
 /* 28 out 2026 (pedido 36) — ONDE FICA A PORTA. A conta saiu do `main.js` para `src/circulation.js`:
    uma regra só, para as seis salas, provada sem three por `circulation.test.mjs`. */
 import { doorPlan } from './circulation.js';
+/* 1.53.0 · A CÂMARA (pedido: «arrastar e mover, scroll para os lados, outros ângulos»).
+   A conta vive em `src/camera.js` — pura, provada em `camera.test.mjs`. Aqui só se liga ao three:
+   o arrasto move o chão, o Alt+arrasto (ou o botão do meio) roda, o scroll horizontal roda e a
+   inclinação dá as vistas de cima. O ângulo isométrico da casa continua a ser o de origem. */
+import {
+  ANGULOS, AEREA, RAD_POR_PIXEL, direcaoDaCamara, rodar, inclinacaoValida,
+  gestoDoScroll, gestoDoArrasto, etiquetaDoAngulo, proximoAngulo, INCLINACAO_BASE,
+} from './camera.js';
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -91,6 +99,9 @@ import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — ba
 import { initToday } from './today.js'; // 26 out 2026: o ecrã HOJE — decidir, o que aconteceu, o que vem
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
+/* 1.53.0 · a loja de apps — o vidro que liga as ferramentas a sério. Vive em `src/apps.js`, que é
+   DOM puro, para poder ser provada em jsdom (e não precisar do three para abrir). */
+import { createApps } from './apps.js';
 /* 1.52.4 · o cartão da tarefa diz quem respondeu. Havia aqui um mapa fixo
    `{ sonnet, opus, fable }` e, quando o modelo era um par da IA da Órbita
    (`fornecedor|modelo`), o cartão escrevia «modelo do escritório» — falso: tinha
@@ -147,7 +158,11 @@ function overviewPos() {
   const sh = (pw / 2) / ppw;
   return [OVERVIEW.base[0] + SR_.x * sh, 0, OVERVIEW.base[2] + SR_.z * sh];
 }
-const view = { target: new THREE.Vector3(...overviewPos()), zoom: OVERVIEW.zoom, arc: 0 };
+const view = {
+  target: new THREE.Vector3(...overviewPos()), zoom: OVERVIEW.zoom, arc: 0,
+  yaw: 0,                                    // 0 = a isométrica de sempre
+  tilt: INCLINACAO_BASE,                     // 0.92 = a altura de sempre
+};
 let tween = null;
 const UPV = new THREE.Vector3(0, 1, 0);
 const isoWork = new THREE.Vector3();
@@ -157,8 +172,11 @@ function applyCamera() {
   camera.left = -FR * aspect; camera.right = FR * aspect;
   camera.top = FR; camera.bottom = -FR;
   camera.zoom = view.zoom;
-  isoWork.copy(ISO);
-  if (view.arc) isoWork.applyAxisAngle(UPV, view.arc); // cinematic swing-in, settles back to locked iso
+  /* 1.53.0: a direcção deixa de ser fixa. `view.yaw` é o ângulo escolhido pelo dono (arrasto com
+     Alt, scroll horizontal, botões ou teclas) e `view.arc` continua a ser o balanço do flyTo, que
+     entra e sai sozinho — somam-se, para a animação nunca anular o ângulo escolhido. */
+  const dir = direcaoDaCamara(view.yaw + view.arc, view.tilt);
+  isoWork.set(dir.x, dir.y, dir.z);
   camera.position.copy(view.target).addScaledVector(isoWork, CAM_DIST);
   camera.lookAt(view.target);
   camera.updateProjectionMatrix();
@@ -766,11 +784,23 @@ function worldAt(nx, ny) {
 }
 let focused = null; // dept key when zoomed into a dept
 
+/* 1.53.0 · O SCROLL DECIDE. Com o trackpad, deslizar para o lado (deltaX) roda a câmara à volta
+   do escritório; Shift+scroll também roda (é o que os ratos normais fazem quando se carrega em
+   Shift). O scroll vertical continua a ser zoom, e o zoom continua a mirar o cursor — cada gesto
+   faz uma coisa só. A decisão está em `gestoDoScroll()`, provada em `camera.test.mjs`. */
 addEventListener('wheel', (e) => {
   if (e.target.closest && e.target.closest('#rail')) return; // let the rail scroll
+  if (e.target.closest && e.target.closest('#apps')) return; // a loja de apps rola por dentro
   e.preventDefault();
   tween = null;
   view.arc = 0;
+  const gesto = gestoDoScroll(e);
+  if (gesto.tipo === 'rodar') {
+    view.yaw = rodar(view.yaw, gesto.valor * RAD_POR_PIXEL);
+    applyCamera();
+    syncAngleBtn();
+    return;
+  }
   const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;
   const before = worldAt(nx, ny);
   view.zoom = clamp(view.zoom * Math.exp(-e.deltaY * 0.0032), 0.72, 5.2);
@@ -785,19 +815,33 @@ addEventListener('wheel', (e) => {
 
 let drag = null;
 canvas.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY, moved: false };
+  drag = {
+    x: e.clientX, y: e.clientY, moved: false,
+    /* Alt+arrastar (ou o botão do meio/direito) RODA; arrastar normal MOVE o chão. */
+    modo: gestoDoArrasto({ altKey: e.altKey, botao: e.button }),
+  };
+  if (drag.modo === 'rodar') { try { canvas.setPointerCapture(e.pointerId); } catch { /* sem captura */ } }
 });
+// o botão direito não abre o menu: é uma pega para rodar
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('pointermove', (e) => {
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-  if (drag.moved) {
-    tween = null;
+  if (!drag.moved) return;
+  tween = null;
+  if (drag.modo === 'rodar') {
+    /* rotação: horizontal dá a volta, vertical inclina (com limites — nunca passa por baixo do chão) */
+    view.yaw = rodar(view.yaw, dx * 0.007);
+    view.tilt = inclinacaoValida(view.tilt + dy * 0.006);
+    applyCamera();
+    syncAngleBtn();
+  } else {
     const a = worldAt((drag.x / innerWidth) * 2 - 1, -(drag.y / innerHeight) * 2 + 1);
     const b = worldAt((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
     if (a && b) view.target.add(a.sub(b));
-    drag.x = e.clientX; drag.y = e.clientY;
   }
+  drag.x = e.clientX; drag.y = e.clientY;
 });
 addEventListener('pointerup', (e) => {
   const wasDrag = drag && drag.moved;
@@ -1043,11 +1087,75 @@ document.getElementById('zOut').addEventListener('click', () => zoomStep(1 / 1.5
 document.getElementById('zHome').addEventListener('click', zoomOut);
 document.getElementById('zTerm')?.addEventListener('click', () => forgeTerm.toggle());
 
+/* ---------- 1.53.0 · OS ÂNGULOS DA CÂMARA ----------
+   Dois botões que rodam um quarto de volta e um que dá a vista aérea. O rótulo do meio diz sempre
+   onde estamos («NE · 90°»), para se saber que há mais do que uma vista e em qual se está. A
+   rotação é animada (380 ms, a mesma curva da casa): uma câmara que salta deixa de se perceber. */
+let angleAnim = null;
+function animarAngulo(paraYaw, paraTilt, dur = 380) {
+  if (paraYaw == null) paraYaw = view.yaw;
+  if (paraTilt == null) paraTilt = view.tilt;
+  // o caminho mais curto: de 350° para 10° são 20°, não 340°
+  const delta = Math.atan2(Math.sin(paraYaw - view.yaw), Math.cos(paraYaw - view.yaw));
+  angleAnim = { t0: performance.now(), dur, yaw0: view.yaw, dYaw: delta, tilt0: view.tilt, tilt1: paraTilt };
+  const passo = (t) => {
+    if (!angleAnim) return;
+    const k = Math.min(1, (t - angleAnim.t0) / angleAnim.dur);
+    const e = bezier(k);
+    view.yaw = rodar(angleAnim.yaw0, angleAnim.dYaw * e);
+    view.tilt = angleAnim.tilt0 + (angleAnim.tilt1 - angleAnim.tilt0) * e;
+    applyCamera();
+    syncAngleBtn();
+    if (k < 1) requestAnimationFrame(passo); else angleAnim = null;
+  };
+  requestAnimationFrame(passo);
+}
+function virarAngulo(sentido = 1) {
+  tween = null; view.arc = 0; angleAnim = null;
+  animarAngulo(proximoAngulo(view.yaw, sentido).yaw, view.tilt);
+}
+function virarAerea() {
+  tween = null; view.arc = 0; angleAnim = null;
+  animarAngulo(view.yaw, view.tilt >= 1.7 ? INCLINACAO_BASE : AEREA.inclinacao);
+}
+/* Volta à direcção isométrica da casa (yaw 0, inclinação 0.92), animado. Devolve `false` se já
+   lá estava, para não haver rodopio de meio grau a cada clique. */
+function voltarAoIso(dur = 380) {
+  const jaEmCasa = Math.abs(view.yaw) < 1e-3 && Math.abs(view.tilt - INCLINACAO_BASE) < 1e-3;
+  if (jaEmCasa) return false;
+  animarAngulo(0, INCLINACAO_BASE, dur);
+  return true;
+}
+function syncAngleBtn() {
+  const b = document.getElementById('zAngle');
+  if (b) b.textContent = etiquetaDoAngulo(view.yaw, view.tilt);
+  const a = document.getElementById('zAerea');
+  if (a) a.classList.toggle('on', view.tilt >= 1.7);
+}
+document.getElementById('zLeft')?.addEventListener('click', () => virarAngulo(-1));
+document.getElementById('zRight')?.addEventListener('click', () => virarAngulo(1));
+document.getElementById('zAngle')?.addEventListener('click', () => virarAngulo(1));
+document.getElementById('zAerea')?.addEventListener('click', virarAerea);
+/* teclado: [ e ] rodam; 9 dá a vista aérea; 0 endireita a câmara (0 continua a ser a visão geral) */
+addEventListener('keydown', (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '[') { e.preventDefault(); virarAngulo(-1); }
+  else if (e.key === ']') { e.preventDefault(); virarAngulo(1); }
+  else if (e.key === '9') { e.preventDefault(); virarAerea(); }
+  else if (e.key === '0') { e.preventDefault(); voltarAoIso(380); }
+});
+syncAngleBtn();
+
 function zoomToDept(k) { enterFocus(k); }
 function zoomOut() {
   if (focused && focused !== 'brain') { exitFocus(true); return; }
   focused = null;
   flyTo(overviewPos(), OVERVIEW.zoom, 550);
+  /* 1.53.0: «vista geral» devolve TAMBÉM o ângulo de origem. Quem rodou para SO e subiu à vista
+     aérea, ao voltar ao geral tem de reencontrar a isométrica de sempre — senão a câmara ficava
+     torcida e sem botão para a endireitar. */
+  voltarAoIso(550);
   syncOverviewBtn();
 }
 document.getElementById('overviewBtn').addEventListener('click', zoomOut);
@@ -1969,7 +2077,7 @@ function floorReport() {
 /* ---------- o espelho acessível (26 out 2026) ----------
    A cena é um canvas: para um leitor de ecrã não há lá nada dentro, e as salas e as pessoas só
    se abriam com o rato. `src/a11y.js` constrói o mesmo escritório por palavras — 6 salas, o
-   centro e os 35 agentes, cada um um botão a sério. Abre pela tecla L, pelo botão da lista (ao
+   centro e os 47 agentes, cada um um botão a sério. Abre pela tecla L, pelo botão da lista (ao
    lado do zoom) ou pela ligação «saltar para a lista», que é a primeira coisa no Tab. */
 function focusIntoRail() {
   requestAnimationFrame(() => {
@@ -2009,6 +2117,16 @@ const a11y = initA11y({
 });
 document.getElementById('skipIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
 document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.currentTarget));
+
+/* ---------- 1.53.0 · A LOJA DE APPS (botão, tecla A, ou o endereço #apps) ---------- */
+const apps = createApps({ doc: document });
+document.getElementById('zApps')?.addEventListener('click', () => apps.toggle());
+addEventListener('keydown', (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'a' || e.key === 'A') { e.preventDefault(); apps.toggle(); }
+});
+if (location.hash === '#apps') setTimeout(() => apps.open(), 60);
 
 /* ---------- a luz que passa nos vidros e nos corredores (28 out 2026) ----------
    Uma só passagem por frame para todas as faixas. A luz nunca pára (é a vida da sala), mas ACELERA

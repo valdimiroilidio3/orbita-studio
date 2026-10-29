@@ -1,4 +1,4 @@
-// Órbita — OS 35 AVATARES (27 out 2026, 1.10.0).
+// Órbita — OS AVATARES (27 out 2026, 1.10.0 · 47 em 1.53.0).
 //
 // Pedido 27+: «melhore o avatar, coloca uma vibe mais pessoa real com roupa formal, mas cada sala
 // mantém a coloração da roupa; cabelo diferente para cada agente (35), alguns com chapéu, alguns
@@ -37,6 +37,8 @@ const TABLE = {
   report: { style: 'bob',      variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: true },
   dash:   { style: 'pixie',    variant: 0, female: true,  hat: 'cap',    beard: 'none',      glasses: false },
   comply: { style: 'bun',      variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: true },
+  atend:  { style: 'bob',      variant: 3, female: true,  hat: 'none',   beard: 'none',      glasses: false },
+  plan:   { style: 'sidepart', variant: 2, female: false, hat: 'none',   beard: 'none',      glasses: false },
   // ── PROSPEÇÃO (sales) ─────────────────────────────────────────────────────
   pros:   { style: 'quiff',    variant: 0, female: false, hat: 'none',   beard: 'stubble',   glasses: false },
   enzo:   { style: 'curly',    variant: 0, female: false, hat: 'none',   beard: 'beard',     glasses: false },
@@ -44,6 +46,8 @@ const TABLE = {
   riley:  { style: 'ponytail', variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   scout:  { style: 'crop',     variant: 0, female: false, hat: 'beanie', beard: 'stubble',   glasses: false },
   vmail:  { style: 'long',     variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: false },
+  radar:  { style: 'afro',     variant: 2, female: false, hat: 'none',   beard: 'stubble',   glasses: false },
+  partners: { style: 'braids', variant: 1, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   // ── VENDAS (ops) ──────────────────────────────────────────────────────────
   olead:  { style: 'sidepart', variant: 0, female: false, hat: 'none',   beard: 'none',      glasses: true },
   piper:  { style: 'wavy',     variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: false },
@@ -51,11 +55,15 @@ const TABLE = {
   ona:    { style: 'braids',   variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   legal:  { style: 'bun',      variant: 1, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   cmail:  { style: 'crop',     variant: 1, female: false, hat: 'none',   beard: 'stubble',   glasses: false },
+  renew:  { style: 'bald',     variant: 1, female: false, hat: 'beanie', beard: 'none',      glasses: false },
+  upsell: { style: 'wavy',     variant: 2, female: true,  hat: 'none',   beard: 'none',      glasses: true },
   // ── DESIGN LAB (fin) ──────────────────────────────────────────────────────
   gfx:    { style: 'slick',    variant: 1, female: false, hat: 'cap',    beard: 'stubble',   glasses: false },
   dasst:  { style: 'afro',     variant: 0, female: false, hat: 'none',   beard: 'beard',     glasses: false },
   alead:  { style: 'bob',      variant: 1, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   invo:   { style: 'ponytail', variant: 1, female: true,  hat: 'none',   beard: 'none',      glasses: true },
+  motion: { style: 'quiff',    variant: 2, female: false, hat: 'cap',    beard: 'stubble',   glasses: false },
+  brand:  { style: 'pixie',    variant: 2, female: true,  hat: 'none',   beard: 'none',      glasses: true },
   // ── ENGENHARIA (delivery) ─────────────────────────────────────────────────
   dlead:  { style: 'sidepart', variant: 1, female: false, hat: 'none',   beard: 'stubble',   glasses: false },
   pco:    { style: 'short',    variant: 2, female: false, hat: 'none',   beard: 'none',      glasses: false },
@@ -64,6 +72,8 @@ const TABLE = {
   cass:   { style: 'bob',      variant: 2, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   apay:   { style: 'crop',     variant: 2, female: false, hat: 'beanie', beard: 'none',      glasses: false },
   kmail:  { style: 'quiff',    variant: 1, female: false, hat: 'none',   beard: 'moustache', glasses: false },
+  sec:    { style: 'slick',    variant: 3, female: false, hat: 'none',   beard: 'beard',     glasses: true },
+  perf:   { style: 'ponytail', variant: 2, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   // ── MEDIA (marketing) ─────────────────────────────────────────────────────
   mlead:  { style: 'slick',    variant: 2, female: false, hat: 'none',   beard: 'beard',     glasses: false },
   newt:   { style: 'short',    variant: 3, female: false, hat: 'none',   beard: 'none',      glasses: false },
@@ -72,6 +82,8 @@ const TABLE = {
   vid:    { style: 'crop',     variant: 3, female: false, hat: 'beret',  beard: 'none',      glasses: false },
   lexi:   { style: 'long',     variant: 1, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   recon:  { style: 'afro',     variant: 1, female: false, hat: 'none',   beard: 'none',      glasses: true },
+  seo:    { style: 'quiff',    variant: 3, female: false, hat: 'none',   beard: 'moustache', glasses: false },
+  mailmkt: { style: 'long',    variant: 2, female: true,  hat: 'none',   beard: 'none',      glasses: false },
 };
 
 /** A aparência de um agente: o que está na tabela + o que a cena deriva da cor da sala. */

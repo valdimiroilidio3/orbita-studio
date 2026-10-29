@@ -1003,6 +1003,25 @@ const server = http.createServer(async (req, res) => {
       const r = await platform.saveKey({ id: b.id, values: b.values });
       return json(res, r.ok ? 200 : 400, r);
     }
+    /* 1.53.0 · «+ Adicionar personalizado»: um serviço que não está no catálogo entra por um
+       ficheiro, sem tocar em código. Só de loopback (ou com o token), como as chaves. */
+    if (url.pathname === '/api/platform/custom' && req.method === 'POST') {
+      const ip = String((req.socket && req.socket.remoteAddress) || '');
+      const local = /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ip);
+      if (!local && !requireIntegrationToken(req, res)) return;
+      const b = await limitedBody(req, 8000).catch((e) => ({ __erro: e }));
+      if (b.__erro) return json(res, b.__erro.status || 400, { ok: false, error: b.__erro.message });
+      const r = await platform.saveCustom({ name: b.name, url: b.url, env: b.env, header: b.header, kind: b.kind });
+      return json(res, r.ok ? 200 : 400, r);
+    }
+    /* 1.53.0 · o «Testar» de um serviço da loja. Uma sonda real, por id, com o que estiver no
+       ambiente; sem chave responde o que falta. Não escreve nada, por isso não pede o token. */
+    if (url.pathname === '/api/platform/testar' && req.method === 'POST') {
+      const b = await limitedBody(req, 4000).catch((e) => ({ __erro: e }));
+      if (b.__erro) return json(res, b.__erro.status || 400, { ok: false, error: b.__erro.message });
+      const r = await platform.probeId(b.id);
+      return jsonCors(res, r.ok ? 200 : 400, r);
+    }
     if (url.pathname === '/api/platform/probe' && req.method === 'POST') {
       if (!requireIntegrationToken(req, res)) return;
       const probed = await platform.probeAll({ force: true });
@@ -2029,7 +2048,7 @@ server.listen(cfg.port, () => {
   const rl = loadRoutines(); const nx = rl.filter(r => !r.paused && r.nextAt).sort((a, b) => a.nextAt - b.nextAt)[0];
   console.log(`  rotinas: ${rl.length} carregadas${rl.some(r => r.paused) ? ' (' + rl.filter(r => r.paused).length + ' em pausa)' : ''}${nx ? ' · próxima ' + untilText(nx.nextAt) + ' ' + nx.title.toUpperCase() + ' (' + nx.agent + ')' : ''} · ${rlist.path}`);
   setInterval(tickRoutines, 20000); tickRoutines(); // the clock: every 20 s; the first tick catches up anything missed while the office was off (once, marked LATE)
-  console.log(`  agentes: 35 (${roster.customised} personalizados${roster.briefed ? ', ' + roster.briefed + ' com briefing' : ''}${roster.files.length ? ' via ' + roster.files.join(' + ') : ''})   ferramentas: ${runner?.tools ? 'servidores MCP ligados' + (cfg.tools?.web === false ? '' : ' + web') + (mcp.browserOn() ? ' + o Chrome do proprietário (' + (mcp.browserState().installed ? 'extensão emparelhada' + (mcp.browserState().device ? ': ' + mcp.browserState().device : '') : 'extensão NÃO emparelhada — corre `claude --chrome` uma vez') + ')' : '') : (AI.active ? 'nenhuma neste motor — ' + AI.active.id + ' devolve texto, não mexe' : 'nenhuma — não há motor de IA')}`);
+  console.log(`  agentes: ${AGENTS.length} (${roster.customised} personalizados${roster.briefed ? ', ' + roster.briefed + ' com briefing' : ''}${roster.files.length ? ' via ' + roster.files.join(' + ') : ''})   ferramentas: ${runner?.tools ? 'servidores MCP ligados' + (cfg.tools?.web === false ? '' : ' + web') + (mcp.browserOn() ? ' + o Chrome do proprietário (' + (mcp.browserState().installed ? 'extensão emparelhada' + (mcp.browserState().device ? ': ' + mcp.browserState().device : '') : 'extensão NÃO emparelhada — corre `claude --chrome` uma vez') + ')' : '') : (AI.active ? 'nenhuma neste motor — ' + AI.active.id + ' devolve texto, não mexe' : 'nenhuma — não há motor de IA')}`);
   console.log(`  equipas: ${TEAMS.enabled ? 'ligadas — EQUIPA na barra ou «em equipa» na frase; o líder divide por até ' + TEAMS.max + ' secretárias' : 'desligadas (teams.enabled em office.config.json)'}`);
   const sk = skills.summary(); const setup = setupMap(); const notYet = DEPT_KEYS.filter(k => !setup[k]);
   console.log(`  competências: ${sk.count} (${sk.shipped} incluídas em skills/, ${sk.brain} em ${path.join(NOTES_DIR, 'skills')})${sk.problems.length ? '   ⚠ ' + sk.problems.length + ' problema' + (sk.problems.length > 1 ? 's' : '') + ' — ver npm run check' : ''}`);

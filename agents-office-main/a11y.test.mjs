@@ -6,7 +6,7 @@
 // módulo que ninguém executa é uma promessa, não uma garantia. Estes testes executam-no.
 //
 // O que fica provado:
-//   · as 7 salas e os 35 agentes existem, e cada um é um <button> a sério (não um div com
+//   · as 7 salas e os 47 agentes existem, e cada um é um <button> a sério (não um div com
 //     `role="button"`), logo Enter e Espaço funcionam por semântica do browser;
 //   · abrir move o foco para dentro, fechar devolve-o a quem abriu, Esc fecha;
 //   · Tab circula dentro da lista, e Shift+Tab também — não se foge para a cena;
@@ -29,6 +29,10 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
 import { initA11y } from './src/a11y.js';
+/* 1.53.0: o escritório falso tem de ser do TAMANHO do verdadeiro. Antes era um `Array.from(35)`
+   escrito à mão; quando os agentes passaram a 47, este teste continuava a falar de 35 e a passar.
+   Agora o espelho lê os dados reais e a contagem é conferida com um número explícito. */
+import { AGENTS as AGENTS_REAIS } from './src/data.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,11 +43,11 @@ const NOMES = {
   emails: 'Comando', delivery: 'Engenharia', sales: 'Prospecção',
   marketing: 'Media', fin: 'Design Lab', ops: 'Vendas', brain: 'Cérebro',
 };
-const AGENTES = Array.from({ length: 35 }, (_, i) => ({
-  id: `a${i + 1}`,
-  name: `Agente ${i + 1}`,
-  dept: SALAS[i % 6], // as seis salas de trabalho; o centro não tem secretárias
-  lead: i % 5 === 0,
+const AGENTES = AGENTS_REAIS.map((a) => ({
+  id: a.id,
+  name: a.name,
+  dept: a.dept,
+  lead: !!a.lead,
 }));
 
 function montar(opts = {}) {
@@ -77,7 +81,7 @@ const tecla = (doc, alvo, key, extra = {}) =>
 
 /* ---------- 1. o que é preciso para navegar ---------- */
 
-test('monta as 7 salas e os 35 agentes, e cada agente é um <button> a sério', () => {
+test('monta as 7 salas e os 47 agentes, e cada agente é um <button> a sério', () => {
   const { doc, api } = montar();
   assert.equal(api.el.id, 'officeIndex');
   assert.equal(api.el.getAttribute('role'), 'dialog');
@@ -90,7 +94,8 @@ test('monta as 7 salas e os 35 agentes, e cada agente é um <button> a sério', 
   // `button` (e não `div role=button`): é o que dá Enter e Espaço de graça e o que o
   // leitor de ecrã anuncia como «botão». Um div com role seria uma imitação.
   const agentes = api.el.querySelectorAll('button.oi-agent');
-  assert.equal(agentes.length, 35);
+  assert.equal(AGENTS_REAIS.length, 47, 'o escritório tem 47 agentes: se este número mudar, o teste muda com ele');
+  assert.equal(agentes.length, AGENTS_REAIS.length);
   for (const b of agentes) {
     assert.equal(b.tagName, 'BUTTON');
     assert.equal(b.getAttribute('type'), 'button');
@@ -114,8 +119,8 @@ test('o centro não inventa agentes: diz, por palavras, o que lá está', () => 
 test('a ordem de tabulação é: salas e agentes na ordem dos dados, e o total é o esperado', () => {
   const { api } = montar();
   const lista = api.focusables();
-  // 1 fechar + 7 salas + 35 agentes
-  assert.equal(lista.length, 43);
+  // 1 fechar + 7 salas + 47 agentes
+  assert.equal(lista.length, 1 + 7 + AGENTS_REAIS.length);
   // agrupados por sala (a ordem dos dados), e todos presentes exactamente uma vez
   const ids = lista.filter((n) => n.dataset.agent).map((n) => n.dataset.agent);
   assert.deepEqual([...ids].sort(), AGENTES.map((a) => a.id).sort());
@@ -217,8 +222,9 @@ test('clicar numa sala chama onRoom com a chave certa', () => {
 test('clicar num agente chama onAgent com o id certo', () => {
   const { api, chamadas } = montar();
   api.open();
-  api.el.querySelector('[data-agent="a7"]').click();
-  assert.deepEqual(chamadas.agentes, ['a7']);
+  const alvo = AGENTES[6].id;
+  api.el.querySelector(`[data-agent="${alvo}"]`).click();
+  assert.deepEqual(chamadas.agentes, [alvo]);
   assert.deepEqual(chamadas.salas, [], 'abrir um agente não abre uma sala');
 });
 
@@ -246,7 +252,7 @@ test('refresh() volta a ler o estado sem perder o sítio', () => {
 test('o texto é PT-PT e conta o que está lá', () => {
   const { api, doc } = montar();
   const t = api.el.textContent;
-  assert.match(t, /7 salas · 35 agentes/);
+  assert.match(t, /7 salas · 47 agentes/);
   assert.match(t, /Tab/);
   assert.match(t, /Enter/);
   assert.match(t, /Esc/);

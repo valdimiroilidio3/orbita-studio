@@ -53,6 +53,9 @@ export const AGENTS = [
   { id: 'report', name: 'ANALISTA DE RESULTADOS',     dept: 'emails',   grid: [1, 1], hair: '#2e2118', skin: '#E8B98E' },
   { id: 'dash', name: 'PAINEL CENTRAL',             dept: 'emails',   grid: [0, 2], hair: '#0d0d0d', skin: '#9C6B43' },
   { id: 'comply', name: 'PERMISSÕES E CONFORMIDADE',  dept: 'emails',   grid: [1, 2], hair: '#5a3a1a', skin: '#C68B59' },
+  /* 1.53.0 · a sala cresceu uma fila: um lugar para o que chega e outro para o dia. */
+  { id: 'atend',  name: 'ATENDIMENTO E TRIAGEM',        dept: 'emails',   grid: [0, 3], hair: '#2a1d14', skin: '#D89F70' },
+  { id: 'plan',   name: 'PLANEAMENTO DO DIA',           dept: 'emails',   grid: [1, 3], hair: '#12100e', skin: '#F0C9A0' },
   // PROSPEÇÃO (6)
   { id: 'pros', name: 'LEAD HUNTER',                dept: 'sales',    lead: true,  grid: [0.5, 0], hair: '#2a1a0e', skin: '#E8B98E' },
   { id: 'enzo', name: 'ENRIQUECEDOR',               dept: 'sales',    grid: [0, 1], hair: '#1c1c2e', skin: '#E0A878' },
@@ -60,6 +63,8 @@ export const AGENTS = [
   { id: 'riley', name: 'INTELIGÊNCIA DE MERCADO',    dept: 'sales',    grid: [0, 2], hair: '#8a4a1f', skin: '#F5D5B0' },
   { id: 'scout', name: 'ANÁLISE COMPETITIVA',        dept: 'sales',    grid: [1, 2], hair: '#101820', skin: '#B07850' },
   { id: 'vmail', name: 'AUDITOR DE WEBSITES',        dept: 'sales',    grid: [0, 3], hair: '#7a3b12', skin: '#F5D5B0' },
+  { id: 'radar', name: 'RADAR DE OPORTUNIDADES',      dept: 'sales',    grid: [1, 3], hair: '#1a1208', skin: '#C68B59' },
+  { id: 'partners', name: 'PARCEIROS E ALIANÇAS',     dept: 'sales',    grid: [0.5, 4], hair: '#3a2a1c', skin: '#E8B98E' },
   // VENDAS (6)
   { id: 'olead', name: 'SALES CLOSER',               dept: 'ops',      lead: true,  grid: [0.5, 0], hair: '#111111', skin: '#F0C9A0' },
   { id: 'piper', name: 'PROPOSTAS',                  dept: 'ops',      grid: [0, 1], hair: '#2d1a0a', skin: '#F0C9A0' },
@@ -67,11 +72,15 @@ export const AGENTS = [
   { id: 'ona',  name: 'RECEÇÃO DE CLIENTES',        dept: 'ops',      grid: [0, 2], hair: '#0d0d0d', skin: '#9C6B43' },
   { id: 'legal', name: 'CONTRATOS',                  dept: 'ops',      grid: [1, 2], hair: '#20242e', skin: '#F0C9A0' },
   { id: 'cmail', name: 'COMUNICAÇÃO COM CLIENTES',   dept: 'ops',      grid: [0, 3], hair: '#3b2b1d', skin: '#F0C9A0' },
+  { id: 'renew', name: 'RENOVAÇÕES',                  dept: 'ops',      grid: [1, 3], hair: '#1b1b24', skin: '#D9A97E' },
+  { id: 'upsell', name: 'PACOTES E UPSELL',           dept: 'ops',      grid: [0.5, 4], hair: '#4a2a10', skin: '#F5D5B0' },
   // DESIGN LAB (4)
   { id: 'gfx',  name: 'CREATIVE ARCHITECT',         dept: 'fin',      lead: true,  grid: [0.5, 0], hair: '#141414', skin: '#F0C9A0' },
   { id: 'dasst', name: 'UI E DESIGN SYSTEM',         dept: 'fin',      grid: [0, 1], hair: '#552200', skin: '#F0C9A0' },
   { id: 'alead', name: 'DIREÇÃO DE ARTE',            dept: 'fin',      grid: [1, 1], hair: '#1f1f1f', skin: '#E0A878' },
   { id: 'invo', name: 'PESQUISA UX',                dept: 'fin',      grid: [0, 2], hair: '#4a2a10', skin: '#F5D5B0' },
+  { id: 'motion', name: 'MOTION E ANIMAÇÃO',          dept: 'fin',      grid: [1, 2], hair: '#101820', skin: '#E0A878' },
+  { id: 'brand', name: 'IDENTIDADE E MARCA',          dept: 'fin',      grid: [0.5, 3], hair: '#2b1a0c', skin: '#F5D5B0' },
   // ENGENHARIA (7)
   { id: 'dlead', name: 'SYSTEMS ENGINEER',           dept: 'delivery', lead: true,  grid: [0.5, 0], hair: '#1f1f1f', skin: '#F0C9A0' },
   { id: 'pco',  name: 'GESTOR DE PROJETOS',         dept: 'delivery', grid: [0, 1], hair: '#3d2814', skin: '#E8B98E' },
@@ -80,6 +89,8 @@ export const AGENTS = [
   { id: 'cass', name: 'BACKEND E INTEGRAÇÕES',      dept: 'delivery', grid: [1, 2], hair: '#141414', skin: '#D9A97E' },
   { id: 'apay', name: 'DEPLOYS E INFRA',            dept: 'delivery', grid: [0, 3], hair: '#0a0a0a', skin: '#8A5A32' },
   { id: 'kmail', name: 'DOCUMENTAÇÃO TÉCNICA',       dept: 'delivery', grid: [1, 3], hair: '#4a2a10', skin: '#D89F70' },
+  { id: 'sec',   name: 'SEGURANÇA E ACESSOS',         dept: 'delivery', grid: [0, 4], hair: '#0a0a0a', skin: '#C68B59' },
+  { id: 'perf',  name: 'DESEMPENHO E CUSTOS',         dept: 'delivery', grid: [1, 4], hair: '#33221a', skin: '#F0C9A0' },
   // MEDIA (7)
   { id: 'mlead', name: 'GROWTH PUBLISHER',           dept: 'marketing', lead: true,  grid: [0.5, 0], hair: '#2a1a0e', skin: '#E0A878' },
   { id: 'newt', name: 'CONTEÚDO E NEWSLETTER',      dept: 'marketing', grid: [0, 1], hair: '#26140a', skin: '#D89F70' },
@@ -88,17 +99,19 @@ export const AGENTS = [
   { id: 'vid',  name: 'VÍDEO',                      dept: 'marketing', grid: [1, 2], hair: '#1b1b24', skin: '#D9A97E' },
   { id: 'lexi', name: 'CALENDÁRIO EDITORIAL',       dept: 'marketing', grid: [0, 3], hair: '#5a2d0c', skin: '#F0C9A0' },
   { id: 'recon', name: 'ANALYTICS DE CONTEÚDO',      dept: 'marketing', grid: [1, 3], hair: '#33221a', skin: '#E8B98E' },
+  { id: 'seo',   name: 'SEO E PESQUISA',              dept: 'marketing', grid: [0, 4], hair: '#1c1c2e', skin: '#D9A97E' },
+  { id: 'mailmkt', name: 'EMAIL MARKETING',           dept: 'marketing', grid: [1, 4], hair: '#5a2d0c', skin: '#F5D5B0' },
 ];
 
 // Plinth placement in world XZ. Brain central; departments well separated (AJ: not too close at zoom-out).
 export const LAYOUT = {
   brain:     { pos: [0, 0],     w: 16, d: 16 },
-  emails:    { pos: [-30, -23], w: 20, d: 26 },
-  delivery:  { pos: [0, -48],   w: 20, d: 34 },   // 6th pod mirrors ops on the top axis
-  sales:     { pos: [30, -23],  w: 20, d: 34 },   // 4 filas: fundo para a entrada (1.10.4)
-  marketing: { pos: [-30, 23],  w: 20, d: 34 },
-  fin:       { pos: [30, 23],   w: 20, d: 26 },
-  ops:       { pos: [0, 48],    w: 20, d: 34 },   // the 5th pod fills the empty bottom-left gap
+  emails:    { pos: [-30, -23], w: 20, d: 32 },   // 1.53.0: 4 filas (entrou o atendimento e o plano do dia)
+  delivery:  { pos: [0, -48],   w: 20, d: 40 },   // 1.53.0: 5 filas (segurança e desempenho)
+  sales:     { pos: [30, -23],  w: 20, d: 40 },   // 1.53.0: 5 filas (radar e parceiros)
+  marketing: { pos: [-30, 23],  w: 20, d: 40 },   // 1.53.0: 5 filas (SEO e email marketing)
+  fin:       { pos: [30, 23],   w: 20, d: 32 },   // 1.53.0: 4 filas (motion e marca)
+  ops:       { pos: [0, 48],    w: 20, d: 40 },   // 1.53.0: 5 filas (renovações e upsell)
 };
 
 /* ---------- onde assenta cada secretária (27 out 2026, 1.10.4) ----------

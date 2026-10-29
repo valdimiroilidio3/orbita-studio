@@ -220,3 +220,54 @@ test('catálogo: identificadores únicos e cada serviço diz que chaves quer', (
     assert.ok(p.probe === null || typeof p.probe === 'object', `${p.id}: sonda mal declarada`);
   }
 });
+
+/* ---------- 1.53.0 · o «Testar» de um serviço da loja ----------
+   O botão tem de fazer uma sonda real e dizer a verdade quando não pode: sem chave, o nome da
+   variável que falta; serviço sem sonda, o motivo. Nunca «conectado» inventado. */
+test('probeId: com chave faz a sonda real e devolve o HTTP', async () => {
+  const root = tmp();
+  const env = { OPENAI_API_KEY: 'sk-segredo-123456' };
+  let pedidos = 0;
+  const p = createPlatform({
+    root, env,
+    fetchImpl: async (url, init) => {
+      pedidos += 1;
+      const h = Object.fromEntries(Object.entries(init.headers).map(([k, v]) => [k.toLowerCase(), v]));
+      assert.equal(h.authorization, 'Bearer sk-segredo-123456');
+      return { url, status: 200, statusText: 'OK', clone: () => ({ json: async () => ({ data: [] }) }), json: async () => ({ data: [] }) };
+    },
+  });
+  const r = await p.probeId('openai');
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 200);
+  assert.equal(r.ms >= 0, true);
+  assert.equal(pedidos, 1);
+  assert.equal(JSON.stringify(r).includes('sk-segredo-123456'), false, 'a chave nunca sai na resposta');
+});
+
+test('probeId: sem chave diz qual falta e não chama a rede', async () => {
+  const root = tmp();
+  let pedidos = 0;
+  const p = createPlatform({ root, env: {}, fetchImpl: async () => { pedidos += 1; return { status: 200 }; } });
+  const r = await p.probeId('figma');
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.missing, ['FIGMA_TOKEN']);
+  assert.match(r.error, /FIGMA_TOKEN/);
+  assert.equal(pedidos, 0, 'sem chave não há pedido nenhum');
+});
+
+test('probeId: um serviço sem sonda automática diz porquê, não finge', async () => {
+  const root = tmp();
+  const p = createPlatform({ root, env: { PAPER_VAULT: '/notas' }, fetchImpl: async () => ({ status: 200 }) });
+  const r = await p.probeId('paper');
+  assert.equal(r.ok, false);
+  assert.equal(r.noProbe, true);
+  assert.match(r.error, /sem sonda automática/);
+});
+
+test('probeId: id desconhecido é um erro por palavras', async () => {
+  const p = createPlatform({ root: tmp(), env: {}, fetchImpl: async () => ({ status: 200 }) });
+  const r = await p.probeId('nao-existe-isto');
+  assert.equal(r.ok, false);
+  assert.match(r.error, /não conheço o serviço/);
+});
