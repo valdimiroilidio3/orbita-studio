@@ -233,7 +233,7 @@ export async function tentarVideoCine(api) {
     const r = await api.call('/cine/video', 'POST', { leadId: S.leadId });
     if (!r.ok) {
       S.aviso = r.motivo || 'o vídeo ainda não está disponível';
-      api.toast('vídeo: ainda não há como — a razão está no painel', true);
+      api.toast(`vídeo: ${r.motivo || 'a fila do OpenMontage não aceitou o trabalho'}`, true);
     } else {
       S.aviso = `trabalho enviado ao worker (${r.estado}). O ficheiro aparece quando renderizar.`;
       api.toast('vídeo enviado ao worker');
