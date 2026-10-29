@@ -40,10 +40,12 @@ O que se liga, liga mesmo:
 - `+ Adicionar personalizado` grava um serviço novo em
   `data/api/providers.json` (`POST /api/platform/custom`), que passa a
   aparecer na lista com os restantes.
-- No servidor de produção, 17 serviços novos ganharam sonda real (Sentry, Neon,
+- No servidor de produção, 15 serviços novos ganharam sonda real (Sentry, Neon,
   Netlify, Render, Linear, Figma, PostHog, Todoist, Trello, Notion, Airtable,
-  Slack, Discord, Telegram, OpenAI, Anthropic, Gemini): testar sem chave diz
-  qual falta.
+  Slack, Discord, Telegram, Gemini): testar sem chave diz qual falta. OpenAI e
+  Anthropic ficaram de fora de propósito — já são fornecedores de IA com o
+  mesmo id, e a lista desempata com o prefixo `ia:`; entravam duas vezes na
+  loja. Um teste novo guarda essa regra (só `vercel` é par assumido).
 
 **A câmara.** `src/camera.js` é a conta pura: yaw (roda), inclinação (0.45
 rasante … 2.2 a pino), `direcaoDaCamara()` sempre unitária. Quatro vistas a 90°
@@ -62,7 +64,7 @@ O mesmo `Testar` sem chave responde `falta FIGMA_TOKEN no ambiente`, e um id inv
 `fetch failed: UNABLE_TO_VERIFY_LEAF_SIGNATURE`: é o proxy TLS desta máquina, não o GitHub —
 o erro real, dito como é.)
 
-**Testes:** 713 (eram 687). Novos: `camera.test.mjs` (13) e `apps.test.mjs`
+**Testes:** 717 (eram 687). Novos: `camera.test.mjs` (13) e `apps.test.mjs`
 (12), mais `probeId` em `platform.test.mjs`. `a11y.test.mjs` passou a ler os
 agentes reais: o espelho dizia «35 agentes» e passava, porque a lista falsa
 tinha 35 escritos à mão.

@@ -120,7 +120,7 @@ function resumoPipeline(leads) {
 const NAO_CHAT = new Set(['exa', 'linkup', 'firecrawl', 'brave', 'tavily', 'serper']);
 const eChat = (id, f) => (f?.tipo ? f.tipo === 'chat' : !NAO_CHAT.has(id));
 
-const SERVICOS = [
+export const SERVICOS = [
   {
     id: 'github', name: 'GitHub', kind: 'codigo', env: ['GITHUB_TOKEN'], docs: 'https://github.com/settings/tokens',
     sonda: 'https://api.github.com/user',
@@ -188,10 +188,6 @@ const SERVICOS = [
     sonda: 'https://discord.com/api/v10/users/@me', cabecalhos: (e) => ({ Authorization: `Bot ${e.DISCORD_BOT_TOKEN}` }) },
   { id: 'telegram', name: 'Telegram', kind: 'mensagens', env: ['TELEGRAM_BOT_TOKEN'], docs: 'https://core.telegram.org/bots/api',
     sonda: (e) => `https://api.telegram.org/bot${e.TELEGRAM_BOT_TOKEN}/getMe` },
-  { id: 'openai', name: 'OpenAI', kind: 'ia', env: ['OPENAI_API_KEY'], docs: 'https://platform.openai.com/api-keys',
-    sonda: 'https://api.openai.com/v1/models', cabecalhos: (e) => ({ Authorization: `Bearer ${e.OPENAI_API_KEY}` }) },
-  { id: 'anthropic', name: 'Anthropic / Claude', kind: 'ia', env: ['ANTHROPIC_API_KEY'], docs: 'https://console.anthropic.com/settings/keys',
-    sonda: 'https://api.anthropic.com/v1/models', cabecalhos: (e) => ({ 'x-api-key': e.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }) },
   { id: 'gemini', name: 'Google Gemini', kind: 'ia', env: ['GEMINI_API_KEY'], docs: 'https://aistudio.google.com/apikey',
     sonda: (e) => `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(e.GEMINI_API_KEY)}` },
   /* 1.27.0: credenciais ao minuto. Não há chave para listar: o que existe (ou
