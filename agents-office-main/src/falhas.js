@@ -61,7 +61,7 @@ export function explicarFalha({ status = 0, texto = '', rota = '/api/tasks', err
       tipo: 'sem-servidor',
       frase: 'Esta página está publicada sem o servidor das tarefas.',
       detalhe: `a rota ${rota} não existe aqui — a Vercel respondeu com uma página de erro em vez de dados`,
-      ajuda: `Nada foi criado e nada foi perdido. A mesa (${ROTA_DA_MESA}) fala com o motor a sério; no teu computador, «npm start» levanta o escritório com a rota das tarefas.`,
+      ajuda: `Nada foi criado e nada foi perdido. A conversa não depende desta rota: a mesa (${ROTA_DA_MESA}) responde pelo motor a sério, e um «oi» com um modelo escolhido é respondido aqui mesmo. O quadro de tarefas só existe no Órbita do teu computador ("npm start").`,
       html: false,
     };
   }
