@@ -93,6 +93,9 @@ function driveDesk(r, con, t, phase, dt) {
 }
 import { initMcp } from './mcp.js';
 import { initComposer, chatBody, metaLine, dividirModelo, agenteDaOrbita, corpoDaOrbita, lerRespostaOrbita, juntarAnexos } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
+/* 1.53.1 · «as IAs devem responder a tudo»: um pedido de conversa nunca morre por falta do
+   quadro de tarefas. A decisão é pura e vive em `src/rota.js` (ver o teste `rota.test.mjs`). */
+import { CAMINHOS, rotaDoEnvio, deveCairParaConversa, avisoDaQueda, metaDaQueda } from './rota.js';
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
 import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
@@ -1421,9 +1424,17 @@ function dropWork(id, text) {
   const k = h.findIndex(m => m.who === 'work' && m.text === text);
   if (k >= 0) h.splice(k, 1);
 }
-async function buildFromChat(id, text, m) {
+/* 1.53.1 · quando o quadro não existe, quem responde é a conversa — com o motor escolhido,
+   e dito em voz alta. Antes daqui saía um erro e a IA nunca era chamada (o caso do «oi» com
+   a Groq escolhida, a 29 out 2026). A tarefa continua a não ser inventada: simplesmente não
+   há tarefa nenhuma, há uma resposta. */
+async function conversaEmVezDeQuadro(id, text, m, par, falha = null) {
+  chatPush(id, { who: 'agent', text: avisoDaQueda({ modo: m.mode }), meta: metaDaQueda({ modo: m.mode }) });
+  await sendChatOrbita(id, text, { ...m, mode: 'ask' }, par, { falha });
+}
+async function buildFromChat(id, text, m, par = null) {
   const r = R[id];
-  if (!tasks || !tasks.isLive()) throw new Error('Construir precisa do servidor: uma tarefa criada só no ecrã seria ficção. Arranca o Órbita com «npm start».');
+  if (!tasks || !tasks.isLive()) return conversaEmVezDeQuadro(id, text, m, par, { tipo: 'sem-servidor' });
   const line = 'A criar a tarefa no quadro…';
   chatPush(id, { who: 'work', i: '…', text: line });
   try {
@@ -1451,6 +1462,10 @@ async function buildFromChat(id, text, m) {
   } catch (e) {
     dropWork(id, line);
     const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/tasks', erro: e.message });
+    /* a rota não existe nesta publicação: o quadro não pode responder, a conversa pode */
+    if (deveCairParaConversa({ falha: f, temOrbita: temOrbitaAgora() })) {
+      return conversaEmVezDeQuadro(id, text, m, par, f);
+    }
     throw Object.assign(new Error('Não foi criada. ' + f.frase + (f.detalhe ? ' — ' + f.detalhe : '') + ' ' + f.ajuda), { falha: f });
   }
 }
@@ -1460,7 +1475,7 @@ async function buildFromChat(id, text, m) {
    CLI desta máquina e não existe na página publicada. Vai por `/api/rpc` →
    `POST /ia/chat`, que é o mesmo sítio onde a mesa conversa. O esforço escolhido
    vira o tecto de tokens (o servidor diz quanto); quem respondeu volta escrito. */
-async function sendChatOrbita(id, texto, m, par) {
+async function sendChatOrbita(id, texto, m, par, _queda = null) {
   const r = R[id];
   /* o histórico já leva esta mensagem (foi escrita antes de chegar aqui): tira-se a última,
      senão a IA lia a pergunta duas vezes */
@@ -1492,6 +1507,13 @@ async function sendChatOrbita(id, texto, m, par) {
     }
     const out = lerRespostaOrbita(lido.json, par);
     if (!out.ok) {
+      /* 1.53.1 · «as IAs devem responder a tudo»: se a ESCOLHA falhou (chave recusada,
+         modelo retirado), tenta-se o automático uma vez — e diz-se que se tentou. Se o
+         automático também não responder, aí sim, não há resposta honesta a dar. */
+      if (par && !(m && m.__tentouAuto)) {
+        chatPush(id, { who: 'agent', text: `A escolha (${par.fornecedor} · ${par.modelo}) não respondeu: ${out.erro}. Vou tentar outro motor.`, meta: 'escolha falhou · a tentar o automático' });
+        return sendChatOrbita(id, texto, { ...m, __tentouAuto: true }, null, _queda);
+      }
       chatPush(id, { who: 'agent', text: `Não consigo responder. O servidor respondeu: ${out.erro}.${par ? ` A escolha foi ${par.fornecedor} · ${par.modelo}.` : ''}` });
       composer?.toast(out.erro, 'err');
       return;
@@ -1534,12 +1556,14 @@ async function sendChat(text, meta = {}) {
   const par = m.auto ? null : dividirModelo(m.model);
   if (m.mode === 'build') {
     chatPush(id, { who: 'user', text: clean });
-    /* construir cria uma tarefa no quadro, e o quadro só existe com o servidor local */
-    if (par) {
-      chatPush(id, { who: 'agent', text: 'Construir precisa do quadro de tarefas, que vive no servidor local (npm start). Com a IA da Órbita escolhida podes conversar e planear aqui; para criar a tarefa, abre o Órbita no teu computador ou usa a Mesa.' });
-      return;
+    /* construir cria uma tarefa no quadro, e o quadro só existe com o servidor local.
+       1.53.1: sem quadro, RESPONDE-SE — em conversa, com o motor escolhido. Antes daqui
+       saía um aviso e um «Não foi criada»: a IA nunca era chamada (29 out 2026). */
+    const quadro = !!(tasks && tasks.isLive && tasks.isLive());
+    if (rotaDoEnvio({ modo: 'build', par, quadro, temCli: temCliAgora(), temOrbita: temOrbitaAgora() }) === CAMINHOS.QUADRO) {
+      return buildFromChat(id, clean, m, par);
     }
-    return buildFromChat(id, clean, m);
+    return conversaEmVezDeQuadro(id, clean, m, par, { tipo: 'sem-servidor' });
   }
 
   const hist = (chatHist[id] || []).filter(x => x.who === 'user' || x.who === 'agent').slice(-8).map(x => ({ who: x.who, text: x.text }));
@@ -1557,10 +1581,11 @@ async function sendChat(text, meta = {}) {
 
   /* 1.51.0 · quando a página não tem motor local (é o caso da publicada), o «automático»
      não pode bater em `/api/chat` — a Órbita responde por /api/rpc e o router escolhe. */
-  const est = (composer && composer.state ? composer.state() : {}) || {};
-  const temCli = Array.isArray(est.health?.models) && est.health.models.length > 0;
-  const temOrbita = (est.catalogo?.modelos || []).length > 0;
-  if (par || (!temCli && temOrbita)) return sendChatOrbita(id, clean, m, par);
+  const temCli = temCliAgora();
+  const temOrbita = temOrbitaAgora();
+  if (rotaDoEnvio({ modo: m.mode, par, quadro: !!(tasks && tasks.isLive && tasks.isLive()), temCli, temOrbita }) === CAMINHOS.CONVERSA) {
+    return sendChatOrbita(id, clean, m, par);
+  }
 
   const line = m.mode === 'plan' ? `${r.a.name} está a preparar o plano` : `${r.a.name} está a pensar`;
   chatPush(id, { who: 'work', i: '…', text: line });
@@ -1590,6 +1615,11 @@ async function sendChat(text, meta = {}) {
        fornecedor. Antes, tudo caía em «sem motor de IA» — e era mentira sempre
        que a página estava publicada sem servidor. */
     const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/chat', erro: e.message });
+    /* 1.53.1 · a publicação não tem `/api/chat`? A Órbita responde na mesma por /api/rpc.
+       É o pedido do dono por palavras: «as IAs devem responder a tudo». */
+    if (deveCairParaConversa({ falha: f, temOrbita: temOrbitaAgora() })) {
+      return sendChatOrbita(id, clean, m, par);
+    }
     chatPush(id, { who: 'agent', text: `Não consigo responder. ${f.frase}${f.detalhe ? ` — ${f.detalhe}` : ''} ${f.ajuda}` });
     throw e;
   }
@@ -1598,6 +1628,15 @@ async function sendChat(text, meta = {}) {
    O cartão substitui o campo de uma linha. Toda a lógica de desenho e de teclado vive em
    src/composer.js; aqui só se liga o envio. */
 const composer = initComposer({ onSubmit: (text, meta) => sendChat(text, meta) });
+/* 1.53.1 · o que existe AGORA para responder: os modelos do CLI da casa e os da Órbita.
+   É daqui que sai a decisão de `src/rota.js` — e é o que impede um «oi» de bater numa rota
+   que a publicação não tem. */
+const estadoDoComposer = () => (composer && composer.state ? composer.state() : {}) || {};
+const temCliAgora = () => {
+  const ms = estadoDoComposer().health?.models;
+  return Array.isArray(ms) && ms.length > 0;
+};
+const temOrbitaAgora = () => (estadoDoComposer().catalogo?.modelos || []).length > 0;
 function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);

@@ -1,3 +1,37 @@
+## 1.53.1 — 29 out 2026 · «oi» nunca mais morre por falta do quadro
+
+O dono escolheu a **Groq**, escreveu **«oi»** e o cartão respondeu:
+
+> **Não foi criada.** Esta página está publicada sem o servidor das tarefas.
+
+A Groq nunca foi chamada. O compositor estava em **Construir**, um modo que
+cria uma tarefa em `/api/tasks` — rota que a Vercel não tem de propósito. Um
+pedido de conversa morreu por causa de uma rota que não existe. Ele foi
+explícito: **«as IAs devem responder de tudo tudo»**.
+
+O que muda:
+
+- **`src/rota.js` (novo)** — a decisão, pura: `quadro` (criar a tarefa, só com
+  servidor local), `conversa` (`/api/rpc → /ia/chat`, o que existe publicado) ou
+  `motor-local` (`/api/chat`, o CLI da casa). Em `Construir` sem quadro, a rota é
+  **conversa** — nunca o motor local, que voltaria a tentar o quadro.
+- **`src/main.js`** — `Construir` sem quadro responde em conversa, com o par
+  escolhido, e diz o que fez («O quadro de tarefas só existe no Órbita do teu
+  computador. Aqui respondo em conversa.»), com a etiqueta
+  `sem quadro nesta publicação`. Se o `/api/tasks` responder 404 a meio, cai
+  para a conversa em vez de acusar. Se o `/api/chat` não existir, a Órbita
+  responde na mesma. E **se a escolha falhar** (chave recusada, modelo
+  retirado), tenta **uma vez** o automático e di-lo — só desiste depois disso.
+- **`src/falhas.js`** — a frase «sem servidor das tarefas» deixa de ser um beco
+  sem saída: diz que a conversa não depende dessa rota.
+- Nada disto inventa trabalho: quando não há quadro, **não há tarefa** — há uma
+  resposta.
+
+**Testes:** 734 (eram 721), com `rota.test.mjs` (13): a decisão nos quatro
+casos, a queda só quando a rota não existe (um 500 não se disfarça de conversa),
+o aviso que não promete tarefa, e os fios no `main.js` — incluindo o beco sem
+saída de 29 out a não poder voltar.
+
 ## 1.53.0 — 29 out 2026 · a loja de apps, 47 agentes e uma câmara que roda
 
 O pedido foi grande e em duas partes. Primeiro: «quero que implementes mais
