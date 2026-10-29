@@ -115,7 +115,20 @@ export function gestoDoScroll({ deltaX = 0, deltaY = 0, shiftKey = false } = {})
 /** Quantos radianos vale um scroll. Trackpads mandam dezenas; ratos mandam 100. */
 export const RAD_POR_PIXEL = 0.0042;
 
-/** O que um arrasto significa: com Alt (ou botão do meio/direito) roda; sem ele, move o chão. */
-export function gestoDoArrasto({ altKey = false, botao = 0 } = {}) {
-  return altKey || botao === 1 || botao === 2 ? 'rodar' : 'mover';
+/**
+ * O que um arrasto significa.
+ *
+ * 1.53.2 · o pedido do dono: «os giros não serão por botões, serão pelo mouse
+ * mesmo, clicando na área sem nada e arrastando». Então a regra passou a ser:
+ *
+ *   · carregar no VAZIO do escritório e arrastar → RODA a câmara (`vazio: true`);
+ *   · arrastar com Shift → MOVE o chão (o pan precisa de casa);
+ *   · Alt, botão do meio ou direito → RODA (para quem já tem o hábito);
+ *   · arrastar sobre uma secretária/agente → MOVE (o clique continua a abrir a ficha).
+ */
+export function gestoDoArrasto({ altKey = false, botao = 0, vazio = false, shiftKey = false } = {}) {
+  if (altKey || botao === 1 || botao === 2) return 'rodar';
+  if (shiftKey) return 'mover';
+  if (vazio) return 'rodar';
+  return 'mover';
 }

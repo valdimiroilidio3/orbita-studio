@@ -104,18 +104,45 @@ test('7 · projetos: criado à mão e a partir de um lead, com os tipos', async 
   assert.equal(um.project.name, 'Site do Largo');
 });
 
-test('8 · tarefas: registadas, mas sem motor dizem que não correram', async () => {
+/* 1.53.2 · o modo local deixou de ser uma lápide: entrega a tarefa ao servidor
+   por `/api/rpc` e devolve o resultado real. Sem servidor, diz que não alcançou
+   — não diz «sem motor de IA» como se o motor não existisse. */
+test('8 · tarefas: o modo local entrega-as ao servidor; sem servidor, diz porquê', async () => {
   const api = createLocalApi({ storage: armazem() });
-  const { tarefa } = await api.call('/ops/tarefas', 'POST', { kind: 'briefing', entityId: 'p_1', entidade: 'projeto', aprovacao: true, correr: true });
-  assert.equal(tarefa.state, 'failed', 'uma tarefa sem motor não pode aparecer concluída');
-  assert.match(tarefa.error, /sem motor/);
-  const correr = await api.call(`/ops/tarefas/${tarefa.id}/correr`, 'POST', {});
-  assert.equal(correr.ok, false);
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('fetch failed'); };
+  try {
+    const { tarefa } = await api.call('/ops/tarefas', 'POST', { kind: 'briefing', entityId: 'p_1', entidade: 'projeto', aprovacao: true, correr: true });
+    assert.equal(tarefa.state, 'failed', 'sem servidor a tarefa não pode aparecer concluída');
+    assert.match(tarefa.error, /não alcançou o servidor/);
+    assert.match(tarefa.error, /orbita-agentes\.vercel\.app/, 'a frase diz onde as tarefas correm');
+    const correr = await api.call(`/ops/tarefas/${tarefa.id}/correr`, 'POST', {});
+    assert.equal(correr.ok, false);
+  } finally { globalThis.fetch = original; }
   const lista = await api.call('/ops/tarefas?limit=100');
   assert.equal(lista.tarefas.length, 1);
   assert.ok(lista.tipos.briefing, 'os tipos de tarefa têm de estar na lista');
   assert.ok(lista.departamentos.length >= 6);
   await assert.rejects(() => api.call('/ops/tarefas', 'POST', { kind: 'inventado' }), /desconhecido/);
+});
+
+test('8b · com o servidor a responder, o modo local guarda a tarefa REAL, com resultado', async () => {
+  const api = createLocalApi({ storage: armazem() });
+  const original = globalThis.fetch;
+  let pedido = null;
+  globalThis.fetch = async (url, init) => {
+    pedido = { url, corpo: JSON.parse(init.body) };
+    return { ok: true, json: async () => ({ tarefa: { state: 'succeeded', resultado: 'briefing escrito pelo modelo', modelo: 'groq/llama-3.3-70b-versatile' }, execucao: { ok: true, modelo: 'groq/llama-3.3-70b-versatile', ms: 800 } }) };
+  };
+  try {
+    const { tarefa, execucao } = await api.call('/ops/tarefas', 'POST', { kind: 'briefing', entityId: 'p_1', entidade: 'projeto' });
+    assert.equal(tarefa.state, 'succeeded');
+    assert.match(tarefa.resultado, /briefing escrito/);
+    assert.equal(execucao.ok, true);
+    assert.equal(pedido.url, '/api/rpc');
+    assert.equal(pedido.corpo.caminho, '/ops/tarefas');
+    assert.equal(pedido.corpo.metodo, 'POST');
+  } finally { globalThis.fetch = original; }
 });
 
 test('9 · o vazio honesto: agentes, atividade e pesquisa não inventam nada', async () => {

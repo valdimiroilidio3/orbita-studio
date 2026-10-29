@@ -816,13 +816,25 @@ addEventListener('wheel', (e) => {
   syncOverviewBtn();
 }, { passive: false });
 
+/* 1.53.2 · onde caiu o dedo? O arrasto no VAZIO roda a câmara (pedido do dono:
+   «os giros serão pelo mouse, clicando na área sem nada e arrastando»); em cima de
+   uma secretária, de um agente ou de uma placa, arrastar continua a mover o chão. */
+function algoSob(nx, ny) {
+  ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  return ray.intersectObjects(personTargets, false).length > 0
+    || ray.intersectObjects(clickTargets, false).length > 0
+    || ray.intersectObjects(mcp.sprites, false).length > 0;
+}
 let drag = null;
 canvas.addEventListener('pointerdown', (e) => {
+  const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;
+  const vazio = !algoSob(nx, ny);
   drag = {
     x: e.clientX, y: e.clientY, moved: false,
-    /* Alt+arrastar (ou o botão do meio/direito) RODA; arrastar normal MOVE o chão. */
-    modo: gestoDoArrasto({ altKey: e.altKey, botao: e.button }),
+    /* vazio → roda; Shift → move; Alt/botão do meio → roda; sobre algo → move */
+    modo: gestoDoArrasto({ altKey: e.altKey, botao: e.button, vazio, shiftKey: e.shiftKey }),
   };
+  canvas.classList.toggle('girando', drag.modo === 'rodar');
   if (drag.modo === 'rodar') { try { canvas.setPointerCapture(e.pointerId); } catch { /* sem captura */ } }
 });
 // o botão direito não abre o menu: é uma pega para rodar
@@ -849,6 +861,7 @@ addEventListener('pointermove', (e) => {
 addEventListener('pointerup', (e) => {
   const wasDrag = drag && drag.moved;
   drag = null;
+  canvas.classList.remove('girando');
   if (wasDrag) return;
   if (e.target !== canvas) return; // HTML chrome handles its own clicks
   const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;

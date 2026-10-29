@@ -87,15 +87,25 @@ test('6 · projetos: à mão e a partir de um lead; tipos e resumo', async () =>
   assert.equal(um.corpo.project.name, 'Site do Largo');
 });
 
-test('7 · tarefas: registadas e honestas sobre a falta de motor', async () => {
+/* 1.53.2 · a tarefa deixou de nascer falhada: a rota tenta o motor e, quando
+   nenhum modelo responde, grava o motivo real (a chave que falta + o último
+   erro). Sem rede neste teste, a falha é imediata e determinística. */
+test('7 · tarefas: correm a sério; sem motor, a frase diz o que faltou', async () => {
   const api = createMemRepo();
-  const r = await chamar(api, '/ops/tarefas', 'POST', { kind: 'briefing', entityId: 'p_1', entidade: 'projeto' });
+  const semRede = async () => { throw new Error('rede desligada no teste'); };
+  const proj = await chamar(api, '/ops/projetos', 'POST', { name: 'Site do Largo', kind: 'site' });
+  const r = await responder(api, {
+    caminho: '/ops/tarefas', metodo: 'POST', fetchImpl: semRede, env: {},
+    corpo: { kind: 'briefing', entityId: proj.corpo.projeto.id, entidade: 'projeto' },
+  });
   assert.equal(r.status, 201);
   assert.equal(r.corpo.tarefa.state, 'failed');
-  assert.match(r.corpo.tarefa.error, /sem motor/);
-  const correr = await chamar(api, `/ops/tarefas/${r.corpo.tarefa.id}/correr`, 'POST', {});
+  assert.match(r.corpo.tarefa.error, /nenhuma chave de IA está configurada|nenhum dos fornecedores/);
+  assert.match(r.corpo.tarefa.error, /rede desligada no teste/, 'o erro real fica escrito, não uma frase feita');
+  const correr = await responder(api, { caminho: `/ops/tarefas/${r.corpo.tarefa.id}/correr`, metodo: 'POST', fetchImpl: semRede, env: {} });
   assert.equal(correr.corpo.ok, false);
-  const lista = (await chamar(api, '/ops/tarefas')).corpo;
+  assert.equal(correr.corpo.tarefa.id, r.corpo.tarefa.id, 'repetir não cria outra tarefa');
+  const lista = (await responder(api, { caminho: '/ops/tarefas', metodo: 'GET', env: {} })).corpo;
   assert.equal(lista.tarefas.length, 1);
   assert.ok(lista.tipos.briefing);
   await assert.rejects(() => chamar(api, '/ops/tarefas', 'POST', { kind: 'inventado' }), (e) => e.status === 400);

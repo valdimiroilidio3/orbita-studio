@@ -1,3 +1,60 @@
+## 1.53.2 — 29 out 2026 · o vídeo sai e as tarefas correm
+
+Duas coisas que estavam escritas como «não dá» e passaram a acontecer.
+
+**1. O vídeo do Cine.** O botão estava cinzento porque o worker do OpenMontage
+(Python + FFmpeg, AGPL) não corre na Vercel. O dono escolheu a **opção C**: dois
+motores, um botão.
+
+- **`src/estudio-video.js` (novo)** — o plano do vídeo (que peças, por que ordem,
+  quanto tempo) é puro e provado; quem desenha é o browser: movimento lento sobre
+  cada peça (Ken Burns), véu, conceito por cima e contador, gravado com
+  `MediaRecorder` a 1280×720, ≤6 planos, 2,6 s por plano, tecto de 20 s.
+- O contentor preferido é **MP4/avc1**; onde o browser não o souber gravar, sai
+  **WebM** — e o cartão di-lo antes de se carregar.
+- Com `worker.vivo`, o **mesmo botão** entrega ao OpenMontage. Sem worker,
+  compõe-se aqui. O botão só fica cinzento enquanto está a compor.
+- O resultado aparece em `<video controls>` com o nome do ficheiro
+  (`<lead>-<data>.mp4|webm`) e um link para guardar. Sem peças aprovadas **não se
+  inventa um vídeo**: a frase diz que falta aprovar uma imagem.
+- O cartão declara o que é: **não é um render de Veo ou Kling**.
+
+**2. As tarefas.** `POST /ops/tarefas` gravava a linha já como `failed`, com a
+frase «sem motor de IA ligado a esta base». Era uma lápide, e o dono disse
+**«nas tarefas nada funciona»**.
+
+- **`api/_tarefas.mjs` (novo)** — cada tipo tem uma rotina escrita (`investigar`,
+  `mensagem`, `briefing`, `codigo`, `qa`), com o contexto real do lead ou do
+  projeto tirado da base. O trabalho corre no motor que já responde em
+  `/ia/chat`, com fallback e registo em `/ia/uso`; o texto devolvido fica na
+  tarefa, com o modelo e o tempo.
+- Sem nenhum modelo a responder, a tarefa falha e a frase diz **o que** faltou: a
+  chave que não está no ambiente (nome da variável) ou os fornecedores com chave
+  que falharam, com o último erro real.
+- `POST /ops/tarefas/:id/correr` repete a MESMA tarefa. `aprovacao: true` corre o
+  trabalho e deixa-o em `awaiting_approval`; aprovar fecha como concluída,
+  rejeitar como cancelada.
+- **`src/mesa.js`** — o cartão da tarefa lia uma forma que a base não devolve
+  (`title`, `dept`, `attempts`) e escrevia títulos vazios. Agora aceita as duas
+  formas e mostra o resultado em texto.
+- **`src/localapi.js`** — no modo local a tarefa é entregue ao servidor por
+  `/api/rpc`; sem servidor, a frase diz que não o alcançou e onde as tarefas
+  correm, em vez de «sem motor».
+- **`supabase/orbita_1_53_2.sql` (novo)** — `resultado` e `modelo` em
+  `orbita_tasks`. Até estar aplicado, o servidor guarda o texto na Atividade e a
+  tarefa aponta a migração: nada se perde.
+
+**3. Rodar a câmara com o rato.** O pedido: «os giros serão pelo mouse, clicando
+na área sem nada e arrastando». `gestoDoArrasto` ganhou `vazio` e `shiftKey`:
+arrastar no vazio **roda**; sobre uma secretária, um agente ou uma placa continua
+a mover o chão; **Shift** é o pan; Alt/botão do meio também rodam. Um clique sem
+arrasto continua a abrir a ficha — 4 px é a fronteira.
+
+**Testes:** 764 (eram 734). Novos: `estudio-video.test.mjs` (11) e
+`tarefas.test.mjs` (15); reescritos os que guardavam as frases mortas
+(`api.test.mjs` 7, `localapi.test.mjs` 8/8b, `cine.test.mjs` 23) e acrescentados
+três ao `camera.test.mjs`.
+
 ## 1.53.1 — 29 out 2026 · «oi» nunca mais morre por falta do quadro
 
 O dono escolheu a **Groq**, escreveu **«oi»** e o cartão respondeu:

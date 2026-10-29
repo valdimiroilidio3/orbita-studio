@@ -1015,30 +1015,60 @@ const TASK_TAG = { queued: '', running: 'novo', succeeded: 'respondeu', failed: 
 const TASK_LABEL = { queued: 'à espera', running: 'a correr', succeeded: 'concluída', failed: 'falhou', awaiting_approval: 'espera aprovação', cancelled: 'cancelada' };
 const dur = ms => (ms == null ? '' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
-function tarefaCard(t) {
-  const d = (S.deptos || []).find(x => x.key === t.dept) || {};
-  const podeCorrer = ['queued', 'failed'].includes(t.state) && t.attempts < t.max_attempts;
+/* 1.53.2 · o cartão da tarefa lia uma forma que a base não devolve.
+   O que chega do Supabase é `{ kind, entity_id, entidade, state, error,
+   resultado, created_at, finished_at }`; o cartão pedia `title`, `dept`,
+   `attempts`, `result`… e escrevia títulos vazios. Isto aceita as duas formas,
+   para que «nada funciona» deixe de ser verdade por um campo mal lido. */
+const DEPTO_DA_TAREFA = { investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia' };
+
+function normalizarTarefa(t = {}) {
+  const tipo = S.tiposTarefa.find(x => x.id === t.kind) || {};
+  const deptId = t.dept || DEPTO_DA_TAREFA[t.kind] || 'comando';
+  const dept = (S.deptos || []).find(x => x.id === deptId || x.key === deptId) || { nome: deptId, name: deptId, role: '' };
+  return {
+    ...t,
+    titulo: t.title || tipo.label || t.kind || 'Tarefa',
+    deptId,
+    deptNome: dept.nome || dept.name || deptId,
+    deptPapel: dept.role || '',
+    entidade: t.entity || t.entidade || '',
+    alvoId: t.entityId || t.entity_id || '',
+    // o resultado vem em texto na base de produção e em objecto no esquema antigo
+    textoResultado: typeof t.resultado === 'string' ? t.resultado : (t.result?.texto || ''),
+    objectoResultado: t.result && typeof t.result === 'object' ? t.result : null,
+    tentativas: Number.isFinite(t.attempts) ? t.attempts : null,
+    maxTentativas: Number.isFinite(t.max_attempts) ? t.max_attempts : null,
+  };
+}
+
+function tarefaCard(tarefaCrua) {
+  const t = normalizarTarefa(tarefaCrua);
+  const podeCorrer = ['queued', 'failed', 'cancelled'].includes(t.state);
   const ev = t.evidence || [];
+  const ligacao = t.alvoId
+    ? `<a href="${t.entidade === 'projeto' ? '#/projeto/' + esc(t.alvoId) : t.entidade === 'lead' ? '#/lead/' + esc(t.alvoId) : '#'}" style="text-decoration:underline">${esc(t.alvoId)}</a>`
+    : '';
   return `<div class="card" style="margin-bottom:var(--s3)">
     <div class="detail-top">
-      <div><h3 style="font-size:var(--t-m)">${esc(t.title)}</h3>
-        <div class="mt">${esc(d.name || t.dept)} · ${esc(d.role || '')}${t.entityId ? ` · <a href="${t.entity === 'projeto' ? '#/projeto/' + esc(t.entityId) : t.entity === 'lead' ? '#/lead/' + esc(t.entityId) : '#'}" style="text-decoration:underline">${esc(t.entityId)}</a>` : ''}</div></div>
+      <div><h3 style="font-size:var(--t-m)">${esc(t.titulo)}</h3>
+        <div class="mt">${esc(t.deptNome)}${t.deptPapel ? ` · ${esc(t.deptPapel)}` : ''}${ligacao ? ` · ${ligacao}` : ''}</div></div>
       <span class="tag ${TASK_TAG[t.state] || ''}">${esc(TASK_LABEL[t.state] || t.state)}</span>
     </div>
     <div class="mt" style="margin-top:var(--s2)">
-      ${t.attempts}/${t.max_attempts} tentativa(s)${t.duration_ms != null ? ` · ${dur(t.duration_ms)}` : ''}${t.started_at ? ` · começou ${esc(hhmm(t.started_at))}` : ''}
+      ${t.tentativas != null ? `${t.tentativas}/${t.maxTentativas ?? '—'} tentativa(s) · ` : ''}${t.modelo ? `${esc(t.modelo)} · ` : ''}${t.finished_at ? `terminou ${esc(hhmm(t.finished_at))}` : t.created_at ? `criada ${esc(hhmm(t.created_at))}` : ''}
       ${t.needsApproval ? ' · acção externa: exige aprovação' : ''}
     </div>
     ${t.error ? `<div class="hint bad" style="margin-top:var(--s2)">${esc(t.error)}</div>` : ''}
-    ${t.state === 'succeeded' && Object.keys(t.result || {}).length ? `<details class="why-box" style="margin-top:var(--s2)"><summary><span>Resultado<small>${esc(Object.keys(t.result).slice(0, 4).join(', '))}</small></span>${IC.chev}</summary>
-      <pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:0">${esc(JSON.stringify(t.result, null, 2).slice(0, 1600))}</pre>
+    ${t.textoResultado ? `<details class="why-box" style="margin-top:var(--s2)"><summary><span>Resultado<small>${esc(String(t.textoResultado).split('\n')[0].slice(0, 60))}</small></span>${IC.chev}</summary>
+      <pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:0">${esc(String(t.textoResultado).slice(0, 4000))}</pre></details>` : ''}
+    ${t.objectoResultado && Object.keys(t.objectoResultado).length ? `<details class="why-box" style="margin-top:var(--s2)"><summary><span>Resultado<small>${esc(Object.keys(t.objectoResultado).slice(0, 4).join(', '))}</small></span>${IC.chev}</summary>
+      <pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:0">${esc(JSON.stringify(t.objectoResultado, null, 2).slice(0, 1600))}</pre>
       ${ev.length ? `<div class="hint">Evidência: ${ev.slice(0, 6).map(e => esc(e.label)).join(' · ')}</div>` : ''}</details>` : ''}
-    ${ev.length && t.state !== 'succeeded' ? `<div class="hint">Evidência: ${ev.slice(0, 4).map(e => esc(e.label)).join(' · ')}</div>` : ''}
+    ${ev.length && !t.textoResultado && !t.objectoResultado ? `<div class="hint">Evidência: ${ev.slice(0, 4).map(e => esc(e.label)).join(' · ')}</div>` : ''}
     <div class="acts" style="margin-top:var(--s3)">
-      ${t.state === 'queued' && may('write') ? `<button class="btn primary small" data-act="correr-tarefa" data-id="${esc(t.id)}">Correr</button>` : ''}
-      ${t.state === 'failed' && podeCorrer && may('write') ? `<button class="btn ghost small" data-act="correr-tarefa" data-id="${esc(t.id)}">Repetir</button>` : ''}
+      ${podeCorrer && may('write') ? `<button class="btn ${t.state === 'failed' ? 'ghost' : 'primary'} small" data-act="correr-tarefa" data-id="${esc(t.id)}">${t.state === 'failed' ? 'Repetir' : 'Correr'}</button>` : ''}
       ${t.state === 'awaiting_approval' && may('approve') ? `<button class="btn ghost small" data-act="rejeitar-tarefa" data-id="${esc(t.id)}">Rejeitar</button><button class="btn primary small" data-act="aprovar-tarefa" data-id="${esc(t.id)}">Aprovar</button>` : ''}
-      ${t.state === 'failed' && !podeCorrer ? '<span class="count">tentativas esgotadas — abre uma tarefa nova</span>' : ''}
     </div>
   </div>`;
 }

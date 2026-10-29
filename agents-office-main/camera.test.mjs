@@ -111,7 +111,8 @@ test('o main.js usa esta conta em vez de ter a direcção fixa', () => {
   assert.match(main, /direcaoDaCamara\(view\.yaw \+ view\.arc, view\.tilt\)/, 'a câmara tem de usar o ângulo escolhido');
   assert.doesNotMatch(main, /isoWork\.copy\(ISO\);/, 'a direcção fixa não pode ter ficado');
   assert.match(main, /gestoDoScroll\(e\)/);
-  assert.match(main, /gestoDoArrasto\(\{ altKey: e\.altKey, botao: e\.button \}\)/);
+  /* 1.53.2 · o gesto passou a saber também se o dedo caiu no vazio e se há Shift */
+  assert.match(main, /gestoDoArrasto\(\{ altKey: e\.altKey, botao: e\.button, vazio, shiftKey: e\.shiftKey \}\)/);
   assert.match(main, /if \(e\.key === '\['\)/, 'falta a tecla de rodar');
   const shell = readFileSync(new URL('./src/shell.html', import.meta.url), 'utf8');
   assert.match(shell, /id="zAerea"/, 'o botão da vista aérea não existe no HTML');
@@ -145,4 +146,37 @@ test('os botões da câmara dizem os gestos que existem (senão ninguém os desc
   assert.match(html, /id="zLeft"[^>]*title="[^"]*Shift\+scroll/);
   assert.match(html, /id="zAngle"[^>]*title="[^"]*0 endireita/);
   assert.match(html, /id="zAerea"[^>]*title="[^"]*Alt\+arrastar inclina/);
+});
+
+/* ---------- 1.53.2 · o arrasto no vazio roda a câmara ---------- */
+test('arrastar no vazio roda; sobre uma secretária move; Shift move; Alt roda', () => {
+  // o pedido do dono, por palavras: «clicando na área sem nada e arrastando»
+  assert.equal(gestoDoArrasto({ vazio: true }), 'rodar');
+  assert.equal(gestoDoArrasto({ vazio: false }), 'mover', 'em cima de uma mesa o arrasto continua a mover o chão');
+  assert.equal(gestoDoArrasto({ vazio: true, shiftKey: true }), 'mover', 'Shift é a casa do pan');
+  assert.equal(gestoDoArrasto({ vazio: true, altKey: true }), 'rodar');
+  assert.equal(gestoDoArrasto({ vazio: false, botao: 1 }), 'rodar');
+  assert.equal(gestoDoArrasto({ vazio: false, botao: 2 }), 'rodar');
+});
+
+test('main.js: o pointerdown sabe o que está por baixo ANTES de decidir o gesto', async () => {
+  const src = readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+  assert.match(src, /function algoSob\(nx, ny\)/, 'falta a leitura do que está sob o cursor');
+  const down = /canvas\.addEventListener\('pointerdown'[\s\S]*?\n\}\);/.exec(src);
+  assert.ok(down, 'não encontrei o pointerdown');
+  assert.match(down[0], /const vazio = !algoSob\(nx, ny\)/, 'a decisão tem de olhar para o que está debaixo do dedo');
+  assert.match(down[0], /gestoDoArrasto\(\{ altKey: e\.altKey, botao: e\.button, vazio, shiftKey: e\.shiftKey \}\)/);
+  // e o raio olha para os três alvos que o clique conhece
+  const fn = /function algoSob[\s\S]*?\n\}/.exec(src)[0];
+  assert.match(fn, /personTargets/);
+  assert.match(fn, /clickTargets/);
+  assert.match(fn, /mcp\.sprites/);
+});
+
+test('um clique sem arrastar continua a abrir a ficha (a rotação não come o clique)', async () => {
+  const src = readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+  const up = /addEventListener\('pointerup'[\s\S]*?\n\}\);/.exec(src);
+  assert.ok(up);
+  assert.match(up[0], /if \(wasDrag\) return;/, 'um arrasto não abre nada…');
+  assert.match(up[0], /openAgent\(clicked/, '…e um clique sem arrasto continua a abrir o agente');
 });

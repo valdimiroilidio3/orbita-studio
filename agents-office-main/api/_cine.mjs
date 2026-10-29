@@ -650,13 +650,21 @@ export async function estadoDoVideo({ repo = null, env = {} } = {}) {
   } catch { /* sem módulo de media, fica indisponível e diz-se */ }
   const temChave = !!chavePollinations(env);
   return {
-    disponivel: false,
+    /* 1.53.2 · «disponível» deixou de ser falso: há sempre um motor que faz o
+       ficheiro. `disponivel` continua a significar o OpenMontage (a fila); `local`
+       é a composição no browser, que não precisa de worker nenhum. */
+    disponivel: !!worker.vivo,
     modelos,
     worker,
+    local: {
+      disponivel: true,
+      motor: 'browser',
+      nota: 'compõe o vídeo no browser com as peças aprovadas (MediaRecorder) — MP4 onde o browser o souber gravar, WebM onde não; não é um render de Veo/Kling',
+    },
     credito: { chavePollinations: temChave },
     motivo: worker.vivo
       ? null
-      : `vídeo precisa de uma de duas coisas: créditos Pollen (os ${modelos.length} modelos de vídeo do Pollinations são pagos) ou o worker do OpenMontage a correr numa máquina com Python e FFmpeg`,
+      : `o worker do OpenMontage não está vivo (precisa de Python + FFmpeg numa máquina tua); entretanto o vídeo é composto no browser. Para cinema a sério: créditos Pollen (os ${modelos.length} modelos de vídeo são pagos) ou o worker ligado`,
   };
 }
 

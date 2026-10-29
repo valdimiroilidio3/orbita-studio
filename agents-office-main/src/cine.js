@@ -21,6 +21,10 @@
    =========================================================================== */
 
 const escPadrao = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/* 1.53.2 · o vídeo que sai mesmo. Quando o worker do OpenMontage não está vivo, o
+   ficheiro é composto aqui: as peças aprovadas em movimento, o conceito por cima e
+   um MP4/WebM para descarregar. A conta do plano é pura (`src/estudio-video.js`). */
+import { planoDoVideo, renderizarVideo, resumoDoVideo, nomeDoFicheiro } from './estudio-video.js';
 
 /** O estado inicial de uma visita ao Cine (nunca partilhado entre leads). */
 function estadoNovo() {
@@ -30,6 +34,8 @@ function estadoNovo() {
     estado: null, projeto: null, analise: null,
     brief: { objetivo: '', estilo: null, formato: '16:9', plataforma: '', tom: '', quantidade: 1, publico: '' },
     erro: null, aviso: null, textoAberto: false, promptEditado: null,
+    /* 1.53.2 · o último vídeo composto nesta visita: url local, nome e resumo */
+    video: null, aVideo: false,
     lista: null, semProjeto: false,
   };
 }
@@ -170,7 +176,57 @@ export async function apagarImagemCine(api, imagemId) {
   api.paint();
 }
 
-/** A promessa do vídeo: ou há worker, ou diz-se o que falta. Nunca um player falso. */
+/**
+ * 1.53.2 · o render no browser. Botão carregado → plano (peças aprovadas, ordem,
+ * duração) → gravação → ficheiro com bytes. Sem peças, não se grava um ecrã vazio:
+ * diz-se o que falta e porquê.
+ */
+export async function renderizarVideoCine(api) {
+  const S = api.S.cine;
+  const p = S.projeto || {};
+  const plano = planoDoVideo({
+    imagens: p.imagens || [],
+    conceito: p.master?.seccoes?.conceito || p.master?.prompts?.video || '',
+    titulo: p.lead?.name || '',
+  });
+  if (!plano.ok) {
+    S.aviso = plano.motivo;
+    api.toast(plano.motivo, true);
+    api.paint();
+    return;
+  }
+  S.aVideo = true; S.aviso = null; api.paint();
+  try {
+    const r = await renderizarVideo({ plano });
+    if (!r.ok) throw new Error(r.motivo || 'o browser não conseguiu gravar');
+    /* uma visita nova não deixa fugas: o objecto do vídeo anterior é libertado */
+    if (S.video?.url) { try { URL.revokeObjectURL(S.video.url); } catch { /* nada a libertar */ } }
+    const nome = nomeDoFicheiro({ lead: p.lead?.name || S.leadId, mime: r.mime, quando: new Date() });
+    S.video = {
+      url: URL.createObjectURL(r.blob), nome, mime: r.mime, bytes: r.bytes,
+      duracao: r.duracao, ms: r.ms, planos: plano.planos.length,
+      resumo: resumoDoVideo({ ...r, planos: plano.planos.length }),
+      quando: new Date().toISOString(),
+    };
+    S.aviso = `vídeo composto aqui (${S.video.resumo}). Descarrega com «guardar».`;
+    api.toast(`vídeo pronto · ${S.video.resumo}`);
+  } catch (e) {
+    S.aviso = `o vídeo não saiu: ${e.message}`;
+    api.toast(S.aviso, true);
+  } finally {
+    S.aVideo = false;
+    api.paint();
+  }
+}
+
+/** O que o botão faz: worker vivo → OpenMontage; senão → compõe-se aqui. */
+export async function accaoVideoCine(api) {
+  const v = api.S.cine?.estado?.video;
+  if (v?.worker?.vivo) return tentarVideoCine(api);
+  return renderizarVideoCine(api);
+}
+
+/** A promessa do vídeo: ou há worker, ou se compõe aqui. Nunca um player falso. */
 export async function tentarVideoCine(api) {
   const S = api.S.cine;
   try {
@@ -361,17 +417,40 @@ function cartaoGaleria(S) {
 function cartaoVideo(S) {
   const v = S.estado?.video;
   if (!v) return '';
+  const vivo = !!v.worker?.vivo;
+  const feito = S.video || null;
+  const aCompor = !!S.aVideo;
+  /* quantas peças aprovadas é que o render vai usar — dito antes de se carregar */
+  const aprovadas = (S.projeto?.imagens || []).filter((i) => i.dataUrl && i.aprovada).length;
+  /* 1.53.2 · dois motores, um botão. Antes daqui havia um botão cinzento e uma
+     frase a explicar por que não fazia nada. Agora: com worker, o trabalho vai para
+     o OpenMontage; sem worker, o ficheiro é composto aqui e aparece já com bytes. */
   return `<section class="cine-card cine-video" aria-labelledby="cine-v1">
-    <div class="cine-card-h"><h2 id="cine-v1">Vídeo cinematográfico</h2>
-      <span class="cine-selo ${v.worker?.vivo ? 'ok' : 'regra'}">${v.worker?.vivo ? 'worker vivo' : 'ainda não há como'}</span></div>
-    <p class="cine-leitura">${escPadrao(v.motivo || 'o worker está vivo: o trabalho entra na fila do estúdio')}</p>
+    <div class="cine-card-h"><h2 id="cine-v1">Vídeo</h2>
+      <span class="cine-selo ${vivo ? 'ok' : 'regra'}">${vivo ? 'OpenMontage vivo' : 'compõe-se aqui'}</span></div>
+    <p class="cine-leitura">${vivo
+      ? 'O worker do OpenMontage está vivo: o trabalho entra na fila e o ficheiro aparece quando ele renderizar.'
+      : 'Sem worker nesta máquina, o vídeo é composto aqui mesmo: as peças aprovadas em movimento, o conceito por cima, e um ficheiro para descarregares.'}</p>
+    ${feito ? `<figure class="cine-fig-video">
+      <video src="${escPadrao(feito.url)}" controls playsinline preload="metadata" aria-label="vídeo composto para ${escPadrao(S.projeto?.lead?.name || 'este projecto')}"></video>
+      <figcaption><span class="cine-min">${escPadrao(feito.resumo)}</span>
+        <span class="cine-acts-min">
+          <a class="cine-link" href="${escPadrao(feito.url)}" download="${escPadrao(feito.nome)}">guardar ${escPadrao(feito.nome)}</a>
+        </span></figcaption>
+    </figure>` : ''}
     <div class="cine-tabela">
       ${(v.modelos || []).map((m) => `<div class="cine-linha"><b>${escPadrao(m.rotulo)}</b><span>${escPadrao(m.nota)}</span><span class="cine-min">pago · créditos Pollen</span></div>`).join('')}
     </div>
     <div class="cine-acts">
-      <button class="cine-btn" data-act="cine-video" ${v.worker?.vivo ? '' : 'disabled'}>${v.worker?.vivo ? 'Enviar ao estúdio' : 'Enviar ao estúdio (indisponível)'}</button>
+      <button class="cine-btn" data-act="cine-video" ${aCompor ? 'disabled aria-busy="true"' : ''}>${aCompor
+        ? 'A compor o vídeo…'
+        : vivo ? 'Enviar ao OpenMontage' : (feito ? 'Compor outra vez' : 'Compor o vídeo agora')}</button>
     </div>
-    <p class="cine-min">O botão só faz alguma coisa quando há um caminho real: o worker do OpenMontage a correr numa máquina com Python e FFmpeg. Enquanto não houver, o prompt de vídeo do Master Prompt fica guardado e pronto a usar.</p>
+    <p class="cine-min">${vivo
+      ? 'O OpenMontage (AGPL) corre onde há Python e FFmpeg — não na Vercel. Enquanto ele não estiver ligado, este botão compõe o ficheiro no browser.'
+      : `O ficheiro sai daqui: MP4 onde o teu browser o sabe gravar, WebM onde não. ${aprovadas} peça(s) aprovada(s) entram no vídeo.`}</p>
+    ${!vivo && !aprovadas ? '<p class="cine-min cine-alerta">Sem peças aprovadas não se inventa um vídeo: aprova pelo menos uma imagem acima e este botão compõe o ficheiro com ela.</p>' : ''}
+    <p class="cine-min">Não é um render de Veo ou Kling: é a composição das tuas peças, com movimento, conceito e contador.</p>
   </section>`;
 }
 
@@ -489,7 +568,9 @@ export async function accaoCine(nome, el, api) {
       api.paint();
       return true;
     case 'cine-video':
-      await tentarVideoCine(api);
+      /* 1.53.2 · o botão deixou de estar morto: com worker vai ao OpenMontage,
+         sem worker compõe o ficheiro aqui mesmo */
+      await accaoVideoCine(api);
       return true;
     default:
       return false;
