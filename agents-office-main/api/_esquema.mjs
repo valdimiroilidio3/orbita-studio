@@ -34,6 +34,8 @@ export const FICHEIROS = [
   'orbita_1_53_2.sql',
   /* 1.54.0 · a porta: contas e sessões. Idempotente também. */
   'orbita_1_54_0.sql',
+  /* 1.54.1 · a confirmação da conta por email (as três colunas). */
+  'orbita_1_54_1.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -53,7 +55,7 @@ export const COLUNAS_EXIGIDAS = {
      mostra — e o `/api/setup` passa a dizer que faltam. */
   orbita_tasks: ['resultado', 'modelo'],
   /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
-  orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira'],
+  orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira', 'confirmado_em', 'confirmar_hash', 'confirmar_expira'],
   orbita_sessoes: ['conta_id', 'token_hash', 'expira', 'revogada'],
 };
 

@@ -108,9 +108,15 @@ pede. Contas, sessões, papéis verificados no servidor, 401 sem cookie, 403 por
 papel, 429 às cinco tentativas, recuperação por email, cookies `HttpOnly`.
 Migração `supabase/orbita_1_54_0.sql`. 23 testes novos em `conta.test.mjs`.
 
-**O que falta para fechar o critério 2 (conta nasce sozinha com email de
-confirmação):** confirmação de email no registo, 2FA opcional, renovação de
-sessão por uso. É a vaga **1.54.1**.
+**1.54.1 (30 out 2026) fechou o critério 2:** `/auth/registo` cria a conta com
+papel `leitor` e **por confirmar**; o link (24 h, uso único, só em sha256) abre a
+conta e entra; sem `RESEND_API_KEY` a resposta nomeia a chave que falta e um dono
+confirma em Contas; login de conta por confirmar devolve **403** com
+`naoConfirmada`; e `/auth/eu` **renova a sessão** a meio do prazo, na base e no
+cookie. Migração `orbita_1_54_1.sql`, 10 testes novos (797 no total).
+
+**O que continua de fora:** 2FA (não é critério da 1.0), e o papel de quem se
+inscreve é sempre `leitor` — de propósito.
 
 **Problema medido.** `GET /api/rpc?caminho=/auth/eu` devolve
 `role: 'owner'`, `admin: true`, todos os perms, **a quem pedir**.
@@ -335,7 +341,8 @@ Sem estas cinco respostas, A1, A2, A5 e A10 avançam na mesma. As outras esperam
 
 A 1.54.0 fecha a produção **até existir uma conta**. Depois do deploy:
 
-1. Aplicar a migração (`/api/setup?token=…&so=orbita_1_54_0.sql` ou SQL Editor).
+1. Aplicar as migrações (`/api/setup?token=…` aplica todas, ou uma a uma com
+   `&so=orbita_1_54_0.sql` e `&so=orbita_1_54_1.sql`).
 2. Abrir `/app` → o ecrã diz «Criar a primeira conta».
 3. Preencher nome, email, palavra-passe (12+) e **colar o `SETUP_TOKEN`** no
    campo que apareceu.

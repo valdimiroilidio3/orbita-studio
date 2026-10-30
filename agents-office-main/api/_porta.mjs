@@ -16,7 +16,7 @@
 import {
   ROLES, can, permisosDe, publico, normEmail, emailValido, checkPassword, hashPassword, verifyPassword,
   novoToken, hashToken, tokenDoPedido, cookieDeSessao, cookieParaApagar, sessaoValida,
-  criarLimitador, estadoDaPorta, HORAS_SESSAO,
+  criarLimitador, estadoDaPorta, precisaRenovar, HORAS_SESSAO,
 } from './_conta.mjs';
 
 const agoraIso = () => new Date().toISOString();
@@ -58,19 +58,22 @@ function corpoDoErro({ estado, env }) {
   };
 }
 
-/* ---------- e-mail de recuperação (só quando há chave) ---------- */
+/* ---------- correio (só quando há chave) ----------
+   1.54.1 · uma função só para os dois emails que a porta manda (confirmar a
+   conta, recuperar a palavra-passe). Sem RESEND_API_KEY não há envio — e isso é
+   dito a quem pediu, com o nome da variável, em vez de um silêncio. */
 
-async function enviarRecuperacao({ para, link, env, fetchImpl }) {
-  if (!env.RESEND_API_KEY) return { enviado: false, motivo: 'falta RESEND_API_KEY no ambiente — o link não saiu por email' };
+async function enviarEmail({ para, assunto, texto, env, fetchImpl }) {
+  if (!env.RESEND_API_KEY) {
+    return { enviado: false, motivo: 'falta RESEND_API_KEY no ambiente — o email não sai daqui sem essa chave' };
+  }
   try {
     const r = await fetchImpl('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         from: env.ORBITA_EMAIL_FROM || 'Orbita <onboarding@resend.dev>',
-        to: [para],
-        subject: 'Recuperar a palavra-passe da Órbita',
-        text: `Pede-se uma palavra-passe nova com este link (vale 30 minutos, uma vez só):\n\n${link}\n\nSe não foste tu, ignora este email.`,
+        to: [para], subject: assunto, text: texto,
       }),
     });
     if (!r.ok) return { enviado: false, motivo: `o Resend respondeu ${r.status}` };
@@ -79,6 +82,13 @@ async function enviarRecuperacao({ para, link, env, fetchImpl }) {
     return { enviado: false, motivo: `não consegui falar com o Resend: ${e.message}` };
   }
 }
+
+const basePublica = (env = {}) => String(env.ORBITA_URL || env.ORBITA_URLAR || 'https://orbita-agentes.vercel.app').replace(/\/$/, '');
+
+/** O link de confirmação, ou o de recuperação — ambos com o token no fragmento
+ *  (o fragmento não vai para os registos do servidor nem para o Referer). */
+export const linkDeConfirmacao = (token, env = {}) => `${basePublica(env)}/app/#/confirmar?t=${encodeURIComponent(token)}`;
+export const linkDeRecuperacao = (token, env = {}) => `${basePublica(env)}/app/#/redefinir?t=${encodeURIComponent(token)}`;
 
 /* ---------- criar sessão ---------- */
 
@@ -138,12 +148,25 @@ export async function avaliarPorta(repo, {
     const estado = estadoDaPorta({ temContas: n > 0, env });
     const s = await lerSessao(repo, headers);
     if (s) {
+      /* 1.54.1 · renovação com o uso: quem abre a Órbita a meio do prazo ganha
+         mais 12 h. A extensão é gravada na base E o cookie é reenviado — sem as
+         duas coisas, o browser fechava a porta antes do servidor. */
+      let expira = s.sessao.expira || null;
+      let cabecalhos;
+      if (precisaRenovar(s.sessao)) {
+        const nova = new Date(Date.now() + HORAS_SESSAO * 3600 * 1000).toISOString();
+        await repo.sessoes.actualizar(s.sessao.id, { expira: nova }).catch(() => null);
+        expira = nova;
+        const token = tokenDoPedido(headers);
+        if (token) cabecalhos = { 'Set-Cookie': cookieDeSessao(token, { horas: HORAS_SESSAO, secure: seguro }) };
+      }
       return { resposta: {
         status: 200,
         corpo: {
           user: publico(s.conta), perms: permisosDe(s.conta.papel), horasSessao: HORAS_SESSAO,
-          expira: s.sessao.expira || null, modo: 'base', estado,
+          expira, modo: 'base', estado, renovada: !!cabecalhos,
         },
+        ...(cabecalhos ? { cabecalhos } : {}),
       } };
     }
     /* sem sessão: se a porta está dormente (modo local) dizemo-lo em vez de 401 */
@@ -188,6 +211,8 @@ export async function avaliarPorta(repo, {
     try {
       conta = await repo.contas.criar({
         email, nome, papel: 'dono', hash: hashPassword(corpo.password), activo: true, criado: agoraIso(),
+        /* a primeira conta nasce confirmada: quem a cria tem o SETUP_TOKEN na mão */
+        confirmado_em: agoraIso(),
       });
     } catch (e) {
       /* a tabela ainda não existe: isto é uma migração por aplicar, não uma
@@ -202,6 +227,114 @@ export async function avaliarPorta(repo, {
     const s = await abrirSessao(repo, conta, { headers, secure: seguro });
     await repo.atividade.add('conta', `primeira conta criada (${email}) — é a dona desta instalação`).catch(() => null);
     return { resposta: respostaDeEntrada(conta, s, { primeiraConta: true }) };
+  }
+
+  /* ---------- 1.54.1 · a conta nasce sozinha ----------
+     Registo aberto (fecha-se com `ORBITA_REGISTO=fechado`), papel mínimo — quem
+     se inscreve entra como `leitor` e um dono sobe o papel. A conta fica por
+     confirmar até o email provar que a caixa existe; sem `RESEND_API_KEY` o
+     link não sai e a conta é confirmada por um dono em Contas (e isso é dito,
+     com o nome da variável). */
+  if (limpo === '/auth/registo' && m === 'POST') {
+    if (String(env.ORBITA_REGISTO || '').toLowerCase() === 'fechado') {
+      return { resposta: { status: 403, corpo: {
+        error: 'esta instalação não aceita contas novas pelo site',
+        hint: 'pede a um dono que crie a tua conta em Contas',
+      } } };
+    }
+    const email = normEmail(corpo?.email);
+    if (!emailValido(email)) return { resposta: { status: 400, corpo: { error: 'email inválido' } } };
+    const nome = String(corpo?.name || '').trim().slice(0, 120) || email.split('@')[0];
+    const mau = checkPassword(corpo?.password, { email, name: nome });
+    if (mau) return { resposta: { status: 400, corpo: { error: mau } } };
+    if (await repo.contas.porEmail(email).catch(() => null)) {
+      return { resposta: { status: 409, corpo: {
+        error: 'já existe uma conta com este email',
+        hint: 'entra, ou pede a recuperação da palavra-passe se te esqueceste',
+      } } };
+    }
+    const token = novoToken();
+    let conta;
+    try {
+      conta = await repo.contas.criar({
+        email, nome, papel: 'leitor', hash: hashPassword(corpo.password), activo: true,
+        criado: agoraIso(), confirmado_em: null,
+        confirmar_hash: hashToken(token), confirmar_expira: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      });
+    } catch (e) {
+      return { resposta: { status: 503, corpo: {
+        error: 'a base de dados ainda não tem as colunas da confirmação',
+        instrucao: 'aplica supabase/orbita_1_54_1.sql (ou corre /api/setup?token=…&so=orbita_1_54_1.sql)',
+        detalhe: String(e.message || e).slice(0, 200),
+      } } };
+    }
+    CACHE_CONTAS.delete(repo);
+    const envio = await enviarEmail({
+      para: email,
+      assunto: 'Confirma a tua conta na Órbita',
+      texto: `Falta um passo: abrir este link (vale 24 horas, uma vez só).\n\n${linkDeConfirmacao(token, env)}\n\nSe não foste tu a criar a conta, ignora este email.`,
+      env, fetchImpl,
+    });
+    await repo.atividade.add('conta', `registo de ${email} (por confirmar${envio.enviado ? ', email enviado' : ', sem email'})`).catch(() => null);
+    return { resposta: { status: 201, corpo: {
+      ok: true,
+      contaCriada: true,
+      porConfirmar: true,
+      emailEnviado: envio.enviado,
+      /* sem chave de correio, o link SÓ se mostra aqui uma vez — é o único
+         caminho honesto para o dono confirmar sem inventar um email */
+      ...(envio.enviado ? {} : {
+        nota: envio.motivo,
+        instrucao: 'um dono confirma esta conta em Contas → «confirmar»; ou define RESEND_API_KEY e repete o registo noutro email',
+      }),
+      mensagem: envio.enviado
+        ? 'conta criada — abre o link que foi para o teu email (vale 24 horas)'
+        : 'conta criada e POR CONFIRMAR: não há correio configurado nesta instalação',
+    } } };
+  }
+
+  if ((limpo === '/auth/confirmar' || limpo === '/auth/reenviar') && m === 'POST') {
+    const token = String(corpo?.token || '').trim();
+    if (limpo === '/auth/reenviar') {
+      /* reenviar é pedido por email: a resposta não diz se a conta existe */
+      const email = normEmail(corpo?.email);
+      const conta = email ? await repo.contas.porEmail(email).catch(() => null) : null;
+      let envio = { enviado: false, motivo: 'sem conta para esse email' };
+      if (conta && !conta.confirmado_em) {
+        const novo = novoToken();
+        await repo.contas.actualizar(conta.id, {
+          confirmar_hash: hashToken(novo), confirmar_expira: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        }).catch(() => null);
+        envio = await enviarEmail({
+          para: conta.email, assunto: 'Confirma a tua conta na Órbita',
+          texto: `Aqui vai outro link de confirmação (vale 24 horas, uma vez só):\n\n${linkDeConfirmacao(novo, env)}`,
+          env, fetchImpl,
+        });
+      }
+      return { resposta: { status: 200, corpo: {
+        ok: true,
+        mensagem: 'se houver uma conta por confirmar com esse email, o link segue para lá',
+        emailConfigurado: !!env.RESEND_API_KEY,
+        ...(conta && !conta.confirmado_em && !envio.enviado ? { nota: envio.motivo } : {}),
+      } } };
+    }
+    if (!token) return { resposta: { status: 400, corpo: { error: 'falta o token do link' } } };
+    const h = hashToken(token);
+    let alvo = null;
+    for (const c of await repo.contas.listar().catch(() => [])) {
+      const inteira = await repo.contas.porId(c.id).catch(() => null);
+      if (inteira?.confirmar_hash === h) { alvo = inteira; break; }
+    }
+    if (!alvo) return { resposta: { status: 400, corpo: { error: 'este link não serve (já foi usado) — pede outro' } } };
+    if (new Date(alvo.confirmar_expira || 0).getTime() < Date.now()) {
+      return { resposta: { status: 400, corpo: { error: 'este link passou das 24 horas — pede outro' } } };
+    }
+    const confirmada = await repo.contas.actualizar(alvo.id, {
+      confirmado_em: agoraIso(), confirmar_hash: null, confirmar_expira: null,
+    });
+    const s = await abrirSessao(repo, confirmada, { headers, secure: seguro });
+    await repo.atividade.add('conta', `${alvo.email} confirmou a conta`).catch(() => null);
+    return { resposta: respostaDeEntrada(confirmada, s, { confirmadaAgora: true }) };
   }
 
   if (limpo === '/auth/entrar' && m === 'POST') {
@@ -223,6 +356,16 @@ export async function avaliarPorta(repo, {
       return { resposta: { status: 401, corpo: { error: 'email ou palavra-passe não conferem', restam: Math.max(0, ritmo.restam - 1) } } };
     }
     limitador.acertou(chave);
+    /* 1.54.1 · a palavra-passe está certa, mas a conta ainda não foi confirmada:
+       isto não é uma falha de credenciais, é um passo em falta — e diz-se qual. */
+    if (!conta.confirmado_em) {
+      return { resposta: { status: 403, corpo: {
+        error: 'a tua conta ainda não está confirmada',
+        naoConfirmada: true,
+        hint: 'abre o link que foi para o teu email; se não chegou, pede outro',
+        podeReenviar: true,
+      } } };
+    }
     const s = await abrirSessao(repo, conta, { headers, secure: seguro });
     await repo.atividade.add('conta', `entrou ${email}`).catch(() => null);
     return { resposta: respostaDeEntrada(conta, s) };
@@ -245,9 +388,11 @@ export async function avaliarPorta(repo, {
       const token = novoToken();
       const expira = new Date(Date.now() + 30 * 60000).toISOString();
       await repo.contas.actualizar(conta.id, { recuperar_hash: hashToken(token), recuperar_expira: expira });
-      const base = String(env.ORBITA_URLAR || env.ORBITA_URL || 'https://orbita-agentes.vercel.app').replace(/\/$/, '');
-      entrega = await enviarRecuperacao({
-        para: conta.email, link: `${base}/app/#/redefinir?t=${encodeURIComponent(token)}`, env, fetchImpl,
+      entrega = await enviarEmail({
+        para: conta.email,
+        assunto: 'Recuperar a palavra-passe da Órbita',
+        texto: `Pede-se uma palavra-passe nova com este link (vale 30 minutos, uma vez só):\n\n${linkDeRecuperacao(token, env)}\n\nSe não foste tu, ignora este email.`,
+        env, fetchImpl,
       });
     }
     /* a resposta é a mesma exista ou não a conta: não se enumeram emails */
@@ -343,7 +488,11 @@ export async function avaliarPorta(repo, {
     const nome = String(corpo?.name || '').trim().slice(0, 120) || email.split('@')[0];
     const mau = checkPassword(corpo?.password, { email, name: nome });
     if (mau) return { resposta: { status: 400, corpo: { error: mau } } };
-    const conta = await repo.contas.criar({ email, nome, papel, hash: hashPassword(corpo.password), activo: true, criado: agoraIso() });
+    const conta = await repo.contas.criar({
+      email, nome, papel, hash: hashPassword(corpo.password), activo: true, criado: agoraIso(),
+      /* criada por um dono: o email já é do conhecimento dele, não fica pendente */
+      confirmado_em: agoraIso(),
+    });
     CACHE_CONTAS.delete(repo);
     await repo.atividade.add('conta', `conta criada para ${email} (${papel}) por ${s.conta.email}`).catch(() => null);
     return { resposta: { status: 201, corpo: { ok: true, utilizador: publico(conta) } } };
@@ -361,6 +510,23 @@ export async function avaliarPorta(repo, {
       const c = await repo.contas.actualizar(alvo.id, { activo: false });
       await repo.atividade.add('conta', `conta ${alvo.email} desactivada por ${s.conta.email}`).catch(() => null);
       return { resposta: { status: 200, corpo: { ok: true, utilizador: publico(c) } } };
+    }
+    if (seg[3] === 'confirmar') {
+      const c = await repo.contas.actualizar(alvo.id, { confirmado_em: agoraIso(), confirmar_hash: null, confirmar_expira: null });
+      await repo.atividade.add('conta', `${alvo.email} confirmada à mão por ${s.conta.email}`).catch(() => null);
+      return { resposta: { status: 200, corpo: { ok: true, utilizador: publico(c) } } };
+    }
+    if (seg[3] === 'reenviar-confirmacao') {
+      const novo = novoToken();
+      await repo.contas.actualizar(alvo.id, {
+        confirmar_hash: hashToken(novo), confirmar_expira: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      }).catch(() => null);
+      const envio = await enviarEmail({
+        para: alvo.email, assunto: 'Confirma a tua conta na Órbita',
+        texto: `Aqui vai o link de confirmação (vale 24 horas, uma vez só):\n\n${linkDeConfirmacao(novo, env)}`,
+        env, fetchImpl,
+      });
+      return { resposta: { status: 200, corpo: { ok: true, enviado: envio.enviado, nota: envio.motivo } } };
     }
     if (seg[3] === 'papel') {
       const papel = String(corpo?.role || '');
