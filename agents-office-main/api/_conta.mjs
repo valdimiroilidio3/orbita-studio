@@ -122,6 +122,9 @@ export function publico(r) {
     roleLabel: role?.label || r.papel || r.role,
     level: role?.level ?? -1,
     active: r.activo !== false,
+    /* 1.54.1 · uma conta criada pelo próprio fica por confirmar até o email
+       provar que a caixa existe. O dono vê isso em Contas. */
+    confirmado: !!r.confirmado_em,
     created_at: r.criado || r.created_at || null,
     last_login_at: r.ultimo_acesso || r.last_login_at || null,
   };
@@ -168,6 +171,18 @@ export function cookieDeSessao(token, { horas = HORAS_SESSAO, secure = true } = 
 
 export function cookieParaApagar({ secure = true } = {}) {
   return `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`;
+}
+
+/**
+ * 1.54.1 · a sessão renova-se com o uso, mas só até metade do prazo: quem usa a
+ * Órbita todos os dias não é expulso a meio do trabalho, e quem desaparece
+ * durante um dia encontra a porta fechada. Renovar em cada pedido seria uma
+ * sessão eterna; renovar nunca seria uma sessão de 12 h mesmo para quem trabalha.
+ */
+export function precisaRenovar(sessao, { agora = Date.now(), horas = HORAS_SESSAO } = {}) {
+  const fim = new Date(sessao?.expira || 0).getTime();
+  if (!Number.isFinite(fim)) return false;
+  return fim - agora < (horas * 3600 * 1000) / 2;
 }
 
 /** Uma sessão vale se não está revogada e ainda não expirou. */

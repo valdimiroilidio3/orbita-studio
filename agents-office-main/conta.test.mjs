@@ -352,3 +352,156 @@ test('a migração da porta existe, é idempotente e não guarda segredos em cla
   assert.doesNotMatch(sql, /password text/i, 'a palavra-passe nunca tem coluna própria em claro');
   assert.match(sql, /enable row level security/);
 });
+
+/* ===========================================================================
+   1.54.1 · A CONTA NASCE SOZINHA
+   O que aqui se prova: alguém que nunca falou com o dono cria a sua conta,
+   recebe um link, confirma, e entra — como leitor. E a sessão de quem trabalha
+   todos os dias não morre a meio do trabalho.
+   =========================================================================== */
+
+/** Um `fetch` falso só para o Resend: guarda o que foi enviado. */
+function correioFalso({ falhar = false } = {}) {
+  const enviados = [];
+  const fetchImpl = async (url, init) => {
+    const corpo = JSON.parse(init.body);
+    enviados.push({ url, ...corpo });
+    return { ok: !falhar, status: falhar ? 500 : 200, json: async () => ({ id: 'mail_1' }) };
+  };
+  return { enviados, fetchImpl };
+}
+
+const ENV_CORREIO = { ...ENV, RESEND_API_KEY: 're_teste_abcdefghij', ORBITA_URL: 'https://orbita.exemplo.pt' };
+
+test('registo: cria a conta por confirmar e manda o link por email', async () => {
+  const { repo } = await comDono();
+  const correio = correioFalso();
+  const r = await chamar(repo, '/auth/registo', 'POST', {
+    email: 'nova@orbita.pt', password: SENHA, name: 'Nova Pessoa',
+  }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.emailEnviado, true);
+  assert.equal(r.corpo.porConfirmar, true);
+  assert.equal(correio.enviados.length, 1);
+  assert.match(correio.enviados[0].subject, /Confirma a tua conta/);
+  assert.match(correio.enviados[0].text, /https:\/\/orbita\.exemplo\.pt\/app\/#\/confirmar\?t=/);
+  assert.equal(correio.enviados[0].to[0], 'nova@orbita.pt');
+
+  /* a conta existe, é leitora, e não tem o token em claro */
+  const conta = repo._dados.contas.find((c) => c.email === 'nova@orbita.pt');
+  assert.equal(conta.papel, 'leitor');
+  assert.equal(conta.confirmado_em, null);
+  assert.match(conta.confirmar_hash, /^[0-9a-f]{64}$/);
+  assert.doesNotMatch(JSON.stringify(conta), /[?&]t=[A-Za-z0-9_-]{20,}/, 'o token não fica guardado em claro');
+});
+
+test('registo sem RESEND_API_KEY: a conta nasce e diz-se que falta a chave', async () => {
+  const { repo } = await comDono();
+  const r = await chamar(repo, '/auth/registo', 'POST', { email: 'semcorreio@orbita.pt', password: SENHA });
+  assert.equal(r.status, 201);
+  assert.equal(r.corpo.emailEnviado, false);
+  assert.match(r.corpo.nota, /RESEND_API_KEY/);
+  assert.match(r.corpo.instrucao, /confirm/i);
+  assert.match(r.corpo.mensagem, /POR CONFIRMAR/);
+});
+
+test('a conta por confirmar não entra — e o 403 diz que é isso, não credenciais', async () => {
+  const { repo } = await comDono();
+  await chamar(repo, '/auth/registo', 'POST', { email: 'espera@orbita.pt', password: SENHA }, { env: ENV_CORREIO, fetchImpl: correioFalso().fetchImpl });
+  limitador.limpar();
+  const r = await chamar(repo, '/auth/entrar', 'POST', { email: 'espera@orbita.pt', password: SENHA });
+  assert.equal(r.status, 403);
+  assert.equal(r.corpo.naoConfirmada, true);
+  assert.match(r.corpo.error, /ainda não está confirmada/);
+  assert.equal(r.corpo.podeReenviar, true);
+});
+
+test('o link confirma a conta e entra: a pessoa passa a poder trabalhar', async () => {
+  const { repo } = await comDono();
+  const correio = correioFalso();
+  await chamar(repo, '/auth/registo', 'POST', { email: 'confirma@orbita.pt', password: SENHA }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  const link = /\?t=([A-Za-z0-9_-]+)/.exec(correio.enviados[0].text)[1];
+
+  const mal = await chamar(repo, '/auth/confirmar', 'POST', { token: 'inventado-mas-comprido' });
+  assert.equal(mal.status, 400);
+
+  const bem = await chamar(repo, '/auth/confirmar', 'POST', { token: link });
+  assert.equal(bem.status, 200, JSON.stringify(bem.corpo));
+  assert.equal(bem.corpo.user.email, 'confirma@orbita.pt');
+  assert.equal(bem.corpo.user.confirmado, true);
+  assert.equal(bem.corpo.user.role, 'leitor', 'quem se inscreve sozinho entra como leitor, não como dono');
+  assert.equal(bem.corpo.perms.write, false, 'e não pode escrever até um dono subir o papel');
+  const token = decodeURIComponent(bem.cabecalhos['Set-Cookie'].split(';')[0].split('=')[1]);
+  assert.equal((await chamar(repo, '/ops/summary', 'GET', null, comCookie(token))).status, 200, 'confirma e entra');
+
+  /* o link é de uso único */
+  const outra = await chamar(repo, '/auth/confirmar', 'POST', { token: link });
+  assert.equal(outra.status, 400);
+});
+
+test('um dono confirma à mão e a conta entra (é o caminho quando não há correio)', async () => {
+  const { repo, token } = await comDono();
+  await chamar(repo, '/auth/registo', 'POST', { email: 'manual@orbita.pt', password: SENHA });
+  const conta = repo._dados.contas.find((c) => c.email === 'manual@orbita.pt');
+  const feito = await chamar(repo, `/ops/utilizadores/${conta.id}/confirmar`, 'POST', {}, comCookie(token));
+  assert.equal(feito.status, 200);
+  assert.equal(feito.corpo.utilizador.confirmado, true);
+  limitador.limpar();
+  const entra = await chamar(repo, '/auth/entrar', 'POST', { email: 'manual@orbita.pt', password: SENHA });
+  assert.equal(entra.status, 200);
+});
+
+test('reviar o link não diz se o email existe; com correio, manda outro', async () => {
+  const { repo } = await comDono();
+  const correio = correioFalso();
+  const r = await chamar(repo, '/auth/reenviar', 'POST', { email: 'nao-existe@orbita.pt' }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  assert.equal(r.status, 200);
+  assert.equal(correio.enviados.length, 0);
+  assert.match(r.corpo.mensagem, /se houver uma conta por confirmar/);
+});
+
+test('o registo fecha-se com ORBITA_REGISTO=fechado, e diz onde pedir conta', async () => {
+  const { repo } = await comDono();
+  const r = await chamar(repo, '/auth/registo', 'POST', { email: 'x@y.pt', password: SENHA }, { env: { ...ENV, ORBITA_REGISTO: 'fechado' } });
+  assert.equal(r.status, 403);
+  assert.match(r.corpo.hint, /dono/);
+});
+
+test('a sessão renova-se com o uso — e o cookie novo vai na resposta', async () => {
+  const { repo, token } = await comDono();
+  /* a sessão está a 1 hora do fim: quem abre a Órbita hoje ganha mais 12 h */
+  const sessao = repo._dados.sessoes[0];
+  const quase = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  sessao.expira = quase;
+  const eu = await chamar(repo, '/auth/eu', 'GET', null, comCookie(token));
+  assert.equal(eu.status, 200);
+  assert.equal(eu.corpo.renovada, true);
+  assert.ok(new Date(eu.corpo.expira).getTime() > new Date(quase).getTime() + 6 * 3600 * 1000, 'ganhou horas, não minutos');
+  assert.match(eu.cabecalhos['Set-Cookie'], /Max-Age=43200/, 'o browser tem de receber o cookie novo, senão fecha sozinho');
+  /* e a base concorda com o cookie */
+  assert.equal(repo._dados.sessoes[0].expira, eu.corpo.expira);
+
+  /* uma sessão acabada de abrir NÃO é renovada em cada pedido (nada de sessões eternas) */
+  const outra = await chamar(repo, '/auth/entrar', 'POST', { email: 'dono@orbita.pt', password: SENHA });
+  limitador.limpar();
+  const t2 = decodeURIComponent(outra.cabecalhos['Set-Cookie'].split(';')[0].split('=')[1]);
+  const eu2 = await chamar(repo, '/auth/eu', 'GET', null, comCookie(t2));
+  assert.equal(eu2.corpo.renovada, false);
+});
+
+test('o link do email leva ao ecrã certo (a rota #/confirmar?t=… é lida)', () => {
+  const mesa = readFileSync(new URL('./src/mesa.js', import.meta.url), 'utf8');
+  assert.match(mesa, /caminho === 'confirmar'/, 'sem isto o link abria a mesa em «Hoje»');
+  assert.match(mesa, /S\.aConfirmar = caminho === 'confirmar' \? t : null/);
+  assert.match(mesa, /data-act="confirmar-conta"/);
+  assert.match(mesa, /aRegistar \? 'registar'/, 'o botão do registo tem de existir no ecrã de entrada');
+  assert.match(mesa, /data-act="abrir-registo"/);
+  assert.match(mesa, /data-act="confirmar-conta-admin"/);
+});
+
+test('a migração da confirmação existe e não tranca os donos antigos fora', () => {
+  const sql = readFileSync(new URL('./supabase/orbita_1_54_1.sql', import.meta.url), 'utf8');
+  assert.match(sql, /add column if not exists confirmado_em/);
+  assert.match(sql, /add column if not exists confirmar_hash/);
+  assert.match(sql, /update public\.orbita_contas[\s\S]*confirmado_em = coalesce/, 'as contas antigas têm de continuar a entrar');
+});

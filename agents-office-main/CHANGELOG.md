@@ -1,3 +1,41 @@
+## 1.54.1 — 30 out 2026 · A CONTA NASCE SOZINHA (e a sessão acompanha quem trabalha)
+
+A 1.54.0 fechou a porta. Faltava o outro lado, o critério 2 da 1.0: alguém que
+nunca falou contigo consegue criar a sua conta e entrar, e o email prova que a
+caixa existe.
+
+- **`POST /auth/registo`** — conta criada na hora, **papel `leitor`** (vê tudo,
+  não altera nada até um dono subir o papel) e **por confirmar**. O link vai por
+  email (`RESEND_API_KEY`) e vale 24 h, uma vez só. Fecha-se com
+  `ORBITA_REGISTO=fechado`.
+- **`POST /auth/confirmar`** — abre a conta e **entra** na mesma. O token só
+  existe em sha256 na base; o link usa o fragmento (`#/confirmar?t=…`), que não
+  viaja em registos nem em Referer.
+- **Sem correio configurado**, a verdade dita-se: a conta fica por confirmar, a
+  resposta nomeia a `RESEND_API_KEY` que falta, e um dono confirma em Contas →
+  «confirmar» (ou reenvia o link). Nada fica pendurado em silêncio.
+- **Login de conta por confirmar** → **403** com `naoConfirmada: true` e a frase
+  «a tua conta ainda não está confirmada» — não é «credenciais erradas», é um
+  passo em falta, e a mesa leva-te ao ecrã certo.
+- **A sessão renova-se com o uso**: a meio do prazo, `/auth/eu` estende para mais
+  12 h **na base e no cookie**. Só a meio do prazo — uma sessão acabada de abrir
+  não é renovada em cada pedido (nada de sessões eternas).
+- **A mesa**: «Criar conta», ecrã de confirmação com o token do link, «Esqueci-me
+  da palavra-passe» com o token do link já preenchido, e a lista de contas mostra
+  **«por confirmar»** com o botão de confirmar à mão.
+- **`supabase/orbita_1_54_1.sql`** — `confirmado_em`, `confirmar_hash`,
+  `confirmar_expira`; e **as contas antigas ficam confirmadas** (quem já entrou ou
+  é dono), senão esta migração trancava os donos fora da própria casa. Entra pela
+  lista do `/api/setup`.
+
+**O que continua a não ser:** não há 2FA, e o papel de quem se inscreve não é
+escolhido por quem se inscreve (é sempre `leitor` — de propósito).
+
+**Testes:** 797 (eram 787). Mais 10 em `conta.test.mjs`: registo com e sem
+correio, login bloqueado por confirmar, link de uso único, confirmação à mão por
+um dono, reenvio que não enumera emails, registo fechado, e a renovação (com
+cookie) contra a não-renovação de uma sessão nova.
+
 ## 1.54.0 — 29 out 2026 · A PORTA · a Órbita deixa de ser de quem chega primeiro
 
 Até aqui, em produção:

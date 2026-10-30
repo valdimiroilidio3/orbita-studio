@@ -92,7 +92,7 @@ const S = {
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
-  eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, contas: null, sessoes: [],
+  eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
   /* 1.18.0 · Control Center da IA */
   ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
 };
@@ -215,8 +215,19 @@ function toast(msg, bad = false) {
 
 /* ---------------- navegação ---------------- */
 function parseHash() {
-  const h = (location.hash || '#/hoje').replace(/^#\/?/, '');
-  const [name, id] = h.split('/');
+  const cru = (location.hash || '#/hoje').replace(/^#\/?/, '');
+  /* 1.54.1 · o link do email é `/app/#/confirmar?t=…` (ou `#/redefinir?t=…`).
+     Sem esta leitura, o link abria a mesa em «Hoje» e ninguém confirmava nada. */
+  const [caminho, query] = cru.split('?');
+  if (caminho === 'confirmar' || caminho === 'redefinir') {
+    const t = new URLSearchParams(query || '').get('t') || '';
+    S.aConfirmar = caminho === 'confirmar' ? t : null;
+    S.aRecuperar = caminho === 'redefinir';
+    S.tokenDoLink = caminho === 'redefinir' ? t : null;
+    S.needLogin = true;
+    return { name: 'hoje', id: null };
+  }
+  const [name, id] = cru.split('/');
   const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
@@ -948,28 +959,49 @@ function viewLogin() {
      (e diz onde está), em vez de o botão falhar sem explicação. */
   const exigeToken = !!(primeira && estado.exigeToken);
   const aRecuperar = !!S.aRecuperar;
+  /* 1.54.1 · quem chega de um link de confirmação vê o passo em que está */
+  const aConfirmar = !!S.aConfirmar;
+  /* registo aberto: a instalação diz se aceita contas novas (ORBITA_REGISTO) */
+  const aRegistar = !!S.aRegistar && !primeira && !aRecuperar && !aConfirmar;
+  if (aConfirmar) {
+    return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
+      <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
+      <div class="card">
+        <h1 style="font-size:28px;margin-bottom:var(--s2)">Confirmar a conta</h1>
+        <p class="hint" style="margin-top:0">Este é o passo que prova que o email é teu. O link vale 24 horas e serve uma vez.</p>
+        <div class="form" style="grid-template-columns:1fr">
+          <input class="in" id="cfToken" placeholder="cola aqui o token do email" aria-label="token de confirmação" value="${esc(S.aConfirmar || '')}">
+          <button class="btn primary" data-act="confirmar-conta">Confirmar e entrar</button>
+          <button class="btn quiet small" data-act="fechar-confirmar">Voltar</button>
+        </div>
+      </div>
+    </div>`;
+  }
   return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
     <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
     <div class="card">
-      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Criar a primeira conta' : 'Entrar'}</h1>
+      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Criar a primeira conta' : aRegistar ? 'Criar conta' : 'Entrar'}</h1>
       <p class="hint" style="margin-top:0">${primeira
         ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e só pode ser criada uma vez.'
-        : 'Entra com o email e a palavra-passe que um dono te deu.'}</p>
+        : aRegistar
+          ? 'A tua conta entra como leitora: vês tudo, não alteras nada até um dono te subir o papel.'
+          : 'Entra com o email e a palavra-passe que um dono te deu.'}</p>
       <div class="form" style="grid-template-columns:1fr">
-        ${primeira ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
+        ${primeira || aRegistar ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
         <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="">
-        ${aRecuperar ? '<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação"><input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password"><input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova">' : ''}
-        ${!aRecuperar ? `<input class="in" id="lgPass" type="password" placeholder="${primeira ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira ? 'new-password' : 'current-password'}">` : ''}
-        ${primeira && !aRecuperar ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
+        ${aRecuperar ? `<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação" value="${esc(S.tokenDoLink || '')}"><input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password"><input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova">` : ''}
+        ${!aRecuperar ? `<input class="in" id="lgPass" type="password" placeholder="${primeira || aRegistar ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira || aRegistar ? 'new-password' : 'current-password'}">` : ''}
+        ${(primeira || aRegistar) && !aRecuperar ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
         ${exigeToken ? '<input class="in" id="lgToken" type="password" placeholder="SETUP_TOKEN da instalação" aria-label="token de instalação">' : ''}
-        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar conta e entrar' : 'Entrar'}</button>
-        ${!primeira && !aRecuperar ? '<button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button>' : ''}
+        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : aRegistar ? 'registar' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar conta e entrar' : aRegistar ? 'Criar conta e confirmar por email' : 'Entrar'}</button>
+        ${!primeira && !aRecuperar && !aRegistar ? '<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button><button class="btn quiet small" data-act="abrir-registo">Criar conta</button></div>' : ''}
+        ${aRegistar ? '<button class="btn quiet small" data-act="voltar-entrar">Já tenho conta</button>' : ''}
       </div>
       <div class="hint" id="leadNote">${aRecuperar
         ? 'O link vale 30 minutos e uma vez só. Ao guardar, todas as sessões antigas desta conta fecham.'
-        : primeira
-          ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.' + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables) para criar a primeira conta.' : '')
-          : 'Sem conta, pede a um dono que crie uma em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e pode ser fechada a qualquer momento.'}</div>
+        : primeira || aRegistar
+          ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.' + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables) para criar a primeira conta.' : '') + (aRegistar ? ' A conta fica <b>por confirmar</b> até abrires o link que vai para o teu email.' : '')
+          : 'Sem conta, cria uma aqui, ou pede a um dono que te crie em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e renova-se enquanto a usares.'}</div>
       ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
       ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
     </div>
@@ -991,7 +1023,7 @@ function viewContas() {
       <div class="sec-h"><h3>Quem entra</h3><span class="count">autenticação</span></div>
       <table><tbody>${c.utilizadores.map(u => `<tr>
         <td>${esc(u.name || u.email)}${u.name ? `<div class="count">${esc(u.email)}</div>` : ''}${u.email === eu ? ' <span class="tag">tu</span>' : ''}</td>
-        <td>${u.active ? '' : '<span class="tag perdido">inactiva</span>'}</td>
+        <td>${u.active ? '' : '<span class="tag perdido">inactiva</span>'}${u.confirmado === false ? ` <span class="tag">por confirmar</span> <button class="btn quiet small" data-act="confirmar-conta-admin" data-id="${esc(u.id)}">confirmar</button>` : ''}</td>
         <td class="n">
           <select class="in" data-act="papel" data-id="${esc(u.id)}" aria-label="papel de ${esc(u.email)}" style="padding:6px">
             ${papeis.map(p => `<option value="${esc(p.key)}"${p.key === u.role ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
@@ -1437,12 +1469,63 @@ async function act(name, el, ev) {
         });
         toast('Conta criada. Bem-vindo ao Órbita.');
       } else {
-        await call('/auth/entrar', 'POST', { email, password: pass });
+        try {
+          await call('/auth/entrar', 'POST', { email, password: pass });
+        } catch (e) {
+          /* 1.54.1 · palavra-passe certa, conta por confirmar: não é «credenciais
+             erradas» — é um passo em falta, e a mesa leva-te ao sítio certo. */
+          if (e.body && e.body.naoConfirmada) {
+            S.aConfirmar = '';
+            toast('A conta ainda não está confirmada — cola o token do email.', true);
+            paint();
+            return;
+          }
+          throw e;
+        }
       }
-      S.needLogin = false; S.primeiraConta = false;
+      S.needLogin = false; S.primeiraConta = false; S.aRegistar = false; S.aConfirmar = null;
       await boot(true);
       return;
     }
+    /* 1.54.1 · registo e confirmação: quem não tem conta cria a sua, e quem tem
+       por confirmar abre o link. Ambos falam com o servidor; nada disto é local. */
+    if (name === 'abrir-registo') { S.aRegistar = true; paint(); return; }
+    if (name === 'voltar-entrar') { S.aRegistar = false; paint(); return; }
+    if (name === 'registar') {
+      const email = String($('#lgEmail')?.value || '').trim();
+      const pass = String($('#lgPass')?.value || '');
+      const nome = String($('#lgNome')?.value || '').trim();
+      if (!email || !pass) { toast('Diz o email e a palavra-passe.', true); return; }
+      if (pass !== String($('#lgPass2')?.value || '')) { toast('As palavras-passe não são iguais.', true); return; }
+      try {
+        const r = await call('/auth/registo', 'POST', { email, password: pass, name: nome });
+        S.aRegistar = false;
+        if (r.emailEnviado) {
+          S.aConfirmar = null;
+          toast('Conta criada. Abre o link que foi para o teu email (24 horas).');
+          paint();
+        } else {
+          /* sem correio configurado, o caminho honesto é o dono confirmar */
+          S.aConfirmar = null;
+          S.avisoAuth = `${r.mensagem}. ${r.instrucao || ''}`.trim();
+          toast('Conta criada e por confirmar — fala com o dono da instalação.', true);
+          paint();
+        }
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    if (name === 'confirmar-conta') {
+      const token = String($('#cfToken')?.value || '').trim();
+      if (!token) { toast('Cola o token que veio no link.', true); return; }
+      try {
+        await call('/auth/confirmar', 'POST', { token });
+        S.aConfirmar = null; S.needLogin = false; S.primeiraConta = false;
+        toast('Conta confirmada. Entraste.');
+        await boot(true);
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    if (name === 'fechar-confirmar') { S.aConfirmar = null; paint(); return; }
     if (name === 'abrir-recuperar') {
       const email = String($('#lgEmail')?.value || '').trim();
       if (!email) { toast('Escreve primeiro o teu email no campo de cima.', true); return; }
@@ -1479,6 +1562,12 @@ async function act(name, el, ev) {
       S.eu = null; S.needLogin = true; S.summary = null; S.leads = []; S.projetos = [];
       paintNav(); paint();
       toast('Sessão fechada.');
+      return;
+    }
+    if (name === 'confirmar-conta-admin') {
+      const r = await call(`/ops/utilizadores/${encodeURIComponent(id)}/confirmar`, 'POST', {});
+      toast(`Conta confirmada${r?.utilizador?.email ? `: ${r.utilizador.email}` : ''}.`);
+      await loadContas(); paint();
       return;
     }
     if (name === 'criar-conta') {
