@@ -1,3 +1,69 @@
+## 1.54.2 — 2 nov 2026 · O BRIEFING DO PROJETO (briefing, Prompt Master, prompts de imagem)
+
+Pedido do dono, por palavras dele: *«ao iniciar um projeto a partir de uma lead,
+permitir que o usuário gere e edite um briefing, crie um Prompt Master
+personalizado e obtenha prompts de imagem relacionados ao projeto — tudo
+vinculado à lead e ao projeto correspondente»*. Entrou antes do A2 (que mantém a
+1.55) porque é o fecho do fluxo que o A1 abriu: agora o projeto tem onde começar.
+
+- **«Iniciar projeto» no lead** — e **uma lead, um projeto**: se o projeto já
+  existir, abre-se esse em vez de criar outro ao lado (`corpo.novo: true` cria o
+  segundo, para quem quiser mesmo). O briefing nasce no mesmo instante, com o que
+  a ficha sustenta: nome, setor e o site (com a nota de que a *identidade visual*
+  ainda não foi avaliada). Nada mais é preenchido sem alguém o dizer.
+- **Briefing editável, 15 campos** — empresa, setor, descrição, produtos, público,
+  objetivo, proposta de valor, tom, identidade visual, direção visual,
+  referências, páginas, funcionalidades, chamada à ação, restrições. Cada campo
+  diz a sua **origem**: «da lead», «sugerido pela IA» ou «escrito por ti»; o que
+  falta diz **«não informado»**. Gravar volta a ler igual, e gravar por cima do
+  trabalho de outra pessoa devolve **409** com a versão guardada recarregada.
+- **Rascunho da IA** — só preenche campos vazios, só com o que a ficha sustenta, e
+  só passa depois de validado (campos conhecidos, texto, tectos). Sem resposta do
+  modelo, a resposta diz **porque** e o briefing continua acessível para ser
+  escrito à mão; a tentativa seguinte é um pedido novo.
+- **Prompt Master** — escrito a partir do **briefing guardado** (nunca do texto
+  por gravar). Com motor, a IA escreve-o (`via: 'ia'`); sem motor, é montado por
+  regras com os mesmos factos e **com o motivo escrito** (`via: 'regras'`). Tem as
+  treze secções do pedido, as regras de honestidade («não inventes números,
+  prémios, anos, testemunhos»), os princípios de clareza do design contemporâneo
+  — **sem copiar a Apple nem outra marca** — e a estrutura de páginas só é
+  sugestão quando o briefing não a traz.
+- **Prompts de imagem** — quatro finalidades (principal, produto/serviço,
+  institucional, apoio), cada uma com o lugar na página, assunto, composição,
+  direção de arte, formato e restrições (**sem texto na imagem**). **Nenhuma
+  imagem é gerada nesta etapa** — o que sai são prompts, para copiar um a um ou
+  todos. A imagem de equipa está marcada: **não é a equipa real**; sem material
+  da lead apresenta-se como conceito ou não se usa.
+- **Regenerar não apaga** — a versão anterior fica em `masterHistorico`/
+  `imagensHistorico` (6 no máximo), pode consultar-se em
+  `GET /ops/projetos/:id/briefing/versoes` e repor-se; a que estava no lugar vai
+  para o histórico em vez de desaparecer.
+- **Desactualizado é dito** — o hash do briefing viaja dentro do Prompt Master e
+  dos prompts de imagem; se o briefing mudar depois, as duas abas mostram o aviso
+  e o botão para gerar outra vez.
+- **Papéis no servidor** — as rotas novas são `PUT`/`POST`, por isso a porta
+  (`_porta.mjs`) exige `write` antes de chegarem aqui: um `leitor` recebe **403**
+  ao gravar ou gerar, e há um teste que o prova com cookie de leitor.
+- **Onde fica guardado** — `orbita_ai_config`, chave `briefing` (jsonb), o mesmo
+  sítio do Cine desde a 1.48.0. **Sem migração nova**: nada a aplicar à mão.
+- **A mesa** — três abas dentro do projeto (Briefing · Prompt Master · Imagens),
+  contas de origem, «alterações por gravar» a bloquear gerações, copiar, versões
+  anteriores, e a frase do modo local quando não há base («este ecrã trabalha
+  sobre a base; no browser ainda não há briefings»), com botão para tentar outra
+  vez. O projeto deixou também de rebentar quando a base não devolve `goals`,
+  `files`, `deliveries` ou `events`.
+
+**O que continua a não ser:** não há geração de imagens nesta etapa (nem vídeo),
+não há editor rico (é texto simples, de propósito), e o arquivo é uma linha jsonb
+com tecto de 200 projetos — partilha o sítio com o Cine.
+
+**Testes:** 826 (eram 797). Os 29 novos em `briefing.test.mjs` cobrem o vínculo
+lead→projeto→briefing→prompts, a idempotência do «iniciar projeto», gravar e
+reler, o 409, gerar do briefing guardado, a preservação e reposição de versões, o
+aviso de desactualizado, a falha da IA com nova tentativa, a validação das
+respostas da IA, o 403 do `leitor`, o isolamento entre projetos e a vista (abas,
+origens, «não informado», nota de conceito, copiar, confirmação ao sair).
+
 ## 1.54.1 — 30 out 2026 · A CONTA NASCE SOZINHA (e a sessão acompanha quem trabalha)
 
 A 1.54.0 fechou a porta. Faltava o outro lado, o critério 2 da 1.0: alguém que

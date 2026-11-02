@@ -611,6 +611,86 @@
   .cine-vazio { text-align: center; display: grid; gap: var(--s3); justify-items: center; }
   .cine-vazio p { color: var(--muted); max-width: 52ch; }
 
+  /* ==========================================================================
+     1.54.2 · O BRIEFING DO PROJETO
+     Três abas dentro do cartão do projeto. A mesma linguagem do resto da mesa:
+     cartões brancos, um azul para a acção principal, etiquetas para a origem de
+     cada campo. Nada de ecrãs de apresentação.
+     ======================================================================= */
+  .bf-card { margin-top: var(--s4); }
+  .bf-cabeca { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s4); flex-wrap: wrap; }
+  .bf-sobre { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .1em; color: var(--faint); font-weight: 600; }
+  .bf-cabeca h3 { font-size: var(--t-l); letter-spacing: -.02em; margin-top: 2px; }
+  .bf-min { color: var(--muted); font-size: var(--t-s); margin-top: 2px; }
+
+  .bf-abas { display: flex; gap: 4px; background: #F4F4F7; padding: 4px; border-radius: 999px; margin-bottom: var(--s4); flex-wrap: wrap; }
+  .bf-aba {
+    padding: 9px 18px; border-radius: 999px; font-size: var(--t-s); font-weight: 560; color: var(--muted);
+    background: transparent; transition: background .2s var(--ease), color .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  .bf-aba:hover { color: var(--ink); }
+  .bf-aba.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(27,27,31,.10), 0 6px 18px -14px rgba(27,27,31,.6); }
+
+  .bf-barra { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3); }
+  .bf-contas { display: flex; gap: var(--s4); flex-wrap: wrap; color: var(--muted); font-size: var(--t-s); }
+  .bf-contas b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .bf-estado { display: flex; gap: 6px; align-items: center; }
+
+  .bf-campos { display: grid; gap: var(--s3); }
+  .bf-campo { display: grid; gap: 5px; }
+  .bf-campo-h { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+  .bf-campo-h label { font-size: var(--t-s); font-weight: 600; letter-spacing: -.01em; }
+  .bf-ajuda { font-size: var(--t-xs); color: var(--faint); }
+  .bf-in { resize: vertical; min-height: 42px; line-height: 1.5; font-family: inherit; }
+  .bf-in.vazio { background: #FCFCFD; border-style: dashed; }
+  .bf-in:focus-visible { outline: 2px solid rgba(43,59,242,.45); outline-offset: 1px; }
+  .bf-badge.lead { background: var(--blue-soft); color: var(--blue); }
+  .bf-badge.ia { background: var(--warn-soft); color: var(--warn); }
+  .bf-badge.manual { background: var(--ok-soft); color: var(--ok); }
+  .bf-badge.vazio { background: #F1F1F3; color: var(--faint); }
+  .bf-acts { flex-wrap: wrap; align-items: center; }
+
+  .bf-aviso {
+    margin: 0 0 var(--s4); padding: 12px 14px; border-radius: 12px; font-size: var(--t-s);
+    background: var(--warn-soft); color: var(--warn); border: 1px solid rgba(161,106,0,.16);
+    display: grid; gap: 4px;
+  }
+  .bf-aviso b { font-weight: 620; }
+  .bf-aviso.mau { background: var(--risk-soft); color: var(--risk); border-color: rgba(179,54,31,.16); }
+
+  .bf-pre {
+    margin: var(--s3) 0 0; padding: var(--s4); border-radius: 14px; background: #0B0B0F; color: #D8DCEA;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.62;
+    white-space: pre-wrap; overflow-x: auto; max-height: 520px; overflow-y: auto;
+  }
+  .bf-pre-pequeno { font-size: 12px; max-height: 260px; background: #F7F7FA; color: var(--ink); }
+
+  .bf-vazio { display: grid; gap: var(--s3); justify-items: start; }
+  .bf-vazio h3 { font-size: var(--t-m); font-weight: 620; }
+  .bf-vazio p { color: var(--muted); max-width: 64ch; }
+
+  .bf-prompts { display: grid; gap: var(--s4); margin-top: var(--s3); }
+  .bf-prompt { border: 1px solid var(--hair); border-radius: 16px; padding: var(--s4); background: #fff; }
+  .bf-prompt header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+  .bf-prompt h4 { font-size: var(--t-m); font-weight: 620; letter-spacing: -.01em; }
+  .bf-dl { display: grid; gap: 6px; margin-top: var(--s3); }
+  .bf-dl > div { display: grid; grid-template-columns: 132px 1fr; gap: var(--s3); align-items: baseline; }
+  .bf-dl dt { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .09em; color: var(--faint); font-weight: 600; }
+  .bf-dl dd { margin: 0; font-size: var(--t-s); line-height: 1.55; }
+  .bf-nota { margin-top: var(--s3); font-size: var(--t-xs); color: var(--warn); background: var(--warn-soft); padding: 8px 10px; border-radius: 10px; }
+
+  .bf-versoes { margin-top: var(--s4); display: grid; gap: var(--s2); }
+  .bf-versoes h4 { font-size: var(--t-s); text-transform: uppercase; letter-spacing: .09em; color: var(--faint); font-weight: 600; }
+  .bf-versao { background: #FAFAFC; border-radius: 12px; padding: 10px 12px; }
+  .bf-versao summary { cursor: pointer; font-size: var(--t-s); }
+
+  @media (max-width: 640px) {
+    .bf-dl > div { grid-template-columns: 1fr; gap: 2px; }
+    .bf-contas { gap: var(--s2) var(--s3); }
+    .bf-aba { padding: 8px 14px; }
+    .bf-pre { max-height: 320px; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }
