@@ -1124,7 +1124,7 @@ function viewProjeto() {
             ${p.lead_id ? `<a role="menuitem" href="#/lead/${esc(p.lead_id)}">Ver a lead</a>` : ''}
             ${p.preview_url ? `<a role="menuitem" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
             ${(d.files || []).length ? `<button role="menuitem" data-act="zip">Obter .zip</button>` : ''}
-            <button role="menuitem" data-act="reload">Actualizar</button>
+            <button class="pj-menu-i" role="menuitem" data-act="reload">Actualizar</button>
           </div>
         </details>
       </div>
