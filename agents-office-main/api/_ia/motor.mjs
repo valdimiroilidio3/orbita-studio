@@ -470,6 +470,12 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         const pronto = !!variavel || publica || (!!p.keyless && p.usavel !== false);
         return {
           id, nome: p.nome, site: p.site, docs: p.docs, estilo: p.estilo,
+          /* 1.60.0 · a diferença que muda o trabalho: um motor local (CLI) tem
+             mãos; uma API responde com texto. Só se declara o que o catálogo
+             declara — sem invenções, `null` quer dizer «não declarado». */
+          classe: p.classe === 'cli' ? 'cli' : 'api',
+          ferramentas: p.ferramentas === true ? true : p.ferramentas === false ? false : null,
+          capacidades: p.capacidades || null,
           gratuito: !!p.gratuito, limites: p.limites, nota: p.nota || '',
           variavel,                                    // NOME da variável, não valor (null = sem chave por desenho)
           variaveis: p.chave,                          // o que aceita (para a interface dizer)

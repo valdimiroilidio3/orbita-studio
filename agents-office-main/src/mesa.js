@@ -34,6 +34,18 @@ import { resumoOperacional, filaDeAprovacao, estadoAgentes, atividadeRecente, pr
 import { confianca as confiancaCRM, verificacao as verificacaoCRM, proximaAccao as proximaAccaoCRM,
   qualificacao as qualificacaoCRM, resumoDoFunil, fraseDaCarteira, FASES, ESTADOS_SITE } from './crm.js';
 
+/* 1.60.0 · MOTORES, AUTONOMIA E SALDO (2 nov 2026). O dono pediu que se
+   percebesse, num sítio só: que motor está escolhido e o que ele sabe fazer
+   (texto? mãos? ficheiros?), o estado das integrações e a última verificação,
+   o consumo real com limites e custo, o nível de autonomia e o que exige
+   aprovação. As contas vivem em `src/motores.js` e são puras — aqui só se
+   desenha o que elas dizem. */
+import {
+  perfis as perfisDeMotores, escolhaDoAgente, resumoDaAutonomia,
+  resumoDoConsumo, acoesSensiveis, filaRapida, barraDeAprovacao,
+  cartoesDoPainel, CLASSES, NIVEIS_AUTONOMIA,
+} from './motores.js';
+
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
    `/api` atrás (a Vercel serve ficheiros estáticos). Em vez do cartão que mandava arrancar o
@@ -85,6 +97,7 @@ const IC = {
   copiar: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6a3 3 0 0 0-3 3v6.5A2.5 2.5 0 0 0 5.5 15"/></svg>',
   pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
   tarefa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 5.6 8 8.5 5"/><path d="M4 12.5 5.6 14l2.9-3"/><path d="M4 18.5 5.6 20l2.9-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/></svg>',
+  motor: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5a4.5 4.5 0 0 0-5.9 5.9L3.5 14.5a2.1 2.1 0 0 0 3 3l5.1-5.1a4.5 4.5 0 0 0 5.9-5.9l-2.6 2.6-2.5-.1-.1-2.5Z"/></svg>',
   ia: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M9.5 15.5h5"/></svg>',
   agentes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.6"/><circle cx="17" cy="9.5" r="2.2"/><path d="M3 19c0-2.8 2.2-4.6 5-4.6s5 1.8 5 4.6"/><path d="M14.8 14.7c2.6-.4 5.2 1.2 5.2 4.3"/></svg>',
   contas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.4 3-5.6 7-5.6s7 2.2 7 5.6"/></svg>',
@@ -100,6 +113,7 @@ const NAV = [
   { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
   { k: 'agentes', label: 'Agentes', ic: 'agentes' },
   { k: 'ia', label: 'IA', ic: 'ia' },
+  { k: 'motores', label: 'Motores', ic: 'motor' },
   { k: 'contas', label: 'Contas', ic: 'contas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
@@ -112,6 +126,8 @@ const S = {
   lead: null, leadMessages: [], dossier: null, editandoLead: false,
   /* 1.59.0 · o CRM: o histórico do lead, os duplicados e o estado de exportação */
   leadEventos: [], duplicados: null, mostrarDuplicados: false, aExportar: false,
+  /* 1.60.0 · a autonomia por tipo (lida da base) — o resto dos motores vem de S.ia */
+  autonomia: null, autonomiaErro: '',
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   /* 1.57.0 · a aba aberta na página do projeto (Briefing por omissão) */
@@ -256,7 +272,7 @@ function parseHash() {
     return { name: 'hoje', id: null };
   }
   const [name, id] = cru.split('/');
-  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
+  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia', 'motores'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -267,9 +283,54 @@ function paintNav() {
   const nav = NAV.filter(n => n.k !== 'contas' || may('admin')).map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
   $('#nav').innerHTML = nav;
   // No telemóvel cabem seis: o resto (Conversas) fica a um toque a partir de Hoje.
-  const TABS = ['hoje', 'leads', 'projetos', 'tarefas', 'agentes', 'saldo'];
+  /* 1.60.0: no telemóvel, «Motores» entra na barra (é onde se vê o que corre e
+     com que permissões); «Agentes» continua a um toque a partir de Hoje. */
+  const TABS = ['hoje', 'leads', 'projetos', 'tarefas', 'motores', 'saldo'];
   $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k) && (n.k !== 'contas' || may('admin')))
     .map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span></a>`).join('');
+}
+
+/* 1.60.0 · O PAINEL MÓVEL. No telemóvel o escritório não se comprime: mostra-se
+   o que está a acontecer em cartões — um número por pergunta, e cada cartão
+   leva ao sítio onde se age. É o mesmo `cartoesDoPainel` que os testes provam. */
+function cartoesMoveis({ tarefas = [], mensagens = [] } = {}) {
+  const cartoes = cartoesDoPainel({ tarefas, mensagens }).filter((c) => ['a-correr', 'espera', 'falhou', 'custo'].includes(c.id));
+  if (!cartoes.length) return '';
+  return `<div class="mo-cards" aria-label="painel rápido">
+    ${cartoes.map((c) => `<a class="mo-card${c.destaque ? ' hot' : ''}" href="${esc(c.ir)}">
+      <span class="mo-card-k">${esc(c.rotulo)}</span>
+      <b>${c.valor == null ? '—' : c.tipo === 'centimos' ? money(c.valor) : esc(String(c.valor))}</b>
+      <span class="mo-card-n">${esc(c.nota)}</span>
+    </a>`).join('')}
+  </div>`;
+}
+
+/* A barra de uma mão: a primeira decisão à espera, com a acção principal. Fica
+   acima da barra de separadores, dentro do alcance do polegar, e não aparece
+   quando não há nada para decidir (um aviso permanente deixa de ser um aviso). */
+function paintMobar() {
+  const el = document.getElementById('mobar');
+  if (!el) return;
+  if (S.needLogin) { el.innerHTML = ''; el.hidden = true; return; }
+  const fila = filaRapida({ mensagens: S.messages || [], tarefas: S.tarefas || [] });
+  const b = barraDeAprovacao(fila);
+  if (!b.principal) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  const p = b.principal;
+  const act = p.tipo === 'tarefa' ? 'aprovar-tarefa' : (p.accao === 'enviar' ? 'enviar' : 'aprovar');
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="mobar-txt">
+      <b>${b.total === 1 ? '1 decisão à tua espera' : `${b.total} decisões à tua espera`}</b>
+      <span>${esc(p.titulo)} · ${esc(p.detalhe)}</span>
+    </div>
+    <div class="mobar-acts">
+      <button class="btn ghost small" data-act="tarefa-rapida" title="criar uma tarefa">+ Tarefa</button>
+      <button class="btn primary" data-act="${esc(act)}" data-id="${esc(p.id)}">${esc(p.rotuloAccao)}</button>
+    </div>`;
 }
 
 function paintSideFoot() {
@@ -442,6 +503,8 @@ async function boot(full = true) {
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
     if (S.route.name === 'ia') await carregarIA(apiMesa);
+    /* 1.60.0 · os motores leem o estado da IA, o uso e a autonomia de uma vez */
+    if (S.route.name === 'motores') await carregarMotores();
     if (S.route.name === 'papel' && !S.papelEstado) await carregarPapel(apiMesa);
     if (S.route.name === 'cine') await carregarCine(apiMesa, S.route.id);
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
@@ -722,6 +785,7 @@ function viewHoje() {
       right: `<button class="btn ghost small" data-act="reload" title="voltar a ler tarefas, atividade e decisões">↻ Actualizar</button>${stopPill()}`,
     })}
     ${ccKpis(cc)}
+    ${cartoesMoveis({ tarefas, mensagens: S.messages || [] })}
     ${vazio ? `<section class="card cc-card cc-start" aria-labelledby="ccStart">
       <div class="sec-h"><h2 id="ccStart">Por onde começar</h2><span class="count">a mesa está vazia</span></div>
       <p class="hint" style="margin-top:0">Ainda não há leads, tarefas nem projetos guardados. Nada aqui é simulado: os números ficam a zero até existir trabalho a sério.</p>
@@ -1975,6 +2039,185 @@ function viewFaturas() {
   </div>`;
 }
 
+/* =========================================================================
+   1.60.0 · MOTORES, AUTONOMIA E SALDO (2 nov 2026)
+
+   O dono pediu que se percebesse, sem abrir três ecrãs: o motor escolhido, o
+   que ele sabe fazer e com que permissões; o estado de cada integração e a
+   última verificação; o consumo real, os limites e o custo; e o nível de
+   autonomia de cada tipo de trabalho — com as acções sensíveis que NUNCA
+   correm sozinhas.
+
+   A regra que atravessa o ecrã: onde não há prova, escreve-se «desconhecido»
+   ou «nunca», nunca um zero ou um verde. A autonomia sobe com casos e é
+   sempre uma decisão com autor e data; descer é imediato.
+   ========================================================================= */
+async function carregarMotores() {
+  const [ia, uso, autonomia] = await Promise.all([
+    call('/ia/estado').catch(() => null),
+    call('/ia/uso').catch(() => null),
+    call('/ops/autonomia').catch((e) => ({ ok: false, lista: [], resumo: null, erro: e.message })),
+  ]);
+  if (ia) S.ia = ia;
+  if (uso) S.iaUso = uso;
+  S.autonomia = autonomia;
+  S.autonomiaErro = autonomia?.erro || '';
+}
+
+function viewMotores() {
+  const ia = S.ia || {};
+  const { lista: motores, resumo: rm } = perfisDeMotores(ia.fornecedores || []);
+  const escolhas = (ia.agentes || []).map((a) => escolhaDoAgente(a, motores));
+  const comAviso = escolhas.filter((e) => e.aviso);
+  const auto = resumoDaAutonomia(S.autonomia?.lista || []);
+  const consumo = resumoDoConsumo({ uso: S.iaUso, saldo: S.saldo });
+  const sensiveis = acoesSensiveis(ia.ferramentas || []);
+  const naoTestados = motores.filter((m) => m.configurado && !m.teste);
+  const semMotor = !motores.length;
+
+  const faixa = semMotor
+    ? `<div class="ia-faixa ${ia.modo === 'local' ? 'bad' : 'warn'}"><b>${ia.modo === 'local' ? 'Modo local.' : 'Sem motor ligado.'}</b>
+        ${esc(ia.motivo || ia.instalacao || 'nenhum fornecedor com chave nesta instalação')} —
+        as chaves vivem no servidor, nunca neste browser. O que está abaixo é o retrato real: zero motores.</div>`
+    : `<div class="ia-faixa ok"><b>${esc(rm.frase)}</b>
+        ${naoTestados.length ? ` ${naoTestados.length} com chave mas sem prova: um teste é um pedido real, e só isso conta.` : ''}
+        ${ia.jaTestado || ''}</div>`;
+
+  const cartao = (titulo, conta, itens) => `<div class="mo-kpi">
+      <span class="mo-kpi-t">${esc(titulo)}</span>
+      <b>${esc(conta)}</b>
+      <span class="mo-kpi-n">${esc(itens)}</span>
+    </div>`;
+
+  const linhaMotor = (m) => {
+    const caps = m.capacidades.filter((c) => c.tem === true).map((c) => c.rotulo);
+    const porDeclarar = m.capacidades.filter((c) => c.tem === null).map((c) => c.rotulo);
+    const testar = `<button class="btn quiet small" data-act="ia-testar" data-id="${esc(m.id)}" ${!m.configurado || m.desligado ? 'disabled title="sem chave ou desligado"' : 'title="faz um pedido real e registra a resposta"'}>Testar</button>`;
+    return `<tr class="${m.estado.id === 'funcional' ? 'ia-ok' : ''}">
+      <td><b>${esc(m.nome)}</b>
+        <div class="ia-sub"><span class="mo-classe ${m.classe}">${esc(CLASSES[m.classe].curto)}</span>
+          ${esc(m.classe === 'cli' ? 'corre nesta máquina' : 'API de texto')}
+          ${m.chaveMascarada ? `· ${esc(m.variavel || 'chave')} ${esc(m.chaveMascarada)}` : (m.configurado ? '· sem chave por desenho' : '· falta a chave')}</div>
+      </td>
+      <td><span class="mo-chip" style="--c:${m.estado.cor}">${esc(m.estado.rotulo)}</span>
+        <div class="ia-sub">${esc(m.estado.porque)}</div></td>
+      <td>${esc(m.verificacao.rotulo)}${m.teste?.ms != null ? `<div class="ia-sub">${m.teste.ms} ms</div>` : ''}</td>
+      <td>${caps.length ? caps.map((c) => `<span class="mo-cap">${esc(c)}</span>`).join(' ') : '<span class="ia-sub">só texto</span>'}
+        ${porDeclarar.length ? `<div class="ia-sub">por declarar: ${esc(porDeclarar.join(', '))}</div>` : ''}</td>
+      <td class="ia-sub">${esc(m.limites)}</td>
+      <td class="ia-acts">${testar}</td>
+    </tr>`;
+  };
+
+  const linhaAgente = (e) => `<tr>
+      <td><b>${e.numero ? `${esc(e.numero)} ` : ''}${esc(e.nome)}</b><div class="ia-sub">${esc(e.papel || 'sem papel declarado')}</div></td>
+      <td>${e.motor ? `<b>${esc(e.motor)}</b>${e.classe ? ` <span class="mo-classe ${e.classe}">${esc(CLASSES[e.classe].curto)}</span>` : ''}<div class="ia-sub">${esc(e.modelo || 'modelo por omissão do fornecedor')}</div>` : '<span class="ia-sub">automático (o router decide)</span>'}</td>
+      <td>${e.ferramentasPedidas.length ? e.ferramentasPedidas.map((f) => `<span class="mo-cap">${esc(f)}</span>`).join(' ') : '<span class="ia-sub">nenhuma</span>'}
+        <div class="ia-sub">${e.ferramentasDisponiveis === true ? 'o motor aceita ferramentas' : e.ferramentasDisponiveis === false ? 'o motor não recebe ferramentas' : 'não declarado pelo fornecedor'}</div></td>
+      <td>${e.aviso ? `<span class="mo-alerta">${esc(e.aviso)}</span>` : '<span class="ia-sub">sem avisos</span>'}</td>
+    </tr>`;
+
+  const linhaAuto = (a) => {
+    const n = NIVEIS_AUTONOMIA[a.nivel];
+    const autor = a.autor ? `${esc(a.autor)}${a.quando ? ` · ${esc(String(a.quando).slice(0, 16).replace('T', ' '))}` : ''}` : 'sem decisão registada';
+    return `<tr>
+      <td><b>${esc(a.escopo)}</b><div class="ia-sub">${a.casos} caso(s) decididos${a.taxa != null ? ` · ${Math.round(a.taxa * 100)}% aprovados` : ' · sem casos'}</div></td>
+      <td><span class="mo-chip" style="--c:${n.cor}">${esc(n.rotulo)}</span><div class="ia-sub">${esc(n.porque)}</div></td>
+      <td class="ia-sub">${autor}${a.motivo ? `<div>${esc(a.motivo)}</div>` : ''}</td>
+      <td>${a.podeSubir
+        ? `<button class="btn primary small" data-act="auto-up" data-scope="${esc(a.escopo)}">Subir</button>`
+        : `<button class="btn ghost small" data-act="auto-up" data-scope="${esc(a.escopo)}" aria-disabled="true" title="${esc(a.porque)}">Subir</button>`}
+        ${a.nivel !== 'pedir_sempre' ? `<button class="btn ghost small" data-act="auto-down" data-scope="${esc(a.escopo)}">Voltar a pedir</button>` : ''}
+        <div class="ia-sub">${esc(a.porque)}</div></td>
+    </tr>`;
+  };
+
+  return `<div class="wrap mo">
+    ${headHTML({
+      title: 'Motores',
+      sub: `${esc(rm.frase)} · autonomia: ${esc(auto.frase)}`,
+      right: `<button class="btn small ghost" data-act="reload" title="voltar a ler motores, uso e autonomia">↻ Actualizar</button>${stopPill()}`,
+    })}
+    ${faixa}
+
+    <div class="mo-kpis">
+      ${cartao('Prontos', rm.prontos, `de ${rm.total} motores`)}
+      ${cartao('Verificados', rm.verificados, 'com resposta registada')}
+      ${cartao('Por testar', rm.porTestar, 'têm chave, falta a prova')}
+      ${cartao('Com mãos', rm.comFerramentas, rm.porDeclarar ? `${rm.porDeclarar} por declarar` : 'aceitam ferramentas')}
+      ${cartao('Gasto em APIs', consumo.custoCentimos == null ? 'desconhecido' : money(consumo.custoCentimos), consumo.semPreco ? `${consumo.semPreco} sem preço` : 'últimos 90 dias')}
+    </div>
+
+    <section class="card" aria-labelledby="moMotores">
+      <div class="sec-h"><h2 id="moMotores">Integrações e última verificação</h2>
+        <span class="count">${motores.length} motor(es) no catálogo</span></div>
+      <p class="hint" style="margin-top:0">«Verificado» quer dizer que houve uma resposta registada — não que a chave é válida para sempre. «Nunca verificado» é dito assim, sem verde. As chaves aparecem pelo NOME da variável e mascaradas; o valor nunca chega a este ecrã.</p>
+      ${motores.length ? `<div class="mo-tabwrap"><table class="mo-tab">
+        <thead><tr><th>Motor</th><th>Estado</th><th>Última verificação</th><th>Capacidades</th><th>Limites</th><th></th></tr></thead>
+        <tbody>${motores.map(linhaMotor).join('')}</tbody></table></div>`
+        : `<div class="hint">Nenhum fornecedor neste servidor. A página <a href="#/ia">IA</a> mostra o catálogo completo e o que falta em cada chave.</div>`}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="moAgentes">
+      <div class="sec-h"><h2 id="moAgentes">O motor escolhido, por agente</h2>
+        <span class="count">${comAviso.length ? `${comAviso.length} com aviso` : 'sem avisos'}</span></div>
+      <p class="hint" style="margin-top:0">Um agente que pede ferramentas e um motor que só dá texto é uma promessa que não se cumpre — e está escrita aqui antes de a tarefa correr. A escolha faz-se na página <a href="#/ia">IA</a>.</p>
+      ${escolhas.length ? `<div class="mo-tabwrap"><table class="mo-tab">
+        <thead><tr><th>Agente</th><th>Motor</th><th>Ferramentas</th><th>Antes de correr</th></tr></thead>
+        <tbody>${escolhas.map(linhaAgente).join('')}</tbody></table></div>`
+        : '<div class="hint">O servidor não devolveu a lista de agentes da IA.</div>'}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="moAuto">
+      <div class="sec-h"><h2 id="moAuto">Autonomia por tipo de trabalho</h2>
+        <span class="count">${esc(auto.frase)}</span></div>
+      <p class="hint" style="margin-top:0">O nível não é um menu: sobe com <b>50 casos decididos à mão e 95% aprovados</b>. Subir sem esses números é recusado com a razão escrita; descer é imediato e não pede justificação. Cada decisão fica com autor e data.</p>
+      ${S.autonomiaErro ? `<div class="ia-faixa bad">Não consegui ler a autonomia: ${esc(S.autonomiaErro)}. Nada foi alterado — e nenhum tipo subiu por engano.</div>` : ''}
+      ${(S.autonomia?.lista || []).length ? `<div class="mo-tabwrap"><table class="mo-tab">
+        <thead><tr><th>Tipo</th><th>Nível</th><th>Quem decidiu</th><th>Decidir</th></tr></thead>
+        <tbody>${(S.autonomia?.lista || []).map(linhaAuto).join('')}</tbody></table></div>`
+        : `<div class="hint">Nenhum tipo avaliado ainda: tudo pede autorização. O primeiro tipo aparece quando houver mensagens decididas à mão (é esse histórico que justifica a confiança).</div>`}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="moSensiveis">
+      <div class="sec-h"><h2 id="moSensiveis">Aprovação obrigatória</h2>
+        <span class="count">${sensiveis.length} acção(ões) sensível(is)</span></div>
+      <p class="hint" style="margin-top:0">Estas acções <b>nunca correm sozinhas</b>, seja qual for o nível de autonomia: o servidor recusa-as sem aprovação humana explícita na própria execução. A regra está no servidor, não só neste ecrã.</p>
+      ${sensiveis.length ? `<div class="mo-sens">${sensiveis.map((a) => `<div class="mo-sens-i">
+        <b>${esc(a.nome)}</b><span>${esc(a.descricao)}</span><em>${esc(a.porque)}</em></div>`).join('')}</div>`
+        : `<div class="hint">O servidor não declarou ferramentas destrutivas. Se alguma aparecer, fica nesta lista — e continua a exigir aprovação.</div>`}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="moCusto">
+      <div class="sec-h"><h2 id="moCusto">Consumo real, limites e custo</h2>
+        <span class="count">${fmtNum(consumo.chamadas)} chamada(s) · ${fmtNum(consumo.tokens)} tokens</span></div>
+      <div class="mo-custo">
+        <div><span>Gasto conhecido</span><b>${consumo.custoCentimos == null ? '<span class="bad">desconhecido</span>' : money(consumo.custoCentimos)}</b></div>
+        <div><span>Chamadas sem preço</span><b class="${consumo.semPreco ? 'bad' : ''}">${fmtNum(consumo.semPreco)}</b></div>
+        <div><span>Latência média</span><b>${(() => { const l = (S.iaUso?.resumo || []).map((u) => u.latenciaMediaMs).filter((x) => x != null); return l.length ? `${Math.round(l.reduce((a, b) => a + b, 0) / l.length)} ms` : '—'; })()}</b></div>
+      </div>
+      <div class="hint">${esc(consumo.nota)}</div>
+      ${consumo.limites.length ? `<table class="mo-tab" style="margin-top:var(--s3)"><thead><tr><th>Motor</th><th>Limite declarado</th></tr></thead>
+        <tbody>${consumo.limites.map((l) => `<tr><td><b>${esc(l.nome)}</b></td><td class="ia-sub">${esc(l.limites)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${(S.iaUso?.resumo || []).length ? `<table class="mo-tab" style="margin-top:var(--s3)"><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>OK</th><th>Erros</th><th>Latência</th><th>Tokens</th></tr></thead>
+        <tbody>${consumoPorMotorHTML()}</tbody></table>` : ''}
+      <div class="acts" style="margin-top:var(--s3)"><a class="btn ghost small" href="#/saldo">Ver o saldo completo</a><a class="btn ghost small" href="#/ia">Configurar na IA</a></div>
+    </section>
+  </div>`;
+}
+
+/** As linhas de consumo — pequenas, e sem esconder os erros. */
+function consumoPorMotorHTML() {
+  const resumo = (S.iaUso?.resumo || []).map((u) => `<tr>
+    <td><b>${esc(u.fornecedor)}</b></td>
+    <td class="n">${fmtNum(u.pedidos)}</td><td class="n">${fmtNum(u.ok)}</td>
+    <td class="n ${u.erros ? 'bad' : ''}">${fmtNum(u.erros)}</td>
+    <td class="n">${u.latenciaMediaMs != null ? `${u.latenciaMediaMs} ms` : '—'}</td>
+    <td class="n">${fmtNum(u.tokens)}</td>
+  </tr>`).join('');
+  return resumo;
+}
+
 function viewSaldo() {
   const b = S.saldo;
   if (!b) return `<div class="wrap"><div class="skeleton">a ler o saldo…</div></div>`;
@@ -2114,6 +2357,7 @@ function paint() {
         <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
     return;
   }
+  paintMobar();
   pintar(S.route.name === 'hoje' ? viewHoje()
     : S.route.name === 'papel' ? vistaPapel(S, { esc })
     : S.route.name === 'cine' ? vistaCine(S, { esc, leadId: S.route.id })
@@ -2125,6 +2369,7 @@ function paint() {
               : S.route.name === 'agentes' ? viewAgentes()
               : S.route.name === 'contas' ? viewContas()
               : S.route.name === 'ia' ? vistaIA(S, { esc, hhmm, when })
+              : S.route.name === 'motores' ? viewMotores()
             : S.route.name === 'conversas' ? viewConversas()
               : S.route.name === 'faturas' ? viewFaturas()
               : viewSaldo());
@@ -2167,8 +2412,10 @@ async function act(name, el, ev) {
 
     if (name === 'auto-up' || name === 'auto-down') {
       const scope = el.dataset.scope;
-      await call(`/ops/autonomia/${encodeURIComponent(scope)}/${name === 'auto-up' ? 'subir' : 'descer'}`, 'POST', { reason: 'decisão na mesa' });
-      toast(name === 'auto-up' ? 'Este tipo passa a enviar sozinho. Os travões continuam.' : 'Volta a pedir-te autorização.');
+      const r = await call(`/ops/autonomia/${encodeURIComponent(scope)}/${name === 'auto-up' ? 'subir' : 'descer'}`, 'POST', { reason: 'decisão na mesa' });
+      toast(name === 'auto-up'
+        ? `${scope}: agora «${r.rotulo || 'propõe e espera'}». As acções sensíveis continuam a pedir aprovação.`
+        : `${scope}: volta a pedir-te autorização.`);
       S.pick = null;
       await boot();
       return;
@@ -2491,6 +2738,16 @@ async function act(name, el, ev) {
       return;
     }
     if (name === 'nova-tarefa') { S.addingTask = !S.addingTask; paint(); return; }
+    /* 1.60.0 · criar trabalho depressa a partir do telemóvel: muda de página e
+       abre o formulário, em vez de deixar o botão a piscar noutro ecrã */
+    if (name === 'tarefa-rapida') {
+      S.route = { name: 'tarefas', id: null };
+      S.addingTask = true;
+      location.hash = '#/tarefas';
+      await boot();
+      document.querySelector('#tarefa-titulo, #tTitulo, .nova-tarefa input, input#tTitulo')?.focus?.();
+      return;
+    }
     if (name === 'filtrar-tarefa') {
       S.tarefaFiltro[el.dataset.k] = el.dataset.v || null;
       await loadTarefas();

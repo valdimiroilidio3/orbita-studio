@@ -225,6 +225,20 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       },
     },
 
+    /* 1.60.0 · A AUTONOMIA, numa tabela. O nível de cada tipo de trabalho é uma
+       decisão do dono, com autor e data — não um valor escondido no código. */
+    autonomia: {
+      async list() { return (await pedir('orbita_autonomia?select=*&order=escopo.asc&limit=200')) || []; },
+      async porEscopo(escopo) { return um(await pedir(`orbita_autonomia?select=*&escopo=eq.${q(escopo)}&limit=1`)); },
+      async guardar(registo) {
+        const r = await pedir('orbita_autonomia?on_conflict=escopo', {
+          method: 'POST', body: registo,
+          prefer: 'return=representation,resolution=merge-duplicates',
+        });
+        return um(r);
+      },
+    },
+
     projetos: {
       async list() { return (await pedir('orbita_projects?select=*&order=updated_at.desc&limit=200')) || []; },
       async byId(id) { return um(await pedir(`orbita_projects?select=*&id=eq.${q(id)}&limit=1`)); },
@@ -466,7 +480,7 @@ const agoraDe = () => new Date().toISOString();
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [], faturas: [],
-    leadEventos: [], contas: [], sessoes: [],
+    leadEventos: [], contas: [], sessoes: [], autonomia: [],
     iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [], geracoes: [],
     ...JSON.parse(JSON.stringify(seed)),
   };
@@ -526,6 +540,17 @@ export function createMemRepo(seed = {}) {
         const novo = { id: id('le'), lead_id, tipo, texto, autor, detalhe, criado: agora() };
         d.leadEventos.push(novo);
         return novo;
+      },
+    },
+    autonomia: {
+      async list() { return [...(d.autonomia || [])].sort((a, b) => String(a.escopo).localeCompare(String(b.escopo))); },
+      async porEscopo(escopo) { return (d.autonomia || []).find((x) => x.escopo === escopo) || null; },
+      async guardar(registo) {
+        d.autonomia = d.autonomia || [];
+        const i = d.autonomia.findIndex((x) => x.escopo === registo.escopo);
+        if (i >= 0) d.autonomia[i] = { ...d.autonomia[i], ...registo };
+        else d.autonomia.push({ id: id('au'), criado: agora(), ...registo });
+        return d.autonomia.find((x) => x.escopo === registo.escopo);
       },
     },
     projetos: {

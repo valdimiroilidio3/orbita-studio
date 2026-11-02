@@ -260,3 +260,25 @@ test('faturas no modo local: o documento existe e o número não salta — o PDF
   const saldo = await api.call('/ops/saldo');
   assert.equal(saldo.faturacao.totalCentimos, 110700, 'o saldo mostra o faturado à parte');
 });
+
+/* 1.60.0 · a autonomia no modo local: mesmas regras, guardada neste browser */
+test('a autonomia local começa em «pede-me sempre» e recusa subir sem casos', async () => {
+  const api = createLocalApi({ storage: armazem() });
+  const inicio = await api.call('/ops/autonomia');
+  assert.deepEqual(inicio.lista, []);
+  assert.match(inicio.resumo.nota, /aprovação humana/);
+  await assert.rejects(() => api.call('/ops/autonomia/email:geral/subir', 'POST', {}), (e) => e.status === 409);
+});
+
+test('a autonomia local guarda a decisão e sobrevive a outra instância', async () => {
+  const storage = armazem();
+  const api = createLocalApi({ storage });
+  const subiu = await api.call('/ops/autonomia/email:geral/subir', 'POST', { force: true, motivo: 'decisão minha' });
+  assert.equal(subiu.nivel, 'proposto');
+  assert.equal(subiu.autonomia.decidido_por, 'dono (modo local)');
+  const outra = await createLocalApi({ storage });
+  const depois = await outra.call('/ops/autonomia');
+  assert.equal(depois.lista.find((x) => x.escopo === 'email:geral').nivel, 'proposto');
+  const desceu = await outra.call('/ops/autonomia/email:geral/descer', 'POST', {});
+  assert.equal(desceu.nivel, 'pedir_sempre');
+});

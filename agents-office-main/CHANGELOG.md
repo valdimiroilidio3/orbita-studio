@@ -1,3 +1,68 @@
+## 1.60.0 — 2 nov 2026 · MOTORES, AUTONOMIA E UM TELEMÓVEL A SÉRIO
+
+Três coisas viviam em três ecrãs e não se respondiam: que motor está escolhido e
+o que ele sabe fazer, quanto custa o que corre, e quem pode agir sozinho. Agora
+há uma página **Motores** que responde às três, e a mesa tem uma experiência de
+telemóvel própria — não o desktop comprimido.
+
+### O motor escolhido, com mãos ou só com texto
+`/ia/estado` passa a declarar, por fornecedor, a **classe** (`cli` = corre nesta
+máquina e tem mãos; `api` = responde com texto) e as **capacidades**
+(ferramentas, ficheiros, imagens, texto). O que o catálogo não declara aparece
+como **«por declarar»** — nunca como «não tem». A página mostra, por agente, o
+motor e o modelo escolhidos e um **aviso antes de correr** quando o agente pede
+ferramentas e o motor só dá texto.
+
+### Permissões e a aprovação que não se negocia
+Cada motor lista as permissões reais. **Uma acção destrutiva nunca é permissão de
+um motor**: exige aprovação humana explícita na própria execução — a regra está
+no servidor (`destrutivo` sem `aprovado` não corre) e a página mostra a mesma
+lista, com a razão escrita.
+
+### Integrações com última verificação datada
+Cada integração diz o estado (**verificado**, **por testar**, **falhou**, **sem
+chave**, **desligado**) e **há quanto tempo** foi o último teste — «nunca
+verificado» é dito assim, sem verde. As chaves aparecem pelo nome da variável e
+mascaradas.
+
+### Autonomia que sobe com casos e desce sem justificação
+Nova tabela `orbita_autonomia` (migração `supabase/orbita_1_60_0.sql`) e rotas
+`GET /ops/autonomia` e `POST /ops/autonomia/:tipo/{subir|descer}`. O nível sobe
+**um degrau de cada vez** e só com **50 casos decididos à mão e 95% aprovados**;
+sem esses números a resposta é **409 com a razão escrita** (quantos faltam, ou
+que taxa existe). Descer é imediato. Cada decisão guarda **autor, data, motivo e
+os casos dessa altura** — e uma subida forçada fica registada como forçada.
+Antes desta versão, os botões de autonomia da mesa chamavam uma rota que o `/api`
+publicado não tinha: davam erro. Agora existem.
+
+### Consumo real, limites e custo sem mentir
+O custo vem do saldo; as chamadas **sem preço conhecido ficam contadas à parte e
+fora da soma** — «o custo real é maior do que o número». Sem leitura do saldo, o
+custo é **«desconhecido»**, nunca `0` (que se lê como grátis). Os limites
+declarados por cada fornecedor aparecem ao lado do consumo.
+
+### Telemóvel: painel em cartões e uma barra de uma mão
+- **Painel em cartões** na visão geral (só no telemóvel): a correr, à espera de
+  ti, falhou, gasto — cada cartão leva ao sítio onde se age.
+- **Barra de uma mão** acima dos separadores, com a **primeira decisão à espera**
+  e a acção principal (Aprovar / Enviar) em alvos de 44 px. Sem decisões, a barra
+  desaparece — um aviso permanente deixa de ser um aviso.
+- **+ Tarefa** na mesma barra: cria trabalho depressa, sem procurar a página.
+- **Motores** entra na barra de separadores do telemóvel; Agentes fica a um toque
+  a partir de Hoje.
+- Respeita `prefers-reduced-motion` e a área segura do iPhone
+  (`env(safe-area-inset-bottom)`).
+
+### O que continua por fazer
+- A migração `orbita_1_60_0.sql` tem de ser aplicada no Supabase.
+- **Prova visual no telemóvel: não feita.** Há testes de DOM sobre o bundle
+  publicado (incluindo a barra e os cartões), mas não houve browser nem telefone
+  real neste ambiente.
+- O escritório 3D no telemóvel continua a ser a cena de sempre, com toque; não
+  foi redesenhado nesta versão.
+
+---
+
 ## 1.59.0 — 2 nov 2026 · OS LEADS COMO CRM
 
 Uma lista de contactos não é um funil. Até aqui um lead tinha nome, telefone e
