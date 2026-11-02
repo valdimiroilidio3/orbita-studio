@@ -5,7 +5,7 @@
 // e `addTask` mas deixou as chamadas; a ReferenceError abortava main.js antes de arrancar o ciclo de
 // desenho e o escritório aparecia em branco — sem salas, sem pessoas, sem plataforma. Nenhum build
 // apanha isso. Este teste apanha: carrega o ficheiro real, espera 3 s e verifica que o módulo
-// chegou ao fim (window.CC), que os 35 postos existem e que nada rebentou.
+// chegou ao fim (window.CC), que os postos do elenco inteiro existem e que nada rebentou.
 //
 // 26 out 2026 (V7): passou também a OLHAR O CHÃO. O dono pediu «um chão da cor dos vidros —
 // vermelho, verde, azul, roxo, amarelo e azul céu». Aqui lê-se o material que ficou desenhado
@@ -17,6 +17,7 @@
 //   node scene.smoke.mjs outro.html
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { familyOf } from './src/palette.js'; // o mesmo módulo puro que a cena usa para derivar o vidro
+import { AGENTS } from './src/data.js';      // 1.59.0: o elenco é a contagem verdadeira (47), não 35
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -137,7 +138,7 @@ ok(rejeicoes.length === 0, 'promessa rejeitada sem tratamento: ' + rejeicoes.joi
 ok(!!win.CC, 'main.js não chegou ao fim (window.CC não existe) — há uma ReferenceError pelo caminho');
 const R = (win.CC && win.CC.R) || {};
 const postos = Object.keys(R);
-ok(postos.length === 35, `esperava 35 postos na cena, encontrei ${postos.length}`);
+ok(postos.length === AGENTS.length, `esperava ${AGENTS.length} postos na cena, encontrei ${postos.length}`);
 ok(postos.every(id => R[id] && R[id].station && R[id].person), 'há postos sem secretária ou sem pessoa');
 ok(!!win.document.getElementById('scene'), 'o canvas #scene desapareceu');
 ok(!!win.document.getElementById('hud'), 'o HUD desapareceu');
@@ -293,12 +294,12 @@ if (indice && win.CC && win.CC.a11y) {
   const salas = indice.querySelectorAll('.oi-room');
   const agentes = indice.querySelectorAll('button.oi-agent');
   ok(salas.length === 7, `a lista devia ter 7 salas (6 + centro), tem ${salas.length}`);
-  ok(agentes.length === 35, `a lista devia ter os 35 agentes, tem ${agentes.length}`);
+  ok(agentes.length === AGENTS.length, `a lista devia ter os ${AGENTS.length} agentes, tem ${agentes.length}`);
   ok(indice.hidden === true, 'a lista devia começar fechada');
   ok(indice.getAttribute('role') === 'dialog', 'a lista devia ser um diálogo');
   ok([...agentes].every(b => b.tagName === 'BUTTON'), 'há agentes na lista que não são <button>');
   const abertos = Object.keys(R).filter(id => R[id].pill && R[id].pill.getAttribute('role') === 'button');
-  ok(abertos.length === 35, `as pastilhas dos agentes deviam ser botões: ${abertos.length}/35`);
+  ok(abertos.length === AGENTS.length, `as pastilhas dos agentes deviam ser botões: ${abertos.length}/${AGENTS.length}`);
   // o caminho do utilizador: a tecla L
   doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'l', bubbles: true }));
   ok(indice.hidden === false, 'a tecla L não abriu a lista');
@@ -455,17 +456,17 @@ if (mIn && mSend) {
 }
 
 /* ---------- os avatares (27 out 2026) ----------
-   O dono pediu 35 pessoas diferentes, com fato, chapéu e mulheres, e mãos que mexem mesmo o rato e
+   O dono pediu pessoas diferentes, com fato, chapéu e mulheres, e mãos que mexem mesmo o rato e
    o teclado. A geometria e o IK provam-se em `office.test.mjs`; aqui prova-se que a CENA é feita
-   deles: 35 looks distintos, todos com fato na cor da sala, com teclas que afundam e um rato que é
+   deles: um look distinto por agente, todos com fato na cor da sala, com teclas que afundam e um rato que é
    uma malha própria (não um enfeite fundido no tampo). */
 {
   const av = office.avatars;
   ok(!!av, 'a cena não publica os avatares em window.CC.office.avatars');
   if (av) {
     ok(av.problems.length === 0, 'avatares inconsistentes: ' + av.problems.join(' · '));
-    ok(av.stats.total === 35, `deviam ser 35 looks (são ${av.stats.total})`);
-    ok(new Set(Object.values(av.looks).map((l) => l.signature)).size === 35, 'há dois agentes com a mesma aparência');
+    ok(av.stats.total === AGENTS.length, `deviam ser ${AGENTS.length} looks (são ${av.stats.total})`);
+    ok(new Set(Object.values(av.looks).map((l) => l.signature)).size === AGENTS.length, 'há dois agentes com a mesma aparência');
     ok(av.stats.women >= 8, `poucas mulheres (${av.stats.women}) — o dono pediu «alguns serão mulheres»`);
     ok(av.stats.hats >= 5, `poucos chapéus (${av.stats.hats}) — o dono pediu «alguns com chapéu»`);
     const SALAS = new Set(Object.values(av.looks).map((l) => l.suit));

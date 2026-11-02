@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { responder } from './api/_rotas.mjs';
 import { createMemRepo, createSupabaseRepo, envBase, chaveLead } from './api/_repo.mjs';
 
-const chamar = (repo, caminho, metodo = 'GET', corpo = null) => responder(repo, { caminho, metodo, corpo });
+const chamar = (repo, caminho, metodo = 'GET', corpo = null, extras = {}) => responder(repo, { caminho, metodo, corpo, ...extras });
 
 test('1 · quem és tu e a prova de saúde', async () => {
   const api = createMemRepo();
@@ -188,4 +188,143 @@ test('14 · sem URL/chave, o ambiente diz que não está pronto (e a mesa cai no
   assert.equal(envBase({}).pronto, false);
   assert.equal(envBase({ SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SECRET_KEY: 'sb_secret_a' }).pronto, true);
   assert.equal(envBase({ SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'eyJ...' }).pronto, true, 'a chave antiga também serve');
+});
+
+/* ============================================================================
+   1.59.0 · o CRM dos leads, do lado do servidor (2 nov 2026)
+
+   O que se prova aqui é o contrato que a mesa chama: exportar o CSV, ver os
+   duplicados sem os fundir, o resumo do funil, e a verificação do site a
+   SÉRIO — com a data guardada e com a recusa honesta quando o lead não tem
+   site. A ida à rede é substituída por um `fetchImpl` falso; o resto é o
+   código que corre em produção.
+   ========================================================================== */
+
+const POPULAR = async (api) => {
+  await chamar(api, '/ops/leads', 'POST', { leads: [
+    { name: 'Clínica do Mondego', city: 'Coimbra', phone: '+351 239 000 111', website: 'https://www.clinicadomondego.pt', category: 'Saúde' },
+    { name: 'Café Central', city: 'Coimbra', phone: '239000111' },
+    { name: 'Padaria do Bairro', city: 'Porto' },
+  ] });
+  return (await chamar(api, '/ops/leads')).corpo.leads;
+};
+
+test('15 · exportar: o CSV sai com cabeçalho em português, BOM e uma linha por lead', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const r = await chamar(api, '/ops/leads.csv');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.linhas, 3);
+  assert.match(r.corpo.ficheiro, /^leads-\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.ok(r.corpo.csv.startsWith('\uFEFF'));
+  assert.equal(r.corpo.csv.split('\r\n').filter(Boolean).length, 4);
+  assert.match(r.corpo.csv, /Nome;Setor;Localização;Telefone/);
+  assert.ok(r.corpo.colunas.includes('Confiança'));
+  assert.ok(api._dados.atividade.some((a) => /exporta/i.test(a.texto || a.titulo || JSON.stringify(a))), 'exportar também deixa rasto');
+});
+
+test('16 · os duplicados aparecem e os dois leads continuam na base', async () => {
+  const api = createMemRepo();
+  const leads = await POPULAR(api);
+  const r = await chamar(api, '/ops/leads/duplicados');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.leads, 3);
+  assert.equal(r.corpo.total, 1, 'o telefone escrito de duas maneiras é o único par');
+  assert.equal(r.corpo.grupos[0].motivo, 'telefone');
+  assert.equal(r.corpo.grupos[0].ids.length, 2);
+  assert.equal((await chamar(api, '/ops/leads')).corpo.leads.length, leads.length, 'detetar não apaga');
+});
+
+test('17 · o resumo do funil conta o que está guardado, incluindo o que falta verificar', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const r = await chamar(api, '/ops/leads/resumo');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.total, 3);
+  assert.equal(r.corpo.comContacto, 2);
+  assert.equal(r.corpo.porVerificar, 1);
+  assert.equal(r.corpo.verificados, 0, 'nenhum site foi verificado ainda — e o resumo não finge que sim');
+  assert.equal(r.corpo.duplicados, 1);
+  assert.equal(r.corpo.fases.reduce((n, f) => n + f.n, 0), 3);
+});
+
+test('18 · verificar o site guarda a data e o motivo — e falhar também é um resultado', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const lead = (await chamar(api, '/ops/leads')).corpo.leads.find((l) => l.name === 'Clínica do Mondego');
+
+  const antes = (await chamar(api, `/ops/leads/${lead.id}`)).corpo.confianca;
+  const bom = async () => ({ ok: true, status: 200, url: 'https://clinicadomondego.pt/', text: async () => '<!doctype html><html><title>Clínica</title></html>' });
+  const r = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.verificacao.estado, 'ok');
+  assert.ok(r.corpo.verificacao.quando, 'sem data, «verificado» é uma palavra vazia');
+  assert.match(r.corpo.verificacao.motivo, /200/);
+
+  const ficha = await chamar(api, `/ops/leads/${lead.id}`);
+  assert.equal(ficha.corpo.verificacao.estado, 'ok');
+  assert.equal(ficha.corpo.verificacao.dias, 0);
+  assert.ok(ficha.corpo.confianca.pontos > antes.pontos, 'verificar o site tem de contar para a confiança');
+  assert.equal(ficha.corpo.confianca.pontos, 65, 'site verificado (+40) e telefone público (+25) — nada mais foi provado');
+  assert.ok(ficha.corpo.eventos.some((e) => e.tipo === 'verificacao'), 'o histórico guarda a verificação e quem a fez');
+
+  const mau = async () => { throw new Error('getaddrinfo ENOTFOUND'); };
+  const r2 = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: mau });
+  assert.equal(r2.corpo.verificacao.estado, 'falhou');
+  assert.match(r2.corpo.verificacao.motivo, /não resolve/, 'o motivo diz o que se passou, não «erro»');
+  assert.equal(r2.corpo.lead.website_estado, 'falhou');
+});
+
+test('19 · verificar um lead sem site recusa (400) em vez de verificar o nada', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const semSite = (await chamar(api, '/ops/leads')).corpo.leads.find((l) => l.name === 'Padaria do Bairro');
+  await assert.rejects(
+    () => chamar(api, `/ops/leads/${semSite.id}/verificar`, 'POST', null, { fetchImpl: async () => { throw new Error('não devia ser chamado'); } }),
+    (e) => e.status === 400 && /site/.test(e.message),
+  );
+});
+
+test('20 · a ficha guarda qualificação, próxima ação e fonte — com validação e histórico', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const lead = (await chamar(api, '/ops/leads')).corpo.leads.find((l) => l.name === 'Café Central');
+
+  const r = await chamar(api, `/ops/leads/${lead.id}`, 'PATCH', {
+    qualificacao: 82, proxima_acao: 'Ligar a pedir reunião', proxima_acao_em: '2026-10-30', fonte_url: 'https://exemplo.pt/lista',
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.lead.qualificacao, 82);
+  assert.equal(r.corpo.lead.proxima_acao_em, '2026-10-30');
+  assert.equal(r.corpo.proxima.estado, 'atrasada');
+  assert.match(r.corpo.proxima.rotulo, /atrasada/);
+
+  await assert.rejects(() => chamar(api, `/ops/leads/${lead.id}`, 'PATCH', { qualificacao: 140 }), (e) => e.status === 400);
+  await assert.rejects(() => chamar(api, `/ops/leads/${lead.id}`, 'PATCH', { proxima_acao_em: 'para a semana' }), (e) => e.status === 400);
+
+  const ficha = await chamar(api, `/ops/leads/${lead.id}`);
+  assert.equal(ficha.corpo.qualificacao.origem, 'guardada');
+  assert.equal(ficha.corpo.qualificacao.valor, 82);
+  assert.ok(ficha.corpo.eventos.some((e) => e.tipo === 'proxima_acao'), 'quem marcou a próxima ação fica registado');
+  assert.ok(ficha.corpo.eventos.every((e) => e.autor), 'cada evento diz quem o fez');
+
+  const limpo = await chamar(api, `/ops/leads/${lead.id}`, 'PATCH', { proxima_acao: null, proxima_acao_em: null });
+  assert.equal(limpo.corpo.lead.proxima_acao, null);
+  assert.equal(limpo.corpo.proxima.estado, 'sem');
+});
+
+test('21 · mudar o site invalida a verificação: a confiança não fica a dizer «alta» sobre outro endereço', async () => {
+  const api = createMemRepo();
+  await POPULAR(api);
+  const lead = (await chamar(api, '/ops/leads')).corpo.leads.find((l) => l.name === 'Clínica do Mondego');
+  const bom = async () => ({ ok: true, status: 200, url: 'https://clinicadomondego.pt/', text: async () => '<html><body>ok</body></html>' });
+  await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom });
+  assert.equal((await chamar(api, `/ops/leads/${lead.id}`)).corpo.verificacao.estado, 'ok');
+
+  const troca = await chamar(api, `/ops/leads/${lead.id}`, 'PATCH', { website: 'https://outro.pt' });
+  assert.equal(troca.corpo.lead.website_verificado_em, null, 'a data antiga não vale para o site novo');
+  assert.equal(troca.corpo.lead.website_estado, null);
+  const ficha = await chamar(api, `/ops/leads/${lead.id}`);
+  assert.equal(ficha.corpo.verificacao.estado, 'por_verificar');
+  assert.notEqual(ficha.corpo.confianca.nivel, 'alta');
 });

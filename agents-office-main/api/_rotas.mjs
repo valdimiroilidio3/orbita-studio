@@ -18,6 +18,11 @@ import * as MD from './_media.mjs';   // 1.54.3: a mídia gerada (imagem e víde
 import { saldo as calcularSaldo, agregarUso, cambioDe, centimosDeMicro } from './_dinheiro.mjs';   // 1.55.0: dinheiro medido
 import { criarFatura, anularFatura, resumoFaturas, documentoDaFatura, emitenteDoAmbiente, avisoEmitente, TAXAS_IVA, MOTIVOS_ISENCAO } from './_faturas.mjs';   // 1.56.0: a fatura
 import { enviarEmail } from './_porta.mjs';   // 1.56.0: a fatura sai por correio
+/* 1.59.0 · o CRM. As contas são puras (`src/crm.js`, provadas em `crm.test.mjs`)
+   e as mesmas que a mesa desenha — o servidor não tem uma segunda opinião sobre
+   o que é uma confiança alta nem sobre como se escreve um CSV. */
+import { confianca as confiancaDoLead, verificacao as verificacaoDoLead, duplicados as duplicadosDeLeads,
+  resumoDoFunil, csvDeLeads, nomeDoFicheiro, proximaAccao, qualificacao as qualificacaoDoLead } from '../src/crm.js';
 
 
 const TIPOS_PROJETO = [
@@ -946,18 +951,165 @@ export async function responder(repo, {
     await repo.atividade.add('lead', `${novos.length} lead(s) novo(s), ${repetidos.length} atualizado(s)`);
     return { status: 200, corpo: { created: novos.length, updated: repetidos.length } };
   }
+  /* ---- 1.59.0 · o CRM: exportar, ver duplicados e resumir o funil ----
+     Estas três leem a MESMA lista que a mesa mostra e fazem as contas com
+     `src/crm.js`. Nada é estimado: o CSV tem as linhas que existem, os
+     duplicados são pares que partilham telefone/domínio/nome, e o resumo conta
+     os estados que estão guardados. */
+  if (caminhoLimpo === '/ops/leads.csv' && m === 'GET') {
+    const leads = await repo.leads.list(500);
+    const agora = Date.now();
+    await repo.atividade.add('lead', `exportação de ${leads.length} lead(s) em CSV`).catch(() => null);
+    return { status: 200, corpo: {
+      ok: true, csv: csvDeLeads(leads, { agora }), linhas: leads.length, ficheiro: nomeDoFicheiro(agora),
+      colunas: ['Nome', 'Setor', 'Localização', 'Telefone', 'Email', 'Site', 'Site verificado em',
+        'Estado comercial', 'Próxima ação', 'Próxima ação em', 'Fonte', 'Endereço da fonte', 'Confiança', 'Porquê a confiança', 'Verificação'],
+    } };
+  }
+  if (caminhoLimpo === '/ops/leads/duplicados' && m === 'GET') {
+    const leads = await repo.leads.list(500);
+    const grupos = duplicadosDeLeads(leads);
+    return { status: 200, corpo: { ok: true, grupos, total: grupos.length, leads: leads.length } };
+  }
+  if (caminhoLimpo === '/ops/leads/resumo' && m === 'GET') {
+    const leads = await repo.leads.list(500);
+    return { status: 200, corpo: { ok: true, ...resumoDoFunil(leads) } };
+  }
+
   if (seg[0] === 'ops' && seg[1] === 'leads' && seg.length === 3) {
     const lead = await repo.leads.byId(seg[2]);
     if (!lead) throw falha(404, 'lead não encontrado');
-    if (m === 'GET') return { status: 200, corpo: { lead, dossier: null, messages: (await repo.mensagens.list(100)).filter((x) => x.lead_id === lead.id) } };
+    if (m === 'GET') {
+      /* o histórico do lead (quem mudou o quê) vem junto da ficha. Numa
+         instalação sem a migração 1.59.0 aplicada, a tabela não existe: o
+         histórico vem vazio em vez de derrubar a ficha. */
+      const eventos = await repo.leads.eventos(lead.id, 40).catch(() => []);
+      const lista = await repo.mensagens.list(100).catch(() => []);
+      return { status: 200, corpo: {
+        lead, dossier: null, eventos, messages: lista.filter((x) => x.lead_id === lead.id),
+        confianca: confiancaDoLead(lead), verificacao: verificacaoDoLead(lead),
+        proxima: proximaAccao(lead), qualificacao: qualificacaoDoLead(lead),
+      } };
+    }
     if (m === 'PATCH') {
       const campos = {};
-      for (const k of ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score']) if (corpo?.[k] !== undefined) campos[k] = corpo[k];
+      /* 1.59.0 · os campos do CRM: qualificação, próxima ação e a data dela, e o
+         endereço da fonte. Os mesmos que a mesa escreve — sem campos que a
+         interface não mostra (um campo escondido é um campo que ninguém sabe
+         que está errado). */
+      for (const k of ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score',
+        'qualificacao', 'proxima_acao', 'proxima_acao_em', 'fonte_url']) if (corpo?.[k] !== undefined) campos[k] = corpo[k];
       const v = validarContacto({ email: campos.email, phone: campos.phone, website: campos.website });
       if (!v.ok) throw falha(400, v.erros.join(' · '), { campo: 'contacto', erros: v.erros });
+
+      if (campos.qualificacao !== undefined) {
+        if (campos.qualificacao === null || campos.qualificacao === '') campos.qualificacao = null;
+        else {
+          const n = Number(campos.qualificacao);
+          if (!Number.isFinite(n) || n < 0 || n > 100) throw falha(400, 'a qualificação é um número de 0 a 100', { campo: 'qualificacao' });
+          campos.qualificacao = Math.round(n);
+        }
+      }
+      if (campos.proxima_acao_em !== undefined) {
+        const cru = limpo(campos.proxima_acao_em);
+        if (!cru) campos.proxima_acao_em = null;
+        else if (!/^\d{4}-\d{2}-\d{2}/.test(cru) || Number.isNaN(Date.parse(cru))) {
+          throw falha(400, 'a data da próxima ação tem de ser uma data (AAAA-MM-DD)', { campo: 'proxima_acao_em' });
+        } else campos.proxima_acao_em = cru.slice(0, 10);
+      }
+      if (campos.proxima_acao !== undefined) campos.proxima_acao = limpo(campos.proxima_acao) || null;
+      if (campos.fonte_url !== undefined) campos.fonte_url = limpo(campos.fonte_url) || null;
+      if (campos.notes !== undefined) campos.notes = limpo(campos.notes) || null;
+
+      /* quando um contacto muda, o site verificado deixa de valer: a confiança
+         é recalculada e guardada — não fica a dizer «alta» sobre um campo novo */
+      const mudouContacto = ['phone', 'email', 'website'].some((k) => campos[k] !== undefined);
+      if (mudouContacto && campos.website !== undefined) {
+        campos.website_estado = null; campos.website_verificado_em = null; campos.website_motivo = null;
+      }
+      const paraConfiar = { ...lead, ...campos, ...v.limpos };
+      campos.confianca = confiancaDoLead(paraConfiar).nivel;
+
       const atualizado = await repo.leads.patch(lead.id, { ...campos, ...v.limpos, updated_at: agoraIso() });
-      return { status: 200, corpo: { ok: true, lead: atualizado } };
+
+      /* o rasto: uma linha por mudança, com o autor. Se a tabela ainda não
+         existe (migração por aplicar), o patch não falha por causa disso. */
+      const autor = conta?.email || conta?.nome || 'dono';
+      let tipo = 'edicao', texto = 'ficha editada';
+      if (campos.status !== undefined && campos.status !== lead.status) {
+        tipo = 'estado'; texto = `estado: ${lead.status || '—'} → ${campos.status}`;
+      } else if (campos.proxima_acao !== undefined || campos.proxima_acao_em !== undefined) {
+        tipo = 'proxima_acao';
+        const alvo = campos.proxima_acao !== undefined ? campos.proxima_acao : lead.proxima_acao;
+        const quando = campos.proxima_acao_em !== undefined ? campos.proxima_acao_em : lead.proxima_acao_em;
+        texto = alvo || quando ? `próxima ação: ${alvo || '(sem texto)'}${quando ? ` · ${quando}` : ''}` : 'próxima ação apagada';
+      } else if (campos.qualificacao !== undefined) {
+        tipo = 'qualificacao'; texto = `qualificação: ${campos.qualificacao == null ? 'sem valor' : campos.qualificacao}`;
+      }
+      await repo.leads.evento({ lead_id: lead.id, tipo, texto, autor, detalhe: { campos: Object.keys(campos) } }).catch(() => null);
+
+      return { status: 200, corpo: {
+        ok: true, lead: atualizado,
+        confianca: confiancaDoLead(atualizado || paraConfiar),
+        proxima: proximaAccao(atualizado || paraConfiar),
+      } };
     }
+  }
+
+  /* ---- 1.59.0 · verificar o site, a sério ----
+     Pede o endereço e diz o que aconteceu: o código, se devolveu uma página, e
+     quanto tempo levou. Guarda a DATA — sem data, «verificado» é uma palavra
+     vazia. Recusa (400) quando o lead não tem site: não se verifica o nada. */
+  if (seg[0] === 'ops' && seg[1] === 'leads' && seg.length === 4 && seg[3] === 'verificar' && m === 'POST') {
+    const lead = await repo.leads.byId(seg[2]);
+    if (!lead) throw falha(404, 'lead não encontrado');
+    const site = limpo(lead.website);
+    if (!site) {
+      throw falha(400, `${lead.name} não tem site guardado — acrescenta o endereço antes de verificar`, { campo: 'website' });
+    }
+    const alvo = /^https?:\/\//i.test(site) ? site : `https://${site.replace(/^\/+/, '')}`;
+    const quando = agoraIso();
+    let estado = 'falhou', motivo = '', final = alvo, codigo = null;
+    const t0 = Date.now();
+    try {
+      const sinal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(9000) : undefined;
+      const r = await fetchImpl(alvo, {
+        redirect: 'follow', signal: sinal,
+        headers: { 'user-agent': 'Orbita/1.59 (verificação de site; +https://orbita-agentes.vercel.app)', accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+      });
+      codigo = r.status;
+      final = r.url || alvo;
+      const corpoPagina = String(await r.text().catch(() => '')).slice(0, 6000);
+      const parecePagina = !corpoPagina ? false : /<html|<!doctype|<body|<a\s|<title/i.test(corpoPagina);
+      estado = r.ok && parecePagina ? 'ok' : 'falhou';
+      motivo = r.ok
+        ? (parecePagina ? `respondeu ${r.status} · ${Date.now() - t0} ms` : `respondeu ${r.status} mas não devolveu uma página`)
+        : `o site respondeu ${r.status}`;
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      motivo = /timeout|abort/i.test(msg) ? 'o site não respondeu em 9 segundos'
+        : /ENOTFOUND|getaddrinfo|EAI_AGAIN/i.test(msg) ? 'o endereço não resolve (o domínio pode ter acabado)'
+        : /CERT|TLS|SSL/i.test(msg) ? 'o certificado do site não é válido'
+        : `não foi possível abrir o site (${msg.slice(0, 120)})`;
+    }
+    const depois = { ...lead, website_estado: estado, website_verificado_em: quando, website_motivo: motivo };
+    const c = confiancaDoLead(depois);
+    const atualizado = await repo.leads.patch(lead.id, {
+      website_estado: estado, website_verificado_em: quando, website_motivo: motivo,
+      confianca: c.nivel, updated_at: quando,
+    });
+    const autor = conta?.email || conta?.nome || 'dono';
+    await repo.leads.evento({
+      lead_id: lead.id, tipo: 'verificacao', autor,
+      texto: estado === 'ok' ? `site verificado: ${motivo}` : `site não respondeu: ${motivo}`,
+      detalhe: { url: final, codigo, ms: Date.now() - t0 },
+    }).catch(() => null);
+    await repo.atividade.add('lead', `site de «${lead.name}» ${estado === 'ok' ? 'verificado' : 'não respondeu'}`).catch(() => null);
+    return { status: 200, corpo: {
+      ok: true, lead: atualizado,
+      verificacao: { estado, quando, motivo, url: final, codigo, ms: Date.now() - t0 },
+      confianca: c,
+    } };
   }
   /* 1.54.2 · «iniciar projeto» a partir de uma lead.
      Uma lead, um projeto: se já existir, ABRE-SE o que existe em vez de criar

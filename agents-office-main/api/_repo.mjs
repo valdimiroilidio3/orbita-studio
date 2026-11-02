@@ -210,6 +210,19 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         const r = await pedir(`orbita_leads?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
         return um(r);
       },
+      /* 1.59.0 · o rasto do lead. A tabela só existe depois de a migração ser
+         aplicada — quem chama trata a falha (uma instalação antiga não pode
+         deixar de guardar um lead por causa do histórico). */
+      async eventos(leadId, limit = 40) {
+        return (await pedir(`orbita_lead_eventos?select=*&lead_id=eq.${q(leadId)}&order=criado.desc&limit=${Math.min(200, limit)}`)) || [];
+      },
+      async evento({ lead_id, tipo = 'nota', texto, autor = 'sistema', detalhe = null }) {
+        return um(await pedir('orbita_lead_eventos', {
+          method: 'POST',
+          body: { lead_id, tipo, texto, autor, detalhe },
+          prefer: 'return=representation',
+        }));
+      },
     },
 
     projetos: {
@@ -453,7 +466,7 @@ const agoraDe = () => new Date().toISOString();
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [], faturas: [],
-    contas: [], sessoes: [],
+    leadEventos: [], contas: [], sessoes: [],
     iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [], geracoes: [],
     ...JSON.parse(JSON.stringify(seed)),
   };
@@ -503,6 +516,16 @@ export function createMemRepo(seed = {}) {
         if (!l) return null;
         Object.assign(l, campos, { updated_at: agora() });
         return l;
+      },
+      async eventos(leadId, limit = 40) {
+        return (d.leadEventos || []).filter((e) => e.lead_id === leadId)
+          .sort((a, b) => String(b.criado).localeCompare(String(a.criado))).slice(0, limit);
+      },
+      async evento({ lead_id, tipo = 'nota', texto, autor = 'sistema', detalhe = null }) {
+        d.leadEventos = d.leadEventos || [];
+        const novo = { id: id('le'), lead_id, tipo, texto, autor, detalhe, criado: agora() };
+        d.leadEventos.push(novo);
+        return novo;
       },
     },
     projetos: {

@@ -1,4 +1,4 @@
-// Órbita — o elenco fixo (35 lugares, 6 salas), a cor de cada sala e os tokens de design.
+// Órbita — o elenco fixo (47 lugares, 6 salas), a cor de cada sala e os tokens de design.
 // Os textos de exemplo (WORKLINES), os pedidos de aprovação fictícios (APPROVAL_ASKS) e as linhas
 // de demonstração por indústria (profile.js) saíram em 26 out 2026: o escritório passou a mostrar
 // o trabalho que está na base de dados, por isso já não precisa de conteúdo de exemplo.
@@ -45,7 +45,7 @@ export const DEPTS = {
   brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', glass: '#AEB6AB', glassName: 'neutro' },
 };
 
-// 35 agents (V3.4, 7 Sep 2026: every department has a lead). grid = [col,row] desk slot on the department plinth.
+// 47 agents (V3.4, 7 Sep 2026: every department has a lead; o elenco cresceu de 35 para 47). grid = [col,row] desk slot on the department plinth.
 export const AGENTS = [
   // COMANDO (5)
   { id: 'elead', name: 'ORBITA DIRECTOR',            dept: 'emails',   lead: true,  grid: [0.5, 0], hair: '#2b2b2b', skin: '#E8B98E' },

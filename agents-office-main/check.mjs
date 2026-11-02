@@ -93,11 +93,15 @@ await step('build: graph has linked notes', async () => {
 
 /* ---------- 1b. the roster + the connector parser ---------- */
 await step('roster: office.agents.json validates', async () => {
+  /* 1.59.0 · o número de agentes NÃO se escreve à mão: o elenco cresceu de 35
+     para 47 e o teste é que ficou velho, a falar de 35 lugares. A verdade está
+     em `src/data.js` — é de lá que a cena, o painel e o `/api/health` contam. */
   const { loadRoster } = await import('./roster.mjs');
+  const { AGENTS } = await import('./src/data.js');
   const r = loadRoster();
-  if (r.agents.length !== 35) throw new Error('agents: ' + r.agents.length);
+  if (r.agents.length !== AGENTS.length) throw new Error(`agents: ${r.agents.length} no roster, ${AGENTS.length} no elenco`);
   if (r.problems.length) throw new Error(r.problems.join(' | '));
-  return `35 agents · ${r.customised} customised${r.files.length ? ' · ' + r.files.join(' + ') : ''}`;
+  return `${r.agents.length} agents · ${r.customised} customised${r.files.length ? ' · ' + r.files.join(' + ') : ''}`;
 });
 await step('roster: bad edits are refused, not applied', async () => {
   const { validate } = await import('./roster.mjs');
@@ -689,7 +693,11 @@ else {
       const c = m.servers.filter(s => s.status === 'connected').length;
       return `${m.servers.length} servers · ${c} connected · agents get tools: ${m.tools ? 'yes' : 'no (API backend)'}${m.web ? ' + web' : ''}`;
     });
-    await step('server: /api/health carries the roster', async () => { if (!Array.isArray(up.agents) || up.agents.length !== 35) throw new Error('agents: ' + (up.agents && up.agents.length)); if (!up.agents[0].does) throw new Error('no job description'); });
+    await step('server: /api/health carries the roster', async () => {
+      const { AGENTS } = await import('./src/data.js');
+      if (!Array.isArray(up.agents) || up.agents.length !== AGENTS.length) throw new Error(`agents: ${up.agents && up.agents.length} (o elenco tem ${AGENTS.length})`);
+      if (!up.agents[0].does) throw new Error('no job description');
+    });
     await step('server: the office default is Sonnet and /api/usage always answers', async () => {
       if (up.model !== 'sonnet' || JSON.stringify(up.models) !== '["sonnet","opus","fable"]') throw new Error('health model: ' + up.model);
       if (up.effort !== '' || JSON.stringify(up.efforts) !== '["low","medium","high","xhigh","max"]') throw new Error('health effort: ' + up.effort);

@@ -28,6 +28,11 @@ import { progresso as progressoDoProjeto, resumoLead, iniciais, ABAS_PROJETO, ab
    de aprovações, o estado das salas e o que está bloqueado — contas puras,
    testáveis sem DOM (ver `src/painel.js`) */
 import { resumoOperacional, filaDeAprovacao, estadoAgentes, atividadeRecente, proximosTrabalhos, bloqueios, saudacao, fraseDoEstado, plural } from './painel.js';
+/* 1.59.0 · o CRM. As mesmas contas puras que o servidor usa para exportar e
+   verificar (`src/crm.js`) — a mesa desenha o que elas dizem, não uma versão
+   paralela da mesma verdade. */
+import { confianca as confiancaCRM, verificacao as verificacaoCRM, proximaAccao as proximaAccaoCRM,
+  qualificacao as qualificacaoCRM, resumoDoFunil, fraseDaCarteira, FASES, ESTADOS_SITE } from './crm.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -105,6 +110,8 @@ const S = {
   route: { name: 'hoje', id: null },
   summary: null, today: null, leads: [], messages: [], saldo: null, clientes: null,
   lead: null, leadMessages: [], dossier: null, editandoLead: false,
+  /* 1.59.0 · o CRM: o histórico do lead, os duplicados e o estado de exportação */
+  leadEventos: [], duplicados: null, mostrarDuplicados: false, aExportar: false,
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   /* 1.57.0 · a aba aberta na página do projeto (Briefing por omissão) */
@@ -402,6 +409,9 @@ async function loadLead(id) {
   S.editandoLead = false;   // abrir outro lead nunca herda o formulário do anterior
   S.dossier = r.dossier || null;
   S.leadMessages = r.messages || [];
+  /* 1.59.0 · o rasto: quem mudou o quê, e quando. Sem a migração aplicada o
+     servidor devolve uma lista vazia — e a mesa di-lo, em vez de fingir história. */
+  S.leadEventos = r.eventos || [];
 }
 
 async function boot(full = true) {
@@ -884,28 +894,111 @@ function novoLeadForm() {
   </div>`;
 }
 
+/* ===========================================================================
+   1.59.0 · O CRM (2 nov 2026)
+
+   O dono pediu que a prospecção valesse: dados verificáveis, contactos que
+   avançam para oportunidade, e nada inventado. O que muda na página:
+
+     · um cartão com os números da carteira (fases do funil, contactáveis, sites
+       verificados, ações atrasadas, duplicados) e os dois gestos que faltavam —
+       exportar em CSV e ver os duplicados;
+     · cada linha diz a confiança nos dados, o estado da verificação do site e a
+       próxima ação (com «atrasada» quando está);
+     · a ficha do lead ganha proveniência, verificação a sério (com data), a
+       próxima ação editável e o histórico de quem fez o quê.
+   =========================================================================== */
+
+/** O estado da verificação do site, em pequeno: a cor e a data, ou a falta dela. */
+function chipDoSite(l) {
+  const v = verificacaoCRM(l);
+  const quando = v.quando ? ` em ${esc(String(v.quando).slice(0, 10))}` : '';
+  return `<span class="crm-chip" style="--c:${v.cor}" title="${esc(v.rotulo)}${v.motivo ? ` — ${esc(v.motivo)}` : ''}">${esc(v.rotulo)}${quando}</span>`;
+}
+
+/** A confiança nos dados, com as razões no `title` (não se afirma sem dizer porquê). */
+function chipDaConfianca(l) {
+  const c = confiancaCRM(l);
+  return `<span class="crm-chip" style="--c:${c.cor}" title="${esc(c.razoes.join(' · '))}">${c.pontos}/100 · ${esc(c.nivel)}</span>`;
+}
+
+/** A próxima ação: o texto, quando, e se está atrasada. */
+function linhaDaProxima(l) {
+  const p = proximaAccaoCRM(l);
+  if (p.estado === 'sem') return '';
+  const cor = p.estado === 'atrasada' ? 'var(--risk)' : p.estado === 'hoje' ? 'var(--warn)' : 'var(--muted)';
+  return `<div class="crm-prox" style="color:${cor}">→ ${esc(p.texto || 'sem texto')} · ${esc(p.rotulo)}</div>`;
+}
+
+function crmCard() {
+  const r = resumoDoFunil(S.leads);
+  if (!r.total) return '';
+  return `<div class="card crm-card" style="margin-bottom:var(--s4)">
+    <div class="sec-h">
+      <h3>Carteira</h3>
+      <span class="count">${esc(fraseDaCarteira(r))}</span>
+      <span class="sp" style="flex:1"></span>
+      ${may('read') ? `<button class="btn small ghost" data-act="csv-leads" title="descarregar todos os leads em CSV (abre no Excel)">↓ CSV</button>` : ''}
+      ${r.duplicados ? `<button class="btn small ghost" data-act="ver-duplicados" aria-expanded="${S.mostrarDuplicados ? 'true' : 'false'}">⚠ ${r.duplicados} duplicado${r.duplicados === 1 ? '' : 's'}</button>` : ''}
+    </div>
+    <div class="stats" style="margin-bottom:var(--s3)">
+      ${r.fases.map(f => `<div class="stat crm-fase" data-fase="${esc(f.id)}"><b>${f.n}</b><span>${esc(f.label)}${f.n ? ` · ${f.percentagem}%` : ''}</span></div>`).join('')}
+    </div>
+    <div class="crm-sinais">
+      <span class="crm-sinal"><b>${r.comContacto}</b> com contacto${r.total ? ` (${r.contactaveis}%)` : ''}</span>
+      <span class="crm-sinal"><b>${r.verificados}</b> com site verificado</span>
+      <span class="crm-sinal"><b>${r.porVerificar}</b> por verificar</span>
+      <span class="crm-sinal ${r.atrasadas ? 'bad' : ''}"><b>${r.atrasadas}</b> com ação atrasada</span>
+    </div>
+    ${S.mostrarDuplicados ? duplicadosCard() : ''}
+    <div class="hint">A confiança não é a nota: a nota diz «vale a pena contactar»; a confiança diz «o que está guardado é de fiar» — e cada ponto tem a razão escrita ao lado (passa o rato por cima).</div>
+  </div>`;
+}
+
+/** Os duplicados que a base não juntou. Mostrar, nunca fundir sozinho. */
+function duplicadosCard() {
+  if (!S.duplicados) return `<div class="crm-dup"><div class="hint" style="margin:0">a procurar duplicados…</div></div>`;
+  if (S.duplicados.erro) return `<div class="crm-dup"><div class="hint bad" style="margin:0">Não consegui analisar os duplicados: ${esc(S.duplicados.erro)}. Nada foi alterado.</div></div>`;
+  const g = S.duplicados.grupos || [];
+  if (!g.length) return `<div class="crm-dup"><div class="hint" style="margin:0">Nenhum duplicado: nenhum par de leads partilha telefone, site ou nome.</div></div>`;
+  return `<div class="crm-dup">
+    <div class="crm-dup-h"><b>${g.length} grupo${g.length === 1 ? '' : 's'} parecido${g.length === 1 ? '' : 's'}</b>
+      <span>${esc(String(S.duplicados.leads ?? S.leads.length))} leads analisados · nada foi fundido</span></div>
+    ${g.map(x => `<div class="crm-dup-g">
+      <div class="crm-dup-m">${esc(x.rotulo)}</div>
+      <div class="crm-dup-l">${x.leads.map(m => `<button class="crm-dup-i" data-act="ver-lead" data-id="${esc(m.id)}" title="abrir «${esc(m.name)}» para decidir">
+        <b>${esc(m.name)}</b><span>${esc([m.city, m.phone, (m.website || '').replace(/^https?:\/\//, '')].filter(Boolean).join(' · ') || 'sem contacto')}</span>
+        <em>${esc(statusLabel[m.status] || m.status || '—')}</em></button>`).join('')}</div>
+    </div>`).join('')}
+    <div class="hint" style="margin:0">Fundir dois leads apaga um deles. O Órbita mostra o par e deixa a decisão a quem conhece o negócio — abrir cada um e corrigir o que está errado é sempre seguro.</div>
+  </div>`;
+}
+
 function viewLeads() {
   const list = filteredLeads();
   const total = S.leads.length;
   const alta = S.leads.filter(l => (l.score || 0) >= 60).length;
   const chips = [['todos', 'Todos'], ['novo', 'Por contactar'], ['sem-site', 'Sem site'], ['responderam', 'Responderam']];
+  const carteira = resumoDoFunil(S.leads);
   return `<div class="wrap">
     ${headHTML({
       title: 'Leads',
-      sub: total ? `${total} guardados · ${alta} com nota alta · ${S.leads.filter(l => !['novo'].includes(l.status)).length} já contactados` : 'ainda não há nenhum lead guardado',
+      sub: total ? esc(fraseDaCarteira(carteira)) : 'ainda não há nenhum lead guardado',
       right: `${may('write') ? '<button class="btn small ghost" data-act="actualizar-leads" title="voltar a ler os leads da base">↻ Actualizar</button><button class="btn small ghost" data-act="novo-lead">+ Lead</button>' : ''}${stopPill()}`,
     })}
     ${procurarLeadsForm()}
     ${S.adding ? novoLeadForm() : ''}
+    ${crmCard()}
     ${pipelineCard()}
     <div class="tools">
       <div class="search">${IC.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho…" value="${esc(S.q)}" aria-label="procurar leads"></div>
       ${chips.map(([k, l]) => `<button class="chip ${S.filter === k ? 'on' : ''}" data-act="filter" data-k="${k}">${l}</button>`).join('')}
     </div>
-    ${list.length ? `<div class="rows">${list.map(l => `<button class="row" data-act="ver-lead" data-id="${esc(l.id)}">
-      <div><div class="nm">${esc(l.name)}</div><div class="mt">${esc([l.category, l.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}</div></div>
-      <div class="cell hide-m">${esc(l.website ? l.website.replace(/^https?:\/\//, '').replace(/\/$/, '') : (l.phone || l.email || 'sem contacto'))}</div>
-      <div class="cell"><span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span></div>
+    ${list.length ? `<div class="rows">${list.map(l => `<button class="row crm" data-act="ver-lead" data-id="${esc(l.id)}">
+      <div><div class="nm">${esc(l.name)}</div><div class="mt">${esc([l.category, l.city].filter(Boolean).join(' · ') || 'sem nicho nem cidade')}</div>${linhaDaProxima(l)}</div>
+      <div class="cell hide-m">${esc(l.website ? l.website.replace(/^https?:\/\//, '').replace(/\/$/, '') : (l.phone || l.email || 'sem contacto'))}${chipDoSite(l)}</div>
+      <div class="cell hide-m crm-conf">${chipDaConfianca(l)}</div>
+      <div class="cell tag-cell"><span class="tag ${esc(l.status)}">${esc(statusLabel[l.status] || l.status)}</span></div>
       ${scoreBadge(l.score)}
     </button>`).join('')}</div>`
       : `<div class="card empty">${IC.vazio}<h3>${total ? 'Nenhum lead neste filtro' : 'Ainda não há leads guardados'}</h3>
@@ -982,6 +1075,81 @@ function leadMessageCard(m) {
   </div>`;
 }
 
+/* 1.59.0 · PROVENIÊNCIA E CONFIANÇA. De onde veio este contacto, se o site foi
+   mesmo verificado (e quando), e quanta fé merecem os dados — com as razões.
+   O botão «verificar» pede o site a sério: o servidor diz o código HTTP, se
+   devolveu uma página e quanto tempo levou. Sem isso, uma data de verificação
+   seria uma frase inventada. */
+function leadProvaCard(l) {
+  const v = verificacaoCRM(l);
+  const c = confiancaCRM(l);
+  const q = qualificacaoCRM(l);
+  const linha = (rotulo, valor, extra = '') => `<tr><td style="color:var(--muted);white-space:nowrap">${esc(rotulo)}</td><td>${valor}${extra}</td></tr>`;
+  return `<div class="card crm-prova">
+    <div class="sec-h"><h3>Proveniência e confiança</h3>
+      <span class="count">${c.pontos}/100 · ${esc(c.nivel)}</span></div>
+    <div class="crm-bar" role="img" aria-label="confiança ${c.pontos} de 100"><i style="width:${c.pontos}%;background:${c.cor}"></i></div>
+    <table><tbody>
+      ${linha('Fonte', esc(l.source || 'não registada'))}
+      ${linha('Endereço da fonte', l.fonte_url ? `<a href="${esc(l.fonte_url)}" target="_blank" rel="noreferrer noopener">${esc(String(l.fonte_url).replace(/^https?:\/\//, '').slice(0, 48))}</a>` : '<span style="color:var(--muted)">não guardado</span>')}
+      ${linha('Site', l.website ? `<a href="${esc(/^https?:\/\//i.test(l.website) ? l.website : `https://${l.website}`)}" target="_blank" rel="noreferrer noopener">${esc(l.website.replace(/^https?:\/\//, ''))}</a>` : '<span style="color:var(--muted)">sem site</span>')}
+      ${linha('Verificação', `<span class="crm-chip" style="--c:${v.cor}">${esc(v.rotulo)}</span>${v.quando ? `<span class="count"> · ${esc(String(v.quando).slice(0, 10))}</span>` : ''}${v.motivo ? `<div class="hint" style="margin:4px 0 0">${esc(v.motivo)}</div>` : ''}`)}
+      ${linha('Qualificação', q.valor == null ? '<span style="color:var(--muted)">sem dados para qualificar</span>' : `<b>${q.valor}</b> <span class="count">· ${esc(q.rotulo)}</span>`)}
+    </tbody></table>
+    <details class="why-box"><summary><span>Porquê esta confiança<small>${c.razoes.length} razões · abre para ver</small></span>${IC.chev}</summary>
+      <div class="why-grid">${c.razoes.map(x => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(x)}</span></div>`).join('')}</div>
+    </details>
+    <div class="acts" style="margin-top:var(--s3)">
+      ${l.website
+        ? `<button class="btn ghost small" data-act="verificar-site" data-id="${esc(l.id)}" title="pedir o site agora e guardar a data e o resultado">Verificar site agora</button>`
+        : '<span class="hint" style="margin:0">Sem site guardado não há nada para verificar — acrescenta o endereço em «Editar».</span>'}
+    </div>
+  </div>`;
+}
+
+/* 1.59.0 · A PRÓXIMA AÇÃO. Um lead sem próximo passo é uma linha numa lista.
+   A data é opcional (uma ação escrita sem data continua a valer), mas quando
+   há data a mesa diz se está atrasada — e não esconde isso numa nota. */
+function leadProximaCard(l) {
+  const p = proximaAccaoCRM(l);
+  const quando = p.quando ? String(p.quando).slice(0, 10) : '';
+  const cor = p.estado === 'atrasada' ? 'var(--risk)' : p.estado === 'hoje' ? 'var(--warn)' : 'var(--muted)';
+  return `<div class="card">
+    <div class="sec-h"><h3>Próxima ação</h3>
+      <span class="count" style="color:${cor}">${esc(p.rotulo)}</span></div>
+    <div class="form two pares">
+      <label class="fld"><span>O que fazer</span>
+        <input class="in" id="proxAcao" placeholder="ex.: ligar e confirmar o horário" value="${esc(l.proxima_acao || '')}" autocomplete="off"></label>
+      <label class="fld"><span>Quando (opcional)</span>
+        <input class="in" id="proxAcaoEm" type="date" value="${esc(quando)}"></label>
+    </div>
+    <div class="acts" style="margin-top:var(--s3)">
+      <button class="btn primary small" data-act="guardar-proxima" data-id="${esc(l.id)}">Guardar próxima ação</button>
+      ${l.proxima_acao || l.proxima_acao_em ? `<button class="btn ghost small" data-act="limpar-proxima" data-id="${esc(l.id)}">Limpar</button>` : ''}
+    </div>
+    <div class="hint">O que fica escrito aqui é o que a lista mostra em cada linha — e o que conta como «atrasada» quando o dia passa.</div>
+  </div>`;
+}
+
+/* 1.59.0 · QUEM FEZ O QUÊ. Uma linha por alteração, com o autor. É o que faltava
+   para se poder responder a «quem marcou isto como ganho?» sem adivinhar. */
+const TIPO_EVENTO = {
+  criado: 'criado', estado: 'estado comercial', verificacao: 'verificação do site', edicao: 'edição',
+  proxima_acao: 'próxima ação', qualificacao: 'qualificação', nota: 'nota', projeto: 'projeto', mensagem: 'mensagem',
+};
+function leadEventosCard() {
+  const ev = S.leadEventos || [];
+  return `<div class="card">
+    <div class="sec-h"><h3>Quem fez o quê</h3><span class="count">${ev.length ? `${ev.length} registo(s)` : 'sem registos'}</span></div>
+    ${ev.length ? `<table><tbody>${ev.slice(0, 20).map(e => `<tr>
+      <td style="color:var(--muted);white-space:nowrap">${esc(hhmm(e.criado))} · ${esc(when(e.criado))}</td>
+      <td><b>${esc(TIPO_EVENTO[e.tipo] || e.tipo)}</b> — ${esc(e.texto)}</td>
+      <td class="n" style="color:var(--muted)">${esc(e.autor || 'sem autor')}</td>
+    </tr>`).join('')}</tbody></table>`
+      : `<p class="hint" style="margin:0">Ainda não há registos deste lead. O histórico começa na primeira alteração — e a tabela do servidor tem de estar criada (migração <code>orbita_1_59_0.sql</code>). Até lá, nada é inventado.</p>`}
+  </div>`;
+}
+
 /* 1.36.0 · editar o lead sem sair da mesa (pedido 57e: «actualizar» também é
    corrigir o que está errado). Os campos são os que a API aceita em PATCH —
    telefone, email, site, nicho, cidade e notas — e a nota de estado (funil)
@@ -1001,8 +1169,9 @@ function leadEditForm() {
       ${campo('elSite', 'Site', l.website, 'text', 'placeholder="empresa.pt"')}
       ${campo('elNicho', 'Nicho', l.category, 'text', 'placeholder="dentista, restaurante…"')}
     </div>
-    <div class="form pares" style="margin-top:var(--s2)">
+    <div class="form two pares" style="margin-top:var(--s2)">
       ${campo('elCidade', 'Cidade', l.city, 'text', 'placeholder="Coimbra"')}
+      ${campo('elQualificacao', 'Qualificação (0–100)', l.qualificacao, 'number', 'min="0" max="100" step="1" placeholder="sem valor"')}
     </div>
     <label class="fld" style="margin-top:var(--s2)"><span>Notas</span>
       <textarea class="in" id="elNotas" rows="3" placeholder="o que sabes e não cabe nos campos">${esc(l.notes || '')}</textarea></label>
@@ -1086,6 +1255,8 @@ function viewLead() {
     ${leadMessageCard(m)}
     ${cineDoLead(l)}
     <div style="display:grid;gap:var(--s4);margin-top:var(--s4)">
+      ${leadProvaCard(l)}
+      ${leadProximaCard(l)}
       ${S.editandoLead ? leadEditForm() : leadFacts()}
       ${projetoDoLead
         ? `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="tag ${PROJ_TAG[projetoDoLead.status]}">${esc(PROJ_LABEL[projetoDoLead.status] || projetoDoLead.status)}</span></div>
@@ -1094,6 +1265,7 @@ function viewLead() {
         : `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="count">ainda não existe</span></div>
             <p class="hint" style="margin-top:0">Iniciar o projeto abre o briefing já preenchido com o que a ficha desta lead sustenta. Depois: Prompt Master, prompts de imagem e o código — um negócio, um projeto.</p>
             <div class="acts" style="margin-top:var(--s3)"><button class="btn primary small" data-act="criar-projeto" data-id="${esc(l.id)}">Iniciar projeto</button></div></div>`}
+      ${leadEventosCard()}
       ${leadHistory()}
       ${next.length ? `<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
         <div class="acts" style="margin-top:0">${next.map(s => `<button class="btn ghost small" data-act="estado" data-id="${esc(l.id)}" data-status="${s}">Marcar ${esc(statusLabel[s])}</button>`).join('')}</div>
@@ -2075,6 +2247,84 @@ async function act(name, el, ev) {
       return;
     }
 
+    /* ---- 1.59.0 · o CRM: exportar, duplicados, verificar o site, próxima ação ---- */
+    if (name === 'csv-leads') {
+      if (S.aExportar) return;                       // um clique, um ficheiro
+      S.aExportar = true;
+      try {
+        const r = await call('/ops/leads.csv');
+        const csv = String(r.csv || '');
+        if (!csv) { toast('O servidor não devolveu o CSV — nada foi exportado.', true); return; }
+        const nome = r.ficheiro || 'leads.csv';
+        try {
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = nome; a.rel = 'noopener';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* já revogado */ } }, 4000);
+          toast(`${r.linhas ?? '—'} lead(s) exportados para ${nome}.`);
+        } catch {
+          toast('Este browser não deixa descarregar ficheiros — o CSV ficou na consola.', true);
+          console.log(csv);
+        }
+      } catch (e) {
+        toast(`Não consegui exportar: ${e.message}`, true);
+      } finally { S.aExportar = false; }
+      return;
+    }
+
+    if (name === 'ver-duplicados') {
+      S.mostrarDuplicados = !S.mostrarDuplicados;
+      if (S.mostrarDuplicados && !S.duplicados) {
+        S.duplicados = null;
+        paint();
+        const r = await call('/ops/leads/duplicados').catch((e) => ({ grupos: [], erro: e.message }));
+        S.duplicados = r || { grupos: [], erro: 'o servidor não respondeu' };
+      }
+      paint();
+      return;
+    }
+
+    if (name === 'verificar-site') {
+      const leadId = id || S.lead?.id;
+      if (!leadId) return;
+      setNote('a pedir o site…');
+      try {
+        const r = await call(`/ops/leads/${encodeURIComponent(leadId)}/verificar`, 'POST', {});
+        const v = r.verificacao || {};
+        toast(v.estado === 'ok' ? `Site verificado: ${v.motivo || 'respondeu'}` : `O site não respondeu: ${v.motivo || 'sem motivo'}`, v.estado !== 'ok');
+        await loadLead(leadId);
+        const i = S.leads.findIndex((x) => x.id === leadId);
+        if (i >= 0 && S.lead) S.leads[i] = S.lead;
+        paint();
+      } catch (e) {
+        toast(`Não consegui verificar: ${e.message}`, true);
+      }
+      return;
+    }
+
+    if (name === 'guardar-proxima' || name === 'limpar-proxima') {
+      const leadId = id || S.lead?.id;
+      if (!leadId) return;
+      const corpoProx = name === 'limpar-proxima'
+        ? { proxima_acao: null, proxima_acao_em: null }
+        : { proxima_acao: String($('#proxAcao')?.value || '').trim() || null,
+            proxima_acao_em: String($('#proxAcaoEm')?.value || '').trim() || null };
+      try {
+        const r = await call(`/ops/leads/${encodeURIComponent(leadId)}`, 'PATCH', corpoProx);
+        S.lead = r.lead || S.lead;
+        toast(name === 'limpar-proxima' ? 'Próxima ação limpa.' : 'Próxima ação guardada.');
+        await loadLead(leadId);
+        const i = S.leads.findIndex((x) => x.id === leadId);
+        if (i >= 0 && S.lead) S.leads[i] = S.lead;
+        paint();
+      } catch (e) {
+        toast(`Não ficou guardada: ${e.message}`, true);
+      }
+      return;
+    }
+
     if (name === 'estado') {
       const status = el.dataset.status;
       await call(`/ops/leads/${encodeURIComponent(id)}`, 'PATCH', { status });
@@ -2436,9 +2686,14 @@ async function act(name, el, ev) {
         ? (/^https?:\/\//i.test(site) ? site : `https://${site.replace(/^\/\//, '')}`)
         : '';
       if (siteLimpo && !/^https?:\/\/[^\s.]+\.[^\s]{2,}/i.test(siteLimpo)) { toast('Esse site não parece um endereço (ex.: empresa.pt).', true); return; }
+      const qualificacao = v('elQualificacao');
+      if (qualificacao && !(Number(qualificacao) >= 0 && Number(qualificacao) <= 100)) {
+        toast('A qualificação é um número de 0 a 100 — ou fica vazia.', true); return;
+      }
       const corpoEdicao = {
         phone: telefone, email, website: siteLimpo,
         category: v('elNicho'), city: v('elCidade'), notes: v('elNotas'),
+        qualificacao: qualificacao === '' ? null : Number(qualificacao),
       };
       let r;
       try {

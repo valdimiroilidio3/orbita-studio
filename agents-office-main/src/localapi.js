@@ -81,6 +81,7 @@ const vazio = () => ({
   v: 1,
   criado: new Date().toISOString(),
   leads: [],
+  leadEventos: [],
   projetos: [],
   tarefas: [],
   receitas: [],
@@ -97,6 +98,12 @@ const novoId = (p) => `${p}_${Date.now().toString(36)}${Math.random().toString(3
 function falha(status, message, extra = {}) {
   return Object.assign(new Error(message), { status, body: { error: message, ...extra } });
 }
+
+/* 1.59.0 · o CRM no modo local. As contas são as MESMAS do servidor e da mesa
+   (`src/crm.js`): sem isso, o CSV exportado aqui e o exportado na Vercel podiam
+   dizer coisas diferentes sobre o mesmo lead. */
+import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca as confiancaDoLead,
+  verificacao as verificacaoDoLead, proximaAccao, qualificacao as qualificacaoDoLead, nomeDoFicheiro } from './crm.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -420,6 +427,31 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       gravar(d);
       return { created, updated, leads: d.leads };
     }
+    /* ---- 1.59.0 · o CRM no modo local ----
+       Exportar, ver duplicados e resumir o funil: as mesmas contas de
+       `src/crm.js` que o servidor usa. O que este modo NÃO faz é verificar o
+       site — o browser não pode pedir outro domínio (CORS) — e di-lo em vez de
+       inventar uma data de verificação. */
+    if (caminhoLimpo === '/ops/leads.csv' && metodo === 'GET') {
+      const agoraMs = agora();
+      escrever(d, 'lead', `exportação de ${d.leads.length} lead(s) em CSV`);
+      gravar(d);
+      return { ok: true, csv: csvDeLeads(d.leads, { agora: agoraMs }), linhas: d.leads.length, ficheiro: nomeDoFicheiro(agoraMs) };
+    }
+    if (caminhoLimpo === '/ops/leads/duplicados' && metodo === 'GET') {
+      const grupos = duplicadosDeLeads(d.leads);
+      return { ok: true, grupos, total: grupos.length, leads: d.leads.length };
+    }
+    if (caminhoLimpo === '/ops/leads/resumo' && metodo === 'GET') {
+      return { ok: true, ...resumoDoFunil(d.leads) };
+    }
+    if (/^\/ops\/leads\/[^/]+\/verificar$/.test(caminhoLimpo) && metodo === 'POST') {
+      const lead = d.leads.find((l) => l.id === seg[1]);
+      if (!lead) throw falha(404, 'lead não encontrado');
+      if (!limpo(lead.website)) throw falha(400, `${lead.name} não tem site guardado — acrescenta o endereço antes de verificar`);
+      throw falha(503, 'verificar o site precisa do servidor: o browser não pode pedir outro domínio (CORS) e esta verificação tem de vir de quem a pode fazer. Liga a base de dados para a data da verificação ser real.');
+    }
+
     /* 1.36.0 · editar um lead a partir da mesa. É o mesmo contrato da API
        (PATCH /ops/leads/:id), por isso o formulário não precisa de saber se está
        a falar com a base ou com este browser. Só os campos que vêm são tocados;
@@ -427,23 +459,50 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (/^\/ops\/leads\/[^/]+$/.test(caminhoLimpo) && metodo === 'PATCH') {
       const lead = d.leads.find((l) => l.id === seg[1]);
       if (!lead) throw falha(404, 'lead não encontrado');
-      const aceites = ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score'];
+      const aceites = ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score',
+        'qualificacao', 'proxima_acao', 'proxima_acao_em', 'fonte_url'];
+      const antes = { status: lead.status, proxima_acao: lead.proxima_acao, qualificacao: lead.qualificacao };
       let tocados = 0;
       for (const k of aceites) {
         if (corpo?.[k] === undefined) continue;
-        lead[k] = k === 'score' ? (corpo[k] === '' || corpo[k] == null ? null : Number(corpo[k])) : limpo(corpo[k]);
+        if (k === 'score' || k === 'qualificacao') {
+          lead[k] = corpo[k] === '' || corpo[k] == null ? null : Math.max(0, Math.min(100, Math.round(Number(corpo[k]))));
+        } else if (k === 'proxima_acao_em') {
+          const cru = limpo(corpo[k]);
+          if (cru && !/^\d{4}-\d{2}-\d{2}/.test(cru)) throw falha(400, 'a data da próxima ação tem de ser uma data (AAAA-MM-DD)');
+          lead[k] = cru ? cru.slice(0, 10) : null;
+        } else if (k === 'proxima_acao' || k === 'fonte_url') lead[k] = limpo(corpo[k]) || null;
+        else lead[k] = limpo(corpo[k]);
         tocados++;
       }
       if (!tocados) throw falha(400, 'nada para alterar');
+      /* mexer no contacto invalida a verificação do site: o que se verificou
+         foi outro endereço, e dizer «verificado» sobre um site novo seria falso */
+      if (corpo?.website !== undefined) { lead.website_estado = null; lead.website_verificado_em = null; lead.website_motivo = null; }
+      lead.confianca = confiancaDoLead(lead).nivel;
       lead.updated_at = new Date(agora()).toISOString();
+      let tipo = 'edicao', texto = 'ficha editada';
+      if (lead.status !== antes.status) { tipo = 'estado'; texto = `estado: ${antes.status || '—'} → ${lead.status}`; }
+      else if (corpo?.proxima_acao !== undefined || corpo?.proxima_acao_em !== undefined) {
+        tipo = 'proxima_acao'; texto = `próxima ação: ${lead.proxima_acao || '(sem texto)'}${lead.proxima_acao_em ? ` · ${lead.proxima_acao_em}` : ''}`;
+      } else if (corpo?.qualificacao !== undefined) { tipo = 'qualificacao'; texto = `qualificação: ${lead.qualificacao ?? 'sem valor'}`; }
+      d.leadEventos = d.leadEventos || [];
+      d.leadEventos.unshift({ id: novoId('le'), lead_id: lead.id, tipo, texto, autor: 'dono (modo local)', criado: new Date(agora()).toISOString() });
       escrever(d, 'lead', `lead «${lead.name}» editado`);
       gravar(d);
-      return { ok: true, lead };
+      return { ok: true, lead, confianca: confiancaDoLead(lead), proxima: proximaAccao(lead) };
     }
     if (/^\/ops\/leads\/[^/]+$/.test(caminhoLimpo) && metodo === 'GET') {
       const lead = d.leads.find((l) => l.id === seg[1]);
       if (!lead) throw falha(404, 'lead não encontrado');
-      return { lead, dossier: null, messages: d.mensagens.filter((m) => m.lead_id === lead.id) };
+      const eventos = (d.leadEventos || []).filter((e) => e.lead_id === lead.id)
+        .sort((a, b) => String(b.criado).localeCompare(String(a.criado))).slice(0, 40);
+      return {
+        lead, dossier: null, eventos,
+        messages: d.mensagens.filter((m) => m.lead_id === lead.id),
+        confianca: confiancaDoLead(lead), verificacao: verificacaoDoLead(lead),
+        proxima: proximaAccao(lead), qualificacao: qualificacaoDoLead(lead),
+      };
     }
     if (/^\/ops\/leads\/[^/]+\/projeto$/.test(caminhoLimpo) && metodo === 'POST') {
       const id = seg[seg.length - 2];

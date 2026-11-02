@@ -38,7 +38,7 @@ npm start              # → http://localhost:4520
 ```
 
 Sem chave nenhuma o escritório abre e diz, em cada sítio, o que falta — não finge que trabalha.
-Com a chave do AI Studio, os 35 agentes encaminham, escrevem e conversam de imediato. Para Chrome,
+Com a chave do AI Studio, os 47 agentes encaminham, escrevem e conversam de imediato. Para Chrome,
 ficheiros e conectores MCP, precisa do Claude Code (uma API dá voz, não mãos): ver
 [AI.md](AI.md).
 
@@ -117,16 +117,19 @@ No terminal (tecla `F`): `:api` mostra o que está pronto e que chave falta; `:m
 sistema, a memória, o `node`, o `shell` e as ferramentas do PATH **com a versão que cada uma diz**.
 Guia completo, incluindo o que **não** é automático: [docs/PLATAFORMA.md](docs/PLATAFORMA.md).
 
-## Os 35 agentes
+## Os 47 agentes
+
+Sete na sala de comando, oito na prospecção, oito em vendas, seis no design,
+nove na engenharia e nove em media — 47 lugares fixos, um chefe por sala.
 
 | Sala | Quem lá está |
 |---|---|
-| **Comando** | ORBITA Director · Chefe de Gabinete · Analista de Resultados · Painel Central · Permissões e Conformidade |
-| **Prospeção** | Lead Hunter · Enriquecador · Qualificador · Inteligência de Mercado · Análise Competitiva · Auditor de Websites |
-| **Vendas** | Sales Closer · Propostas · Seguimentos · Receção de Clientes · Contratos · Comunicação com Clientes |
-| **Design Lab** | Creative Architect · UI e Design System · Direção de Arte · Pesquisa UX |
-| **Engenharia** | Systems Engineer · Gestor de Projetos · QA e Testes · Frontend · Backend e Integrações · Deploys e Infra · Documentação Técnica |
-| **Media** | Growth Publisher · Conteúdo e Newsletter · Anúncios Meta · Redes Sociais · Vídeo · Calendário Editorial · Analytics de Conteúdo |
+| **Comando** (7) | Orbita Director · Chefe de Gabinete · Analista de Resultados · Painel Central · Permissões e Conformidade · Atendimento e Triagem · Planeamento do Dia |
+| **Prospeção** (8) | Lead Hunter · Enriquecedor · Qualificador · Inteligência de Mercado · Análise Competitiva · Auditor de Websites · Radar de Oportunidades · Parceiros e Alianças |
+| **Vendas** (8) | Sales Closer · Propostas · Seguimentos · Receção de Clientes · Contratos · Comunicação com Clientes · Renovações · Pacotes e Upsell |
+| **Design Lab** (6) | Creative Architect · UI e Design System · Direção de Arte · Pesquisa UX · Motion e Animação · Identidade e Marca |
+| **Engenharia** (9) | Systems Engineer · Gestor de Projetos · QA e Testes · Frontend · Backend e Integrações · Deploys e Infra · Documentação Técnica · Segurança e Acessos · Desempenho e Custos |
+| **Media** (9) | Growth Publisher · Conteúdo e Newsletter · Anúncios Meta · Redes Sociais · Vídeo · Calendário Editorial · Analytics de Conteúdo · SEO e Pesquisa · Email Marketing |
 
 Cada agente tem: um papel, uma descrição do que faz, as ferramentas que pode usar, as
 competências que segue e um briefing com as tuas instruções permanentes. Tudo isso se edita em

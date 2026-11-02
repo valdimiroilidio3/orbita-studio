@@ -1,3 +1,73 @@
+## 1.59.0 — 2 nov 2026 · OS LEADS COMO CRM
+
+Uma lista de contactos não é um funil. Até aqui um lead tinha nome, telefone e
+uma nota; faltava o que faz alguém confiar num contacto e o que faz um contacto
+avançar. Agora cada lead diz **de onde veio**, **se o site foi mesmo verificado e
+quando**, **quanta confiança merecem os dados e porquê**, **que duplicados
+existem**, **qual é a próxima ação e se está atrasada** — e a carteira inteira
+sai num CSV que abre no Excel em português.
+
+### Nada é «verificado» sem data
+`POST /api/ops/leads/:id/verificar` vai ao site a sério — segue redireccionamentos,
+lê o código HTTP, espera no máximo 9 segundos e guarda **a data, o resultado e o
+motivo**: `respondeu 200 · 418 ms`, `o endereço não resolve (o domínio pode ter
+acabado)`, `o certificado do site não é válido`, `não respondeu em 9 segundos`.
+Um lead sem site é recusado com 400 — não se verifica o nada. Passados 180 dias a
+verificação passa a **«antiga»** e a mesa pede outra antes de se confiar nela.
+Mudar o endereço do site apaga a verificação antiga: dizer «verificado» sobre um
+endereço novo seria falso.
+
+### A confiança tem razões escritas, não só um número
+0 a 100, com a soma à vista: site verificado e a responder **+40** (antigo +20,
+por verificar +10), telefone público **+25**, email com forma válida **+15**,
+fonte registada que não seja «escrito à mão» **+10**, endereço da fonte **+5**.
+Cada ponto tem a razão ao lado, no `title` do chip e no cartão do lead. A
+confiança **não é a nota**: a nota diz «vale a pena contactar»; a confiança diz
+«o que está guardado é de fiar».
+
+### Os duplicados aparecem — e nunca são fundidos sozinhos
+`GET /api/ops/leads/duplicados` procura pares reais: o mesmo telefone escrito de
+duas maneiras (`+351 239 000 111` e `239000111`), o mesmo domínio com `www.` e
+caminhos diferentes, o mesmo nome sem acentos nem pontuação. O cartão mostra as
+fichas lado a lado, diz **«nada foi fundido»** e cada uma abre a ficha real para
+uma pessoa decidir. Fundir em silêncio é a forma mais rápida de perder dados.
+
+### A próxima ação e o estado comercial
+Cada lead tem **próxima ação** e data opcional; a lista diz «atrasada há 3 dias»
+na cor do atraso, sem ser preciso abrir nada. A **qualificação** (0–100) diz se
+foi escrita à mão, calculada da nota ou se não há dados — um número sem origem é
+um número inventado. O funil conta sete fases (por contactar, qualificados,
+contactados, responderam, em negociação, ganhos, perdidos) e o cartão da carteira
+resume: quantos têm contacto, quantos têm site verificado, quantos faltam
+verificar, quantas ações estão atrasadas.
+
+### Exportação que abre no Excel
+`GET /api/ops/leads.csv` devolve o CSV com **BOM**, separador `;` e fim de linha
+CRLF — o que o Excel em português abre sem partir acentos. Quinze colunas com
+nome, sector, localização, contactos, site, data da verificação, estado
+comercial, próxima ação, fonte **e a confiança em texto com as razões**. O botão
+«↓ CSV» descarrega uma vez por clique (dois cliques seguidos não geram dois
+ficheiros) e, quando o servidor não devolve CSV, a mesa diz que nada foi
+exportado em vez de escrever um ficheiro vazio.
+
+### Quem fez o quê
+A tabela `orbita_lead_eventos` (migração `supabase/orbita_1_59_0.sql`) guarda
+uma linha por alteração — **criado, estado comercial, verificação do site, edição,
+próxima ação, qualificação** — com o autor. A ficha do lead mostra o histórico; e
+se a migração ainda não estiver aplicada, o histórico vem vazio com o nome do
+ficheiro em falta, em vez de derrubar a ficha.
+
+### O que ainda falta (e não se finge)
+- A migração `orbita_1_59_0.sql` tem de ser aplicada no Supabase por quem tem a
+  chave; até lá os campos novos vivem na base mas o histórico fica vazio.
+- No **modo local** (sem servidor) verificar o site responde **503** com o
+  motivo: o browser não pode pedir outro domínio por CORS e a data tem de vir de
+  quem a pode medir. Exportar, duplicados, resumo e próxima ação funcionam.
+- A prova visual (lista e ficha no telemóvel) é a de 1.58.0 mais estes cartões:
+  há testes de DOM sobre o bundle publicado, mas não houve browser real.
+
+---
+
 ## 1.58.0 — 2 nov 2026 · O ESCRITÓRIO COMO INTERFACE
 
 O escritório 3D era a cara da Órbita, mas não era ainda uma ferramenta: as seis
