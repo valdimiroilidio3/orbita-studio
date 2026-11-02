@@ -1,3 +1,61 @@
+## 1.58.0 — 2 nov 2026 · O ESCRITÓRIO COMO INTERFACE
+
+O escritório 3D era a cara da Órbita, mas não era ainda uma ferramenta: as seis
+salas tinham números e o resto vivia noutro ecrã. Agora cada sala diz o que é, os
+agentes activos têm um sinal discreto, clicar numa sala abre um painel com o que
+lá está, o Cérebro mostra as relações entre agentes, tarefas e conhecimento, e
+há uma vista 2D — sem WebGL — para trabalho intensivo.
+
+### Cada sala mostra o seu estado real
+O cartão que flutua sobre cada sala ganhou uma linha de estado: **A TRABALHAR**,
+**ESPERA POR TI**, **BLOQUEADA**, **NA FILA**, **EM DESCANSO** ou **SEM
+TRABALHO**, com a cor certa e o motivo escrito. A regra **não é nova**: é a
+`estadoAgentes` de `src/painel.js` — a mesma que a mesa usa desde 1.57.2 —, agora
+aplicada às seis salas por `src/oficina.js`. Uma sala sem ligação ao servidor diz
+**SEM LIGAÇÃO** em vez de afirmar «sem trabalho» sobre o que não viu.
+
+### Os agentes activos têm indicadores discretos
+Um ponto pequeno por cima da cabeça: **verde** a trabalhar, **âmbar** à espera do
+teu OK, **vermelho** quando a última tarefa falhou. Nasce apagado e só acende com
+trabalho real vindo do retrato do servidor; sem ligação, fica apagado. A opacidade
+respira devagar — e quem pediu menos movimento fica com um ponto fixo.
+
+### Clicar numa sala abre um painel contextual
+A gaveta da sala passou a abrir com **estado, contagens, as tarefas que lá estão
+(com a idade e o dono, vindas do escritório e do servidor, sem repetir) e as
+pessoas que lá estão**, cada uma com o seu ponto de estado. Quando há uma decisão
+à espera, os botões **Aprovar/Rejeitar** estão na própria linha e chamam a rota
+real (`/api/ops/tarefas/:id/aprovar`). Dois caminhos a partir daí: «Ver esta sala
+em 2D» e «Tarefas da sala».
+
+**Um bug antigo caiu por causa disto:** o primeiro clique numa sala rebentava em
+`applySceneDim` — `m.color.clone()` sobre materiais sem cor (o orbe do Cérebro é
+um `ShaderMaterial`), antes de a gaveta abrir. Um material sem cor passou a não
+ser escurecido; o centro mantém o brilho e o resto da cena apaga-se como deve.
+
+### O Cérebro representa relações, não só notas
+`src/rede.js` constrói a rede a partir do trabalho real: **agente → tarefa →
+nota**. As notas já existiam no grafo; entram agora dois grupos novos (Agentes e
+Tarefas), com as arestas reais entre os três tipos, reconstruídas a cada retrato
+(nunca acumuladas) e cortadas quando o trabalho desaparece. Sem nota declarada
+pelo servidor não há aresta — e não há nó de conhecimento inventado. Seleccionar
+um nó de trabalho diz o que é (estado, dono, ligações).
+
+### Vista 2D para trabalho intensivo
+Tecla **M**, botão na barra de zoom ou o link do painel da sala: as seis salas na
+mesma ordem do chão (comando a noroeste, engenharia a norte, Cérebro ao centro),
+cada uma com estado, contagens, os pontos dos agentes e a última actividade; à
+direita, o mesmo painel contextual, com as mesmas acções. Setas andam, Enter abre
+no 3D, Esc fecha e devolve o foco a quem abriu. Funciona sem WebGL e sem animação
+— é a vista que se pode usar com a máquina carregada.
+
+Código: `src/oficina.js` e `src/rede.js` (novos, puros, com testes), `setTrabalho`
+em `src/brain.js`, a ligação em `src/main.js` e o CSS em `src/shell.html`.
+Testes: `oficina.test.mjs` (20) e `rede.test.mjs` (12). Suite **970/970**.
+O que não fica provado: pixéis num browser — a cena foi corrida em jsdom com
+WebGL falso (o bundle carrega, a planta abre, os estados e os sinais respondem ao
+retrato), mas o desenho em si só se julga num ecrã.
+
 ## 1.57.2 — 2 nov 2026 · A MESA COMO CENTRO DE COMANDO
 
 A vista principal respondia a uma pergunta («o que precisa de ti?») e deixava as
