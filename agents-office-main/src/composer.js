@@ -129,7 +129,7 @@ export function modelosDoCatalogo(corpo, estado = {}) {
 }
 
 /** Que agente da IA da Órbita responde por um agente do escritório.
-    O escritório tem 35 postos com nomes de gente; a IA da Órbita tem 8 papéis.
+    O escritório tem 47 postos com nomes de gente; a IA da Órbita tem 8 papéis.
     Sem esta ponte, todos caíam no `research` — o «automático» que o dono estranhou. */
 const POR_DEPT = { emails: 'orchestrator', sales: 'research', ops: 'research', fin: 'design', delivery: 'backend', marketing: 'creative' };
 const POR_POSTO = {
