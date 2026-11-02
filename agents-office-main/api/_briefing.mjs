@@ -224,6 +224,60 @@ function dataLegivel(iso) {
  * escreve o site). Estruturado por secções, e sempre com as regras de
  * honestidade à frente — porque é isso que impede o texto inventado.
  */
+/* As regras de honestidade que o Prompt Master tem SEMPRE. Vivem aqui porque são
+   o mesmo bloco nos dois caminhos: o das regras e o da IA. Antes desta versão, o
+   texto da IA substituía o documento inteiro e levava consigo estas quatro
+   linhas — ou seja, a única defesa escrita contra inventar factos desaparecia
+   exactamente quando era a IA a escrever. */
+export const REGRAS_DO_MASTER = Object.freeze([
+  '- Usa apenas os factos deste documento. Não inventes números, prémios, anos de atividade, certificações, testemunhos, avaliações, moradas nem preços.',
+  '- Onde leres «não informado», escreve «[a confirmar]» no conteúdo final e devolve a lista do que falta ao cliente.',
+  '- Não copies marcas, páginas, textos nem identidade visual de terceiros — incluindo a Apple. Podes seguir princípios de clareza, hierarquia e cuidado no detalhe; nunca a forma de outra marca.',
+  '- Escreve em português de Portugal, com a grafia e as expressões do país do cliente.',
+]);
+
+export const CABECA_REGRAS = '## 0. Regras que não se negociam';
+
+/** Texto das regras, pronto a prefixar a um documento escrito pela IA. */
+export function blocoDeRegras() {
+  return [CABECA_REGRAS, ...REGRAS_DO_MASTER].join('\n');
+}
+
+/**
+ * O que a IA escreveu e o briefing não sustenta. Não é um detector de mentiras:
+ * é a lista do que um humano tem de confirmar antes de o documento ser usado —
+ * anos, dinheiro, prémios e números de clientes/anos que não constam do briefing.
+ * Devolve excertos curtos (sem repetir), para a mesa os poder mostrar.
+ */
+export function factosSuspeitos(texto = '', briefing = {}) {
+  const fonte = Object.values(briefing.valores || {}).join(' ').toLowerCase();
+  const t = String(texto || '');
+  const achados = [];
+  const juntar = (frase) => {
+    const f = String(frase).replace(/\s+/g, ' ').trim().slice(0, 110);
+    if (f && !achados.some((a) => a.toLowerCase() === f.toLowerCase())) achados.push(f);
+  };
+
+  /* anos: «desde 1998», «em 2021» */
+  for (const m of t.matchAll(/\b(19|20)\d{2}\b/g)) {
+    if (!fonte.includes(m[0])) juntar(`o ano ${m[0]}`);
+  }
+  /* dinheiro: «30 €», «350 EUR», «R$ 120» */
+  for (const m of t.matchAll(/\b(\d{1,6}(?:[.,]\d{1,2})?)\s*(€|eur\b|euros|r\$|\$|usd\b)/gi)) {
+    if (!fonte.includes(m[1])) juntar(`o valor ${m[1]} ${m[2]}`);
+  }
+  /* afirmações com número que o briefing não tem */
+  for (const m of t.matchAll(/\b(\d{2,6})\s*(clientes|anos|colaboradores|funcion[áa]rios|doentes|pacientes|m[ée]dicos|avalia[çc][õo]es|estrelas)\b/gi)) {
+    if (!fonte.includes(m[1])) juntar(`«${m[1]} ${m[2]}»`);
+  }
+  /* títulos que ninguém provou */
+  for (const m of t.matchAll(/\b(pr[ée]mio[s]?|premiad[oa]s?|certificad[oa]s?|n[ºo°]\s*1|n[úu]mero um|l[íi]der de mercado|reconhecid[oa]s?)[^.!?\n]{0,50}/gi)) {
+    const trecho = m[0].replace(/\s+/g, ' ').trim();
+    if (!fonte.includes(trecho.toLowerCase().slice(0, 10))) juntar(trecho);
+  }
+  return achados.slice(0, 8);
+}
+
 export function montarPromptMaster({ briefing = {}, lead = {}, projeto = null, versao = null } = {}) {
   const v = briefing.valores || {};
   const empresa = limpo(v.empresa) || limpo(lead.name) || 'o projeto';
@@ -238,11 +292,8 @@ export function montarPromptMaster({ briefing = {}, lead = {}, projeto = null, v
     `PROMPT MASTER — ${empresa}`,
     versao ? `versão ${versao} · ${dataLegivel()} · briefing ${hashBriefing(briefing)}` : `briefing ${hashBriefing(briefing)} · ${dataLegivel()}`,
     '',
-    '## 0. Regras que não se negociam',
-    '- Usa apenas os factos deste documento. Não inventes números, prémios, anos de atividade, certificações, testemunhos, avaliações, moradas nem preços.',
-    '- Onde leres «não informado», escreve «[a confirmar]» no conteúdo final e devolve a lista do que falta ao cliente.',
-    '- Não copies marcas, páginas, textos nem identidade visual de terceiros — incluindo a Apple. Podes seguir princípios de clareza, hierarquia e cuidado no detalhe; nunca a forma de outra marca.',
-    '- Escreve em português de Portugal, com a grafia e as expressões do país do cliente.',
+    CABECA_REGRAS,
+    ...REGRAS_DO_MASTER,
     '',
     '## 1. Contexto da empresa',
     linha('Empresa ou marca', empresa),
@@ -566,14 +617,62 @@ export async function masterComIA({ briefing = {}, lead = {}, projeto = null, ba
       { role: 'system', content: 'Escreves documentos de projeto em português de Portugal. Não inventas factos.' },
       { role: 'user', content: pedido },
     ], { agente: 'briefing', maxTokens: 2000, temperatura: 0.55, limite: 3 });
-    const texto = limpo(r?.texto);
-    if (texto.length < 400) {
-      return { ok: false, codigo: 'resposta-curta', motivo: `o modelo devolveu ${texto.length} caracteres — não chega para um Prompt Master`, ms: Date.now() - t0 };
+    /* O modelo pode devolver o bloco de regras (pediu-se-lhe que não contradiga a
+       secção 0). Se devolveu, tira-se para não ficar duas vezes; se não devolveu,
+       é acrescentado aqui. As regras deixam de depender da boa vontade do modelo. */
+    let corpo = limpo(r?.texto).replace(/^\s*PROMPT MASTER[^\n]*\n/i, '');
+    if (corpo.includes(CABECA_REGRAS)) {
+      corpo = corpo.slice(corpo.indexOf(CABECA_REGRAS)).replace(CABECA_REGRAS, '').trim();
     }
-    return { ok: true, via: 'ia', texto: texto.slice(0, 24000), modelo: r?.modelo || null, fornec: r?.fornec || null, ms: Date.now() - t0 };
+    if (corpo.length < 400) {
+      return { ok: false, codigo: 'resposta-curta', motivo: `o modelo devolveu ${corpo.length} caracteres — não chega para um Prompt Master`, ms: Date.now() - t0 };
+    }
+
+    /* o que a IA afirmou e o briefing não sustenta: não se apaga (pode ser
+       verdade que ainda ninguém escreveu), marca-se e diz-se — quem usa decide */
+    const suspeitos = factosSuspeitos(corpo, briefing);
+    const aviso = suspeitos.length
+      ? ['## ⚠ Antes de usar — por confirmar', ...suspeitos.map((x) => `- ${x}: não consta do briefing. Confirma com o cliente ou retira antes de usar.`), '']
+      : [];
+    const texto = [blocoDeRegras(), '', ...aviso, corpo].join('\n').slice(0, 24000);
+    return {
+      ok: true, via: 'ia', texto,
+      avisos: suspeitos.map((x) => `${x} — não consta do briefing`),
+      modelo: r?.modelo || null, fornec: r?.fornec || null, ms: Date.now() - t0,
+    };
   } catch (e) {
     return { ok: false, codigo: 'falha', motivo: String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
   }
+}
+
+/**
+ * O que um prompt de imagem não pode pedir, venha de onde vier.
+ *
+ * O caminho por regras já impõe isto (`montarPromptsDeImagem`): sem texto na
+ * imagem, sem pessoas reconhecíveis a fazer de testemunho, nada apresentado como
+ * fotografia real da empresa. A versão da IA tem de obedecer ao mesmo — senão o
+ * prompt segue para a área de mídia e produz a imagem que o produto prometeu
+ * nunca produzir.
+ */
+export function violacoesDePrompt(p = {}) {
+  const texto = [p.prompt, p.assunto, p.composicao, p.direcaoArte].filter(Boolean).join(' \n ');
+  const out = [];
+
+  /* Olha-se cláusula a cláusula, porque «no text in the image» é uma defesa e
+     «include a bold logo» é um pedido — a mesma palavra, sentidos opostos. */
+  const clausulas = String(texto).split(/[.;\n]|,\s|\band\b|\bwith\b/i).map((c) => c.trim()).filter(Boolean);
+  const NEGACAO = /\b(no|not|never|without|avoid|free of|sem|nunca|evitar|isento)\b/i;
+  const PEDE_TEXTO = /\b(texto|text|lettering|letters|words?|typography|titles?|captions?|logo|logos|log[óo]tipo|watermark|signage|wordmark|letterhead|marca de [áa]gua)\b/i;
+  const pedidoDeTexto = clausulas.some((c) => PEDE_TEXTO.test(c) && !NEGACAO.test(c))
+    || /text\s+on\s+(the\s+)?image|overlay(ed)?\s+text|\bwordmark\b/i.test(texto);
+  if (pedidoDeTexto) out.push('pede texto, letras ou logótipos dentro da imagem');
+
+  /* apresentar pessoas ou instalações como as reais da empresa */
+  if (/(real|actual|genuine|true)\s+(team|staff|employees|workers|doctors|dentists|crew|clinic|shop|store|office|premises|interior)/i.test(texto)
+    || /(equipa|equipe)\s+real|noss[ao]s?\s+(equipa|equipe|funcion[áa]rios|colaboradores)|verdadeir[ao]s?\s+(funcion[áa]rios|colaboradores)/i.test(texto)) {
+    out.push('apresenta pessoas ou instalações como sendo as reais da empresa');
+  }
+  return out;
 }
 
 /** Os prompts de imagem escritos pela IA — validados contra o conjunto das regras. */
@@ -615,11 +714,29 @@ export async function imagensComIA({ briefing = {}, lead = {}, projeto = null, b
         composicao: corta(x.composicao, 400) || b.composicao,
         direcaoArte: corta(x.direcaoArte, 600) || b.direcaoArte,
         formato: corta(x.formato, 60) || b.formato,
-        restricoes: corta(x.restricoes, 400) || b.restricoes,
+        /* as restrições do caminho por regras NUNCA se perdem: se a IA escrever
+           «nenhuma», passa a «nenhuma; <as que o projeto exige>» */
+        restricoes: [corta(x.restricoes, 300), b.restricoes].filter(Boolean).join('; '),
         prompt: corta(x.prompt, MAX_PROMPT) || b.prompt,
         idioma: 'prompt em inglês; descrição em português',
       };
     });
+
+    /* A IA não fica dispensada das regras que o caminho por regras cumpre. Se ela
+       pedir texto na imagem, imitar a equipa real ou reivindicar material que
+       ninguém entregou, o conjunto dela é RECUSADO (e usa-se o das regras, com o
+       motivo escrito) — em vez de entrar em silêncio na área de mídia. */
+    const violacoes = [];
+    for (const p of prompts) {
+      for (const v of violacoesDePrompt(p)) violacoes.push(`${p.finalidade}: ${v}`);
+    }
+    if (violacoes.length) {
+      return {
+        ok: false, codigo: 'regra',
+        motivo: `a versão da IA quebrava as regras de imagem — ${violacoes.slice(0, 3).join('; ')}`,
+        violacoes, ms: Date.now() - t0,
+      };
+    }
     return { ok: true, via: 'ia', prompts, modelo: r?.modelo || null, fornec: r?.fornec || null, ms: Date.now() - t0 };
   } catch (e) {
     return { ok: false, codigo: 'falha', motivo: String(e?.message || e).slice(0, 300), ms: Date.now() - t0 };
@@ -850,6 +967,8 @@ export async function gerarMaster(repo, { projeto, lead = null, motor = null, in
   const novo = {
     id: idCurto('m'),
     texto,
+    /* 1.54.4 · o que a IA afirmou sem apoio no briefing (vazio no caminho por regras) */
+    avisos: ia.ok ? (ia.avisos || []) : [],
     via: ia.ok ? 'ia' : 'regras',
     modelo: ia.ok ? (ia.modelo || null) : null,
     fornec: ia.ok ? (ia.fornec || null) : null,
@@ -866,7 +985,7 @@ export async function gerarMaster(repo, { projeto, lead = null, motor = null, in
   evento(registo, `Prompt Master v${versao} ${ia.ok ? `escrito por ${ia.fornec || 'IA'}/${ia.modelo || '—'}` : `montado por regras (${novo.motivo})`}`, por);
   const g = await gravarRegisto(repo, arquivo, registo);
   if (!g.ok) return g;
-  return { ok: true, master: novo, via: novo.via, motivo: novo.motivo, vista: vistaDoRegisto(registo, { projeto }) };
+  return { ok: true, master: novo, via: novo.via, motivo: novo.motivo, avisos: novo.avisos, vista: vistaDoRegisto(registo, { projeto }) };
 }
 
 function atrasarMaster(registo) {

@@ -95,6 +95,9 @@ export default async function handler(req, res) {
       });
       return;
     }
-    res.status(estado).json({ error: e.message || 'erro na base' });
+    /* 1.54.4 · o corpo do erro atravessa (com `rota: true` quando é a rota que
+       não existe). Sem isto, um 404 de recurso e um 404 de rota chegavam iguais
+       ao browser — e a mesa anunciava «modo local» com a base viva. */
+    res.status(estado).json({ ...(e.corpo && typeof e.corpo === 'object' ? e.corpo : {}), error: e.corpo?.error || e.message || 'erro na base' });
   }
 }

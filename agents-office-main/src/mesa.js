@@ -19,6 +19,8 @@ import { vistaBriefing, carregarBriefing, accaoBriefing, ligarBriefing, podeSair
 /* 1.54.3 · a mídia do projeto: gerar imagem e vídeo a partir do briefing,
    com estimativa antes de gastar e estado que sobrevive a um recarregar. */
 import { vistaMedia, carregarMedia, accaoMedia, ligarMedia, iniciarCiclo, pararCiclo } from './media.js';
+/* 1.54.4 · um 404 de rota ≠ um 404 de recurso (a decisão é pura e está testada) */
+import { decidirResposta } from './respostas.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -105,6 +107,9 @@ const S = {
   briefing: null,
   /* 1.54.3 · a mídia gerada (imagem e vídeo) do projeto aberto */
   media: null,
+  /* 1.54.4 · o projeto que o endereço pede e a base não tem (link antigo,
+     projeto apagado): mostra-se isso, em vez de «modo local» com a base viva */
+  projetoErro: null,
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -148,36 +153,27 @@ async function call(path, method = 'GET', body) {
     // sem rede nenhuma: o trabalho continua neste browser
     return usarLocal().call(path, method, body);
   }
-  /* 404/405 = não há função nesse caminho. 503 com `modo: 'local'` = há função, mas a base não
-     está ligada (sem chaves, ou sem o esquema aplicado). Nos dois casos a mesa não fica em
-     branco: continua neste browser, e o aviso diz porquê. */
-  if (r.status === 404 || r.status === 405) return usarLocal().call(path, method, body);
-  /* O envelope traz o status do caminho DENTRO do JSON (`{status: 404}`) e a
-     resposta HTTP é 200. Sem isto, uma rota que a versão publicada ainda não
-     tem (foi o caso de /ia/estado e /ia/gratuitos na 1.29) chegava como erro e
-     a página ficava presa em «A carregar…» para sempre. 404/405/503 no envelope
-     querem dizer o mesmo que no HTTP: esta instalação não tem a rota — usa o
-     armazém do browser e di-lo. */
-  if (r.status === 503) {
-    let motivo = '';
-    try { motivo = (await r.json()).error || ''; } catch { /* sem corpo */ }
-    S.baseMotivo = motivo || 'a base de dados não respondeu';
-    return usarLocal().call(path, method, body);
-  }
-  S.baseLigada = true;
   let j = {};
   try { j = await r.json(); } catch { /* resposta vazia */ }
-  const doCaminho = Number(j?.status);
-  if (doCaminho === 404 || doCaminho === 405) return usarLocal().call(path, method, body);
-  if (doCaminho === 503) {
-    S.baseMotivo = j?.corpo?.error || S.baseMotivo || 'a base de dados não respondeu';
+
+  /* 1.54.4 · uma resposta, uma decisão (ver `src/respostas.js`). A diferença que
+     se corrigiu: um 404 de ROTA continua a cair no armazém do browser (a
+     instalação é antiga, e a mesa não fica em branco), mas um 404 de RECURSO
+     («projeto não encontrado») passa a ser um erro com a frase do servidor —
+     antes anunciava «a base de dados não está a responder» com a base viva. */
+  const d = decidirResposta({ httpOk: r.ok, httpStatus: r.status, envelope: j });
+  if (d.tipo === 'local') return usarLocal().call(path, method, body);
+  if (d.tipo === 'base') {
+    S.baseMotivo = d.motivo || 'a base de dados não respondeu';
     return usarLocal().call(path, method, body);
   }
-  if (r.status === 401) {
-    if (j.hint || j.mode === 'sessao' || j.error === 'entra') {
+  if (d.tipo === 'login') {
+    S.baseLigada = true;
+    const c = d.corpo || {};
+    if (c.hint || c.mode === 'sessao' || c.error === 'entra' || /entra/i.test(d.mensagem || '')) {
       // instalação com contas: mostra o ecrã de entrada (não um prompt do browser)
       S.needLogin = true;
-      throw Object.assign(new Error(j.error || 'entra para continuar'), { login: true, body: j });
+      throw Object.assign(new Error(d.mensagem || 'entra para continuar'), { login: true, body: c });
     }
     // token de máquina (instalação sem contas): pede uma vez e guarda no browser
     const given = prompt('Este Órbita está protegido. Cola o ORBITA_ADMIN_TOKEN:');
@@ -187,13 +183,17 @@ async function call(path, method = 'GET', body) {
       try { localStorage.setItem(TOKEN_KEY, given); } catch { /* sem storage */ }
       return call(path, method, body);
     }
+    throw Object.assign(new Error(d.mensagem || 'entra para continuar'), { status: 401, body: c });
   }
-  if (!r.ok || j.ok === false) {
-    const e = new Error(j.error || `HTTP ${r.status}`);
-    e.status = r.status;
+  if (d.tipo === 'erro') {
+    const e = new Error(d.mensagem || `HTTP ${d.estado}`);
+    e.status = d.estado;
+    e.codigo = d.codigo || null;
+    e.body = d.corpo || null;
     throw e;
   }
-  return j;
+  S.baseLigada = true;
+  return d.corpo;
 }
 
 /* o ficheiro escolhido substitui o armazém — só depois de o dono confirmar */
@@ -358,8 +358,19 @@ async function loadPipeline() {
 }
 
 async function loadProjeto(id) {
-  const r = await call(`/ops/projetos/${encodeURIComponent(id)}`);
-  S.projeto = r;
+  try {
+    const r = await call(`/ops/projetos/${encodeURIComponent(id)}`);
+    S.projeto = r;
+    S.projetoErro = null;
+  } catch (e) {
+    /* 404 = este projeto não existe (ou foi apagado). Dizer a verdade, com um
+       caminho de saída — não deixar o ecrã no esqueleto de «a abrir o projeto…». */
+    S.projeto = null;
+    S.projetoErro = e?.status === 404
+      ? { id, naoExiste: true, texto: `Este projeto não existe nesta instalação (ou foi apagado). O endereço aponta para «${id}».` }
+      : { id, naoExiste: false, texto: e?.message || 'não consegui abrir o projeto' };
+    throw e;
+  }
 }
 
 async function loadLead(id) {
@@ -920,7 +931,22 @@ function viewProjetos() {
 
 function viewProjeto() {
   const d = S.projeto;
-  if (!d) return `<div class="wrap"><div class="skeleton">a abrir o projeto…</div></div>`;
+  if (!d) {
+    const erro = S.projetoErro;
+    if (!erro) return `<div class="wrap"><div class="skeleton">a abrir o projeto…</div></div>`;
+    return `<div class="wrap">
+      <div style="margin-bottom:var(--s3)"><a href="#/projetos" class="btn quiet small">‹ Projetos</a></div>
+      <div class="card" style="margin-top:var(--s3)">
+        <div class="sec-h"><h3>${erro.naoExiste ? 'Projeto não encontrado' : 'Não consegui abrir o projeto'}</h3></div>
+        <p class="hint" style="margin-top:0" role="alert">${esc(erro.texto)}</p>
+        <div class="acts" style="margin-top:var(--s4)">
+          <a class="btn primary" href="#/projetos">Ver todos os projetos</a>
+          <button class="btn ghost" data-act="reload">Tentar outra vez</button>
+        </div>
+        ${erro.naoExiste ? '<div class="hint">Se o projeto devia existir, confirma a ligação à base em Definições. Um projeto apagado não volta com «Tentar outra vez».</div>' : ''}
+      </div>
+    </div>`;
+  }
   const p = d.project;
   const qa = d.qa;
   const podeGerar = ['rascunho', 'gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'].includes(p.status);

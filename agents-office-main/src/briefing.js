@@ -230,6 +230,7 @@ function painelMaster(B) {
       <div class="bf-estado">${estadoVia(m.via, m.motivo)}</div>
     </div>
     ${m.via !== 'ia' && m.motivo ? `<div class="hint">Porque não foi a IA: ${E(m.motivo)}</div>` : ''}
+    ${(m.avisos || []).length ? `<div class="bf-aviso mau" role="alert"><b>Por confirmar antes de usar.</b><span>Esta versão foi escrita pela IA e menciona ${m.avisos.length === 1 ? 'uma coisa que não consta' : `${m.avisos.length} coisas que não constam`} do briefing: ${E(m.avisos.join(' · '))}. Confirma com o cliente ou retira.</span></div>` : ''}
     <pre class="bf-pre" id="bfMasterTexto">${E(m.texto)}</pre>
     <div class="acts bf-acts">
       <button class="btn primary" data-act="bf-copiar-master">Copiar</button>
