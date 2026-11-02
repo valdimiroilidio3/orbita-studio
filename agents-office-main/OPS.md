@@ -493,6 +493,12 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | GET | `/api/ops/projetos/:id/briefing/versoes` | As versões anteriores do Prompt Master e dos prompts de imagem |
 | POST | `/api/ops/projetos/:id/master` | O Prompt Master do briefing **guardado** (IA ou regras, com `via` e `motivo`) |
 | POST | `/api/ops/projetos/:id/imagens` | Os prompts de imagem (4 finalidades) — **não** gera imagens |
+| GET | `/api/ops/projetos/:id/media` | Mídia do projeto: fornecedores, opções, prompts do briefing, galeria, uso e limites |
+| POST | `/api/ops/projetos/:id/media/estimativa` | Estimativa de custo para uma configuração (não gera nada) |
+| POST | `/api/ops/projetos/:id/media` | Criar a geração (`confirmado: true`, `chave` de idempotência) |
+| GET | `/api/ops/media/:id` | Estado de uma geração (e um passo de avanço) |
+| POST | `/api/ops/media/:id/cancelar` · `/repetir` · `/classificar` · `/ficheiro` | Cancelar antes de sair, nova tentativa, conceito↔aprovado, receber o vídeo do browser |
+| GET | `/api/ficheiro?id=…&d=1` | O ficheiro gerado, **com sessão** (nunca uma URL pública do fornecedor) |
 | POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | O pipeline |
 | GET | `/api/ops/projetos/:id/zip` | Os ficheiros em ZIP |
 | GET/POST | `/api/ops/tarefas` | Tarefas / criar (`correr: true` executa já) |

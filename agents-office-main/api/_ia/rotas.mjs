@@ -585,6 +585,24 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     if (limpo === '/media/assumir') return media.assumir(repo, env);
     if (limpo === '/media/sinal') return media.sinal(repo, c);
 
+    /* 1.54.3 · o «pump» da mídia gerada: faz avançar as gerações de imagem que
+       ficaram à espera (a mesa avança-as ao consultar; um cron ou uma máquina
+       tua usa este caminho para quando ninguém está a olhar). Mesmo token do
+       worker, e nunca mais do que 5 por chamada — uma função da Vercel tem 60 s. */
+    if (limpo === '/media/geracoes/avancar') {
+      const MD = await import('../_media.mjs');
+      const { criarArmazem } = await import('../_armazem.mjs');
+      const armazem = criarArmazem({ env });
+      const pendentes = await repo.geracoes.listarPendentes(Number(c.limite) || 5).catch(() => []);
+      const feitas = [];
+      for (const g of pendentes) {
+        if (g.tipo === 'video') continue;   // vídeo: quem compõe é o browser
+        const depois = await MD.avancar(repo, g, { env, armazem });
+        feitas.push({ id: depois.id, estado: depois.estado, erro: depois.erro || null });
+      }
+      return { status: 200, corpo: { ok: true, avancadas: feitas, restantes: Math.max(0, pendentes.length - feitas.length) } };
+    }
+
     const acao = seg[seg.length - 1];
     if (seg[1] === 'media' && seg.length === 4 && acao === 'concluir') return media.concluir(repo, seg[2], c);
     if (seg[1] === 'media' && seg.length === 4 && acao === 'falhar') return media.falhar(repo, seg[2], c.motivo);

@@ -1,3 +1,67 @@
+## 1.54.3 — 2 nov 2026 · A MÍDIA GERADA (imagem e vídeo, com o custo à vista)
+
+O passo seguinte ao briefing: até aqui o projeto dizia o que fazer e nada saía.
+Agora o projeto **gera** — imagem a sério e vídeo composto — com estimativa antes
+de gastar, estados que sobrevivem a recarregar a página, e tudo ligado à lead, ao
+projeto e a quem pediu. **Não mexeu na 1.55** (que é do A2 · Dinheiro verdadeiro):
+entrou como 1.54.3, tal como o briefing foi 1.54.2.
+
+- **Duas integrações, ambas gratuitas hoje** — `api/_media/fornecedores.mjs`:
+  **Pollinations** para imagem (a mesma integração provada do Cine; tier anónimo
+  sem chave, modelos do catálogo com `POLLINATIONS_API_KEY`) e **Órbita Render**
+  para vídeo (composição no browser com `MediaRecorder`, `src/estudio-video.js`).
+  Diz-se na cara que o vídeo **não é generativo**: não há caminho gratuito para
+  vídeo de IA numa função serverless, e não se finge que há.
+- **Estimativa antes de confirmar** — tabela de preços configurável
+  (`ORBITA_PRECOS_MEDIA`), 0 para os dois gratuitos, e **«custo desconhecido»**
+  para o que não estiver na tabela (obriga a confirmação explícita). O custo real
+  fica `null` quando o fornecedor não o devolve — nunca se apresenta o estimado
+  como definitivo.
+- **Limites antes do fornecedor** — por utilizador e por dia, por projeto e por
+  dia, e trabalhos simultâneos (`ORBITA_MEDIA_LIMITE_DIA`,
+  `ORBITA_MEDIA_LIMITE_PROJETO_DIA`, `ORBITA_MEDIA_SIMULTANEAS`). Um pedido a mais
+  devolve **429** com o limite que foi atingido, e nem chega a sair daqui.
+- **Idempotência a sério** — `chave` única em `orbita_geracoes` e a mesma chave
+  repetida pelo botão enquanto o pedido está em curso: dois cliques (ou uma rede
+  que repete) devolvem o **mesmo** trabalho, em vez de gerar e cobrar duas vezes.
+  O avanço é reivindicado com um `PATCH … where estado = 'aguardando'`: dois
+  separadores abertos não geram a mesma imagem duas vezes.
+- **Estados persistidos** — `aguardando → em_processamento → concluida | falhou |
+  cancelada`, com tentativas limitadas (2), motivo escrito, «repetir» a avisar do
+  custo e «cancelar» só antes de o pedido sair (depois disso, diz-se que pode ser
+  cobrado na mesma).
+- **Sem requisição longa** — `POST` cria e responde `202`; a mesa pergunta de
+  2,5 em 2,5 segundos e **cada pergunta faz avançar um passo**. Há também um
+  *pump* para cron/máquina (`/media/geracoes/avancar`, com `MEDIA_WORKER_TOKEN`).
+- **Ficheiros que não expiram** — Supabase Storage, bucket **privado**
+  `orbita-media`, servido só por `GET /api/ficheiro?id=…` com sessão
+  (`private, no-store`, `nosniff`, tipo numa lista fechada). Sem base, memória do
+  processo — e a interface avisa que se perdem num arranque. Nunca se guarda uma
+  URL do fornecedor.
+- **Conteúdo de IA, marcado** — toda a peça nasce «conceito» (etiqueta no cartão e
+  no detalhe, texto no cabeçalho da área) e só o dono a passa a «aprovado para
+  uso». Nenhuma imagem de pessoas ou instalações se apresenta como registo real.
+- **A mesa** — área «Mídia do projeto» dentro do projeto, com abas
+  imagem/vídeo, prompts do briefing à escolha, opções **só as que existem**
+  (o compositor grava 16:9: não se anuncia 9:16), custo, galeria com
+  pré-visualização, download, detalhe, «gerar outra vez», classificação e
+  progresso da composição. Funciona em mobile e desktop.
+- **Bugs fechados pelo caminho** — ao mudar de projeto por `#/projeto/:id` a mesa
+  não voltava a ler o briefing (ficava «a abrir o briefing…» para sempre) nem a
+  mídia; agora lê os dois. As vistas do projeto deixaram de rebentar com listas
+  ausentes.
+- **Base** — migração `supabase/orbita_1_54_3.sql` (tabela `orbita_geracoes` +
+  bucket privado), idempotente e já na ordem de `_esquema.mjs`.
+
+**Testes:** 851 (eram 826). Os 25 novos em `media.test.mjs` cobrem vínculo
+lead/projeto/quem, prompt enviado, estimativa (e a sua ausência), confirmação,
+limites (incluindo simultâneos), idempotência, transições de estado, falha e nova
+tentativa, cancelamento, classificação, vídeo (sem imagens, ficheiro inválido,
+envio repetido), ficheiro servido com sessão, isolamento entre projetos, `403` de
+leitor, o *pump* com token, e a recuperação do estado depois de «actualizar a
+página». Fornecedor falso e bytes inventados: zero rede, zero cobranças.
+Documentação em `MEDIA.md`.
+
 ## 1.54.2 — 2 nov 2026 · O BRIEFING DO PROJETO (briefing, Prompt Master, prompts de imagem)
 
 Pedido do dono, por palavras dele: *«ao iniciar um projeto a partir de uma lead,
