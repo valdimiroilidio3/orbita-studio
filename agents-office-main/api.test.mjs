@@ -421,3 +421,123 @@ test('27 · um tipo sem decisões continua em «pede-me sempre» e o resumo não
   assert.equal(corpo.lista[0].autor, 'dono');
   assert.equal(corpo.lista[0].nivel, 'autonomo');
 });
+
+/* ---------------- 1.61.0 · execução transparente ---------------- */
+const runParado = (api, extra = {}) => {
+  const cria = {
+    id: 'run_pausado', objetivo: 'Preparar a proposta para a Clínica Aurora', estado: 'aguarda_aprovacao',
+    criado: new Date().toISOString(), plano: { passos: [{ ordem: 1, agente: 'research', titulo: 'Investigar', instrucao: 'vai', criterio: 'site' }] },
+    pendente: { ordem: 1, agente: 'research', ferramenta: 'apagar_receita', resumo: '«apagar_receita» é destrutiva' },
+    autorizacoes: [], ...extra,
+  };
+  api._dados.iaRuns.unshift(cria);
+  api._dados.iaSteps.push({ id: 'st_1', run_id: cria.id, ordem: 1, agente: 'research', titulo: 'Investigar', estado: 'aguarda_aprovacao', entrada: 'vai', saida: 'quase', criado: cria.criado, ferramentas: [{ nome: 'apagar_receita', precisaAprovacao: true }] });
+  return cria;
+};
+
+test('28 · a execução sai da API já traduzida: estado, passos, registo e recuperação', async () => {
+  const api = createMemRepo();
+  runParado(api);
+  const r = await chamar(api, '/ia/runs/run_pausado');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.visivel.id, 'a_espera');
+  assert.equal(r.corpo.visivel.rotulo, 'À espera de aprovação');
+  assert.equal(r.corpo.lidos.length, 1);
+  assert.equal(r.corpo.lidos[0].acoes[0].esperou, true);
+  assert.ok(r.corpo.registo.some((e) => e.tipo === 'passo'), 'o registo mostra o passo');
+  assert.equal(r.corpo.recuperacao.opcoes[0].id, 'aprovar');
+  assert.equal(r.corpo.accoes.aprovar.sim, true);
+  assert.equal(r.corpo.resumo.custo.desconhecido, true, 'sem preço não se inventa 0');
+});
+
+test('29 · aprovar exige nome — sem nome não há histórico', async () => {
+  const api = createMemRepo();
+  runParado(api);
+  const r = await chamar(api, '/ia/runs/run_pausado/aprovar', 'POST', {});
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.error, /quem autoriza/);
+  assert.equal(api._dados.iaRuns[0].estado, 'aguarda_aprovacao', 'sem nome, nada muda');
+});
+
+test('30 · aprovar grava quem, quando e o quê — e a execução volta à fila', async () => {
+  const api = createMemRepo();
+  runParado(api);
+  const r = await chamar(api, '/ia/runs/run_pausado/aprovar', 'POST', { por: 'Dono', motivo: 'cliente pediu' });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.autorizacao.por, 'Dono');
+  assert.equal(r.corpo.autorizacao.o_que, 'apagar_receita');
+  assert.equal(r.corpo.autorizacao.motivo, 'cliente pediu');
+  assert.ok(r.corpo.autorizacao.em, 'com hora');
+  assert.equal(r.corpo.run.estado, 'novo');
+  const lido = (await chamar(api, '/ia/runs/run_pausado')).corpo;
+  assert.equal(lido.autorizacoes.length, 1);
+  assert.equal(lido.autorizacoes[0].por, 'Dono');
+});
+
+test('31 · recusar fecha a execução com a razão escrita, não a deixa pendurada', async () => {
+  const api = createMemRepo();
+  runParado(api);
+  const r = await chamar(api, '/ia/runs/run_pausado/recusar', 'POST', { por: 'Dono', motivo: 'não apagar nada hoje' });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.run.estado, 'cancelado');
+  assert.match(r.corpo.run.erro, /não apagar nada hoje/);
+  assert.equal(r.corpo.autorizacoes[0].decisao, 'recusada');
+});
+
+test('32 · cancelar guarda quem pediu, com hora, e diz que a paragem é entre passos', async () => {
+  const api = createMemRepo();
+  runParado(api, { estado: 'a_executar', pendente: null });
+  const r = await chamar(api, '/ia/runs/run_pausado/cancelar', 'POST', { por: 'Dono' });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.run.estado, 'cancelado');
+  assert.equal(r.corpo.run.cancelamento.por, 'Dono');
+  assert.match(r.corpo.nota, /entre passos/);
+});
+
+test('33 · cancelar o que já fechou é 409 com a razão, não um sucesso falso', async () => {
+  const api = createMemRepo();
+  runParado(api, { estado: 'concluido', pendente: null, fim: new Date().toISOString() });
+  const r = await chamar(api, '/ia/runs/run_pausado/cancelar', 'POST', {});
+  assert.equal(r.status, 409);
+  assert.match(r.corpo.error, /já fechou/);
+});
+
+test('34 · repetir abre uma execução nova ligada à antiga e não duplica com duplo clique', async () => {
+  const api = createMemRepo();
+  runParado(api, { estado: 'falhou', pendente: null, erro: 'sem motor' });
+  const a = await chamar(api, '/ia/runs/run_pausado/repetir', 'POST', { por: 'Dono' });
+  assert.equal(a.status, 201);
+  assert.equal(a.corpo.run.repeticao_de, 'run_pausado');
+  assert.equal(a.corpo.run.estado, 'novo');
+  assert.equal(a.corpo.run.autorizacoes[0].por, 'Dono');
+  const b = await chamar(api, '/ia/runs/run_pausado/repetir', 'POST', {});
+  assert.equal(b.status, 200);
+  assert.equal(b.corpo.repetida, false, 'a segunda chamada devolve a que já existe');
+  assert.equal(b.corpo.run.id, a.corpo.run.id);
+  assert.equal(api._dados.iaRuns.length, 2, 'duas execuções, não três');
+});
+
+test('35 · repetir uma execução a correr é recusado com a razão', async () => {
+  const api = createMemRepo();
+  runParado(api, { estado: 'a_executar', pendente: null });
+  const r = await chamar(api, '/ia/runs/run_pausado/repetir', 'POST', {});
+  assert.equal(r.status, 409);
+  assert.match(r.corpo.error, /ainda não fechou/);
+  assert.equal(api._dados.iaRuns.length, 1, 'não se abre nada quando a original ainda corre');
+});
+
+test('36 · a lista de execuções traz o estado dito por palavras e o que se pode fazer', async () => {
+  const api = createMemRepo();
+  runParado(api);
+  api._dados.iaRuns.push({ id: 'run_2', objetivo: 'Fechar o site', estado: 'concluido', criado: new Date().toISOString(), fim: new Date().toISOString() });
+  const r = await chamar(api, '/ia/runs');
+  assert.equal(r.status, 200);
+  const espera = r.corpo.runs.find((x) => x.id === 'run_pausado');
+  assert.equal(espera.visivel.id, 'a_espera');
+  assert.equal(espera.accoes.aprovar.sim, true);
+  assert.equal(espera.accoes.cancelar.sim, true);
+  const feito = r.corpo.runs.find((x) => x.id === 'run_2');
+  assert.equal(feito.visivel.id, 'concluido');
+  assert.equal(feito.accoes.repetir.sim, true);
+  assert.equal(feito.accoes.cancelar.sim, false);
+});

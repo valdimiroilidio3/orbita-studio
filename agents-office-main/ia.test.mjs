@@ -1250,3 +1250,77 @@ test('rota /ia/modelos: diz os níveis de esforço que o servidor sabe aplicar',
   assert.deepEqual(r.corpo.esforcos, ['low', 'medium', 'high', 'xhigh', 'max']);
   assert.match(r.corpo.esforcoNota, /tecto de tokens/);
 });
+
+/* ---------- 7 · 1.61.0 · execução transparente (ponta a ponta) ---------- */
+const DESLIGADOS = ['ovh', 'kilo', 'llm7', 'opencode', 'pollinations'];
+
+test('1.61.0: acção destrutiva sem autorização pára a execução — não falha nem finge que fez', async () => {
+  const repo = createMemRepo();
+  repo._dados.receitas.push({ id: 'rec_1', descricao: 'consultoria', cents: 12000 });
+  const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'receita_apagar', args: { id: 'rec_1' } } });
+  await repo.ia.config.gravar('desligados', DESLIGADOS);
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+
+  const run = await correr({ repo, motor, objetivo: 'Apagar a receita antiga do Café Central', env: envFalso });
+  assert.equal(run.estado, 'aguarda_aprovacao', `esperava aguarda_aprovacao, veio ${run.estado}: ${run.erro || ''}`);
+  assert.equal(run.pendente.ferramenta, 'receita_apagar');
+  assert.match(run.pendente.resumo, /autorização|aprovação/);
+  const passos = await repo.ia.steps.porRun(run.id);
+  const parado = passos.find((p) => p.estado === 'aguarda_aprovacao');
+  assert.ok(parado, 'há um passo parado à espera');
+  assert.equal(parado.agente, 'backend');
+  assert.equal(parado.ferramentas[0].precisaAprovacao, true);
+  /* o research tentou a ferramenta sem a ter: isso fica registado como recusa,
+     e a recusa não é uma aprovação pendente */
+  const recusado = passos.find((p) => p.agente === 'research');
+  assert.equal(recusado.ferramentas[0].ok, false);
+  assert.match(recusado.ferramentas[0].resumo, /não tem permissão/);
+  assert.equal(repo._dados.receitas.length, 1, 'sem aprovação, a receita NÃO é apagada');
+});
+
+test('1.61.0: com a autorização registada, a mesma execução continua e apaga', async () => {
+  const repo = createMemRepo();
+  repo._dados.receitas.push({ id: 'rec_1', descricao: 'consultoria', cents: 12000 });
+  const { fetchImpl } = fornecedorFalso({ chamarFerramenta: { nome: 'receita_apagar', args: { id: 'rec_1' } } });
+  await repo.ia.config.gravar('desligados', DESLIGADOS);
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+
+  const parada = await correr({ repo, motor, objetivo: 'Apagar a receita antiga do Café Central', env: envFalso });
+  assert.equal(parada.estado, 'aguarda_aprovacao');
+
+  /* é isto que a rota /aprovar grava: quem, quando, o quê e porquê */
+  const autorizacao = { por: 'Dono', em: new Date().toISOString(), o_que: 'receita_apagar', motivo: 'é lixo', decisao: 'aprovada' };
+  await repo.ia.runs.actualizar(parada.id, { autorizacoes: [autorizacao], pendente: null, estado: 'novo' });
+
+  const fim = await correr({ repo, motor, objetivo: parada.objetivo, runId: parada.id, retomar: true, env: envFalso });
+  assert.equal(fim.estado, 'concluido', `esperava concluido, veio ${fim.estado}: ${fim.erro || ''}`);
+  assert.equal(repo._dados.receitas.length, 0, 'autorizada, a receita é apagada');
+  const passos = await repo.ia.steps.porRun(parada.id);
+  assert.equal(passos.filter((p) => p.ordem === 1).length, 1, 'retomar não duplica o passo');
+});
+
+test('1.61.0: cancelar a meio pára mesmo — não corre o passo seguinte nem a revisão', async () => {
+  const repo = createMemRepo();
+  const { fetchImpl } = fornecedorFalso();
+  await repo.ia.config.gravar('desligados', DESLIGADOS);
+  const motor = criarMotor({ repo, env: envFalso, fetchImpl });
+
+  let pediu = false;
+  const run = await correr({
+    repo, motor, objetivo: 'Organizar os leads de Coimbra', env: envFalso,
+    aoMudar: async (r) => {
+      if (pediu) return;
+      const passos = await repo.ia.steps.porRun(r.id);
+      if (passos.length >= 1) {
+        pediu = true;
+        await repo.ia.runs.actualizar(r.id, { cancelamento: { pedido: true, por: 'Dono', em: new Date().toISOString() } });
+      }
+    },
+  });
+  assert.equal(run.estado, 'cancelado');
+  assert.equal(run.cancelamento.por, 'Dono');
+  assert.equal(run.cancelamento.efectivo, true, 'a paragem diz-se efectiva, não «pedida»');
+  const passos = await repo.ia.steps.porRun(run.id);
+  assert.equal(passos.length, 1, 'o segundo passo não chegou a começar');
+  assert.equal(passos.some((p) => p.agente === 'reviewer'), false, 'a revisão não correu');
+});

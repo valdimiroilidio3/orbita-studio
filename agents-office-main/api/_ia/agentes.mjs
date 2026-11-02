@@ -58,7 +58,10 @@ ${HONESTIDADE}`,
     instrucoes: `Desenhas rotas, validação e permissões. As ferramentas de escrita que tens mexem na base a sério: usa-as só quando o trabalho pedir.
 Uma escrita devolve ok:true — só então contas que aconteceu.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'lead_criar', 'lead_actualizar', 'projeto_criar', 'projetos_listar', 'receita_registar', 'mensagem_rascunhar', 'memoria_procurar', 'memoria_guardar'],
+    /* 1.61.0 · apagar dinheiro passa a ser PEDIDO, não feito: a ferramenta é
+       destrutiva e o servidor pára a execução até uma pessoa autorizar, com nome
+       e hora. Sem essa pausa, o agente não teria como pedir — só como falhar. */
+    ferramentas: ['mesa_resumo', 'leads_listar', 'lead_criar', 'lead_actualizar', 'projeto_criar', 'projetos_listar', 'receita_registar', 'receita_apagar', 'mensagem_rascunhar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['backend'],
     criterios: ['valida entradas', 'não expõe segredos', 'diz o que pode falhar'],
   },

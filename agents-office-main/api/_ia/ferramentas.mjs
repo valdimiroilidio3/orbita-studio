@@ -292,7 +292,12 @@ export async function executar(nome, args, ctx = {}) {
   if (ctx.permitidas && !ctx.permitidas.includes(nome)) return { ok: false, erro: `o agente ${ctx.agente || ''} não tem permissão para «${nome}»` };
   const v = validar(f.parametros, args);
   if (!v.ok) return { ok: false, erro: `argumentos inválidos: ${v.erros.join('; ')}` };
-  if (f.destrutivo && !ctx.aprovado) {
+  /* 1.61.0 · a aprovação é POR FERRAMENTA, com nome e hora no histórico da
+     execução. `ctx.aprovado` continua a valer (aprovou-se a execução à
+     partida); `ctx.aprovadas` é a lista do que uma pessoa autorizou uma a uma.
+     Uma acção destrutiva que não esteja em nenhuma das duas não corre. */
+  const autorizada = ctx.aprovado || (Array.isArray(ctx.aprovadas) && ctx.aprovadas.includes(nome));
+  if (f.destrutivo && !autorizada) {
     return { ok: false, precisaAprovacao: true, erro: `«${nome}» é destrutiva e precisa de aprovação humana` };
   }
   const t0 = Date.now();

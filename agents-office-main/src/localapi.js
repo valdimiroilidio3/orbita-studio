@@ -321,7 +321,18 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       return { fornecedores: [...porFornec.values()], totalModelosCatalogo: GRATUITOS_LOCAIS.length, modo: 'local',
         nota: 'cópia local: a lista completa, com os modelos que já responderam, lê-se com o servidor a correr' };
     }
-    if (caminhoLimpo === '/ia/runs') return { runs: [], modo: 'local' };
+    /* 1.61.0 · as execuções vivem no servidor: é lá que correm os agentes e é
+       lá que ficam os passos, as autorizações e o pedido de paragem. Aqui a
+       lista é vazia e DIZ-SE porquê — em vez de um ecrã que parece avariado. */
+    if (caminhoLimpo === '/ia/runs') {
+      return {
+        runs: [], modo: 'local',
+        nota: 'no modo local não corre nenhum agente: o motor e as chaves vivem no servidor. Uma execução só existe (e só fica registada) quando a mesa fala com o /api.',
+      };
+    }
+    if (caminhoLimpo.startsWith('/ia/runs/')) {
+      throw falha(503, 'esta execução vive no servidor: no modo local não há motor, nem passos, nem autorizações para mostrar');
+    }
     if (caminhoLimpo.startsWith('/ia')) throw falha(404, 'a IA precisa do servidor (modo local não tem motor)');
 
     /* --- 1.47.0 · digitalizar papel: neste browser não há olhos ---

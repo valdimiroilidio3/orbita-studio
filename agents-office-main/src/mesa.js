@@ -46,6 +46,16 @@ import {
   cartoesDoPainel, CLASSES, NIVEIS_AUTONOMIA,
 } from './motores.js';
 
+/* 1.61.0 · EXECUÇÃO TRANSPARENTE (2 nov 2026). Pedido do dono: ver o que o
+   agente fez, com que dados, o que mudou — e poder parar, repetir em segurança e
+   saber quem autorizou. As contas (estados, recuperação, repetição segura,
+   autorizações) vivem em `src/execucao.js` e são as MESMAS que o servidor usa. */
+import {
+  estadoDoRun, cartaoDoRun, passosDoRun, registoDoRun, autorizacoesDoRun,
+  cancelamentoDe, podeCancelar, podeRepetir, podeAprovar, recuperacao,
+  resumoDoRun, filaDeExecucao, avisosDaLista, quandoDe, ORDEM_ESTADOS,
+} from './execucao.js';
+
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
    `/api` atrás (a Vercel serve ficheiros estáticos). Em vez do cartão que mandava arrancar o
@@ -112,6 +122,7 @@ const NAV = [
   { k: 'projetos', label: 'Projetos', ic: 'pastas' },
   { k: 'tarefas', label: 'Tarefas', ic: 'tarefa' },
   { k: 'agentes', label: 'Agentes', ic: 'agentes' },
+  { k: 'execucoes', label: 'Execuções', ic: 'ia' },
   { k: 'ia', label: 'IA', ic: 'ia' },
   { k: 'motores', label: 'Motores', ic: 'motor' },
   { k: 'contas', label: 'Contas', ic: 'contas' },
@@ -128,6 +139,9 @@ const S = {
   leadEventos: [], duplicados: null, mostrarDuplicados: false, aExportar: false,
   /* 1.60.0 · a autonomia por tipo (lida da base) — o resto dos motores vem de S.ia */
   autonomia: null, autonomiaErro: '',
+  /* 1.61.0 · as execuções: a lista, a execução aberta e o filtro escolhido */
+  execucoes: [], execucao: null, execucaoErro: '', execucaoFiltro: 'todas',
+  execucoesRecentes: [],
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
   /* 1.57.0 · a aba aberta na página do projeto (Briefing por omissão) */
@@ -272,7 +286,8 @@ function parseHash() {
     return { name: 'hoje', id: null };
   }
   const [name, id] = cru.split('/');
-  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia', 'motores'];
+  /* 1.61.0 · `execucoes` e `execucao/:id` entram na lista de rotas conhecidas. */
+  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia', 'motores', 'execucoes', 'execucao'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -312,7 +327,13 @@ function paintMobar() {
   const el = document.getElementById('mobar');
   if (!el) return;
   if (S.needLogin) { el.innerHTML = ''; el.hidden = true; return; }
-  const fila = filaRapida({ mensagens: S.messages || [], tarefas: S.tarefas || [] });
+  /* 1.61.0 · uma execução parada à espera de aprovação é uma decisão como as
+     outras — e no telemóvel tem de caber no polegar. */
+  const pedidos = (S.execucoesRecentes || [])
+    .filter((r) => estadoDoRun(r).id === 'a_espera')
+    .slice(0, 3)
+    .map((r) => ({ id: r.id, titulo: String(r.objetivo || 'execução').slice(0, 70), detalhe: 'execução parada à espera de aprovação', accao: 'abrir', quando: r.criado }));
+  const fila = filaRapida({ mensagens: S.messages || [], tarefas: S.tarefas || [], pedidos });
   const b = barraDeAprovacao(fila);
   if (!b.principal) {
     el.hidden = true;
@@ -320,7 +341,9 @@ function paintMobar() {
     return;
   }
   const p = b.principal;
-  const act = p.tipo === 'tarefa' ? 'aprovar-tarefa' : (p.accao === 'enviar' ? 'enviar' : 'aprovar');
+  const act = p.tipo === 'pedido' ? 'run-abrir'
+    : p.tipo === 'tarefa' ? 'aprovar-tarefa'
+      : (p.accao === 'enviar' ? 'enviar' : 'aprovar');
   el.hidden = false;
   el.innerHTML = `
     <div class="mobar-txt">
@@ -400,7 +423,7 @@ async function loadContas() {
 }
 
 async function loadCommon() {
-  const [summary, today, leads, messages, saldo, clientes, projetos] = await Promise.all([
+  const [summary, today, leads, messages, saldo, clientes, projetos, execucoes] = await Promise.all([
     call('/ops/summary').catch(() => null),
     call('/ops/today').catch(() => null),
     call('/ops/leads?limit=200').catch(() => ({ leads: [] })),
@@ -408,6 +431,9 @@ async function loadCommon() {
     call('/ops/saldo').catch(() => null),
     call('/ops/clientes').catch(() => null),
     call('/ops/projetos').catch(() => ({ projetos: [], resumo: null, tipos: [] })),
+    /* 1.61.0 · as últimas execuções servem a barra de uma mão: uma execução
+       parada à espera de aprovação tem de estar ao alcance do polegar. */
+    call('/ia/runs?limite=12').catch(() => null),
   ]);
   S.summary = summary;
   S.today = today;
@@ -418,6 +444,7 @@ async function loadCommon() {
   S.projetos = projetos.projetos || [];
   S.projetosResumo = projetos.resumo || null;
   S.tipos = projetos.tipos || [];
+  S.execucoesRecentes = execucoes?.runs || [];
 }
 
 async function loadTarefas() {
@@ -505,6 +532,9 @@ async function boot(full = true) {
     if (S.route.name === 'ia') await carregarIA(apiMesa);
     /* 1.60.0 · os motores leem o estado da IA, o uso e a autonomia de uma vez */
     if (S.route.name === 'motores') await carregarMotores();
+    /* 1.61.0 · as execuções: a lista, ou uma execução e os seus passos */
+    if (S.route.name === 'execucoes') await carregarExecucoes();
+    if (S.route.name === 'execucao' && S.route.id) await carregarExecucao(S.route.id);
     if (S.route.name === 'papel' && !S.papelEstado) await carregarPapel(apiMesa);
     if (S.route.name === 'cine') await carregarCine(apiMesa, S.route.id);
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
@@ -2339,6 +2369,207 @@ function avisoLocal() {
   </div>`;
 }
 
+
+/* ===========================================================================
+   1.61.0 · AS EXECUÇÕES (2 nov 2026)
+
+   A pergunta do dono: «o que fez o agente, com que dados, o que mudou — e quem
+   autorizou?». A página responde com os cinco estados por palavras, os passos
+   com entradas → acções → resultados, o que fazer quando corre mal, o histórico
+   de autorizações e os botões que só aparecem quando são verdadeiros
+   (cancelar/repetir/aprovar). Nada aqui recalcula a verdade: usa `src/execucao.js`.
+   =========================================================================== */
+/* Um estado técnico representativo por estado visível — para os filtros. */
+const ESTADOS_TECNICO = {
+  em_fila: 'novo', em_execucao: 'a_executar', a_espera: 'aguarda_aprovacao',
+  falhou: 'falhou', concluido: 'concluido', cancelado: 'cancelado',
+};
+
+async function carregarExecucoes() {
+  const r = await call(`/ia/runs?limite=${Number(S.execucaoLimite) || 40}`).catch((e) => ({ __erro: e.message }));
+  if (r?.__erro) { S.execucoes = []; S.execucaoErro = r.__erro; return; }
+  S.execucoes = r?.runs || [];
+  S.execucaoErro = '';
+}
+
+async function carregarExecucao(id) {
+  try {
+    S.execucao = await call(`/ia/runs/${encodeURIComponent(id)}`);
+  } catch (e) {
+    S.execucao = null;
+    S.execucaoErro = e.message;
+  }
+}
+
+const runChip = (e) => `<span class="mo-chip run-chip" style="--c:${e.cor}" title="${esc(e.tecnico)}"><i class="dot"></i>${esc(e.rotulo)}</span>`;
+
+/* A lista: cartões, um por execução, com o número curto (o início real do id). */
+function viewExecucoes() {
+  const runs = S.execucoes || [];
+  const avisos = avisosDaLista({ runs, modoLocal: S.modoLocal });
+  const fila = filaDeExecucao(runs);
+  const filtro = S.execucaoFiltro || 'todas';
+  const cartoes = fila.cartoes.filter((c) => filtro === 'todas' || c.estado.id === filtro);
+  const contagem = (id) => fila.cartoes.filter((c) => c.estado.id === id).length;
+  const chips = [['todas', `Todas (${fila.total})`], ...ORDEM_ESTADOS.map((id) => [id, `${estadoDoRun({ estado: ESTADOS_TECNICO[id] }).rotulo} (${contagem(id)})`])];
+
+  const linha = (c) => `<a class="run-card" href="#/execucao/${esc(c.id)}" data-act="run-abrir" data-id="${esc(c.id)}">
+    <div class="run-top">
+      <span class="run-num">#${esc(c.numero)}</span>
+      ${runChip(c.estado)}
+      ${c.repeticaoDe ? '<span class="run-tag">repetição</span>' : ''}
+      <span class="run-when">${esc(c.quando)}</span>
+    </div>
+    <div class="run-tit">${esc(c.titulo)}</div>
+    ${c.nota ? `<div class="run-nota bad">${esc(c.nota)}</div>` : ''}
+    <div class="run-meta">
+      <span>${c.passos} passo${c.passos === 1 ? '' : 's'}</span>
+      <span>${c.acoes} acção${c.acoes === 1 ? '' : 'ões'}</span>
+      <span>${esc(c.duracao)}</span>
+      <span>${c.custo.desconhecido ? 'custo desconhecido' : money(c.custo.centimos)}</span>
+    </div>
+  </a>`;
+
+  return `<div class="wrap mo">
+    ${headHTML({
+      title: 'Execuções',
+      sub: `${esc(fila.frase)} · cada passo mostra o que recebeu, o que fez e o que voltou`,
+      right: `<a class="btn small ghost" href="#/ia" title="abrir o Control Center da IA">Nova execução</a>
+        <button class="btn small ghost" data-act="reload" title="voltar a ler as execuções">↻ Actualizar</button>${stopPill()}`,
+    })}
+    ${avisos.map((a) => `<div class="ia-faixa ${a.tipo === 'espera' ? 'warn' : a.tipo === 'local' ? 'bad' : ''}"><b>${esc(a.tipo === 'espera' ? 'Parado à tua espera' : a.tipo === 'local' ? 'Modo local' : 'Sem execuções')}</b> ${esc(a.texto)}</div>`).join('')}
+    ${S.execucaoErro ? `<div class="ia-faixa bad"><b>Não consegui ler as execuções.</b> ${esc(S.execucaoErro)}</div>` : ''}
+    <div class="mo-filtros" role="tablist" aria-label="filtrar execuções">
+      ${chips.map(([id, rotulo]) => `<button class="mo-tab${filtro === id ? ' on' : ''}" role="tab" aria-selected="${filtro === id}" data-act="run-filtrar" data-id="${esc(id)}">${esc(rotulo)}</button>`).join('')}
+    </div>
+    ${cartoes.length ? `<div class="run-list">${cartoes.map(linha).join('')}</div>`
+      : `<div class="card empty"><h3>${runs.length ? 'Nada neste filtro' : 'Ainda não houve execuções'}</h3>
+          <p>${runs.length
+            ? 'Nenhuma execução está neste estado agora. Muda o filtro para ver as outras.'
+            : 'Uma execução nasce quando pedes trabalho a um agente no Control Center da IA. Quando houver, aparece aqui com passos, acções, custo e quem autorizou.'}</p>
+          <div class="acts" style="justify-content:center"><a class="btn primary" href="#/ia">Pedir trabalho a um agente</a></div></div>`}
+  </div>`;
+}
+
+/* O detalhe: «Execução #a3f19c» — o que recebeu, o que fez, o que voltou. */
+function viewExecucao() {
+  const d = S.execucao;
+  const id = S.route.id || '';
+  if (!d) {
+    return `<div class="wrap mo">${headHTML({ title: 'Execução', sub: 'não consegui abrir', right: '<a class="btn small ghost" href="#/execucoes">Voltar</a>' })}
+      <div class="card empty"><h3>Esta execução não abriu</h3>
+        <p>${esc(S.execucaoErro || 'a base não devolveu esta execução')}</p>
+        <div class="acts" style="justify-content:center"><a class="btn primary" href="#/execucoes">Ver todas as execuções</a></div></div></div>`;
+  }
+  const run = d.run || {};
+  const passos = (d.lidos && d.lidos.length) ? d.lidos : passosDoRun(d.passos || []);
+  const e = d.visivel?.id ? d.visivel : estadoDoRun(run);
+  /* o servidor manda o resumo já feito; se vier incompleto (versão antiga da
+     base), calcula-se aqui com as mesmas contas — nunca se mostra um zero */
+  const r = d.resumo?.custo ? d.resumo : resumoDoRun(run, d.passos || []);
+  const rec = d.recuperacao || recuperacao(run, d.passos || []);
+  const auts = (d.autorizacoes && d.autorizacoes.length) ? d.autorizacoes : autorizacoesDoRun(run);
+  const cancel = cancelamentoDe(run);
+  const podeC = d.accoes?.cancelar || podeCancelar(run);
+  const podeR = d.accoes?.repetir || podeRepetir(run, S.execucoes || []);
+  const podeA = d.accoes?.aprovar || podeAprovar(run);
+  const reg = (d.registo && d.registo.length) ? d.registo : registoDoRun(run, d.passos || []);
+
+  const acaoDoBotao = (o) => {
+    const classes = o.id === 'aprovar' ? 'btn primary' : o.id === 'recusar' ? 'btn ghost bad' : 'btn ghost';
+    const alvo = ['run-aprovar', 'run-recusar', 'run-retomar', 'run-repetir', 'run-cancelar'].includes(o.accao) ? ` data-id="${esc(run.id || id)}"` : '';
+    return `<button class="${classes}" data-act="${esc(o.accao)}"${alvo} title="${esc(o.porque)}">${esc(o.rotulo)}</button>`;
+  };
+
+  const passoHTML = (p) => `<article class="run-step" data-estado="${esc(p.estado)}">
+    <header class="run-step-h">
+      <span class="run-step-n">${p.ordem}</span>
+      <div><b>${esc(p.titulo)}</b>
+        <div class="ia-sub">${esc(p.agente || 'agente')}${p.modelo ? ` · ${esc(p.modelo)}` : ''} · ${esc(p.duracao)}</div></div>
+      <span class="mo-chip" style="--c:${estadoDoRun({ estado: p.estado === 'a_espera' ? 'aguarda_aprovacao' : p.estado === 'em_execucao' ? 'a_correr' : p.estado === 'falhou' ? 'falhou' : p.estado }).cor}">${esc(p.estado === 'a_espera' ? 'à espera' : p.estado === 'em_execucao' ? 'a correr' : p.estado === 'falhou' ? 'falhou' : p.estado === 'cancelado' ? 'cancelado' : 'concluído')}</span>
+    </header>
+    ${p.temEntrada ? `<div class="run-bloco"><span class="run-k">Entrada · o que lhe foi pedido</span><div class="run-v">${esc(p.entrada)}</div></div>` : '<div class="run-bloco"><span class="run-k">Entrada</span><div class="run-v ia-sub">não ficou registada</div></div>'}
+    <div class="run-bloco"><span class="run-k">Acções · o que correu no servidor</span>
+      ${p.acoes.length ? `<ul class="run-acoes">${p.acoes.map((a) => `<li class="${a.ok ? 'ok' : 'bad'}">
+          <b>${esc(a.nome)}</b>
+          <span>${a.esperou ? 'pediu aprovação humana — não correu' : esc(a.resumo || (a.ok ? 'correu' : 'falhou'))}</span>
+          ${a.argumentos ? `<code>${esc(JSON.stringify(a.argumentos).slice(0, 160))}</code>` : ''}
+        </li>`).join('')}</ul>`
+        : '<div class="run-v ia-sub">nenhuma — este passo só escreveu texto</div>'}
+    </div>
+    <div class="run-bloco"><span class="run-k">Resultado · o que voltou</span>
+      <div class="run-v${p.temResultado ? '' : ' ia-sub'}">${p.temResultado ? esc(p.resultado).slice(0, 4000) : 'sem resultado'}</div>
+    </div>
+    ${p.erro ? `<div class="run-erro"><b>Falhou:</b> ${esc(p.erro)}</div>` : ''}
+  </article>`;
+
+  return `<div class="wrap mo">
+    ${headHTML({
+      title: `Execução #${String(run.id || id).replace(/-/g, '').slice(0, 6)}`,
+      sub: `${esc(e.rotulo)} · ${esc(quandoDe(run.criado))}${run.fim ? ` · fechou ${esc(quandoDe(run.fim))}` : ''}`,
+      right: `<a class="btn small ghost" href="#/execucoes">← Todas</a>
+        <button class="btn small ghost" data-act="reload" title="voltar a ler esta execução">↻</button>${stopPill()}`,
+    })}
+
+    <section class="card run-cabeca">
+      <div class="run-titulo">${esc(String(run.objetivo || ''))}</div>
+      <div class="run-estado-linha">${runChip(e)}<span class="run-porque">${esc(e.porque)}</span></div>
+      <div class="run-ficha">
+        <div><span>Passos</span><b>${r.concluidos}/${r.passos}</b></div>
+        <div><span>Acções</span><b>${r.acoes}${r.acoesFalhadas ? ` · ${r.acoesFalhadas} falharam` : ''}</b></div>
+        <div><span>Tokens</span><b>${fmtNum(r.tokens)}</b></div>
+        <div><span>Custo</span><b class="${r.custo.desconhecido ? 'bad' : ''}">${r.custo.desconhecido ? 'desconhecido' : money(r.custo.centimos)}</b></div>
+        <div><span>Duração</span><b>${esc(r.duracao)}</b></div>
+        <div><span>Modelo</span><b>${esc(r.modelo || 'não registado')}</b></div>
+      </div>
+      ${r.custo.desconhecido ? '<div class="hint">Custo desconhecido: o fornecedor usado não tem preço declarado. Zero seria uma mentira — não é grátis, é não medido.</div>' : ''}
+      ${cancel.pedido ? `<div class="ia-faixa ${cancel.efectivo ? 'bad' : 'warn'}"><b>${cancel.efectivo ? 'Paragem efectiva' : 'Cancelamento pedido'}.</b>
+        ${esc(cancel.por || 'sem nome')} · ${esc(quandoDe(cancel.em))} — ${esc(cancel.porque || 'verificado entre passos')}.</div>` : ''}
+
+      ${rec.necessaria || rec.opcoes.length ? `<div class="run-recuperacao${e.id === 'a_espera' ? ' hot' : ''}" role="group" aria-label="o que fazer a seguir">
+        <div class="run-rec-txt"><b>${e.id === 'a_espera' ? 'Precisa da tua decisão' : 'O que fazer a seguir'}</b><span>${esc(rec.porque)}</span></div>
+        <div class="acts">${rec.opcoes.map(acaoDoBotao).join('')}</div>
+      </div>` : ''}
+
+      <div class="acts run-acts">
+        ${podeA.sim ? '' : `<button class="btn ghost small" data-act="run-aprovar" data-id="${esc(run.id || id)}" aria-disabled="true" title="${esc(podeA.porque)}">Aprovar</button>`}
+        ${podeC.sim ? `<button class="btn ghost small" data-act="run-cancelar" data-id="${esc(run.id || id)}" title="${esc(podeC.porque)}">Parar</button>`
+          : `<button class="btn ghost small" aria-disabled="true" title="${esc(podeC.porque)}">Parar</button>`}
+        ${podeR.sim ? `<button class="btn ghost small" data-act="run-repetir" data-id="${esc(run.id || id)}" title="${esc(podeR.porque)}">Repetir</button>`
+          : `<button class="btn ghost small" aria-disabled="true" title="${esc(podeR.porque)}">Repetir</button>`}
+        <a class="btn ghost small" href="#/ia">Abrir na IA</a>
+      </div>
+      <div class="hint">A paragem é verificada entre passos e entre ferramentas: uma chamada já começada termina. Repetir abre uma execução nova ligada a esta — a antiga fica no histórico.</div>
+    </section>
+
+    <section class="card" aria-labelledby="runSteps">
+      <div class="sec-h"><h2 id="runSteps">Passos</h2><span class="count">${passos.length} registado(s)</span></div>
+      ${passos.length ? passos.map(passoHTML).join('') : '<div class="hint">Esta execução ainda não tem passos gravados. Uma execução em fila ganha passos quando começa a correr.</div>'}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="runAuth">
+      <div class="sec-h"><h2 id="runAuth">Quem autorizou</h2><span class="count">${auts.length} autorização(ões)</span></div>
+      ${auts.length ? `<table class="mo-tab"><thead><tr><th>Quem</th><th>O quê</th><th>Quando</th><th>Decisão</th></tr></thead><tbody>
+        ${auts.map((a) => `<tr><td><b>${esc(a.por)}</b>${a.legado ? ' <span class="ia-sub">(aprovação à partida)</span>' : ''}</td>
+          <td>${esc(a.oQue)}${a.motivo ? `<div class="ia-sub">${esc(a.motivo)}</div>` : ''}</td>
+          <td class="ia-sub">${esc(quandoDe(a.em))}</td>
+          <td><span class="mo-chip" style="--c:${a.decisao === 'recusada' ? '#b3261e' : '#1f7a4d'}">${esc(a.decisao)}</span></td></tr>`).join('')}
+        </tbody></table>`
+        : '<div class="hint">Ninguém autorizou nada nesta execução. As acções destrutivas ficam paradas até haver um nome — não correm «por omissão».</div>'}
+    </section>
+
+    <section class="card" style="margin-top:var(--s4)" aria-labelledby="runReg">
+      <div class="sec-h"><h2 id="runReg">Registo</h2><span class="count">${reg.length} evento(s)</span></div>
+      <ol class="run-registo">
+        ${reg.map((ev) => `<li data-estado="${esc(ev.estado || '')}">
+          <span class="run-reg-em">${esc(quandoDe(ev.em))}</span>
+          <span class="run-reg-t"><b>${esc(ev.titulo)}</b><span>${esc(ev.detalhe || '')}</span></span>
+        </li>`).join('')}
+      </ol>
+    </section>
+  </div>`;
+}
+
 function paint() {
   paintHead();
   if (S.needLogin) { main().innerHTML = viewLogin(); return; }
@@ -2370,6 +2601,8 @@ function paint() {
               : S.route.name === 'contas' ? viewContas()
               : S.route.name === 'ia' ? vistaIA(S, { esc, hhmm, when })
               : S.route.name === 'motores' ? viewMotores()
+              : S.route.name === 'execucoes' ? viewExecucoes()
+              : S.route.name === 'execucao' ? viewExecucao()
             : S.route.name === 'conversas' ? viewConversas()
               : S.route.name === 'faturas' ? viewFaturas()
               : viewSaldo());
@@ -2419,6 +2652,73 @@ async function act(name, el, ev) {
       S.pick = null;
       await boot();
       return;
+    }
+
+    /* ---------------- 1.61.0 · execuções ---------------- */
+    if (name === 'run-filtrar') {
+      S.execucaoFiltro = id || 'todas';
+      paint();
+      return;
+    }
+    if (name === 'run-abrir') {
+      if (id) location.hash = `#/execucao/${encodeURIComponent(id)}`;
+      return;
+    }
+    if (name === 'ir-motores') {
+      location.hash = '#/motores';
+      return;
+    }
+    if (name.startsWith('run-') && ['run-cancelar', 'run-repetir', 'run-retomar', 'run-aprovar', 'run-recusar'].includes(name)) {
+      const alvo = id || S.route.id;
+      const quem = S.eu?.user?.name || S.eu?.user?.email || 'dono';
+      const depois = async (extra) => {
+        toast(extra);
+        if (S.route.name === 'execucao') await carregarExecucao(alvo);
+        else await carregarExecucoes();
+        await boot(false);
+      };
+      try {
+        if (name === 'run-cancelar') {
+          const r = await call(`/ia/runs/${encodeURIComponent(alvo)}/cancelar`, 'POST', { por: quem });
+          await depois(r.nota || 'Cancelamento pedido. A paragem é verificada entre passos.');
+          return;
+        }
+        if (name === 'run-repetir') {
+          const r = await call(`/ia/runs/${encodeURIComponent(alvo)}/repetir`, 'POST', { por: quem });
+          const novo = r.run?.id || alvo;
+          await depois(r.repetida === false ? 'Esta repetição já estava aberta — não se criaram duas.' : 'Execução nova aberta. A antiga fica no histórico.');
+          location.hash = `#/execucao/${encodeURIComponent(novo)}`;
+          if (r.repetida !== false) {
+            /* a repetição nova é uma execução em fila: corre-a, sem bloquear a mesa */
+            call(`/ia/runs/${encodeURIComponent(novo)}/correr`, 'POST', {}).then(() => {
+              if (S.route.id === novo) boot(false);
+            }).catch(() => null);
+          }
+          return;
+        }
+        if (name === 'run-aprovar' || name === 'run-recusar') {
+          const motivo = name === 'run-recusar'
+            ? (typeof window !== 'undefined' && typeof window.prompt === 'function'
+              ? (window.prompt('Porque recusas? Fica escrito no histórico.', '') || '').trim() : '')
+            : 'aprovado na mesa';
+          const r = await call(`/ia/runs/${encodeURIComponent(alvo)}/${name === 'run-recusar' ? 'recusar' : 'aprovar'}`, 'POST', { por: quem, motivo });
+          await depois(r.nota || (name === 'run-recusar' ? 'Recusada. A execução fecha com a razão escrita.' : `Aprovada por ${quem}. O trabalho continua.`));
+          if (name === 'run-aprovar') {
+            call(`/ia/runs/${encodeURIComponent(alvo)}/correr`, 'POST', { retomar: true }).then(() => {
+              if (S.route.id === alvo) boot(false);
+            }).catch((e) => toast(`Aprovada, mas não conseguia continuar: ${e.message}`, true));
+          }
+          return;
+        }
+        if (name === 'run-retomar') {
+          await call(`/ia/runs/${encodeURIComponent(alvo)}/correr`, 'POST', { retomar: true });
+          await depois('Retomada: os passos concluídos não se repetem.');
+          return;
+        }
+      } catch (e) {
+        toast(e.message, true);
+        return;
+      }
     }
 
     if (name === 'aprovar') {
