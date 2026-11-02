@@ -735,8 +735,12 @@
   .md-galeria { margin-top: var(--s4); display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s3); }
   .md-item { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line, #E4E6EB); border-radius: 16px; overflow: hidden; }
   .md-item.mau { border-color: #EFD2D2; }
-  .md-fig-caixa { background: #0B0D10; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
-  .md-fig { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* a caixa segue a proporção do ficheiro: uma imagem 4:5 não é cortada a 4:3,
+     e um vídeo 16:9 não aparece com barras — `contain` mostra o ficheiro todo */
+  .md-fig-caixa { background: #0B0D10; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; }
+  .md-fig-caixa.retrato { aspect-ratio: 4 / 5; }
+  .md-fig-caixa.quadrado { aspect-ratio: 1 / 1; }
+  .md-fig { width: 100%; height: 100%; object-fit: contain; display: block; }
   .md-fig-vazio { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
     color: rgba(255,255,255,.55); font-size: var(--t-s); letter-spacing: .06em; text-transform: uppercase; }
   .md-item-corpo { padding: 12px 14px 14px; display: grid; gap: 8px; }
@@ -763,6 +767,10 @@
   .tag.md-class-aprovado { background: #E7F5EA; color: #1F6B33; }
 
   @media (max-width: 640px) {
+    /* no telemóvel o dedo não é um rato: 44 px é o mínimo recomendado */
+    .md-tipo { min-height: 44px; }
+    .md-item-acts .btn, .md-acts .btn, .md-curso .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+    .md-sel, .md-area { font-size: 16px; } /* 16px evita o zoom automático do iOS ao focar */
     .md-galeria { grid-template-columns: 1fr; }
     .md-opcoes { grid-template-columns: 1fr; }
     .md-tipos { width: 100%; }

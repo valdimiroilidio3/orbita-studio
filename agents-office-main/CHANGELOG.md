@@ -1,3 +1,62 @@
+## 1.54.4 — 2 nov 2026 · O QUE O TESTE MANUAL ENCONTROU (cinco correcções, uma delas sem prova)
+
+Depois de a 1.54.3 estar publicada, o fluxo principal foi percorrido com leads
+representativos — encontrar e cadastrar a lead, corrigir os dados, iniciar o
+projeto, escrever o briefing, gerar e copiar o Prompt Master, gerar mídia, sair,
+entrar e recuperar tudo — no computador e no telemóvel. O caminho determinístico
+passou. O que **não** passou ficou aqui corrigido, com o teste que o apanhou:
+
+- **F1 · a IA podia escrever o Prompt Master sem as regras e com factos
+  inventados.** O documento da IA **substituía** o das regras de honestidade: um
+  modelo que devolvesse «prémio nacional em 2021, 5000 clientes desde 1998»
+  entregava-o pronto a copiar, sem uma única linha a dizer o que era inventado.
+  Agora `masterComIA` **prefixa sempre** o bloco de regras (e não o duplica se o
+  modelo já o trouxer), e o texto ganha uma secção **«⚠ Antes de usar — por
+  confirmar»** com o que afirma sem apoio no briefing: anos, valores em euros,
+  «N clientes», prémios e certificados (`factosSuspeitos`). Nada é apagado do que
+  a IA escreveu — fica **marcado**, e a mesa mostra o alerta por cima do texto.
+- **F1b · prompts de imagem a pedir texto ou a «equipa real».** Os prompts
+  escritos pela IA passam por `violacoesDePrompt`: pedir texto/letras/logótipos
+  dentro da imagem, ou apresentar pessoas e instalações como as reais da empresa,
+  é **recusado** (`codigo: 'regra'`), com o motivo escrito — e volta o conjunto
+  montado pelas regras, vez de se aceitar o da IA. As restrições do projeto e as
+  da regra passam a ser **acumuladas** (antes, a última ganhava).
+- **F2 · as recusas chegavam como «HTTP 409».** As seis respostas de erro do
+  briefing traziam só `erro`; a mesa lia `error` e ficava sem a frase. Passam a
+  trazer as duas chaves (`error` e `erro`), e a rota do Prompt Master devolve
+  `avisos`, a das imagens `violacoes`. O `/api/rpc` devolve o corpo do erro em vez
+  de o perder.
+- **F3 · um projeto inexistente anunciava «Modo local · 0 leads».** Havia dois
+  `404` com sentidos opostos e a mesa tratava-os igual. Agora a decisão é uma
+  função pura, `src/respostas.js` (`decidirResposta`): **404 de rota** (instalação
+  antiga) → armazém do browser; **404 de recurso** (projeto/lead/ficheiro
+  apagado) → o ecrã do erro com a frase do servidor. A vista do projeto ganhou um
+  ecrã próprio: «Projeto não encontrado», o endereço que falhou, «Ver todos os
+  projetos» e «Tentar outra vez» — com a nota de que um projeto apagado não volta
+  por tentar outra vez. O servidor marca o 404 de rota (`{ rota: true }`).
+- **F4 · a lead aceitava contactos impossíveis.** `validarContacto` existia e só
+  era usada numa rota. Agora vale em `PATCH /ops/leads/:id` **e** em
+  `POST /ops/leads` (criação e importação da pesquisa): email que não parece
+  email, telefone com letras ou curto demais, site com espaços — **400** com a
+  frase que diz como corrigir e com o nome do lead. O que é válido é normalizado
+  (email em minúsculas, `https://` no site); vazio continua permitido.
+- **F5 · telemóvel (preparado, não medido).** A caixa de pré-visualização da
+  mídia passa a acompanhar a proporção do ficheiro (16:9, 4:5, 1:1) com
+  `object-fit: contain` — antes era 4:3 com `cover`, que cortava um vídeo 16:9. Os
+  botões da mídia passam a ter 44 px de altura mínima no telemóvel e os campos
+  16 px de letra (evita o zoom automático do iOS). **Não foi medido em pixéis nem
+  com um telemóvel a sério**: sem Chrome no ambiente, e a composição de vídeo com
+  `MediaRecorder` num telemóvel continua por provar. Está dito no relatório, em
+  `REVISAO-1.54.4.md`.
+
+**Testes:** 861 (eram 851). `revisao.test.mjs` (10) prova F1–F4 no servidor e na
+vista do briefing; `revisao-ui.test.mjs` (3) abre o `dist/mesa.html` num DOM, com
+o `/api/rpc` a responder como em produção, e lê o ecrã: o projeto inexistente já
+não anuncia uma base em baixo. Dois testes antigos mudaram de propósito: o do
+Prompt Master pela IA passa a exigir as regras à frente, e a função que detecta
+violações de prompt passou a olhar cláusula a cláusula (para não confundir «no
+text in the image» com «include a logo»).
+
 ## 1.54.3 — 2 nov 2026 · A MÍDIA GERADA (imagem e vídeo, com o custo à vista)
 
 O passo seguinte ao briefing: até aqui o projeto dizia o que fazer e nada saía.

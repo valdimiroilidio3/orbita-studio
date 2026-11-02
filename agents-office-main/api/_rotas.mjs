@@ -64,6 +64,54 @@ function leadDoCliente(l) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   1.54.4 · OS DADOS DO LEAD SÃO VALIDADOS NO SERVIDOR
+
+   A mesa já validava no browser (telefone, email, site). Mas o browser não é a
+   única porta: `POST /api/rpc` com um curl, uma importação, um script. Um email
+   «nao-e-email» guardado hoje é um envio falhado amanhã e um link de WhatsApp
+   com «abc» dentro — e ninguém sabe porquê.
+
+   Aqui valida-se o que faz sentido validar, com frases que dizem como corrigir.
+   Vazio continua a ser permitido: uma ficha sem email é normal, uma ficha com
+   um email impossível não é.
+   ------------------------------------------------------------------------ */
+export function validarContacto({ email, phone, website } = {}) {
+  const erros = [];
+  const limpos = {};
+  const t = (v) => String(v ?? '').trim();
+
+  if (email !== undefined) {
+    const v = t(email);
+    if (!v) limpos.email = null;
+    else if (!/^[^@\s]+@[^@\s.]+\.[^@\s]{2,}$/.test(v)) {
+      erros.push(`«${v}» não parece um email: falta o @ ou o domínio (exemplo: nome@empresa.pt)`);
+    } else limpos.email = v.toLowerCase();
+  }
+
+  if (phone !== undefined) {
+    const v = t(phone);
+    const digitos = v.replace(/\D/g, '');
+    if (!v) limpos.phone = null;
+    else if (/[a-zA-Z]/.test(v)) erros.push(`«${v}» tem letras: um telefone só leva dígitos, espaços, + , - e parênteses`);
+    else if (digitos.length < 6) erros.push(`«${v}» tem ${digitos.length} dígito(s): um telefone precisa de pelo menos 6`);
+    else limpos.phone = v;
+  }
+
+  if (website !== undefined) {
+    const v = t(website);
+    if (!v) limpos.website = null;
+    else if (/\s/.test(v)) erros.push(`«${v}» tem espaços: o site é um endereço só (exemplo: empresa.pt)`);
+    else {
+      const semEsquema = v.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      if (!/^[a-z0-9.-]+\.[a-z]{2,}(\/\S*)?$/i.test(semEsquema)) {
+        erros.push(`«${v}» não parece um endereço de site (exemplo: empresa.pt)`);
+      } else limpos.website = /^https?:\/\//i.test(v) ? v : `https://${semEsquema}`;
+    }
+  }
+  return { ok: erros.length === 0, erros, limpos };
+}
+
 function falha(status, mensagem, extra = {}) {
   return Object.assign(new Error(mensagem), { status, corpo: { error: mensagem, ...extra } });
 }
@@ -866,6 +914,16 @@ export async function responder(repo, {
   if (caminhoLimpo === '/ops/leads' && m === 'POST') {
     const lista = (Array.isArray(corpo?.leads) ? corpo.leads : [corpo]).map(leadDoCliente).filter(Boolean);
     if (!lista.length) throw falha(400, 'o lead precisa de um nome');
+    /* 1.54.4 · um contacto impossível é recusado na porta, com o nome do lead e a
+       frase que diz como corrigir. Não se guarda «abc» como telefone para
+       descobrir o problema três passos depois, no envio. */
+    for (const l of lista) {
+      const v = validarContacto({ email: l.email, phone: l.phone, website: l.website });
+      if (!v.ok) {
+        throw falha(400, `${l.name}: ${v.erros.join(' · ')}`, { lead: l.name, erros: v.erros });
+      }
+      Object.assign(l, v.limpos);
+    }
     // quem já existe por dedupe_key é atualizado; quem não existe entra
     const existentes = await repo.leads.existentes(lista.map((l) => l.dedupe_key));
     const porChave = new Set(existentes.map((e) => e.dedupe_key));
@@ -883,7 +941,9 @@ export async function responder(repo, {
     if (m === 'PATCH') {
       const campos = {};
       for (const k of ['status', 'notes', 'phone', 'email', 'website', 'category', 'city', 'score']) if (corpo?.[k] !== undefined) campos[k] = corpo[k];
-      const atualizado = await repo.leads.patch(lead.id, { ...campos, updated_at: agoraIso() });
+      const v = validarContacto({ email: campos.email, phone: campos.phone, website: campos.website });
+      if (!v.ok) throw falha(400, v.erros.join(' · '), { campo: 'contacto', erros: v.erros });
+      const atualizado = await repo.leads.patch(lead.id, { ...campos, ...v.limpos, updated_at: agoraIso() });
       return { status: 200, corpo: { ok: true, lead: atualizado } };
     }
   }
@@ -1135,7 +1195,7 @@ export async function responder(repo, {
         base: limpo(corpo?.base) || null, por: porQuem(),
       });
       if (!r.ok) {
-        if (r.codigo === 'conflito') return { status: 409, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+        if (r.codigo === 'conflito') return { status: 409, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, ...(r.vista || {}) } };
         throw falha(503, r.erro || 'a base não guardou o briefing');
       }
       await repo.atividade.add('briefing', `briefing de «${projeto.name}» gravado`).catch(() => null);
@@ -1153,7 +1213,7 @@ export async function responder(repo, {
       }
       /* a IA não respondeu: o projeto continua acessível e diz-se porquê */
       return { status: r.codigo === 'completo' ? 409 : 502, corpo: {
-        ok: false, codigo: r.codigo, erro: r.erro, dica: r.dica,
+        ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, dica: r.dica,
         ...(r.vista || {}), campos: bf.CAMPOS,
       } };
     }
@@ -1163,7 +1223,7 @@ export async function responder(repo, {
         projeto, lead, tipo: limpo(corpo?.tipo) === 'imagens' ? 'imagens' : 'master',
         id: limpo(corpo?.id), por: porQuem(),
       });
-      if (!r.ok) return { status: 404, corpo: { ok: false, codigo: r.codigo, erro: r.erro } };
+      if (!r.ok) return { status: 404, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro } };
       await repo.atividade.add('briefing', `versão anterior reposta em «${projeto.name}»`).catch(() => null);
       return { status: 200, corpo: { ok: true, ...r.vista } };
     }
@@ -1186,13 +1246,13 @@ export async function responder(repo, {
     if (seg[3] === 'master') {
       const motor = await motorDoBriefing();
       const r = await bf.gerarMaster(repo, { projeto, lead, motor, instrucao: limpo(corpo?.instrucao), por: porQuem() });
-      if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+      if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, ...(r.vista || {}) } };
       await repo.atividade.add('briefing', `Prompt Master de «${projeto.name}» ${r.via === 'ia' ? 'escrito pela IA' : 'montado por regras'}`).catch(() => null);
-      return { status: 200, corpo: { ok: true, master: r.master, via: r.via, motivo: r.motivo, ...r.vista } };
+      return { status: 200, corpo: { ok: true, master: r.master, via: r.via, motivo: r.motivo, avisos: r.avisos || [], ...r.vista } };
     }
     const motor = await motorDoBriefing();
     const r = await bf.gerarImagens(repo, { projeto, lead, motor, por: porQuem() });
-    if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+    if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, violacoes: r.violacoes || [], ...(r.vista || {}) } };
     await repo.atividade.add('briefing', `prompts de imagem de «${projeto.name}» ${r.via === 'ia' ? 'escritos pela IA' : 'montados por regras'}`).catch(() => null);
     return { status: 200, corpo: { ok: true, imagens: r.imagens, via: r.via, motivo: r.motivo, ...r.vista } };
   }
@@ -1656,5 +1716,10 @@ export async function responder(repo, {
     return { status: out.ok ? 202 : 503, corpo: out };
   }
 
-  throw falha(404, `a base ainda não serve «${caminhoLimpo}»`);
+  /* 1.54.4 · este 404 é diferente dos outros: a ROTA não existe (versão antiga
+     da função, caminho errado). Os 404 de recurso («projeto não encontrado»)
+     dizem outra coisa e a mesa não pode confundi-los — antes desta marca, um
+     projeto inexistente fazia a mesa anunciar «a base de dados não está a
+     responder». A marca `rota: true` é o que o cliente lê para decidir. */
+  throw falha(404, `a base ainda não serve «${caminhoLimpo}»`, { rota: true });
 }

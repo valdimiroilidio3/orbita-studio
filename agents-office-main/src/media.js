@@ -265,8 +265,11 @@ function cartao(g, M) {
       : `<img class="md-fig" src="${E(g.ficheiro.ver)}" alt="conceito visual gerado por IA para este projeto" loading="lazy">`)
     : `<div class="md-fig md-fig-vazio"><span>${g.estado === 'falhou' ? 'falhou' : g.estado === 'cancelada' ? 'cancelada' : 'à espera'}</span></div>`;
 
+  const forma = g.ficheiro?.largura && g.ficheiro?.altura
+    ? (g.ficheiro.altura > g.ficheiro.largura ? 'retrato' : (Math.abs(g.ficheiro.largura - g.ficheiro.altura) < 40 ? 'quadrado' : ''))
+    : '';
   return `<article class="md-item ${g.estado === 'falhou' ? 'mau' : ''}">
-    <div class="md-fig-caixa">${media}</div>
+    <div class="md-fig-caixa ${forma}">${media}</div>
     <div class="md-item-corpo">
       <div class="md-item-topo">
         <span class="tag md-tag-${E(g.estadoCls)}">${E(g.estadoTxt)}</span>

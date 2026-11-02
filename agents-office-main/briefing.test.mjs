@@ -379,7 +379,12 @@ test('Prompt Master pela IA: texto curto ou vazio é recusado, e a razão vem es
   assert.equal(curto.codigo, 'resposta-curta');
   const bom = await masterComIA({ briefing, lead: CLINICA, base: 'x', motor: motorFalso({ texto: 'A'.repeat(900), modelo: 'm', fornec: 'stub' }) });
   assert.equal(bom.ok, true);
-  assert.equal(bom.texto.length, 900);
+  /* 1.54.4 · o texto da IA passa a levar SEMPRE as regras de honestidade à
+     frente: antes, o documento da IA substituía o das regras e levava consigo a
+     única defesa escrita contra factos inventados */
+  assert.ok(bom.texto.startsWith('## 0. Regras que não se negociam'), 'as regras têm de ir à frente');
+  assert.ok(bom.texto.includes('A'.repeat(900)), 'o texto da IA fica inteiro');
+  assert.ok(bom.texto.length > 900);
   const semMotor = await masterComIA({ briefing, motor: null });
   assert.equal(semMotor.codigo, 'semmotor');
 });
