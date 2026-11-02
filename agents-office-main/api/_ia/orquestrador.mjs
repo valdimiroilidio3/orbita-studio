@@ -60,7 +60,7 @@ export function normalizarPlano(obj) {
 
 /* Uma ronda de conversa com ferramentas: o modelo pede, o servidor executa,
    o resultado volta para o modelo. Máximo `MAX_RODADAS_FERRAMENTA` rondas. */
-async function conversarComFerramentas({ motor, agente, tipo, mensagens, orc, ctx, maxTokens = 1400 }) {
+async function conversarComFerramentas({ motor, agente, tipo, mensagens, orc, ctx, maxTokens = 1400, cancelado = async () => false }) {
   const permitidas = AGENTES[agente].ferramentas.filter((f) => FERRAMENTAS[f]);
   const ferramentas = paraModelo(permitidas);
   const conversa = [...mensagens];
@@ -78,8 +78,20 @@ async function conversarComFerramentas({ motor, agente, tipo, mensagens, orc, ct
       tool_calls: r.chamadas.map((c) => ({ id: c.id, type: 'function', function: { name: c.nome, arguments: JSON.stringify(c.argumentos || {}) } })),
     });
     for (const c of r.chamadas) {
+      /* 1.61.0 · cancelamento REAL: verifica-se antes de cada ferramenta, não
+         só entre passos. Uma chamada já começada termina; a seguinte não começa. */
+      if (await cancelado()) {
+        return { texto: ultimo?.texto || '', chamadas: chamadasFeitas, cancelado: true, modelo: ultimo?.modelo, fornec: ultimo?.fornec };
+      }
       const res = await executarFerramenta(c.nome, c.argumentos, { ...ctx, permitidas, agente });
-      chamadasFeitas.push({ nome: c.nome, argumentos: c.argumentos, ok: !!res.ok, resumo: res.resumo || res.erro || '', precisaAprovacao: !!res.precisaAprovacao, ms: res.ms || 0 });
+      const chamada = { nome: c.nome, argumentos: c.argumentos, ok: !!res.ok, resumo: res.resumo || res.erro || '', precisaAprovacao: !!res.precisaAprovacao, ms: res.ms || 0 };
+      chamadasFeitas.push(chamada);
+      /* Uma acção destrutiva sem autorização não é um erro a repetir às cegas:
+         é uma execução que pára à espera de uma pessoa. Devolve-se o pedido e o
+         passo fica `aguarda_aprovacao` — nada mais corre até haver resposta. */
+      if (res.precisaAprovacao) {
+        return { texto: ultimo?.texto || '', chamadas: chamadasFeitas, pausa: chamada, modelo: ultimo?.modelo, fornec: ultimo?.fornec };
+      }
       conversa.push({ role: 'tool', tool_call_id: c.id, name: c.nome, content: JSON.stringify(res.dados ?? { ok: res.ok, resumo: res.resumo, erro: res.erro }) });
     }
   }
@@ -97,7 +109,12 @@ export async function correr({
   limites = {}, env = process.env, retomar = false,
 }) {
   const orc = orcamento({ maxChamadas: limites.maxChamadas || 16, maxTokens: limites.maxTokens || 160000 });
-  const ctx = { repo, aprovado, allowFerramentas: true };
+  /* 1.61.0 · o que uma pessoa autorizou, ferramenta a ferramenta, com nome e
+     hora. Sem isto, uma acção destrutiva fica parada — não corre «porque sim». */
+  const aprovadasDe = (registo) => (Array.isArray(registo?.autorizacoes) ? registo.autorizacoes : [])
+    .filter((a) => a && a.decisao === 'aprovada' && a.o_que)
+    .map((a) => String(a.o_que));
+  const ctx = { repo, aprovado, allowFerramentas: true, aprovadas: [] };
 
   const run = runId
     ? await repo.ia.runs.porId(runId)
@@ -106,6 +123,16 @@ export async function correr({
   /* retomar = continuar de um plano já gravado, sem repetir os passos que já
      ficaram concluídos. Sem plano (ou sem pedido de retomar), é começar do zero. */
   const retomando = !!(runId && retomar && run.plano && Array.isArray(run.plano.passos) && run.plano.passos.length);
+  ctx.aprovadas = aprovadasDe(run);
+  /* O cancelamento é lido da base (não de memória): o pedido pode chegar de
+     outro separador ou do telemóvel enquanto esta execução corre. */
+  let cancelamentoEfectivo = false;
+  const cancelado = async () => {
+    const agora = await repo.ia.runs.porId(run.id);
+    if (agora?.estado !== 'cancelado' && !agora?.cancelamento?.pedido) return false;
+    cancelamentoEfectivo = true;
+    return true;
+  };
   if (run.estado === 'cancelado' && !retomando) return run;   // cancelada antes de começar: não se começa
   const mudar = async (campos) => {
     const r = await repo.ia.runs.actualizar(run.id, campos);
@@ -160,7 +187,8 @@ export async function correr({
     }
 
     /* --- 4/5 · executar (e, ao retomar, saltar o que já está concluído) --- */
-    const anteriores = retomando ? await repo.ia.steps.porRun(run.id) : [];
+    const anteriores = await repo.ia.steps.porRun(run.id);
+    const existentes = new Map(anteriores.map((s) => [s.ordem, s]));
     const jaFeitos = anteriores
       .filter((x) => x.estado === 'concluido' && x.agente !== 'reviewer')
       .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
@@ -169,13 +197,32 @@ export async function correr({
     for (const [indice, passo] of plano.passos.entries()) {
       const ordem = indice + 1;
       const actual = await repo.ia.runs.porId(run.id);
-      if (actual?.estado === 'cancelado') return mudar({ estado: 'cancelado', fim: new Date().toISOString() });
+      /* 1.61.0 · parar é parar: basta o PEDIDO, não é preciso o estado final. E o
+         registo diz que a paragem foi efectiva (o passo anterior já tinha fim). */
+      if (actual?.estado === 'cancelado' || actual?.cancelamento?.pedido) {
+        return await mudar({
+          estado: 'cancelado', fim: new Date().toISOString(),
+          cancelamento: {
+            ...(actual.cancelamento || {}), pedido: true, efectivo: true,
+            em: actual.cancelamento?.em || new Date().toISOString(),
+            porque: 'parada verificada entre passos',
+          },
+        });
+      }
       if (feitos.has(ordem)) continue;   // retomada: não se repete trabalho já feito
 
-      const step = await repo.ia.steps.criar({
-        run_id: run.id, ordem, agente: passo.agente, titulo: passo.titulo,
-        estado: 'a_correr', entrada: passo.instrucao,
-      });
+      /* Retomar depois de uma pausa não deixa dois passos com o mesmo número:
+         reaproveita-se a linha que já existe (a que ficou à espera ou falhou). */
+      const anteriorLinha = retomando ? existentes.get(ordem) : null;
+      const step = anteriorLinha && anteriorLinha.estado !== 'concluido'
+        ? await repo.ia.steps.actualizar(anteriorLinha.id, {
+          estado: 'a_correr', entrada: passo.instrucao, saida: null, erro: null,
+          ferramentas: [], duracao_ms: null, agente: passo.agente, titulo: passo.titulo,
+        })
+        : await repo.ia.steps.criar({
+          run_id: run.id, ordem, agente: passo.agente, titulo: passo.titulo,
+          estado: 'a_correr', entrada: passo.instrucao,
+        });
       await mudar({ agente: passo.agente, estado: 'a_executar' });
 
       const inicio = Date.now();
@@ -183,11 +230,42 @@ export async function correr({
         const anterior = resumos.length ? `\n\nO que os passos anteriores produziram:\n${blocoContexto(resumos)}` : '';
         const r = await conversarComFerramentas({
           motor, agente: passo.agente, tipo: (AGENTES[passo.agente].tipos || ['texto'])[0], orc, ctx,
+          cancelado,
           mensagens: [
             { role: 'system', content: promptDe(passo.agente) },
             { role: 'user', content: `Passo ${ordem} de ${plano.passos.length}: ${passo.titulo}\n\nO que fazer: ${passo.instrucao}\nComo se sabe que ficou bem: ${passo.criterio}${anterior}` },
           ],
         });
+        /* 1.61.0 · parou porque alguém mandou parar. O passo fica `cancelado` e
+           o registo da execução diz que a paragem foi efectiva (não «pedida»). */
+        if (r.cancelado) {
+          await repo.ia.steps.actualizar(step.id, {
+            estado: 'cancelado', ferramentas: r.chamadas, duracao_ms: Date.now() - inicio,
+            saida: r.texto || null, erro: 'cancelada a pedido antes da próxima ferramenta',
+          });
+          return await mudar({
+            estado: 'cancelado', fim: new Date().toISOString(),
+            cancelamento: { ...(run.cancelamento || {}), pedido: true, efectivo: true, em: run.cancelamento?.em || new Date().toISOString(), porque: 'parada verificada entre ferramentas' },
+          });
+        }
+        /* 1.61.0 · uma acção destrutiva sem autorização pára a execução. Não se
+           marca como falha: fica à espera de uma pessoa, com o pedido escrito. */
+        if (r.pausa) {
+          await repo.ia.steps.actualizar(step.id, {
+            estado: 'aguarda_aprovacao', ferramentas: r.chamadas, duracao_ms: Date.now() - inicio,
+            saida: r.texto || null, erro: `«${r.pausa.nome}» precisa de aprovação humana`,
+          });
+          return await mudar({
+            estado: 'aguarda_aprovacao',
+            agente: passo.agente,
+            pendente: {
+              ordem, agente: passo.agente, ferramenta: r.pausa.nome, argumentos: r.pausa.argumentos || null,
+              resumo: `«${r.pausa.nome}» é destrutiva e pede a tua autorização antes de correr`,
+              desde: new Date().toISOString(),
+            },
+            erro: null, fim: null,
+          });
+        }
         const saida = String(r.texto || '').trim();
         const estado = saida ? 'concluido' : 'vazio';
         const s2 = await repo.ia.steps.actualizar(step.id, {
@@ -206,6 +284,15 @@ export async function correr({
         }
         resumos.push({ agente: passo.agente, titulo: passo.titulo, saida: `falhou: ${e.message}` });
       }
+    }
+
+    /* 1.61.0 · pediram para parar enquanto corria o último passo: não se gasta
+       uma chamada de revisão para fechar um trabalho que já não se quer. */
+    if (await cancelado()) {
+      return await mudar({
+        estado: 'cancelado', fim: new Date().toISOString(),
+        cancelamento: { ...(run.cancelamento || {}), pedido: true, efectivo: true, em: run.cancelamento?.em || new Date().toISOString(), porque: 'parada verificada antes da revisão' },
+      });
     }
 
     /* --- 6 · revisão (agente independente) --- */

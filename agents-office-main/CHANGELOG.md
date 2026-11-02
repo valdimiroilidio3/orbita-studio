@@ -1,3 +1,74 @@
+## 1.61.0 — 2 nov 2026 · EXECUÇÃO TRANSPARENTE
+
+O pedido: «quero ver o que o agente fez, com que dados, o que mudou — e poder
+parar, repetir em segurança e saber quem autorizou». O servidor já gravava
+execuções desde a 1.18.0, mas com um vocabulário técnico e três buracos: o
+cancelamento era uma bandeira, a repetição era um botão que duplicava trabalho,
+e ninguém sabia quem tinha autorizado o quê. Esta versão fecha os três.
+
+### Cinco estados, ditos por palavras
+Nova página **Execuções** (`#/execucoes`) e detalhe por execução
+(`#/execucao/<id>`). O estado técnico (`a_planear`, `a_executar`, `parcial`…) é
+traduzido num só sítio — `src/execucao.js`, usado pelo servidor **e** pela mesa:
+**em fila · em execução · à espera de aprovação · concluído · falhado**, mais
+**cancelado**. `parcial` nunca é «concluído»: é trabalho que fechou a meio, e
+diz-se.
+
+### Entradas → acções → resultados
+Cada passo mostra, por esta ordem, o que lhe foi pedido, as ferramentas que
+correu no servidor (com argumentos, resultado e duração) e o texto que voltou.
+Se alguma coisa falhou, o erro fica **ao lado** do resultado, não no lugar dele.
+Uma ferramenta que pediu aprovação aparece como «não correu» — não como feita.
+
+### Erros com recuperação
+Cada falha propõe o que fazer, pela causa: sem chave → ligar o motor; plano
+ilegível → repetir (nada correu); orçamento esgotado ou passo falhado →
+**continuar do passo**, sem repetir o que já está feito; cancelada → correr
+outra vez.
+
+### Repetição segura
+`POST /ia/runs/:id/repetir` abre uma execução **nova**, ligada à antiga por
+`repeticao_de`, com uma `chave` única: um duplo clique (ou dois separadores) não
+cria duas execuções — a segunda chamada devolve a que já existe. Repetir por
+cima de uma execução a correr é recusado com a razão escrita.
+
+### Cancelamento real
+`POST /ia/runs/:id/cancelar` guarda **quem** pediu e **quando**, e o motor passa
+a verificar o pedido **entre passos e entre ferramentas** — uma chamada já
+começada termina, a seguinte não começa. O registo distingue «cancelamento
+pedido» de «paragem efectiva».
+
+### Aprovação obrigatória, com nome no histórico
+Uma acção destrutiva (`receita_apagar`) já pode ser **pedida** por um agente —
+e o servidor **pára a execução** em `aguarda_aprovacao`, com o pedido escrito.
+`POST /ia/runs/:id/aprovar` exige quem autoriza (sem nome → `400`), guarda
+`{por, em, o_que, motivo}` e só essa ferramenta fica autorizada; `/recusar`
+fecha a execução com o motivo. Sem autorização, nada corre. O backend passa a
+ter `receita_apagar` na lista precisamente porque agora existe a pausa — antes
+não havia como pedir, só como falhar.
+
+### Base de dados
+Migração **`supabase/orbita_1_61_0.sql`** (idempotente): `autorizacoes`,
+`cancelamento`, `pendente`, `repeticao_de`, `chave` em `orbita_ai_runs`, com
+índice único na chave. Numa base por migrar, a escrita tenta de novo sem as
+colunas novas e diz que ficaram por guardar — a execução não se perde.
+As migrações 1.59.0, 1.60.0 e 1.61.0 entram na lista do `/api/setup`.
+
+### Telemóvel
+A barra de uma mão passa a mostrar uma **execução parada à espera de
+aprovação** e abre-a. Alvos de 44 px, `prefers-reduced-motion` respeitado.
+
+### O que continua por fazer
+- As migrações `orbita_1_56_0.sql`, `orbita_1_59_0.sql`, `orbita_1_60_0.sql` e
+  `orbita_1_61_0.sql` têm de ser aplicadas na base (pelo SQL editor ou por
+  `/api/setup`).
+- **Prova visual no telemóvel: não feita.** Há testes de DOM sobre o bundle
+  publicado; não houve browser nem telefone real neste ambiente.
+- Um agente ainda não escolhe **quando** pedir uma acção destrutiva: faz o que
+  o modelo decidir. O que está garantido é que, se pedir, não corre sem ti.
+
+---
+
 ## 1.60.0 — 2 nov 2026 · MOTORES, AUTONOMIA E UM TELEMÓVEL A SÉRIO
 
 Três coisas viviam em três ecrãs e não se respondiam: que motor está escolhido e

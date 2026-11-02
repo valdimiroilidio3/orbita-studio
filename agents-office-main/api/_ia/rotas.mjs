@@ -19,7 +19,10 @@
      POST   /ia/runs                    — abre uma execução
      POST   /ia/runs/:id/correr         — corre-a (pode demorar; a mesa faz polling)
      GET    /ia/runs/:id                — execução + passos
-     POST   /ia/runs/:id/cancelar       — pede paragem (verificada entre passos)
+     POST   /ia/runs/:id/cancelar       — pede paragem (verificada entre passos e ferramentas)
+     POST   /ia/runs/:id/repetir        — abre uma execução nova ligada à antiga (sem duplicar)
+     POST   /ia/runs/:id/aprovar        — autoriza a acção sensível parada (com nome e hora)
+     POST   /ia/runs/:id/recusar        — recusa e fecha a execução com a razão escrita
      GET    /ia/uso                     — pedidos, latência, erros, tokens
      PATCH  /ia/config                  — desligar fornecedores, modelo por agente
      1.19.0
@@ -49,6 +52,12 @@ import * as memoria from './memoria.mjs';
 import * as mem0 from './mem0.mjs';
 import * as media from './media.mjs';
 import { TIPOS } from './router.mjs';
+/* 1.61.0 · a leitura da execução é a MESMA no servidor e na mesa: estados,
+   recuperação, repetição segura e quem autorizou vêm de `src/execucao.js`. */
+import {
+  estadoDoRun, passosDoRun, registoDoRun, autorizacoesDoRun, resumoDoRun,
+  podeCancelar, podeRepetir, podeAprovar, recuperacao, chaveDeRepeticao,
+} from '../../src/execucao.js';
 
 const corpoDe = (c) => (c && typeof c === 'object' ? c : {});
 const idDe = (seg) => seg[seg.length - 2];
@@ -476,7 +485,16 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
 
   /* ---------------- execuções ---------------- */
   if (limpo === '/ia/runs' && m === 'GET') {
-    return { status: 200, corpo: { runs: await repo.ia.runs.listar(Number(qs.get('limite')) || 20) } };
+    /* 1.61.0 · a lista já vem traduzida: estado em português, passos, custo e o
+       que se pode fazer. A mesa desenha isto; não recalcula a verdade. */
+    const runs = await repo.ia.runs.listar(Number(qs.get('limite')) || 20);
+    const comEstado = runs.map((r) => ({
+      ...r,
+      visivel: estadoDoRun(r),
+      resumo: resumoDoRun(r, []),
+      accoes: { cancelar: podeCancelar(r), repetir: podeRepetir(r, runs), aprovar: podeAprovar(r) },
+    }));
+    return { status: 200, corpo: { runs: comEstado } };
   }
 
   if (limpo === '/ia/runs' && m === 'POST') {
@@ -504,15 +522,106 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
     const id = seg[2];
     const run = await repo.ia.runs.porId(id);
     if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
-    return { status: 200, corpo: { run, passos: await repo.ia.steps.porRun(id) } };
+    const passos = await repo.ia.steps.porRun(id);
+    const todos = await repo.ia.runs.listar(50);
+    return { status: 200, corpo: {
+      run, passos,
+      /* 1.61.0 · o que se vê: estado dito por palavras, passos com entradas,
+         acções e resultados, o registo cronológico, quem autorizou, o resumo das
+         contas e o que fazer a seguir se correu mal. */
+      visivel: estadoDoRun(run),
+      lidos: passosDoRun(passos),
+      registo: registoDoRun(run, passos),
+      autorizacoes: autorizacoesDoRun(run),
+      resumo: resumoDoRun(run, passos),
+      recuperacao: recuperacao(run, passos),
+      accoes: { cancelar: podeCancelar(run), repetir: podeRepetir(run, todos), aprovar: podeAprovar(run) },
+    } };
   }
 
   if (seg[1] === 'runs' && seg[3] === 'cancelar' && m === 'POST') {
     const id = idDe(seg);
     const run = await repo.ia.runs.porId(id);
     if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
-    const r = await repo.ia.runs.actualizar(id, { estado: 'cancelado', fim: new Date().toISOString() });
-    return { status: 200, corpo: { ok: true, run: r, nota: 'a paragem é verificada entre passos — o passo a decorrer termina primeiro' } };
+    const pode = podeCancelar(run);
+    if (!pode.sim) return { status: 409, corpo: { error: pode.porque } };
+    const c = corpoDe(corpo);
+    const por = String(c.por || c.autor || 'dono').slice(0, 120);
+    const agora = new Date().toISOString();
+    /* O pedido fica datado e com nome. O estado passa a `cancelado` já (para o
+       orquestrador ver entre passos), mas o registo guarda que houve um passo a
+       decorrer — é essa a diferença entre «parei» e «pára quando puderes». */
+    const r = await repo.ia.runs.actualizar(id, {
+      estado: 'cancelado',
+      fim: agora,
+      cancelamento: { pedido: true, por, em: agora, efectivo: false, porque: 'verificado entre passos e entre ferramentas' },
+    });
+    return { status: 200, corpo: {
+      ok: true, run: r,
+      nota: 'a paragem é verificada entre passos e entre ferramentas — uma chamada já começada termina',
+      pedido: { por, em: agora },
+    } };
+  }
+
+  /* ---------------- 1.61.0 · repetir em segurança ---------------- */
+  if (seg[1] === 'runs' && seg[3] === 'repetir' && m === 'POST') {
+    const id = idDe(seg);
+    const run = await repo.ia.runs.porId(id);
+    if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
+    const todos = await repo.ia.runs.listar(50);
+    const chave = chaveDeRepeticao(run);
+    const c = corpoDe(corpo);
+    /* Duplo clique, rede lenta, dois separadores: a chave é a mesma e a segunda
+       chamada devolve a execução que já existe em vez de abrir outra. */
+    const jaAberta = todos.find((r) => r.chave === chave);
+    if (jaAberta) {
+      return { status: 200, corpo: { ok: true, repetida: false, run: jaAberta, nota: 'esta repetição já estava aberta — não se criam duas' } };
+    }
+    const pode = podeRepetir(run, todos);
+    if (!pode.sim) return { status: 409, corpo: { error: pode.porque } };
+    const nova = await repo.ia.runs.criar({
+      objetivo: run.objetivo,
+      estado: 'novo',
+      agente: 'orchestrator',
+      repeticao_de: run.id,
+      chave,
+      autorizacoes: [{ por: String(c.por || c.autor || 'dono').slice(0, 120), em: new Date().toISOString(), o_que: 'repetição da execução', motivo: String(c.motivo || '').slice(0, 200) || null, decisao: 'aprovada' }],
+    });
+    try { await repo.atividade.add('ia', `execução repetida: ${String(run.objetivo).slice(0, 60)}`); } catch { /* opcional */ }
+    return { status: 201, corpo: { ok: true, repetida: true, run: nova, de: run.id, nota: 'a antiga fica no histórico; esta começa do zero' } };
+  }
+
+  /* ---------------- 1.61.0 · aprovar / recusar o que está parado ---------------- */
+  if (seg[1] === 'runs' && (seg[3] === 'aprovar' || seg[3] === 'recusar') && m === 'POST') {
+    const id = idDe(seg);
+    const run = await repo.ia.runs.porId(id);
+    if (!run) return { status: 404, corpo: { error: 'execução não encontrada' } };
+    const c = corpoDe(corpo);
+    const por = String(c.por || c.autor || '').trim();
+    if (!por) return { status: 400, corpo: { error: 'quem autoriza tem de ser dito: sem nome não há histórico, e sem histórico não há autorização' } };
+    const aprovar = seg[3] === 'aprovar';
+    const pode = podeAprovar(run);
+    if (!pode.sim) return { status: 409, corpo: { error: pode.porque } };
+    const agora = new Date().toISOString();
+    const entrada = {
+      por: por.slice(0, 120), em: agora,
+      o_que: String(run.pendente?.ferramenta || run.pendente?.resumo || 'acção sensível').slice(0, 200),
+      motivo: String(c.motivo || '').slice(0, 300) || null,
+      decisao: aprovar ? 'aprovada' : 'recusada',
+    };
+    const autorizacoes = [...(Array.isArray(run.autorizacoes) ? run.autorizacoes : []), entrada];
+    /* Aprovada, a execução volta à fila (`novo`) — e quem trata de a correr é a
+       mesa com `retomar`, que reaproveita o plano e não repete passos feitos. */
+    const r = await repo.ia.runs.actualizar(id, aprovar
+      ? { autorizacoes, pendente: null, estado: 'novo', aprovado_por: entrada.por }
+      : { autorizacoes, pendente: null, estado: 'cancelado', erro: `recusada por ${entrada.por}: ${entrada.motivo || 'sem motivo escrito'}`, fim: agora });
+    try { await repo.atividade.add('ia', `${aprovar ? 'aprovada' : 'recusada'} por ${entrada.por}: ${entrada.o_que}`); } catch { /* opcional */ }
+    return { status: 200, corpo: {
+      ok: true, run: r, autorizacao: entrada, autorizacoes,
+      nota: aprovar
+        ? 'a autorização fica com o teu nome e a hora; o trabalho continua quando voltares a correr'
+        : 'a execução fecha cancelada com a razão escrita',
+    } };
   }
 
   /* ---------------- 1.19.0 · memória (Graft) ---------------- */

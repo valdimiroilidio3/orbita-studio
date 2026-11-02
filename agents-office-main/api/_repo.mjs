@@ -312,10 +312,33 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         },
       },
       runs: {
-        async criar(r) { return um(await pedir('orbita_ai_runs', { method: 'POST', body: r, prefer: 'return=representation' })); },
+        /* 1.61.0 · as colunas novas (autorizações, cancelamento, pendente,
+           repetição, chave) só existem depois de `orbita_1_61_0.sql`. Numa base
+           por migrar, a escrita não pode falhar: tenta-se de novo sem elas e
+           diz-se que ficaram por guardar — em vez de perder a execução inteira. */
+        async criar(r) {
+          try {
+            return um(await pedir('orbita_ai_runs', { method: 'POST', body: r, prefer: 'return=representation' }));
+          } catch (e) {
+            if (!e.semEsquema) throw e;
+            const { autorizacoes, cancelamento, pendente, repeticao_de, chave, ...antigo } = r;
+            void autorizacoes; void cancelamento; void pendente; void repeticao_de; void chave;
+            const linha = um(await pedir('orbita_ai_runs', { method: 'POST', body: antigo, prefer: 'return=representation' }));
+            return linha ? { ...linha, migracaoEmFalta: 'orbita_1_61_0' } : linha;
+          }
+        },
         async actualizar(id, campos) {
-          const r = await pedir(`orbita_ai_runs?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
-          return um(r);
+          try {
+            const r = await pedir(`orbita_ai_runs?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
+            return um(r);
+          } catch (e) {
+            if (!e.semEsquema) throw e;
+            const { autorizacoes, cancelamento, pendente, repeticao_de, chave, ...antigo } = campos;
+            void autorizacoes; void cancelamento; void pendente; void repeticao_de; void chave;
+            const r = await pedir(`orbita_ai_runs?id=eq.${q(id)}`, { method: 'PATCH', body: antigo, prefer: 'return=representation' });
+            const linha = um(r);
+            return linha ? { ...linha, migracaoEmFalta: 'orbita_1_61_0' } : linha;
+          }
         },
         async porId(id) { return um(await pedir(`orbita_ai_runs?select=*&id=eq.${q(id)}&limit=1`)); },
         async listar(limit = 30) { return (await pedir(`orbita_ai_runs?select=*&order=criado.desc&limit=${Math.min(100, limit)}`)) || []; },

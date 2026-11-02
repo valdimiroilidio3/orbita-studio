@@ -282,3 +282,13 @@ test('a autonomia local guarda a decisão e sobrevive a outra instância', async
   const desceu = await outra.call('/ops/autonomia/email:geral/descer', 'POST', {});
   assert.equal(desceu.nivel, 'pedir_sempre');
 });
+
+/* 1.61.0 · execuções no modo local: lista vazia com a razão, nunca um ecrã partido */
+test('as execuções locais são vazias e dizem porquê', async () => {
+  const api = createLocalApi({ storage: armazem() });
+  const r = await api.call('/ia/runs');
+  assert.deepEqual(r.runs, []);
+  assert.equal(r.modo, 'local');
+  assert.match(r.nota, /não corre nenhum agente/);
+  await assert.rejects(() => api.call('/ia/runs/abc'), (e) => e.status === 503 && /vive no servidor/.test(e.message));
+});
