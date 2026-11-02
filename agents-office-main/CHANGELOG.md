@@ -1,3 +1,32 @@
+## 1.57.1 — 2 nov 2026 · OS BOTÕES (maiores, e a toda a largura do sistema, até ao terminal)
+
+Os botões eram o sítio mais frágil do sistema: 15 px de altura de texto, raios
+diferentes de ecrã para ecrã, nenhum anel de foco, e no terminal o «executar»
+media 3 px de padding. Esta passagem dá-lhes uma escala única e torna-os
+utilizáveis com o dedo.
+
+- **Mesa** — `.btn` com 46 px de altura (48 no telemóvel), 20 px de respiro
+  lateral, raio de 11 px, ícone de 18 px e três estados legíveis: hover com
+  sombra, `:active` a descer 1 px, `:focus-visible` com anel azul de 2 px.
+  Variantes: primária (azul com sombra própria), fantasma (contorno), discreta
+  (sem caixa) e **perigo** (nova, para acções destrutivas). `.small` fica nos 38
+  px para tabelas; no telemóvel sobe a 42.
+- **Pastilha e chips** — 42 px e 38 px com foco visível; deixam de ser botões
+  sem estado de teclado.
+- **Página do projeto** — copiar contacto (36×36) e menu (44×44) alinhados com a
+  nova escala; as entradas do menu passam a ter classe própria (`.pj-menu-i`),
+  porque havia um `<button>` sem estilo nenhum no menu de acções.
+- **Terminal da oficina** — «executar» com 36 px de altura (42 no telemóvel),
+  letra de 11,5 px em versaletes e hover verde; filtros por sala a 30 px;
+  fechar com alvo de 32×32 e fundo no hover. Todos com anel de foco verde, que
+  num fundo escuro se lê melhor que uma sombra.
+- **Oficina** — botões de painel e de visita (`.mc-*`) a 34 px, chips da barra a
+  34 px, `.lv-foot` a 34 px, controlos de câmara de 42 para 46 px.
+
+Prova: `botoes.test.mjs` (9) lê as regras CSS que interessam e abre a página do
+projeto num DOM para garantir que nenhum botão fica sem classe. Suite **923/923**.
+O que não se prova aqui: pixéis medidos num ecrã a sério.
+
 ## 1.57.0 — 2 nov 2026 · O REDESENHO DA PÁGINA DO PROJETO (a mesma app, outro cuidado)
 
 A página do projeto deixou de ser uma lista de cartões iguais e passou a ser um ecrã
