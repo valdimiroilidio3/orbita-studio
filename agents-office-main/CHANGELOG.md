@@ -1,3 +1,64 @@
+## 1.56.0 — 2 nov 2026 · A3 · A FATURA (número, IVA, PDF, anulação)
+
+A receita entrava à mão e não havia documento nenhum. Esta frente entrega o papel:
+número sequencial sem buracos, IVA configurável, NIF validado, PDF gerado no
+servidor sem dependências, envio por email quando há chave, e anulação com nota de
+crédito. O total faturado **não** entra na receita do saldo — uma fatura é o que se
+cobrou, a receita é o que entrou; somar as duas contaria o mesmo dinheiro duas
+vezes, e o ecrã di-lo.
+
+- **Numeração sem buracos** — `máximo + 1` dentro da série (o ano), com chave única
+  `(serie, numero, tipo)`: dois pedidos ao mesmo tempo, um ganha e o outro recebe o
+  conflito e tenta o número seguinte (até 5 vezes). Uma fatura anulada **não** se
+  apaga: passa a `estado = 'anulada'`, o número fica gasto e a nota de crédito é uma
+  linha nova (`2026/0001-NC`) com os valores negativos e o motivo escrito.
+- **IVA** — 23 %, 13 %, 6 % ou 0 % (isento com motivo obrigatório, ex.: «Isento —
+  artigo 9.º do CIVA»). Tudo em cêntimos inteiros: o IVA arredonda-se **uma vez** e
+  base + IVA = total sempre (um teste cobre 1 cêntimo a 6 %).
+- **NIF** — dígito de controlo verificado (módulo 11). Sem NIF só com «consumidor
+  final», e o PDF escreve «Consumidor final (sem NIF)» em vez de inventar um número
+  para o papel parecer completo.
+- **PDF** — `api/_pdf.mjs`, um gerador de 200 linhas sem dependências (Helvetica e
+  Helvetica-Bold, texto, linhas e caixas, xref com deslocamentos). Cobre o português
+  em WinAnsi (ã, ç, €, º). O documento é gerado a partir do que está na base: o que
+  se descarrega é o que ficou guardado, incluindo a marca de ANULADA.
+- **Emitente** — `ORBITA_EMITENTE_NOME`, `ORBITA_EMITENTE_NIF`,
+  `ORBITA_EMITENTE_MORADA`. Sem nome e NIF, o PDF diz na cara «Emitente por
+  configurar» e o ecrã nomeia as variáveis que faltam — não sai um documento que
+  parece válido sem o ser.
+- **Envio** — `POST /ops/faturas/:id/enviar` anexa o PDF pelo Resend. Sem
+  `RESEND_API_KEY` responde `enviado: false` com o motivo e **não** marca a fatura
+  como enviada (um teste garante que `enviada_em` fica `null`).
+- **Ecrã** — nova página «Faturas»: lista com número, cliente, totais e estado;
+  formulário com linhas (descrição, quantidade, preço), IVA e motivo de isenção;
+  por mês e por cliente; aviso do emitente e do correio por configurar. No saldo
+  aparece «Faturado (não é receita)» ao lado do que entrou.
+- **Modo local** — a fatura fica registada com número e totais (as mesmas regras),
+  mas o PDF e o email dizem que precisam da base ligada: um documento fiscal não
+  vive numa aba do browser.
+- **Base** — `supabase/orbita_1_56_0.sql` (idempotente) na ordem de `_esquema.mjs`,
+  com `orbita_faturas` na lista de tabelas da prontidão.
+- **Correcção da 1.55.0 incluída** — sem a migração do custo aplicada, o PostgREST
+  recusava a **linha inteira** do `orbita_ai_uso` por causa das colunas novas, e
+  perdia-se também o uso (tokens, latência, erro). Agora há recuo: grava-se o que a
+  base aceita e o custo fica de fora, dito, em vez de a chamada desaparecer.
+
+**Testes:** 894 (eram 879 na 1.55.0). `faturas.test.mjs` (11) prova: NIF,
+IVA, numeração 1→4 com uma anulada pelo meio, a corrida de dois pedidos, as nove
+recusas (cliente, NIF, linhas, quantidade, IVA, isenção, série), consumidor final,
+o PDF com xref verificado objecto a objecto e o texto do documento, o emitente em
+falta, os totais do resumo, as rotas (emitir, listar, enviar sem chave, enviar com
+Resend falso com o PDF em anexo, anular, duplicar anulação) e o saldo com o
+faturado à parte. `faturas-ui.test.mjs` (2) abre o `dist/mesa.html` num DOM: a
+lista, a nota de crédito, o aviso do emitente e o formulário que recusa um
+documento incompleto antes de o enviar. `localapi.test.mjs` ganhou um teste do
+modo local.
+
+**Continua a não ser:** pagamento (Stripe e afins), séries por tipo de documento
+(além do ano), IVA por linha (é por fatura), e envio por WhatsApp. O número é
+atribuído pela base; sem a migração aplicada a fatura falha com a tabela em falta,
+em vez de guardar um documento sem sítio.
+
 ## 1.55.0 — 2 nov 2026 · A2 · DINHEIRO VERDADEIRO (o custo de cada chamada, medido)
 
 Até aqui o saldo dizia `custoCentimos: 0` e `margemCentimos = receitaCentimos`.

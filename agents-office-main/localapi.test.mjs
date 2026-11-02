@@ -225,3 +225,38 @@ test('23 · editar um lead no modo local: corrige o campo e não mexe no resto (
   await assert.rejects(() => api.call(`/ops/leads/${id}`, 'PATCH', {}), /nada para alterar/);
   await assert.rejects(() => api.call('/ops/leads/l_nao_existe', 'PATCH', { city: 'Porto' }), (e) => e.status === 404);
 });
+
+test('faturas no modo local: o documento existe e o número não salta — o PDF é que precisa de servidor', async () => {
+  const api = createLocalApi({ storage: armazem() });
+  const pedido = {
+    cliente: { nome: 'Clínica do Mondego', nif: '509442013' },
+    linhas: [{ descricao: 'Site institucional', quantidade: 1, precoEuros: 900 }],
+    ivaTaxa: 23,
+  };
+  const a = await api.call('/ops/faturas', 'POST', pedido);
+  assert.equal(a.fatura.codigo, '2026/0001');
+  assert.equal(a.fatura.iva_centimos, 20700);
+  assert.equal(a.fatura.total_centimos, 110700);
+  assert.match(a.aviso, /PDF é gerado no servidor/, 'diz o que falta, em vez de um botão morto');
+
+  const b = await api.call('/ops/faturas', 'POST', pedido);
+  assert.equal(b.fatura.codigo, '2026/0002');
+  await api.call(`/ops/faturas/${b.fatura.id}/anular`, 'POST', { motivo: 'duplicado' });
+  const c = await api.call('/ops/faturas', 'POST', pedido);
+  assert.equal(c.fatura.codigo, '2026/0003', 'a anulada não devolve o número');
+
+  const lista = await api.call('/ops/faturas');
+  assert.equal(lista.faturas.length, 4, 'três faturas e uma nota de crédito');
+  assert.equal(lista.resumo.emitidas, 2);
+  assert.equal(lista.resumo.anuladas, 1);
+  assert.equal(lista.resumo.notasCredito, 1);
+  assert.equal(lista.resumo.totalCentimos, 110700, 'duas faturas de 1 107 € menos a nota de crédito de 1 107 €');
+
+  const envio = await api.call(`/ops/faturas/${a.fatura.id}/enviar`, 'POST', {});
+  assert.equal(envio.enviado, false);
+  assert.match(envio.motivo, /não há servidor de correio/i);
+
+  await assert.rejects(() => api.call('/ops/faturas', 'POST', { cliente: { nome: 'X' }, linhas: [] }), /NIF do cliente|linha/);
+  const saldo = await api.call('/ops/saldo');
+  assert.equal(saldo.faturacao.totalCentimos, 110700, 'o saldo mostra o faturado à parte');
+});

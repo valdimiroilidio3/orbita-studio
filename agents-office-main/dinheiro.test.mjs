@@ -25,7 +25,7 @@ import {
   CAMBIO_PADRAO, cambioDe, centimosDeMicro, custoDeUso,
   eurosDeMicro, precosDoAmbiente, precoDe, tectoDeCusto,
 } from './api/_dinheiro.mjs';
-import { createMemRepo } from './api/_repo.mjs';
+import { createMemRepo, createSupabaseRepo } from './api/_repo.mjs';
 import { responder } from './api/_rotas.mjs';
 import { orcamento } from './api/_ia/router.mjs';
 import { criarECorrer, custoDaExecucao } from './api/_tarefas.mjs';
@@ -323,4 +323,41 @@ test('a mídia gerada entra no custo — e o que não tem valor fiável fica de 
   assert.equal(s.midia.porFornecedor[0].desconhecido, true, 'o fornecedor tem uma peça sem valor fiável — diz-se');
   assert.equal(s.midia.porFornecedor[0].desconhecidas, 1);
   assert.ok(s.midia.porFornecedor.some((m) => m.fornecedor === 'pollinations' && m.microUsd === 0 && !m.desconhecido), 'a imagem gratuita aparece a 0 porque é gratuita, não porque não se sabe');
+});
+
+test('sem a migração aplicada, a chamada não se perde: grava-se o uso e o custo recalcula-se na leitura', async () => {
+  const pedidos = [];
+  const fetchFalso = async (url, opt = {}) => {
+    const corpo = opt.body ? JSON.parse(opt.body) : null;
+    pedidos.push({ url: String(url), corpo });
+    /* a base velha recusa a linha inteira por causa das colunas do custo */
+    if (corpo && 'custo_micro_usd' in corpo) {
+      return {
+        ok: false, status: 400,
+        text: async () => JSON.stringify({
+          code: 'PGRST204',
+          message: "Could not find the 'custo_micro_usd' column of 'orbita_ai_uso' in the schema cache",
+        }),
+      };
+    }
+    return { ok: true, status: 201, text: async () => '' };
+  };
+  const repo = createSupabaseRepo({ url: 'https://base.test', key: 'sb_secret_teste', fetchImpl: fetchFalso });
+  await repo.ia.uso.registar({ fornecedor: GROQ.fornec, modelo: GROQ.modelo, agente: 'orchestrator', tipo: 'texto', ok: true, ms: 40, tokens_in: 60000, tokens_out: 20000 });
+
+  assert.equal(pedidos.length, 2, 'tentou com custo, recuou e gravou o uso');
+  assert.ok('custo_micro_usd' in pedidos[0].corpo);
+  assert.ok(!('custo_micro_usd' in pedidos[1].corpo), 'o segundo pedido não leva as colunas que faltam');
+  assert.equal(pedidos[1].corpo.tokens_in, 60000, 'os tokens não se perdem');
+  assert.equal(pedidos[1].corpo.ok, true);
+
+  /* e uma base a sério grava na primeira, com o custo */
+  const bons = [];
+  const fetchBom = async (url, opt = {}) => { bons.push(JSON.parse(opt.body)); return { ok: true, status: 201, text: async () => '' }; };
+  const repoBom = createSupabaseRepo({ url: 'https://base.test', key: 'sb_secret_teste', fetchImpl: fetchBom });
+  await repoBom.ia.uso.registar({ fornecedor: GROQ.fornec, modelo: GROQ.modelo, ok: true, ms: 10, tokens_in: 1000, tokens_out: 500 });
+  assert.equal(bons.length, 1, 'sem erro, um pedido só');
+  assert.equal(bons[0].custo_micro_usd, 985);
+  assert.equal(bons[0].preco_entrada, 0.59);
+  assert.equal(bons[0].preco_fonte, 'catalogo');
 });

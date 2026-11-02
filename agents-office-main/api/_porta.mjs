@@ -63,20 +63,30 @@ function corpoDoErro({ estado, env }) {
    conta, recuperar a palavra-passe). Sem RESEND_API_KEY não há envio — e isso é
    dito a quem pediu, com o nome da variável, em vez de um silêncio. */
 
-async function enviarEmail({ para, assunto, texto, env, fetchImpl }) {
+/* 1.56.0 · passou a exportada e a aceitar anexos: a fatura segue em PDF, e o
+   mesmo caminho serve a porta e a mesa — uma só forma de mandar correio. */
+export async function enviarEmail({ para, assunto, texto, env, fetchImpl = fetch, anexos = null, de = null }) {
   if (!env.RESEND_API_KEY) {
     return { enviado: false, motivo: 'falta RESEND_API_KEY no ambiente — o email não sai daqui sem essa chave' };
   }
   try {
+    const corpo = {
+      from: de || env.ORBITA_EMAIL_FROM || 'Orbita <onboarding@resend.dev>',
+      to: [para], subject: assunto, text: texto,
+    };
+    if (Array.isArray(anexos) && anexos.length) {
+      corpo.attachments = anexos.map((a) => ({ filename: a.filename, content: a.content }));
+    }
     const r = await fetchImpl('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        from: env.ORBITA_EMAIL_FROM || 'Orbita <onboarding@resend.dev>',
-        to: [para], subject: assunto, text: texto,
-      }),
+      body: JSON.stringify(corpo),
     });
-    if (!r.ok) return { enviado: false, motivo: `o Resend respondeu ${r.status}` };
+    if (!r.ok) {
+      let detalhe = '';
+      try { detalhe = String((await r.text()) || '').slice(0, 200); } catch { detalhe = ''; }
+      return { enviado: false, motivo: `o Resend respondeu ${r.status}${detalhe ? `: ${detalhe}` : ''}` };
+    }
     return { enviado: true, motivo: null };
   } catch (e) {
     return { enviado: false, motivo: `não consegui falar com o Resend: ${e.message}` };
