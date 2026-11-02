@@ -55,6 +55,7 @@ export function estadoNovo(projetoId = null) {
     base: null,
     sujo: false,
     aGerar: null,          // 'rascunho' | 'master' | 'imagens'
+    aGravar: false,        // uma gravação de cada vez (dois toques não são duas)
     aviso: null,           // { texto, mau }
     versoes: null,         // { master: [], imagens: [] }
     aCarregarVersoes: false,
@@ -198,9 +199,13 @@ function painelBriefing(B, S) {
     ${B.semRegisto ? '<div class="hint">Este projeto ainda não tinha briefing guardado: o que vês vem da ficha da lead. Grava para começar.</div>' : ''}
     ${camposHTML(B)}
     <div class="acts bf-acts">
-      <button class="btn primary" data-act="bf-guardar"${B.sujo ? '' : ' disabled'}>Gravar briefing</button>
-      <button class="btn ghost" data-act="bf-descartar"${B.sujo ? '' : ' disabled'}>Descartar alterações</button>
+      <button class="btn ghost" data-act="bf-descartar"${B.sujo ? '' : ' disabled'}>Descartar</button>
       <button class="btn ghost" data-act="bf-rascunho"${B.aGerar ? ' disabled' : ''}>${B.aGerar === 'rascunho' ? 'A IA está a escrever…' : 'Rascunho da IA'}</button>
+      <button class="btn ghost" data-act="bf-guardar"${B.sujo && !B.aGravar ? '' : ' disabled'}>${B.aGravar ? 'A gravar…' : (B.sujo ? 'Salvar' : 'Salvo')}</button>
+      <button class="btn primary" data-act="bf-master"${B.aGerar ? ' disabled' : ''} title="escreve o Prompt Master a partir do briefing guardado">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z"/><path d="M18 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"/></svg>
+        ${B.aGerar === 'master' ? 'A gerar…' : 'Gerar Prompt Master'}
+      </button>
       ${B.dados?.master || B.dados?.imagens ? `<button class="btn quiet small" data-act="bf-rascunho-tudo"${B.aGerar ? ' disabled' : ''} title="a IA reescreve os campos que ela própria sugeriu; o que escreveste fica">Reescrever sugestões</button>` : ''}
     </div>
     <div class="hint">O rascunho da IA só preenche campos vazios e só com o que a ficha da lead sustenta. Podes escrever tudo à mão — o projeto não depende da IA.${pode ? '' : ' Para o Prompt Master precisas do nome da empresa e de pelo menos o objetivo, a descrição, os produtos, o público ou a proposta de valor.'}</div>
@@ -310,12 +315,26 @@ function versoesHTML(B, tipo) {
   </div>`;
 }
 
-export function vistaBriefing(S, { projeto = null } = {}) {
+export function vistaBriefing(S, { projeto = null, painel = null, semAbas = false } = {}) {
   const B = S?.briefing;
   if (!B) return '';
   if (B.aCarregar && !B.dados) return '<div class="card bf-card"><div class="skeleton">a abrir o briefing…</div></div>';
 
-  const cabeca = `<div class="bf-cabeca">
+  /* Na página do projeto (sem abas internas) o nome já está no cabeçalho da
+     página: aqui fica o título da secção e a frase que explica para que serve,
+     como na referência. Fora dela, mantém-se a cabeça antiga — é o que os
+     testes e as outras chamadas conhecem. */
+  const cabeca = semAbas
+    ? `<div class="bf-cabeca bf-cabeca-sec">
+        <div>
+          <h3>Briefing do projeto</h3>
+          <p class="bf-min">Defina as informações principais da empresa para orientar a criação com IA.</p>
+        </div>
+        <div class="bf-cabeca-lado">
+          ${B.dados?.leadId ? `<a class="btn quiet small" href="#/lead/${encodeURIComponent(B.dados.leadId)}">Ver a lead</a>` : ''}
+        </div>
+      </div>`
+    : `<div class="bf-cabeca">
     <div>
       <div class="bf-sobre">Briefing do projeto</div>
       <h3>${E(projeto?.name || B.dados?.leadNome || 'Projeto')}</h3>
@@ -338,15 +357,20 @@ export function vistaBriefing(S, { projeto = null } = {}) {
   }
 
   const aviso = B.aviso ? `<div class="bf-aviso${B.aviso.mau ? ' mau' : ''}" role="status">${E(B.aviso.texto)}</div>` : '';
-  const painel = B.aba === 'master' ? painelMaster(B) : B.aba === 'imagens' ? painelImagens(B) : painelBriefing(B, S);
+  /* 1.57.0 · a página do projeto passou a ter as suas abas (Briefing, Prompt
+     Master, Imagens, Vídeo). Quando ela diz qual é o painel, é esse que se
+     desenha e a barra interna desaparece — duas barras de abas iguais na mesma
+     página eram ruído. Sem essa indicação, tudo fica como antes. */
+  const qual = painel || B.aba;
+  const corpo = qual === 'master' ? painelMaster(B) : qual === 'imagens' ? painelImagens(B) : painelBriefing(B, S);
 
   return `<div class="card bf-card" id="bf">
     ${cabeca}
-    <div class="bf-abas" role="tablist" aria-label="briefing do projeto">
+    ${semAbas ? '' : `<div class="bf-abas" role="tablist" aria-label="briefing do projeto">
       ${ABAS.map((a) => abaBtn(B, a.id, a.label)).join('')}
-    </div>
+    </div>`}
     ${aviso}
-    ${painel}
+    ${corpo}
   </div>`;
 }
 
@@ -406,7 +430,11 @@ export async function accaoBriefing(name, el, api) {
   }
 
   if (name === 'bf-guardar') {
+    /* 1.57.0 · dois toques seguidos no «Salvar» não podem ser duas gravações: a
+       primeira ainda está à espera do servidor quando a segunda chega. */
+    if (B.aGravar) { api.toast('a gravar… espera um instante'); return true; }
     if (!B.sujo) { api.toast('não há nada por gravar'); return true; }
+    B.aGravar = true;
     try {
       const r = await api.call(`/ops/projetos/${encodeURIComponent(id)}/briefing`, 'PUT', {
         valores: B.valores,
@@ -431,6 +459,8 @@ export async function accaoBriefing(name, el, api) {
         api.toast(e?.message || 'não consegui gravar o briefing', true);
         return true;
       }
+    } finally {
+      B.aGravar = false;
     }
     api.paint();
     return true;

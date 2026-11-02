@@ -124,10 +124,14 @@ function opcoesDoTipo(M) {
 /* ---------------------------------------------------------------------------
    3 · A VISTA
    ------------------------------------------------------------------------ */
-export function vistaMedia(S, { projeto = null } = {}) {
+export function vistaMedia(S, { projeto = null, tipoFixo = null, semCabeca = false } = {}) {
   const M = S?.media;
   if (!M) return '';
   const d = M.dados;
+  /* 1.57.0 · a página do projeto tem as abas «Imagens» e «Vídeo»: quando ela
+     manda o tipo, a vista obedece — sem interruptor próprio (dois pares de abas
+     iguais na mesma página era ruído) e com a galeria só desse tipo. */
+  const tipo = tipoFixo === 'video' ? 'video' : tipoFixo === 'imagem' ? 'imagem' : M.tipo;
 
   if (M.aCarregar && !d) {
     return `<section class="card md-card" id="md"><div class="skeleton">a abrir a mídia do projeto…</div></section>`;
@@ -144,7 +148,9 @@ export function vistaMedia(S, { projeto = null } = {}) {
     </section>`;
   }
 
-  const lista = d?.geracoes || [];
+  const todas = d?.geracoes || [];
+  const lista = tipoFixo ? todas.filter((g) => g.tipo === tipoFixo) : todas;
+  if (tipoFixo) M.tipo = tipo;
   const emCurso = activas(lista);
   const op = opcoesDoTipo(M);
   const formatos = op.formatos || [];
@@ -152,7 +158,7 @@ export function vistaMedia(S, { projeto = null } = {}) {
   const uso = d?.uso || {};
   const limites = d?.limites || {};
 
-  const cabeca = `<div class="md-cabeca">
+  const cabeca = semCabeca ? '' : `<div class="md-cabeca">
     <div>
       <div class="md-sobre">Mídia do projeto</div>
       <h3>${E(projeto?.name || d?.projeto?.nome || 'Projeto')}</h3>
@@ -169,10 +175,10 @@ export function vistaMedia(S, { projeto = null } = {}) {
   ].join('');
 
   const formulario = `<div class="md-form">
-    <div class="md-tipos" role="tablist" aria-label="tipo de mídia">
+    ${tipoFixo ? '' : `<div class="md-tipos" role="tablist" aria-label="tipo de mídia">
       <button class="md-tipo ${M.tipo === 'imagem' ? 'on' : ''}" data-act="md-tipo" data-tipo="imagem" role="tab" aria-selected="${M.tipo === 'imagem'}">Imagem</button>
       <button class="md-tipo ${M.tipo === 'video' ? 'on' : ''}" data-act="md-tipo" data-tipo="video" role="tab" aria-selected="${M.tipo === 'video'}">Vídeo</button>
-    </div>
+    </div>`}
 
     ${(d?.prompts || []).length ? `<label class="md-lab" for="md-prompt">Partir de um prompt do briefing</label>
       <select class="md-sel" data-act="md-prompt-fonte" id="md-prompt">
@@ -180,8 +186,8 @@ export function vistaMedia(S, { projeto = null } = {}) {
         ${d.prompts.map((p) => `<option value="${E(p.id)}" ${M.promptFonte === p.id ? 'selected' : ''}>${E(p.finalidade)}</option>`).join('')}
       </select>` : ''}
 
-    <label class="md-lab" for="md-texto">Prompt ${M.tipo === 'video' ? '(o que move a câmara)' : '(o que se vê)'}</label>
-    <textarea class="md-area" id="md-texto" data-md="prompt" rows="4" placeholder="${M.tipo === 'video'
+    <label class="md-lab" for="md-texto">Prompt ${tipo === 'video' ? '(o que move a câmara)' : '(o que se vê)'}</label>
+    <textarea class="md-area" id="md-texto" data-md="prompt" rows="4" placeholder="${tipo === 'video'
       ? 'movimento lento sobre o interior da clínica, luz de manhã, sem texto no ecrã'
       : 'interior de clínica dentária, luz de janela, madeira clara, sem texto na imagem'}">${E(M.prompt)}</textarea>
 
@@ -192,7 +198,7 @@ export function vistaMedia(S, { projeto = null } = {}) {
           ${formatos.map((f) => `<option value="${E(f.id)}" ${formato === f.id ? 'selected' : ''}>${E(f.rotulo)} · ${E(f.id)}</option>`).join('')}
         </select>
       </div>
-      ${M.tipo === 'imagem' ? `<div>
+      ${tipo === 'imagem' ? `<div>
         <label class="md-lab" for="md-resolucao">Resolução</label>
         <select class="md-sel" data-act="md-opcao" data-campo="resolucao" id="md-resolucao">
           ${(op.resolucoes || []).map((r) => `<option value="${E(r.id)}" ${M.resolucao === r.id ? 'selected' : ''}>${E(r.rotulo)}</option>`).join('')}
@@ -221,10 +227,10 @@ export function vistaMedia(S, { projeto = null } = {}) {
       <button class="btn ghost" data-act="md-estimar" ${M.aEstimar ? 'disabled aria-busy="true"' : ''}>${M.estimativa ? 'Recalcular estimativa' : 'Ver estimativa'}</button>
       <button class="btn primary" data-act="md-gerar" ${podeConfirmar(M) ? '' : 'disabled'}>${M.aGerar
         ? 'a criar…'
-        : (M.tipo === 'video' ? 'Confirmar e compor o vídeo' : 'Confirmar e gerar a imagem')}</button>
+        : (tipo === 'video' ? 'Confirmar e compor o vídeo' : 'Confirmar e gerar a imagem')}</button>
       ${M.estimativa ? `<button class="btn quiet" data-act="md-limpar">Limpar</button>` : ''}
     </div>
-    <div class="hint">${M.tipo === 'video'
+    <div class="hint">${tipo === 'video'
       ? 'O vídeo é composto NESTE browser com as imagens já geradas do projeto (Ken Burns). Não é vídeo generativo de um fornecedor de IA — e por isso não custa nada. Se fechares a página, a peça fica «à espera» e podes retomá-la.'
       : 'A imagem é gerada no servidor (Pollinations) e guardada no armazém do Órbita: fica ligada a este projeto, à lead e a ti.'}</div>
   </div>`;

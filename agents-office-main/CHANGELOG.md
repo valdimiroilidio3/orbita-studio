@@ -1,3 +1,38 @@
+## 1.57.0 — 2 nov 2026 · O REDESENHO DA PÁGINA DO PROJETO (a mesma app, outro cuidado)
+
+A página do projeto deixou de ser uma lista de cartões iguais e passou a ser um ecrã
+de trabalho: barra lateral de 248 px, cabeçalho global de 76 px, o projeto com nome,
+estado e quatro abas, o formulário na coluna principal e o acompanhamento (progresso
+e lead) na lateral. **Nada foi substituído por um mockup**: tudo o que existia
+continua a existir, com os mesmos `data-act`, e o progresso e o resumo da lead vêm
+dos dados guardados.
+
+- **Cabeçalho global** — pesquisa em todas as páginas (com `Ctrl/Cmd+K`), aviso das
+  decisões à espera (o número real, não um ponto vermelho decorativo) e a conta com
+  nome, espaço activo e papel. Saiu da página de Leads e de Projetos, onde estava
+  duplicada; ganhou-se altura de leitura.
+- **Barra lateral** — 248 px, itens de 40 px, activo em azul suave; o cartão do fundo
+  mostra o **custo real das APIs nos últimos 30 dias** e leva ao consumo. Não há
+  planos, quotas nem percentagens inventadas.
+- **Página do projeto** — caminho (`Projetos / nome`), marca com as iniciais, nome a
+  34 px, subtítulo `nicho · cliente · cidade`, selo de estado e menu de acções
+  secundárias (lead, preview, `.zip`, actualizar). Por baixo, **quatro abas
+  funcionais**: Briefing, Prompt Master, Imagens e Vídeo — a aba aberta guarda-se em
+  `S.projetoTab`, e mudar de aba não perde o briefing por gravar.
+- **Briefing** — grelha 70/30: o formulário (nome da empresa, objetivo, público-alvo,
+  direção visual) com as etiquetas sempre escritas, selos de origem (lead a
+  cinzento-azulado, sugestão da IA a verde), erros de campo e o rodapé «Salvar» +
+  «Gerar Prompt Master». **Salvar grava a sério** pela rota existente e **dois toques
+  seguidos já não gravam duas vezes** (guarda `B.aGravar`, o botão diz «A gravar…»).
+- **Lateral** — «Progresso do projeto» com percentagem **calculada** das cinco etapas
+  (concluída = 1, em andamento = 0,5, pendente = 0) e «Resumo da lead» com origem,
+  contacto, email, localização e data lidos do que está guardado; sem lead, diz que
+  não há e não inventa nada.
+- **Código** — as contas vivem em `src/projeto.js` (funções puras: `progresso`,
+  `resumoLead`, `origemLegivel`, `iniciais`, `ABAS_PROJETO`), testadas sem DOM;
+  `vistaBriefing` e `vistaMedia` ganharam `semAbas`/`tipoFixo` para não repetirem abas
+  dentro da página. Testes novos: `redesenho.test.mjs` (19), suite **914**.
+
 ## 1.56.0 — 2 nov 2026 · A3 · A FATURA (número, IVA, PDF, anulação)
 
 A receita entrava à mão e não havia documento nenhum. Esta frente entrega o papel:
