@@ -52,7 +52,7 @@ deploy READY → uma linha honesta na conversa.
 | **A1.2** | Mídia do projeto (gerar imagem e vídeo, com custo e limites) | o briefing dizia o que fazer e nada saía | **1.54.3 ✅** | 🟠 alto | feito |
 | **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` dizia custo `0` | **1.55 ✅** | 🔴 alto | feito |
 | **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | **1.56 ✅** | 🟠 alto | feito |
-| **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.57 | 🟠 alto | 1 ciclo |
+| **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.58 | 🟠 alto | 1 ciclo |
 | **A5** | Fiabilidade (timeouts, falhas, restauro provado) | falha silenciosa, restauro nunca testado | 1.58 | 🟠 alto | 1 ciclo |
 | **A6** | A Cara (nome, página, preço, vídeo, domínio) | produto sem porta de entrada pública | 1.59 | 🟡 médio | 1 ciclo |
 | **A7** | Legal e RGPD | tratas dados de terceiros sem base escrita | 1.60 | 🟠 alto | 1 ciclo |
@@ -311,7 +311,30 @@ correcto, não um SAF-T.
 
 ---
 
-### A4 · Primeiro cliente — `1.57.0` 🟠
+### Redesenho da página do projeto — `1.57.0` ✅
+
+Pedido do dono, com uma referência visual: a página interna do projeto passou a
+ser um ecrã de trabalho. **Na aplicação existente** — não é uma landing page nem
+um mockup: barra lateral de 248 px (doze secções, nenhuma retirada), cabeçalho
+global de 76 px com pesquisa (`Ctrl/Cmd+K`), aviso das decisões à espera e conta;
+o projeto com caminho, marca, nome a 34 px, estado e menu de acções secundárias;
+quatro abas funcionais (Briefing · Prompt Master · Imagens · Vídeo); grelha 70/30
+com o formulário à esquerda e «Progresso do projeto» + «Resumo da lead» à direita.
+Salvar continua a gravar pela rota existente e deixou de aceitar duas gravações
+com dois toques seguidos; o progresso sai de cinco etapas reais (concluída = 1,
+em andamento = 0,5) e o resumo da lead só mostra o que está guardado.
+
+**Prova:** `src/projeto.js` com as contas puras e `redesenho.test.mjs` (19) — 9 de
+contas e 10 num DOM com `dist/mesa.html` e `/api/rpc` falso. Suite **914/914**.
+
+**O que continua a não ser:** conferência de pixéis num browser (não há browser
+neste ambiente — a conferência visual é no deploy e no telemóvel do dono); o
+cartão de plano com percentagem de quota, porque essa quota não existe na base
+(o cartão mostra o custo real das APIs em 30 dias).
+
+---
+
+### A4 · Primeiro cliente — `1.58.0` 🟠
 
 Ecra «Começar» com 4 passos: (1) dados de exemplo saem num clique, com
 confirmação escrita do que vai ser apagado; (2) importar CSV de leads com pré-visualização

@@ -269,6 +269,30 @@ ausência de consumo, não uma medição.
 Cada execução tem um tecto de custo (`ORBITA_ORCAMENTO_CENTIMOS`): ao passar, falha com o valor
 escrito — não descobre no fim do mês. `spentToday()` (na app de operações) é o travão diário.
 
+## A página do projeto (1.57.0)
+
+`#/projeto/<id>` é uma página só, com quatro abas e duas colunas:
+
+- **cabeçalho da página** — caminho, marca (iniciais do nome), nome, subtítulo
+  `nicho · cliente · cidade`, selo de estado e menu de acções secundárias;
+- **abas** — Briefing, Prompt Master, Imagens, Vídeo (`data-act="proj-tab"`),
+  guardadas em `S.projetoTab`; mudar de aba não perde o briefing por gravar;
+- **coluna principal** — o formulário do briefing (`bf-*`) ou a mídia (`md-*`);
+- **lateral** — progresso calculado (`src/projeto.js`) e resumo da lead.
+
+Regras que a página não quebra: o progresso vem das cinco etapas reais (concluída
+= 1, em andamento = 0,5, pendente = 0); o resumo da lead só mostra campos
+guardados («não informado» onde não há nada); nenhuma acção antiga desapareceu
+(`gerar`, `qa`, `aprovar-projeto`, `entregar`, `zip`, `entregar-vercel`,
+`entregar-github` continuam abaixo do formulário); e o «Salvar» recusa duas
+gravações seguidas (`B.aGravar`).
+
+O cabeçalho global (`#appHead`) e a barra lateral (248 px) são iguais em todas as
+páginas: a pesquisa é uma só (`Ctrl/Cmd+K`), o aviso conta as decisões à espera e
+a conta mostra nome, espaço activo e papel.
+
+---
+
 ## Faturas (passo 5b, 1.56.0)
 
 **O que é.** A receita é o dinheiro que entrou; a **fatura** é o documento que se
