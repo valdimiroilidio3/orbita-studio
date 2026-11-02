@@ -123,7 +123,10 @@ export async function criarFatura(repo, dados = {}, { agora = () => new Date() }
   const nota = String(dados?.nota || '').trim();
 
   for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
-    const existentes = await repo.faturas.listar(5000).catch(() => []);
+    /* sem `catch`: se a tabela não existir, isto tem de rebentar com o nome do
+       SQL em falta. Tratar a falha como «lista vazia» daria o número 1 outra vez
+       e esconderia a causa atrás de um conflito de numeração. */
+    const existentes = await repo.faturas.listar(5000);
     const daSerie = existentes.filter((f) => String(f.serie) === serie && f.tipo !== 'nota_credito');
     const numero = daSerie.reduce((n, f) => Math.max(n, Number(f.numero) || 0), 0) + 1;
     const fatura = {

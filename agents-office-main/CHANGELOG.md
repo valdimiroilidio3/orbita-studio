@@ -43,13 +43,13 @@ vezes, e o ecrã di-lo.
   perdia-se também o uso (tokens, latência, erro). Agora há recuo: grava-se o que a
   base aceita e o custo fica de fora, dito, em vez de a chamada desaparecer.
 
-**Testes:** 894 (eram 879 na 1.55.0). `faturas.test.mjs` (11) prova: NIF,
+**Testes:** 895 (eram 879 na 1.55.0). `faturas.test.mjs` (12) prova: NIF,
 IVA, numeração 1→4 com uma anulada pelo meio, a corrida de dois pedidos, as nove
 recusas (cliente, NIF, linhas, quantidade, IVA, isenção, série), consumidor final,
 o PDF com xref verificado objecto a objecto e o texto do documento, o emitente em
 falta, os totais do resumo, as rotas (emitir, listar, enviar sem chave, enviar com
-Resend falso com o PDF em anexo, anular, duplicar anulação) e o saldo com o
-faturado à parte. `faturas-ui.test.mjs` (2) abre o `dist/mesa.html` num DOM: a
+Resend falso com o PDF em anexo, anular, duplicar anulação), o saldo com o faturado à parte e a base sem a migração
+(que diz qual é o SQL em vez de inventar o número 1). `faturas-ui.test.mjs` (2) abre o `dist/mesa.html` num DOM: a
 lista, a nota de crédito, o aviso do emitente e o formulário que recusa um
 documento incompleto antes de o enviar. `localapi.test.mjs` ganhou um teste do
 modo local.

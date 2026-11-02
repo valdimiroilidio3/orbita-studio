@@ -1402,6 +1402,7 @@ function viewFaturas() {
       sub: lista.length ? `${r.emitidas || 0} emitida(s) · ${r.anuladas || 0} anulada(s)${r.notasCredito ? ` · ${r.notasCredito} nota(s) de crédito` : ''} · ${eurosTexto(r.totalCentimos)}` : 'ainda não há faturas',
       right: `${podeEscrever ? '<button class="btn small ghost" data-act="fatura-nova">+ Fatura</button>' : ''}${stopPill()}`,
     })}
+    ${d.avisoBase ? `<div class="bf-aviso mau" role="status"><b>A tabela das faturas ainda não existe nesta base.</b><span>${esc(d.avisoBase)}</span></div>` : ''}
     ${em.aviso ? `<div class="bf-aviso${S.modoLocal ? '' : ' mau'}" role="status"><b>${S.modoLocal ? 'Sem PDF no modo local.' : 'O emitente está incompleto.'}</b><span>${esc(em.aviso)}</span></div>` : ''}
     ${S.modoLocal ? '<div class="localbar" role="status"><span>As faturas ficam registadas neste browser, com número e totais. O PDF e o email precisam da base de dados ligada: um documento fiscal não vive numa aba do browser.</span></div>' : ''}
     ${correio.configurado === false ? `<div class="hint" style="margin-bottom:var(--s3)">${esc(correio.aviso || 'sem RESEND_API_KEY o email não sai')}</div>` : ''}

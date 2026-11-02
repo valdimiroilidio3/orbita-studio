@@ -312,3 +312,23 @@ test('o saldo mostra o faturado ao lado do recebido — e não os soma', async (
   assert.equal(saldo.corpo.faturacao.totalCentimos, 110700, 'o faturado é outra coisa, e é mostrado à parte');
   assert.equal(saldo.corpo.faturacao.emitidas, 1);
 });
+
+test('sem a migração aplicada a numeração não é inventada: o erro diz qual é o SQL', async () => {
+  const repo = createMemRepo();
+  const emFalta = Object.assign(
+    new Error('falta a tabela public.orbita_faturas — aplica supabase/orbita_1_56_0.sql'),
+    { semEsquema: true, status: 503 },
+  );
+  repo.faturas.listar = async () => { throw emFalta; };
+  repo.faturas.inserir = async () => { throw emFalta; };
+
+  /* emitir rebenta com a mensagem da tabela, em vez de assumir «lista vazia» e
+     dar outra vez o número 1 */
+  await assert.rejects(() => criarFatura(repo, pedido()), /orbita_1_56_0\.sql/);
+
+  /* e a página de faturas diz o que falta, sem lista vazia a fingir de «sem faturas» */
+  const r = await chamar(repo, '/ops/faturas', 'GET', null, emitenteBom);
+  assert.equal(r.status, 200);
+  assert.match(r.corpo.avisoBase, /orbita_1_56_0\.sql/);
+  assert.deepEqual(r.corpo.faturas, []);
+});

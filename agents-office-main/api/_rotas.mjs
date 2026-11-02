@@ -1424,7 +1424,16 @@ export async function responder(repo, {
      saldo: uma fatura é o que se cobrou, a receita é o que entrou — somar as
      duas contaria o mesmo dinheiro duas vezes. */
   if (caminhoLimpo === '/ops/faturas' && m === 'GET') {
-    const lista = await repo.faturas.listar(5000).catch(() => []);
+    let lista = [];
+    let avisoBase = null;
+    try {
+      lista = await repo.faturas.listar(5000);
+    } catch (e) {
+      /* a tabela ainda não existe (migração por aplicar): a página diz qual é o
+         ficheiro em vez de mostrar uma lista vazia a fingir de «sem faturas» */
+      if (!e?.semEsquema) throw e;
+      avisoBase = e.message;
+    }
     const emitente = emitenteDoAmbiente(env);
     return { status: 200, corpo: {
       ok: true,
@@ -1432,6 +1441,7 @@ export async function responder(repo, {
       resumo: resumoFaturas(lista),
       taxasIva: TAXAS_IVA,
       motivosIsencao: MOTIVOS_ISENCAO,
+      avisoBase,
       emitente: { ...emitente, aviso: avisoEmitente(emitente) },
       correio: env.RESEND_API_KEY
         ? { configurado: true, de: remetente(env) }
