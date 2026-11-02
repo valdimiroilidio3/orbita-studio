@@ -1121,6 +1121,11 @@ const dur = ms => (ms == null ? '' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toF
    para que «nada funciona» deixe de ser verdade por um campo mal lido. */
 const DEPTO_DA_TAREFA = { investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia' };
 
+/* 1.55.0 · números grandes sem separadores de milhar confundem («1234567
+   micro-USD»). O custo é sempre do servidor: aqui só se formata. */
+const fmtNum = n => Number(n || 0).toLocaleString('pt-PT');
+const tokensDaTarefa = t => t.custo?.tokens ?? t.tokens ?? 0;
+
 function normalizarTarefa(t = {}) {
   const tipo = S.tiposTarefa.find(x => x.id === t.kind) || {};
   const deptId = t.dept || DEPTO_DA_TAREFA[t.kind] || 'comando';
@@ -1158,6 +1163,9 @@ function tarefaCard(tarefaCrua) {
       ${t.tentativas != null ? `${t.tentativas}/${t.maxTentativas ?? '—'} tentativa(s) · ` : ''}${t.modelo ? `${esc(t.modelo)} · ` : ''}${t.finished_at ? `terminou ${esc(hhmm(t.finished_at))}` : t.created_at ? `criada ${esc(hhmm(t.created_at))}` : ''}
       ${t.needsApproval ? ' · acção externa: exige aprovação' : ''}
     </div>
+    ${t.custo ? `<div class="mt" style="margin-top:var(--s2)">${t.custo.desconhecido
+      ? `<span class="hint">custo desconhecido — ${esc(t.custo.nota || 'o motor não devolveu uso')}</span>`
+      : `custou <b>${money(t.custo.centimos)}</b>${t.custo.microUsd ? ` <span class="count">(${fmtNum(t.custo.microUsd)} micro-USD · ${fmtNum(tokensDaTarefa(t))} tokens)</span>` : ''}`}</div>` : ''}
     ${t.error ? `<div class="hint bad" style="margin-top:var(--s2)">${esc(t.error)}</div>` : ''}
     ${t.textoResultado ? `<details class="why-box" style="margin-top:var(--s2)"><summary><span>Resultado<small>${esc(String(t.textoResultado).split('\n')[0].slice(0, 60))}</small></span>${IC.chev}</summary>
       <pre style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:0">${esc(String(t.textoResultado).slice(0, 4000))}</pre></details>` : ''}
@@ -1280,12 +1288,17 @@ function viewSaldo() {
   const b = S.saldo;
   if (!b) return `<div class="wrap"><div class="skeleton">a ler o saldo…</div></div>`;
   const u = b.unitarios || {};
+  const conta = b.contaAVista || {};
+  const cambio = conta.cambio || {};
   const uni = [
     u.custoPorLead != null ? `custo por lead ${money(u.custoPorLead)}` : '',
     u.custoPorContactado != null ? `por contactado ${money(u.custoPorContactado)}` : '',
     u.custoPorCliente != null ? `por cliente ${money(u.custoPorCliente)}` : '',
     u.receitaPorCliente != null ? `receita por cliente ${money(u.receitaPorCliente)}` : '',
   ].filter(Boolean).join(' · ') || 'sem dados suficientes para custos unitários';
+  const linhasConta = conta.linhas || [];
+  const desconhecidas = conta.desconhecidas || 0;
+  const precoTexto = (p) => (Array.isArray(p) ? `${p[0]} / ${p[1]} USD por 1M tokens` : 'preço desconhecido');
   return `<div class="wrap">
     ${headHTML({ title: 'Saldo', sub: `os últimos ${b.janela?.dias || 90} dias · só o que está registado`, right: stopPill() })}
     <div class="money">
@@ -1293,7 +1306,27 @@ function viewSaldo() {
       <div class="card"><b>${money(b.custoCentimos)}</b><small>gastou em APIs</small></div>
       <div class="card"><b class="${b.margemCentimos < 0 ? 'bad' : 'ok'}">${money(b.margemCentimos)}</b><small>margem</small></div>
     </div>
-    ${b.semDados?.receita ? `<div class="hint" style="margin-bottom:var(--s4)">${esc(b.semDados.receita)}</div>` : ''}
+    ${b.semDados?.receita ? `<div class="hint" style="margin-bottom:var(--s3)">${esc(b.semDados.receita)}</div>` : ''}
+    ${b.semDados?.custo ? `<div class="bf-aviso${desconhecidas ? ' mau' : ''}" role="status"><b>Como se chegou ao custo.</b><span>${esc(b.semDados.custo)}</span></div>` : ''}
+
+    <div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>A conta à vista</h3><span class="count">${fmtNum(conta.chamadas || 0)} chamada(s) · ${fmtNum((conta.linhas || []).reduce((n, l) => n + (l.tokensIn || 0) + (l.tokensOut || 0), 0))} tokens</span></div>
+      ${linhasConta.length ? `<table><thead><tr><th>modelo</th><th class="n">tokens</th><th class="n">preço</th><th class="n">custo</th></tr></thead><tbody>
+        ${linhasConta.map(l => `<tr>
+          <td>${esc(l.fornecedorNome || l.fornecedor)}<div class="count">${esc(l.modelo)}${l.fonte === 'ambiente' ? ' · preço declarado por ti' : l.fonte === 'catalogo-gratuito' ? ' · gratuito no catálogo' : ' · preço do catálogo'}</div></td>
+          <td class="n">${fmtNum(l.tokensIn)} → ${fmtNum(l.tokensOut)}${l.desconhecidas ? `<div class="count bad">${l.desconhecidas} sem preço</div>` : ''}</td>
+          <td class="n">${esc(precoTexto(l.preco))}</td>
+          <td class="n">${l.microUsd == null && l.desconhecidas ? '<span class="bad">desconhecido</span>' : money(centimosDeEuro(l))}</td>
+        </tr>`).join('')}
+      </tbody></table>` : `<div class="hint">Sem chamadas de IA neste período. O custo é 0 porque não houve consumo — o saldo não inventa um número para parecer medido.</div>`}
+      <div class="hint" style="margin-top:var(--s3)">
+        ${desconhecidas ? `<b class="bad">${desconhecidas} chamada(s) sem preço conhecido não entram na soma.</b> ` : ''}
+        ${esc(conta.nota || 'preços do catálogo — é uma conta, não uma fatura')}.
+        ${cambio.taxa ? ` Câmbio: 1 USD = ${String(cambio.taxa).replace('.', ',')} € (${esc(cambio.fonte === 'ambiente' ? 'declarado por ti' : 'valor de referência')}).` : ''}
+        ${cambio.fonte === 'padrao' ? ' Declara <code>ORBITA_CAMBIO_USD_EUR</code> para usar a taxa real.' : ''}
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:var(--s4)">
       <div class="sec-h"><h3>Registar uma entrada</h3><span class="count">escrita por ti</span></div>
       <div class="form">
@@ -1303,6 +1336,7 @@ function viewSaldo() {
       </div>
       <div class="hint">Nada é adivinhado: uma fatura emitida fora do Órbita só entra se a escreveres aqui.</div>
     </div>
+
     <div class="cards2">
       <div class="card"><div class="sec-h"><h3>Receita por campanha</h3></div>
         <table><tbody>${(b.porCampanha || []).length
@@ -1310,14 +1344,36 @@ function viewSaldo() {
           : '<tr><td class="hint">Sem entradas registadas.</td></tr>'}</tbody></table></div>
       <div class="card"><div class="sec-h"><h3>Custos por fornecedor</h3></div>
         <table><tbody>${(b.custosPorFornecedor || []).length
-          ? b.custosPorFornecedor.map(c => `<tr><td>${esc(c.provider)}</td><td class="n">${money(c.cents)}</td></tr>`).join('')
-          : '<tr><td class="hint">Sem custos de API neste período.</td></tr>'}</tbody></table></div>
+          ? b.custosPorFornecedor.map(c => `<tr>
+              <td>${esc(c.fornecedorNome || c.provider)}<div class="count">${fmtNum(c.chamadas)} chamadas · ${fmtNum(c.tokens)} tokens${c.desconhecido ? ' · <span class="bad">algumas sem preço</span>' : ''}</div></td>
+              <td class="n">${money(c.cents)}</td></tr>`).join('')
+          : '<tr><td class="hint">Sem custos de API neste período.</td></tr>'}</tbody></table>
+        ${(b.tarefas?.total || 0) ? `<div class="hint" style="margin-top:var(--s3)">${b.tarefas.total} tarefa(s) guardada(s)${b.tarefas.semCusto ? `, ${b.tarefas.semCusto} sem custo registado` : ''} · ${money(b.tarefas.custoCentimos || 0)} atribuídos a trabalho</div>` : ''}
+      </div>
     </div>
+
+    ${(b.midia?.geracoes || 0) ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Mídia gerada</h3><span class="count">${b.midia.geracoes} peça(s) · ${money(b.midia.centimos || 0)}</span></div>
+      <table><tbody>${(b.midia.porFornecedor || []).map(m => `<tr><td>${esc(m.fornecedorNome || m.fornecedor)}<div class="count">${m.geracoes} peça(s)${m.desconhecido ? ' · <span class="bad">algumas sem custo fiável</span>' : ''}</div></td><td class="n">${money(m.centimos || 0)}</td></tr>`).join('')}</tbody></table>
+      <div class="hint">${esc(b.midia.nota)}</div></div>` : ''}
+    ${(b.custosPorProjeto || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Custo por projeto</h3><span class="count">das tarefas ligadas</span></div>
+      <table><tbody>${b.custosPorProjeto.map(p => `<tr><td>${esc(p.nome)}<div class="count">${p.tarefas} tarefa(s)</div></td><td class="n">${p.centimos != null ? money(p.centimos) : '<span class="bad">desconhecido</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${(b.custosPorLead || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Custo por lead</h3><span class="count">das tarefas ligadas</span></div>
+      <table><tbody>${b.custosPorLead.map(p => `<tr><td>${esc(p.nome)}<div class="count">${p.tarefas} tarefa(s)</div></td><td class="n">${p.centimos != null ? money(p.centimos) : '<span class="bad">desconhecido</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+
     <div class="hint" style="margin-top:var(--s4)">${esc(uni)}</div>
     ${(b.entradas || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Entradas</h3><span class="count">${b.entradas.length}</span></div>
       <table><tbody>${b.entradas.map(e => `<tr><td style="white-space:nowrap;color:var(--muted)">${esc(when(e.at))}</td><td>${esc(e.campaign || 'sem campanha')}</td><td class="n">${money(e.amount_cents)}</td>
         <td class="n"><button class="btn quiet" data-act="apagar-receita" data-id="${esc(e.id)}" title="apagar">✕</button></td></tr>`).join('')}</tbody></table></div>` : ''}
   </div>`;
+}
+
+/* cêntimos de uma linha da conta à vista: o servidor já os manda; sem eles,
+   calcula-se dos micro-USD com o câmbio que ele indicou (nunca a esconder) */
+function centimosDeEuro(linha) {
+  if (linha.centimos != null) return linha.centimos;
+  const taxa = Number(S.saldo?.contaAVista?.cambio?.taxa) || 0.92;
+  if (linha.microUsd == null) return 0;
+  return Math.round((linha.microUsd * taxa) / 1e4);
 }
 
 /* ---------------- pintar ---------------- */

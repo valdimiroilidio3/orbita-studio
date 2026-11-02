@@ -15,6 +15,7 @@ import { remetente } from './_prontidao.mjs';   // 1.41.0: o «from» do correio
 import { criarECorrer, correrDeNovo } from './_tarefas.mjs';   // 1.53.2: as tarefas correm a sério
 import { avaliarPorta } from './_porta.mjs';   // 1.54.0: a porta (contas, sessões, papéis)
 import * as MD from './_media.mjs';   // 1.54.3: a mídia gerada (imagem e vídeo)
+import { saldo as calcularSaldo, agregarUso, cambioDe, centimosDeMicro } from './_dinheiro.mjs';   // 1.55.0: dinheiro medido
 
 
 const TIPOS_PROJETO = [
@@ -117,26 +118,20 @@ function falha(status, mensagem, extra = {}) {
 }
 
 /* ---------- contas derivadas (as mesmas do servidor local) ---------- */
-function resumoSaldo(receitas, janelaDias = 90) {
-  const desde = new Date(Date.now() - janelaDias * 86400000).toISOString();
-  const dentro = receitas.filter((r) => r.at >= desde);
-  const receitaCentimos = dentro.reduce((n, r) => n + (r.amount_cents || 0), 0);
-  const mapa = new Map();
-  for (const r of dentro) {
-    const k = r.campaign || 'sem campanha';
-    mapa.set(k, (mapa.get(k) || 0) + (r.amount_cents || 0));
+
+/* 1.55.0 · o saldo deixou de ser uma conta de somar de receitas: agora vem de
+   `_dinheiro.mjs`, que junta receita escrita, custo medido por chamada (tokens ×
+   preço), margem, custo por lead/projeto e a conta à vista. A versão anterior
+   devolvia `custoCentimos: 0` — falso por construção. */
+
+/** O custo de uma tarefa já gravada, para o cartão das tarefas. */
+function custoDaTarefa(t, env = {}) {
+  if (t?.custo_micro_usd == null) {
+    return { microUsd: null, centimos: null, euros: null, desconhecido: true, nota: 'esta tarefa não tem custo registado (foi criada antes da 1.55.0)' };
   }
-  return {
-    janela: { dias: janelaDias },
-    receitaCentimos, custoCentimos: 0, margemCentimos: receitaCentimos,
-    porCampanha: [...mapa.entries()].map(([campanha, c]) => ({ campanha, cents: c })).sort((a, b) => b.cents - a.cents),
-    custosPorFornecedor: [], unitarios: {},
-    entradas: dentro.slice(0, 40),
-    semDados: {
-      custo: 'Sem custos de API registados neste período.',
-      receita: dentro.length ? null : 'Ainda não há entradas registadas. Uma fatura emitida fora do Órbita só entra se a escreveres aqui.',
-    },
-  };
+  const { taxa } = cambioDe(env);
+  const centimos = centimosDeMicro(Number(t.custo_micro_usd), taxa);
+  return { microUsd: Number(t.custo_micro_usd), centimos, euros: centimos / 100, desconhecido: false };
 }
 
 function resumoPipeline(leads) {
@@ -891,11 +886,26 @@ export async function responder(repo, {
 
   /* ---- Hoje ---- */
   if (caminhoLimpo === '/ops/summary') {
-    const [leads, projetos] = await Promise.all([repo.leads.list(500), repo.projetos.list()]);
+    const desde30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const [leads, projetos, uso] = await Promise.all([
+      repo.leads.list(500),
+      repo.projetos.list(),
+      repo.ia.uso.porPeriodo(desde30, 5000).catch(() => []),
+    ]);
+    /* 1.55.0 · este `0` era o mesmo defeito do saldo, uma linha acima do ecrã:
+       a faixa dizia «Custos de API (30 d): 0,00 €» com chamadas pagas no registo */
+    const conta = agregarUso(uso, env);
     return { status: 200, corpo: {
       leads: { total: leads.length, comContacto: leads.filter((l) => l.phone || l.email).length },
       projetos: { total: projetos.length },
-      custos: { apiCentimos: 0 }, modo: 'base',
+      custos: {
+        apiCentimos: centimosDeMicro(conta.microUsd, cambioDe(env).taxa),
+        microUsd: conta.microUsd,
+        chamadas: conta.chamadas,
+        desconhecidas: conta.desconhecidas,
+        janelaDias: 30,
+      },
+      modo: 'base',
     } };
   }
   if (caminhoLimpo === '/ops/today') {
@@ -1346,8 +1356,20 @@ export async function responder(repo, {
     const todas = await repo.tarefas.list(100);
     const fdept = limpo(qs.get('departamento'));
     const festado = limpo(qs.get('estado'));
+    const lista = todas
+      .filter((t) => (!festado || t.state === festado) && (!fdept || (DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando') === fdept))
+      .map((t) => ({ ...t, custo: custoDaTarefa(t, env) }));
+    const comCusto = lista.filter((t) => !t.custo.desconhecido);
+    const micro = comCusto.reduce((n, t) => n + (t.custo.microUsd || 0), 0);
     return { status: 200, corpo: {
-      tarefas: todas.filter((t) => (!festado || t.state === festado) && (!fdept || (DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando') === fdept)),
+      tarefas: lista,
+      /* 1.55.0 · o custo das tarefas desta lista, com quantas ficaram sem conta */
+      custos: {
+        microUsd: micro,
+        centimos: centimosDeMicro(micro, cambioDe(env).taxa),
+        comCusto: comCusto.length,
+        semCusto: lista.length - comCusto.length,
+      },
       tipos: TIPOS_TAREFA, departamentos: DEPARTAMENTOS,
     } };
   }
@@ -1374,8 +1396,20 @@ export async function responder(repo, {
 
   /* ---- dinheiro ---- */
   if (caminhoLimpo === '/ops/saldo') {
-    const desde = new Date(Date.now() - 90 * 86400000).toISOString();
-    return { status: 200, corpo: { ...resumoSaldo(await repo.receitas.desde(desde)), presenca: { parado: false } } };
+    const dias = Math.min(365, Math.max(1, Number(qs.get('dias')) || 90));
+    const desde = new Date(Date.now() - dias * 86400000).toISOString();
+    const [receitas, uso, tarefas, leads, projetos, geracoes] = await Promise.all([
+      repo.receitas.desde(desde).catch(() => []),
+      repo.ia.uso.porPeriodo(desde, 5000).catch(() => []),
+      repo.tarefas.list(500).catch(() => []),
+      repo.leads.list(500).catch(() => []),
+      repo.projetos.list(500).catch(() => []),
+      repo.geracoes.porPeriodo(desde, 5000).catch(() => []),
+    ]);
+    return { status: 200, corpo: {
+      ...calcularSaldo({ receitas, uso, tarefas, leads, projetos, geracoes, env, janelaDias: dias }),
+      presenca: { parado: false },
+    } };
   }
   if (caminhoLimpo === '/ops/receita' && m === 'POST') {
     const c = cents(corpo?.euros);

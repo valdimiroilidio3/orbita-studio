@@ -22,6 +22,9 @@
    =========================================================================== */
 import { criarMotor } from './_ia/motor.mjs';
 import { FORNECEDORES } from './_ia/catalogo.mjs';
+/* 1.55.0 · cada tarefa leva o seu orçamento e o seu custo */
+import { orcamento } from './_ia/router.mjs';
+import { cambioDe, centimosDeMicro, custoDeUso, tectoDeCusto, eurosDeCentimos } from './_dinheiro.mjs';
 
 /** O que cada tipo de tarefa pede ao modelo. `alvo` diz que contexto é preciso. */
 export const ROTINAS = {
@@ -179,7 +182,54 @@ async function lerAlvo(repo, tarefa) {
 }
 
 /**
- * Corre uma tarefa e devolve `{ ok, estado, resultado, modelo, ms, erro }`.
+ * 1.55.0 · Quanto custou esta execução.
+ *
+ * A fonte é o orçamento do motor quando ele o devolve (é o número que já somou
+ * todas as tentativas da cadeia). Se um motor antigo ou de teste só devolver o
+ * uso, calcula-se dos tokens. Se não devolver nada, o custo é **desconhecido** —
+ * não é zero: zero é uma afirmação, e não temos com que a sustentar.
+ */
+export function custoDaExecucao({ r = {}, orc = null, env = {} } = {}) {
+  const cambio = cambioDe(env);
+  const doOrc = r?.orc || (orc && typeof orc.resumo === 'function' ? orc.resumo() : null);
+  if (doOrc) {
+    const microUsd = doOrc.custoMicroUsd ?? null;
+    return {
+      microUsd,
+      centimos: centimosDeMicro(microUsd, cambio.taxa),
+      chamadas: doOrc.chamadas ?? null,
+      tokens: doOrc.tokens ?? null,
+      semPreco: doOrc.semPreco || 0,
+      desconhecido: microUsd == null || (doOrc.semPreco || 0) > 0,
+      fonte: 'motor',
+      moeda: 'USD',
+      cambio,
+    };
+  }
+  if (r?.uso) {
+    const c = custoDeUso({ fornec: r.fornec, modelo: r.modelo, entrada: r.uso.entrada, saida: r.uso.saida, env });
+    return {
+      microUsd: c.microUsd,
+      centimos: centimosDeMicro(c.microUsd, cambio.taxa),
+      chamadas: 1,
+      tokens: c.tokensIn + c.tokensOut,
+      semPreco: c.desconhecido ? 1 : 0,
+      desconhecido: c.desconhecido,
+      fonte: 'uso',
+      preco: c.preco,
+      moeda: 'USD',
+      cambio,
+    };
+  }
+  return {
+    microUsd: null, centimos: null, chamadas: null, tokens: null, semPreco: null,
+    desconhecido: true, fonte: 'ausente', moeda: 'USD', cambio,
+    nota: 'o motor não devolveu uso nem orçamento — o custo desta tarefa é desconhecido',
+  };
+}
+
+/**
+ * Corre uma tarefa e devolve `{ ok, estado, resultado, modelo, ms, erro, custo }`.
  * Não grava na base: quem chama decide o que fazer com o resultado (é o que
  * permite testar isto sem rede e sem Supabase).
  */
@@ -195,12 +245,18 @@ export async function executarTarefa({ repo, tarefa, env = {}, fetchImpl = fetch
   ];
 
   const t0 = Date.now();
+  /* o orçamento desta execução: chamadas, tokens e — 1.55.0 — dinheiro */
+  const orc = orcamento({ maxCustoMicroUsd: tectoDeCusto(env) });
   try {
     const m = motor || criarMotor({ repo, env, fetchImpl });
-    const r = await m.pedir('texto', mensagens, { agente: 'orchestrator', maxTokens, temperatura: 0.4 });
+    const r = await m.pedir('texto', mensagens, { agente: 'orchestrator', maxTokens, temperatura: 0.4, orc });
+    const custo = custoDaExecucao({ r, orc, env });
     const texto = String(r?.texto || '').trim();
     if (!texto) {
-      return { ok: false, estado: 'failed', ms: Date.now() - t0, erro: `${r?.fornec || 'o modelo'}/${r?.modelo || '?'} respondeu sem texto — a tarefa não conta como feita` };
+      return {
+        ok: false, estado: 'failed', ms: Date.now() - t0, custo,
+        erro: `${r?.fornec || 'o modelo'}/${r?.modelo || '?'} respondeu sem texto — a tarefa não conta como feita`,
+      };
     }
     return {
       ok: true,
@@ -209,9 +265,12 @@ export async function executarTarefa({ repo, tarefa, env = {}, fetchImpl = fetch
       modelo: `${r.fornec}/${r.modelo}`,
       ms: Date.now() - t0,
       tentativas: r.tentativas || 1,
+      custo,
+      orcamento: orc.resumo(),
     };
   } catch (e) {
-    return { ok: false, estado: 'failed', ms: Date.now() - t0, erro: motivoSemMotor(e, env) };
+    /* mesmo a falhar houve gasto (as tentativas da cadeia): o custo fica dito */
+    return { ok: false, estado: 'failed', ms: Date.now() - t0, erro: motivoSemMotor(e, env), custo: custoDaExecucao({ orc, env }) };
   }
 }
 
@@ -228,17 +287,34 @@ export async function registarDesfecho(repo, tarefa, r, { aprovacao = false } = 
     finished_at: agoraIso(),
   };
   const extras = r.ok ? { resultado: r.resultado, modelo: r.modelo || null } : {};
+  /* 1.55.0 · o custo fica na tarefa (micro-USD, inteiro). É o que permite ao
+     saldo dizer quanto custou este lead e este projeto, não só o total. */
+  const dinheiro = r.custo?.microUsd != null ? { custo_micro_usd: Math.round(r.custo.microUsd) } : {};
+
   try {
-    return await repo.tarefas.patch(tarefa.id, { ...campos, ...extras });
+    return await repo.tarefas.patch(tarefa.id, { ...campos, ...extras, ...dinheiro });
   } catch (e) {
-    /* a coluna não existe nesta base: guarda o resultado onde ele não se perde */
-    if (!r.ok) throw e;
-    const nota = `resultado de «${tarefa.kind}» (${r.modelo || 'modelo não identificado'}):\n${corta(r.resultado, 900)}`;
-    await repo.atividade.add('tarefa', corta(nota, 1000)).catch(() => null);
-    return await repo.tarefas.patch(tarefa.id, {
-      ...campos,
-      error: 'resultado guardado na Atividade — falta aplicar supabase/orbita_1_53_2.sql para a coluna `resultado`',
-    });
+    /* a coluna do custo ainda não existe nesta base (migração por aplicar):
+       grava-se o resto e o custo vai para a Atividade — não se perde */
+    try {
+      const semDinheiro = await repo.tarefas.patch(tarefa.id, { ...campos, ...extras });
+      if (dinheiro.custo_micro_usd != null) {
+        await repo.atividade.add('tarefa', corta(
+          `custo de «${tarefa.kind}»: ${eurosDeCentimos(r.custo.centimos)} (${r.custo.tokens ?? 0} tokens) — falta aplicar supabase/orbita_1_55_0.sql para ficar na tarefa`,
+          500,
+        )).catch(() => null);
+      }
+      return semDinheiro;
+    } catch {
+      /* nem o `resultado` existe nesta base: guarda-se o texto na Atividade */
+      if (!r.ok) throw e;
+      const nota = `resultado de «${tarefa.kind}» (${r.modelo || 'modelo não identificado'}):\n${corta(r.resultado, 900)}`;
+      await repo.atividade.add('tarefa', corta(nota, 1000)).catch(() => null);
+      return await repo.tarefas.patch(tarefa.id, {
+        ...campos,
+        error: 'resultado guardado na Atividade — falta aplicar supabase/orbita_1_53_2.sql para a coluna `resultado`',
+      });
+    }
   }
 }
 
@@ -259,7 +335,7 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
   await repo.atividade.add('tarefa', r.ok
     ? `${TIPOS[tipo].label}: concluída com ${r.modelo}${aprovacao ? ' (à espera da tua aprovação)' : ''}`
     : `${TIPOS[tipo].label}: não passou — ${corta(r.erro, 200)}`).catch(() => null);
-  return { status: 201, corpo: { tarefa: final, execucao: { ok: r.ok, modelo: r.modelo || null, ms: r.ms || 0 } } };
+  return { status: 201, corpo: { tarefa: final, execucao: { ok: r.ok, modelo: r.modelo || null, ms: r.ms || 0, custo: r.custo || null, orcamento: r.orcamento || null } } };
 }
 
 /** `POST /ops/tarefas/:id/correr` — repetir uma tarefa que já existe. */
@@ -270,5 +346,5 @@ export async function correrDeNovo({ repo, tarefa, env = {}, fetchImpl = fetch, 
   await repo.atividade.add('tarefa', r.ok
     ? `${tarefa.kind}: repetida e concluída com ${r.modelo}`
     : `${tarefa.kind}: repetida e não passou — ${corta(r.erro, 200)}`).catch(() => null);
-  return { status: 200, corpo: { ok: r.ok, tarefa: final, execucao: { ok: r.ok, modelo: r.modelo || null, ms: r.ms || 0 } } };
+  return { status: 200, corpo: { ok: r.ok, tarefa: final, execucao: { ok: r.ok, modelo: r.modelo || null, ms: r.ms || 0, custo: r.custo || null, orcamento: r.orcamento || null } } };
 }

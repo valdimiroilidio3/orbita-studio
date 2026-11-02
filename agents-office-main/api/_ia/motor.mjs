@@ -13,6 +13,7 @@
 import { CHAVE_PUBLICA, FORNECEDORES, MODELOS, SEM_CHAVE, comChave, mascarar, modelosDe } from './catalogo.mjs';
 import { ErroIA, falar, listarModelos, listarModelosDetalhados } from './cliente.mjs';
 import { cadeia, diagnostico, exportarFora, falarComFallback, foraDoAr, importarFora, marcarFora, orcamento } from './router.mjs';
+import { camposDeCusto, tectoDeCusto } from '../_dinheiro.mjs';   // 1.55.0: o custo de cada chamada
 import { PROVADOS, catalogoDaCadeia, descobertosSalvos, estadoCurto, eModeloDeConversa, preferidoDoAmbiente, provadosActivos, resumo as resumoGratuitos } from './gratuitos.mjs';
 
 export function chavesDoAmbiente(env = process.env) {
@@ -505,7 +506,10 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
     /** Um pedido com fallback + registo de uso. */
     async pedir(tipo, mensagens, {
       ferramentas = [], agente = null, maxTokens = 1200, temperatura = 0.3,
-      orc = orcamento(), preferido = null, limite = 4, timeoutMs = null,
+      /* 1.55.0 · o orçamento passa a ter um TECTO DE CUSTO, lido do ambiente
+         (`ORBITA_ORCAMENTO_CENTIMOS`). Sem tecto, uma execução pode correr a
+         cadeia toda e só depois o dono ver a conta no saldo. */
+      orc = orcamento({ maxCustoMicroUsd: tectoDeCusto(env) }), preferido = null, limite = 4, timeoutMs = null,
       /* 1.52.0 · `fixo` = a escolha do dono é uma escolha, não uma sugestão. Sem
          isto, «preferido» valia +1000 pontos e o bónus de «medido em produção»
          (+2000) passava-lhe à frente: pedia-se OVH/Qwen3.5-9B e respondia o
@@ -547,17 +551,23 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
         executar: (entrada) => chamar(entrada, mensagens, { ferramentas, maxTokens, temperatura, timeoutMs }),
         registar: async (evento) => {
           try {
-            await repo.ia.uso.registar({
+            const linha = {
               fornecedor: evento.fornec, modelo: evento.modelo, agente,
               tipo, ok: !!evento.ok, ms: evento.ms || 0,
               tokens_in: evento.uso?.entrada || 0, tokens_out: evento.uso?.saida || 0,
               erro: evento.ok ? null : String(evento.erro || '').slice(0, 300),
-            });
+            };
+            /* 1.55.0 · o custo vai gravado com a chamada, com o preço e a fonte
+               (ambiente ou catálogo). Sem preço, fica `custo_desconhecido` —
+               nunca um zero que se confunde com «grátis». */
+            await repo.ia.uso.registar({ ...linha, ...camposDeCusto(linha, env) });
           } catch { /* registar é útil, não é bloqueante */ }
         },
       });
       await guardarFora();
-      return resultado;
+      /* o resumo do orçamento segue com a resposta: a tarefa mostra quanto
+         gastou, e o mesmo número aparece no saldo */
+      return { ...resultado, orc: orc.resumo() };
     },
 
     /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora. */

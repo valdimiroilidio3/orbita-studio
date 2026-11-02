@@ -50,7 +50,7 @@ deploy READY → uma linha honesta na conversa.
 | **A1** | A Porta (auth real, papéis, sessões) | qualquer visitante é dono | 1.54 | 🔴 crítico | 2 ciclos |
 | **A1.1** | Briefing do projeto (briefing, Prompt Master, prompts de imagem) | projeto sem sítio onde começar | **1.54.2 ✅** | 🟠 alto | feito |
 | **A1.2** | Mídia do projeto (gerar imagem e vídeo, com custo e limites) | o briefing dizia o que fazer e nada saía | **1.54.3 ✅** | 🟠 alto | feito |
-| **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` diz custo `0` | 1.55 | 🔴 alto | 1 ciclo |
+| **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` dizia custo `0` | **1.55 ✅** | 🔴 alto | feito |
 | **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | 1.56 | 🟠 alto | 1–2 ciclos |
 | **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.57 | 🟠 alto | 1 ciclo |
 | **A5** | Fiabilidade (timeouts, falhas, restauro provado) | falha silenciosa, restauro nunca testado | 1.58 | 🟠 alto | 1 ciclo |
@@ -208,20 +208,57 @@ Detalhe em `MEDIA.md`.
 **Nota de numeração:** o A2 mantém a **1.55** — esta frente entrou na série 1.54
 (1.54.3), como o briefing (1.54.2).
 
-### A2 · Dinheiro verdadeiro — `1.55.0` 🔴
+### A2 · Dinheiro verdadeiro — `1.55.0` ✅
 
-**Problema.** `/ops/saldo` devolve `custoCentimos: 0` e
-`margemCentimos = receitaCentimos`. É falso por construção: o `/ia/uso` já
-registou tokens e milissegundos de cada chamada, mas ninguém os converte em euros.
+**O problema.** `/ops/saldo` devolvia `custoCentimos: 0` e
+`margemCentimos = receitaCentimos`. Não faltavam dados — o `/ia/uso` guardava
+tokens de cada chamada. Faltava a conta. A faixa do topo repetia o mesmo zero
+(«Custos de API (30 d): 0,00 €»).
 
-**O que fazer.** Tabela de preços por modelo (entrada/saída por 1M tokens, já há
-`preco` em `FORNECEDORES`); custo calculado por chamada e gravado; custo por
-tarefa (`/ops/tarefas` mostra `custo`); `/ops/saldo` derivado — receita, custo,
-margem, custo por lead, custo por projeto; orçamento por execução visível e
-respeitado (`orcamento()` já existe no router).
+**O que ficou.**
 
-**Prova:** correr 10 tarefas e o saldo mostrar a soma com a conta à vista
-(tokens × preço), sem um único fornecedor «a zero».
+- **Preço por modelo** — `MODELOS[].preco` (USD por milhão de tokens, entrada e
+  saída) com correcção por `ORBITA_PRECOS_IA` (`{"groq/llama-3.3-70b-versatile":
+  [0.59,0.79]}` ou só `{"groq": […]}`). O catálogo repete pares e as entradas do
+  freellmapi dizem `[0,0]`: agora **um preço conhecido ganha a um zero**.
+- **Custo por chamada, gravado** — `orbita_ai_uso.custo_micro_usd` (inteiro),
+  `custo_moeda`, `custo_desconhecido`, `preco_entrada`, `preco_saida`,
+  `preco_fonte`. Guarda-se em **micro-USD** porque uma chamada de 900 tokens
+  custa 0,000135 USD: arredondada a cêntimos dava zero e mil chamadas ficavam
+  «grátis». Os cêntimos de euro derivam-se na leitura
+  (`ORBITA_CAMBIO_USD_EUR`, com 0,92 de referência declarada).
+- **Sem preço ≠ zero** — `custo_micro_usd: null` e `custo_desconhecido: true`; o
+  saldo conta essas chamadas **à parte** e diz quais os pares que faltam.
+- **Custo por tarefa** — `orbita_tasks.custo_micro_usd`, calculado no orçamento
+  da execução (`orcamento()` devolve chamadas, tokens e dinheiro). `/ops/tarefas`
+  mostra o custo em cada cartão; `/ops/saldo` atribui o custo ao lead e ao projeto.
+- **Saldo derivado** (`api/_dinheiro.mjs`) — receita, custo, margem, por
+  campanha, por fornecedor, por lead, por projeto, unitários, e a **conta à
+  vista** (modelo · tokens · preço · custo) com o câmbio usado. Inclui a **mídia
+  gerada** (valor real ou estimativa; sem valor fiável fica de fora, dito).
+- **Orçamento visível e respeitado** — tecto de custo por execução
+  (`ORBITA_ORCAMENTO_CENTIMOS`); ao passar, a execução falha com o valor escrito
+  («orçamento de custo esgotado (0,05 €; já ia em 0,09 €)»), não com uma fatura
+  no fim do mês.
+- **Faixa do topo** — `GET /ops/summary` passa a somar o uso dos últimos 30 dias
+  (centimos, micro-USD, chamadas, quantas sem preço) em vez do `0` fixo.
+- **Base** — migração `supabase/orbita_1_55_0.sql` (idempotente) e as colunas na
+  lista de `api/_esquema.mjs`.
+
+**Prova.** `dinheiro.test.mjs` (13) corre **10 tarefas** com motor falso de uso
+conhecido, grava as 10 linhas de uso como o motor grava, e lê `/ops/saldo` pela
+rota verdadeira: 10 × 51 200 micro-USD = 512 000 → **47 cêntimos** (não 50: a
+conta faz-se em micro-USD e arredonda-se no fim), fornecedor com tokens e preço à
+vista, custo atribuído (5 tarefas ao lead, 5 ao projeto), nenhum fornecedor «a
+zero». Um segundo teste prova que uma chamada sem preço fica **fora da soma** e é
+nomeada; um terceiro que o custo gravado não muda quando o preço muda; um quarto
+que a faixa do topo deixou de ser zero. `dinheiro-ui.test.mjs` (2) abre o
+`dist/mesa.html` num DOM e lê o ecrã: a conta à vista, o câmbio, a margem
+verdadeira e o aviso de custo desconhecido.
+
+**O que continua a não ser:** fatura (A3), pagamento, custo real faturado pelo
+fornecedor (é uma conta com preços declarados, e o ecrã di-lo), e câmbio
+consultado a uma fonte — a taxa é declarada.
 
 ---
 

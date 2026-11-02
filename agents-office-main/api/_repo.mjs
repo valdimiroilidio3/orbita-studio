@@ -14,6 +14,8 @@
      · createMemRepo      — memória, para os testes provarem as rotas sem rede.
    =========================================================================== */
 
+import { camposDeCusto } from './_dinheiro.mjs';   // 1.55.0: o custo de cada chamada
+
 const semAcentos = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 export const chaveLead = (nome, cidade) => `${semAcentos(nome)}|${semAcentos(cidade)}`;
 
@@ -288,7 +290,12 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       },
       uso: {
         async registar(u) {
-          return um(await pedir('orbita_ai_uso', { method: 'POST', body: u, prefer: 'return=minimal' }));
+          /* 1.55.0 · o custo fica GRAVADO com a chamada (preço da altura, não o
+             de amanhã). Se o motor já o calculou com as regras dele, respeita-se. */
+          const linha = u?.custo_micro_usd !== undefined || u?.custo_desconhecido !== undefined
+            ? u
+            : { ...u, ...camposDeCusto(u) };
+          return um(await pedir('orbita_ai_uso', { method: 'POST', body: linha, prefer: 'return=minimal' }));
         },
         async latencias() {
           const linhas = (await pedir('orbita_ai_uso?select=fornecedor,modelo,ms&ok=eq.true&order=criado.desc&limit=300')) || [];
@@ -304,6 +311,11 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         },
         async recentes(limit = 200) {
           return (await pedir(`orbita_ai_uso?select=*&order=criado.desc&limit=${Math.min(500, limit)}`)) || [];
+        },
+        /* o período inteiro, para o saldo somar o que aconteceu e não os últimos 500 */
+        async porPeriodo(desde, limit = 5000) {
+          const q = desde ? `&criado=gte.${encodeURIComponent(desde)}` : '';
+          return (await pedir(`orbita_ai_uso?select=*${q}&order=criado.desc&limit=${Math.min(5000, limit)}`)) || [];
         },
       },
       /* 1.19.0 · memória (plugins do Graft) e trabalhos de media (OpenMontage) */
@@ -359,6 +371,11 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       },
       async listarPorProjeto(projetoId, limite = 60) {
         return (await pedir(`orbita_geracoes?select=*&projeto_id=eq.${q(projetoId)}&order=criado.desc&limit=${Math.min(200, limite)}`)) || [];
+      },
+      /* 1.55.0 · o que se gerou no período, para o saldo contar o custo da mídia */
+      async porPeriodo(desde, limite = 5000) {
+        const q = desde ? `&criado=gte.${encodeURIComponent(desde)}` : '';
+        return (await pedir(`orbita_geracoes?select=*${q}&order=criado.desc&limit=${Math.min(5000, limite)}`)) || [];
       },
       async contarDesde(contaId, iso) {
         const l = await pedir(`orbita_geracoes?select=id&conta_id=eq.${q(contaId)}&criado=gte.${q(iso)}&limit=500`);
@@ -505,7 +522,16 @@ export function createMemRepo(seed = {}) {
         async porRun(runId) { return d.iaSteps.filter((s) => s.run_id === runId).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)); },
       },
       uso: {
-        async registar(u) { d.iaUso.unshift({ id: id('u'), criado: agora(), ...u }); return true; },
+        async registar(u) {
+          const linha = u?.custo_micro_usd !== undefined || u?.custo_desconhecido !== undefined
+            ? u : { ...u, ...camposDeCusto(u) };
+          d.iaUso.unshift({ id: id('u'), criado: agora(), ...linha });
+          return true;
+        },
+        async porPeriodo(desde, limit = 5000) {
+          const linhas = desde ? d.iaUso.filter((x) => String(x.criado || '') >= desde) : d.iaUso;
+          return linhas.slice(0, Math.min(5000, limit));
+        },
         async latencias() {
           const soma = new Map();
           for (const l of d.iaUso.filter((u) => u.ok)) {
@@ -566,6 +592,9 @@ export function createMemRepo(seed = {}) {
       async porChave(chave) { return chave ? (d.geracoes.find((x) => x.chave === chave) || null) : null; },
       async listarPorProjeto(projetoId, limite = 60) {
         return d.geracoes.filter((g) => g.projeto_id === projetoId).slice(0, limite);
+      },
+      async porPeriodo(desde, limite = 5000) {
+        return d.geracoes.filter((g) => !desde || String(g.criado || '') >= desde).slice(0, limite);
       },
       async contarDesde(contaId, iso) { return d.geracoes.filter((g) => g.conta_id === contaId && String(g.criado) >= iso).length; },
       async contarDoProjetoDesde(projetoId, iso) { return d.geracoes.filter((g) => g.projeto_id === projetoId && String(g.criado) >= iso).length; },

@@ -612,6 +612,9 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   /* ---------------- uso ---------------- */
   if (limpo === '/ia/uso' && m === 'GET') {
     const linhas = await repo.ia.uso.recentes(Number(qs.get('limite')) || 200);
+    const dinheiro = await import('../_dinheiro.mjs');
+    const cambio = dinheiro.cambioDe(env);
+    const conta = dinheiro.agregarUso(linhas, env);
     const porFornecedor = new Map();
     for (const l of linhas) {
       const k = l.fornecedor || '—';
@@ -622,12 +625,34 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
       a.tokens += (l.tokens_in || 0) + (l.tokens_out || 0);
       porFornecedor.set(k, a);
     }
-    const resumo = [...porFornecedor.values()].map((a) => ({
-      ...a, latenciaMediaMs: a.pedidos ? Math.round(a.msTotal / a.pedidos) : null, msTotal: undefined,
-    }));
+    const resumo = [...porFornecedor.values()].map((a) => {
+      const linhasFornec = conta.linhas.filter((l) => l.fornecedor === a.fornecedor);
+      const micro = linhasFornec.reduce((n, l) => n + (l.microUsd || 0), 0);
+      return {
+        ...a, latenciaMediaMs: a.pedidos ? Math.round(a.msTotal / a.pedidos) : null, msTotal: undefined,
+        custoMicroUsd: micro,
+        custoCentimos: dinheiro.centimosDeMicro(micro, cambio.taxa),
+        desconhecidas: linhasFornec.reduce((n, l) => n + (l.desconhecidas || 0), 0),
+        modelos: linhasFornec.map((l) => ({
+          modelo: l.modelo, chamadas: l.chamadas, tokensIn: l.tokensIn, tokensOut: l.tokensOut,
+          preco: l.preco, fonte: l.fonte, microUsd: l.microUsd,
+          centimos: dinheiro.centimosDeMicro(l.microUsd, cambio.taxa), desconhecidas: l.desconhecidas,
+        })),
+      };
+    });
     return { status: 200, corpo: {
       resumo, ultimos: linhas.slice(0, 25),
       errosRecentes: linhas.filter((l) => !l.ok).slice(0, 10).map((l) => ({ fornecedor: l.fornecedor, modelo: l.modelo, quando: l.criado, erro: l.erro })),
+      /* 1.55.0 · quanto custou o que aqui está, com a conta à vista */
+      custos: {
+        microUsd: conta.microUsd,
+        centimos: dinheiro.centimosDeMicro(conta.microUsd, cambio.taxa),
+        desconhecidas: conta.desconhecidas,
+        chamadas: conta.chamadas,
+        cambio,
+        conta: conta.linhas.map((l) => ({ ...l, centimos: dinheiro.centimosDeMicro(l.microUsd, cambio.taxa) })),
+        nota: 'preços do catálogo (USD por milhão de tokens) ou de ORBITA_PRECOS_IA; é uma conta, não uma fatura',
+      },
     } };
   }
 

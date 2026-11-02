@@ -39,6 +39,9 @@ export const FICHEIROS = [
   /* 1.54.3 · a mídia gerada: a tabela das gerações e o bucket privado dos
      ficheiros. Idempotente: `create table if not exists` e `on conflict do nothing`. */
   'orbita_1_54_3.sql',
+  /* 1.55.0 · o dinheiro medido: custo por chamada (micro-USD) e por tarefa.
+     Idempotente (`add column if not exists`). */
+  'orbita_1_55_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -56,13 +59,16 @@ export const COLUNAS_EXIGIDAS = {
   /* 1.53.2 · onde fica o texto que a tarefa produziu. Sem estas duas, a tarefa
      conclui na mesma (o resultado vai para a Atividade), mas o cartão não o
      mostra — e o `/api/setup` passa a dizer que faltam. */
-  orbita_tasks: ['resultado', 'modelo'],
+  orbita_tasks: ['resultado', 'modelo', 'custo_micro_usd'],
   /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
   orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira', 'confirmado_em', 'confirmar_hash', 'confirmar_expira'],
   orbita_sessoes: ['conta_id', 'token_hash', 'expira', 'revogada'],
   /* 1.54.3 · sem estas, uma geração perde o vínculo (projeto, lead, quem) ou o
      custo — e a auditoria da mídia fica a mentir. */
   orbita_geracoes: ['chave', 'projeto_id', 'lead_id', 'conta_id', 'tipo', 'fornecedor', 'prompt', 'opcoes', 'estado', 'custo_estimado', 'custo_moeda', 'classificacao', 'ficheiro'],
+  /* 1.55.0 · sem estas, o custo de uma chamada não fica gravado — e o saldo
+     volta a ser uma soma de zeros. */
+  orbita_ai_uso: ['custo_micro_usd', 'custo_desconhecido', 'preco_entrada', 'preco_saida', 'preco_fonte'],
 };
 
 export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes'];
