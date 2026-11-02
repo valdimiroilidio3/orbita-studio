@@ -126,10 +126,21 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       janela: { dias: janela },
       receitaCentimos, custoCentimos: 0, margemCentimos: receitaCentimos,
       porCampanha, custosPorFornecedor: [], unitarios: {},
+      /* 1.55.0 · no modo local não há chamadas de IA (o motor vive no servidor),
+         logo o custo é 0 porque não houve consumo — e diz-se assim, em vez de
+         deixar o ecrã a sugerir que se mediu alguma coisa */
+      contaAVista: {
+        linhas: [], microUsd: 0, centimos: 0, desconhecidas: 0, chamadas: 0,
+        cambio: null,
+        nota: 'no modo local não há chamadas de IA: as chaves e o motor vivem no servidor. Este custo é 0 por ausência de consumo, não por medição',
+      },
+      custosPorProjeto: [], custosPorLead: [],
+      tarefas: { total: (d.tarefas || []).length, custoCentimos: 0, semCusto: (d.tarefas || []).length },
       entradas: dentro.slice(0, 40),
       semDados: {
-        custo: 'Sem custos de API registados: nenhuma chave foi usada a partir daqui.',
+        custo: 'Sem custos de API: no modo local nenhuma chamada de IA sai daqui.',
         receita: dentro.length ? null : 'Ainda não há entradas registadas. Uma fatura emitida fora do Órbita só entra se a escreveres aqui.',
+        cambio: null,
       },
     };
   }

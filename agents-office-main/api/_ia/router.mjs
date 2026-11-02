@@ -21,6 +21,7 @@
    não continua a gastar para «parecer que trabalhou».
    =========================================================================== */
 import { FORNECEDORES, MODELOS, SEM_CHAVE } from './catalogo.mjs';
+import { centimosDeMicro, eurosDeMicro } from '../_dinheiro.mjs';   // 1.55.0: orçamento em dinheiro
 
 export const TIPOS = {
   /* `exige` filtra (sem isso o modelo não serve); `gosta` só ordena. Misturar os
@@ -249,23 +250,39 @@ export function diagnostico({ chaves = {}, desligados = [] } = {}) {
  * Orçamento de uma execução. Não é decoração: é o que impede um agente de
  * correr em círculos a gastar quota.
  */
-export function orcamento({ maxChamadas = 14, maxTokens = 120000 } = {}) {
+export function orcamento({ maxChamadas = 14, maxTokens = 120000, maxCustoMicroUsd = null } = {}) {
   return {
-    maxChamadas, maxTokens, chamadas: 0, tokens: 0, custoCentimos: 0,
+    maxChamadas, maxTokens, maxCustoMicroUsd,
+    chamadas: 0, tokens: 0, custoMicroUsd: 0,
+    /* 1.55.0 · `custoCentimos` fica por compatibilidade, mas sai dos micro-USD
+       (inteiros). Antes era `Math.round(usd * 100)`: uma chamada de 900 tokens
+       dava zero cêntimos e mil chamadas ficavam «grátis». */
+    get custoCentimos() { return centimosDeMicro(this.custoMicroUsd); },
     gastar(uso = {}, ms = 0, modelo = null) {
       this.chamadas += 1;
       this.tokens += (uso.entrada || 0) + (uso.saida || 0);
       if (modelo && Array.isArray(modelo.preco)) {
-        const entrada = (uso.entrada || 0) / 1e6 * modelo.preco[0];
-        const saida = (uso.saida || 0) / 1e6 * modelo.preco[1];
-        this.custoCentimos += Math.round((entrada + saida) * 100);
+        /* tokens × USD por milhão = micro-USD, exacto */
+        this.custoMicroUsd += Math.round((uso.entrada || 0) * modelo.preco[0] + (uso.saida || 0) * modelo.preco[1]);
+      } else {
+        /* sem preço não é zero: é desconhecido, e fica contado como tal */
+        this.semPreco = (this.semPreco || 0) + 1;
       }
       this.ultimaMs = ms;
       if (this.chamadas > this.maxChamadas) throw Object.assign(new Error(`orçamento de chamadas esgotado (${this.maxChamadas})`), { codigo: 'orcamento' });
       if (this.tokens > this.maxTokens) throw Object.assign(new Error(`orçamento de tokens esgotado (${this.maxTokens})`), { codigo: 'orcamento' });
+      if (this.maxCustoMicroUsd != null && this.custoMicroUsd > this.maxCustoMicroUsd) {
+        throw Object.assign(new Error(`orçamento de custo esgotado (${eurosDeMicro(this.maxCustoMicroUsd)}; já ia em ${eurosDeMicro(this.custoMicroUsd)})`), { codigo: 'orcamento' });
+      }
     },
     resumo() {
-      return { chamadas: this.chamadas, tokens: this.tokens, custoCentimos: this.custoCentimos, maxChamadas: this.maxChamadas, maxTokens: this.maxTokens };
+      return {
+        chamadas: this.chamadas, tokens: this.tokens,
+        custoMicroUsd: this.custoMicroUsd, custoCentimos: centimosDeMicro(this.custoMicroUsd),
+        semPreco: this.semPreco || 0,
+        maxChamadas: this.maxChamadas, maxTokens: this.maxTokens,
+        maxCustoMicroUsd: this.maxCustoMicroUsd,
+      };
     },
   };
 }

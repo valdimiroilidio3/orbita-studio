@@ -253,13 +253,21 @@ oferta — o resto aprende-se a usar.
 
 - **receita** — só a que o dono escreveu (`POST /api/ops/receita`, em cêntimos ou euros, com
   campanha e nota). Nada é inferido de leads ou de conversas.
-- **custos** — da tabela `usage`, escrita por quem chama as APIs (Places, pesquisa, motores).
-- **margem** — a diferença, por campanha e por fornecedor, mais os custos unitários: por lead,
-  por contactado, por cliente, e receita por cliente.
+- **custos** — desde a 1.55.0, o custo **medido por chamada**: `orbita_ai_uso.custo_micro_usd`
+  (tokens × preço do catálogo, ou `ORBITA_PRECOS_IA`). Guarda-se em micro-USD inteiros; os
+  cêntimos de euro derivam-se com `ORBITA_CAMBIO_USD_EUR` (0,92 é valor de referência, e o ecrã
+  diz que é). Uma chamada **sem preço** fica `custo_desconhecido` e **não** se soma: o saldo
+  diz quantas ficaram de fora e de que pares fornecedor/modelo.
+- **margem** — a diferença, por campanha, por fornecedor, por lead e por projeto (via
+  `orbita_tasks.custo_micro_usd`), mais os custos unitários.
 
-Sem entradas registadas a margem é **negativa** (gastaste e não entraste nada) e a resposta traz
-`semDados.receita` com essa frase, em vez de um zero que parecia equilíbrio. `spentToday()` é o
-que o travão diário de custos usa.
+A resposta traz a **conta à vista** (`contaAVista.linhas`: fornecedor, modelo, tokens de entrada
+e saída, preço e custo) para o número poder ser conferido. Sem entradas registadas a margem é
+**negativa** e `semDados.receita` diz isso; sem chamadas, `semDados.custo` diz que o zero é
+ausência de consumo, não uma medição.
+
+Cada execução tem um tecto de custo (`ORBITA_ORCAMENTO_CENTIMOS`): ao passar, falha com o valor
+escrito — não descobre no fim do mês. `spentToday()` (na app de operações) é o travão diário.
 
 ## A mesa de trabalho (leads e aprovação)
 

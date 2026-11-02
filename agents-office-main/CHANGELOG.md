@@ -1,3 +1,61 @@
+## 1.55.0 — 2 nov 2026 · A2 · DINHEIRO VERDADEIRO (o custo de cada chamada, medido)
+
+Até aqui o saldo dizia `custoCentimos: 0` e `margemCentimos = receitaCentimos`.
+Era falso por construção: o `/ia/uso` já guardava os tokens de cada chamada e
+ninguém os multiplicava por um preço. A faixa do topo repetia o zero («Custos de
+API (30 d): 0,00 €»). Esta frente fecha o A2 do plano e não mexe na 1.56.
+
+- **Preço por modelo** — `MODELOS[].preco` (USD por milhão de tokens, entrada e
+  saída), corrigível por `ORBITA_PRECOS_IA`: `{"groq/llama-3.3-70b-versatile":
+  [0.59,0.79]}` ou só `{"groq": […]}`. O catálogo repete pares — as entradas do
+  freellmapi dizem `[0,0]` e tapavam o preço declarado do mesmo modelo. Agora um
+  preço conhecido ganha a um zero, e «gratuito» é dito como gratuito.
+- **Custo gravado com a chamada** — `orbita_ai_uso` ganha `custo_micro_usd`
+  (inteiro), `custo_moeda`, `custo_desconhecido`, `preco_entrada`, `preco_saida`
+  e `preco_fonte`. Guarda-se em **micro-USD**: uma chamada de 900 tokens custa
+  0,000135 USD, e arredondada a cêntimos por chamada dava zero — mil chamadas
+  ficavam «grátis». Os cêntimos derivam-se na leitura com
+  `ORBITA_CAMBIO_USD_EUR` (0,92 é referência declarada no ecrã, não cotação).
+- **Sem preço ≠ zero** — `custo_micro_usd: null`, `custo_desconhecido: true`. O
+  saldo conta essas chamadas **à parte** e nomeia os pares que faltam; não as soma
+  como gratuitas nem as esconde.
+- **Custo por tarefa** — `orbita_tasks.custo_micro_usd`, tirado do orçamento da
+  execução (`orcamento()` passou a somar dinheiro e a devolver `custoMicroUsd`).
+  Cada cartão de tarefa mostra quanto custou; `/ops/saldo` atribui o custo ao
+  **lead** e ao **projeto**.
+- **Saldo derivado** — novo `api/_dinheiro.mjs`: receita, custo, margem, por
+  campanha, por fornecedor, por lead, por projeto, unitários, e a **conta à
+  vista** (modelo · tokens de entrada/saída · preço · custo) com o câmbio usado.
+  A vista do Saldo mostra a conta, o aviso de chamadas sem preço e o custo por
+  projeto/lead — os números deixam de ser uma caixa negra.
+- **Orçamento respeitado** — tecto de custo por execução
+  (`ORBITA_ORCAMENTO_CENTIMOS`). Ao passar, a execução falha com o valor escrito
+  («orçamento de custo esgotado (0,05 €; já ia em 0,09 €)») e o gasto parcial fica
+  registado na tarefa.
+- **Mídia gerada no custo** — o que se gastou a gerar imagens/vídeo (valor real
+  quando o fornecedor o devolve, senão a estimativa) entra no total, com uma
+  secção própria por fornecedor. Sem valor fiável, a peça fica de fora — dita,
+  não somada a zero.
+- **Faixa do topo** — `GET /ops/summary` somava `0` à mão; passa a somar o uso dos
+  últimos 30 dias (cêntimos, micro-USD, chamadas, quantas sem preço).
+- **Base** — migração `supabase/orbita_1_55_0.sql` (idempotente: `add column if
+  not exists`), na ordem de `_esquema.mjs`, com índices por data e fornecedor.
+
+**Testes:** 879 (eram 864). `dinheiro.test.mjs` (13) corre **dez tarefas** com
+motor falso de uso conhecido, grava as dez linhas de uso como o motor grava, e lê
+`/ops/saldo` pela rota verdadeira: 10 × 51 200 micro-USD = 512 000 → **47
+cêntimos** (não 50 — a conta faz-se em micro-USD e só se arredonda no fim),
+fornecedor com tokens e preço à vista, custo atribuído (5 tarefas ao lead, 5 ao
+projeto), nenhum fornecedor «a zero». Também prova: chamada sem preço fica fora
+da soma e é nomeada; o custo gravado não muda quando o preço de hoje muda; o tecto
+de orçamento rebenta com a frase certa; a mídia gerada entra no total (e o que não
+tem valor fiável fica de fora, nomeado); a migração existe e é idempotente; a conta
+antiga (`custoCentimos: 0, margemCentimos = receita`) não pode voltar.
+`dinheiro-ui.test.mjs` (2) abre o `dist/mesa.html` num DOM e lê o ecrã.
+
+**Continua a não ser:** fatura (A3), pagamento, custo faturado pelo fornecedor
+(é uma conta com preços declarados) e câmbio consultado a uma fonte.
+
 ## 1.54.4 — 2 nov 2026 · O QUE O TESTE MANUAL ENCONTROU (cinco correcções, uma delas sem prova)
 
 Depois de a 1.54.3 estar publicada, o fluxo principal foi percorrido com leads
