@@ -16,11 +16,16 @@ import { BRAIN as BRAIN0 } from './braingraph.js';
 const BRAIN = BRAIN0; // as notas reais vêm do servidor (GET /api/brain); nada de grafos de exemplo
 import { AGENTS } from './data.js';
 import { fmtTime } from './time.js';
+/* 1.58.0 · as relações entre agentes, tarefas e conhecimento. A conta é pura
+   (`src/rede.js`, provada em `rede.test.mjs`); aqui só se juntam os nós ao grafo
+   que já existe — as notas — e se desenham com a mesma gramática. */
+import { construirRede, resumoDaRede, GRUPO } from './rede.js';
 
 const GROUP_COL = {
   '40-Marketing': '#E69393', '50-Products': '#98A5EF', '60-Sales': '#EADC8F', '70-Delivery': '#8FD3F4',
   '10-Business': '#BFA2E3', '00-Meta': '#F2B33D', '90-Skills': '#5ADEB7', '30-Customers': '#D1DECD',
   '95-Agents': '#B0ADA3', '80-Finance': '#A9B6F0', '05-Inbox': '#B0ADA3',
+  [GRUPO.agente]: '#5ADEB7', [GRUPO.tarefa]: '#EADC8F',
 };
 const GROUP_NAME = g => g.replace(/^\d\d-/, '');
 // which folders each department reads from (and writes into)
@@ -361,6 +366,62 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     etch(); glint(n);
     updateStrip();
   }
+  /* ---------- 1.58.0 · AS RELAÇÕES (tarefas, agentes, conhecimento) ----------
+     O grafo deixa de ser só o vault: entra o trabalho que liga um agente a uma
+     tarefa, e a tarefa à nota que escreveu. Os nós de trabalho são reconstruídos
+     de cada vez (nunca se acumulam); as notas ficam onde estão. */
+  let baseLen = null;   // onde acabam as notas e começam os nós de trabalho
+  let redeAtual = null;
+
+  function limparTrabalho() {
+    if (baseLen == null) { baseLen = nodes.length; return; }
+    nodes.length = baseLen;
+    links = links.filter(([a, b]) => a < baseLen && b < baseLen);
+    adj = nodes.map(() => new Set());
+    for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
+    byId = new Map();
+    nodes.forEach((n, i) => { if (!byId.has(n.id)) byId.set(n.id, i); });
+    recalcularGrupos();
+  }
+
+  /**
+   * Dá ao Cérebro o trabalho que existe agora. Devolve a rede que ficou, para a
+   * planta 2D e para a gaveta das tarefas lerem a mesma verdade.
+   */
+  function setTrabalho({ agentes = [], tarefas = [] } = {}) {
+    limparTrabalho();
+    const base = nodes.slice(0, baseLen == null ? nodes.length : baseLen);
+    const rede = construirRede({ agentes, tarefas, notas: base.map(n => ({ id: n.id })) });
+    redeAtual = { ...rede, resumo: resumoDaRede(rede) };
+    const idx = new Map();
+    base.forEach((n) => idx.set(`nota:${n.id}`, n.i));
+    for (const no of rede.nos) {
+      /* as notas já estão no grafo: entram só como destino das arestas, nunca
+         como um segundo nó com o mesmo nome */
+      if (idx.has(no.chave)) continue;
+      const i = nodes.length;
+      nodes.push({
+        id: no.rotulo, g: GRUPO[no.tipo] || no.g, d: no.d, x: no.x, y: no.y, i,
+        tipo: no.tipo, chave: no.chave, estado: no.estado || null, agente: no.agente || null,
+      });
+      idx.set(no.chave, i);
+    }
+    for (const l of rede.ligacoes) {
+      const a = idx.get(l.a), b = idx.get(l.b);
+      if (a == null || b == null || a === b) continue;
+      links.push([a, b]);
+    }
+    adj = nodes.map(() => new Set());
+    for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
+    nodes.forEach((n, i) => { if (!byId.has(n.id)) byId.set(n.id, i); });
+    recalcularGrupos();
+    if (openNow) {
+      meta.textContent = `${owner} · ${state.notes.toLocaleString('en-NZ')} NOTES · ${links.length} LINKS`;
+      chips();
+    }
+    return redeAtual;
+  }
+
   // LIVE: replace the graph with the server's (the user's real vault), keeping today's state
   function setGraph(g) {
     if (!g || !g.nodes || !g.nodes.length) return;
@@ -369,6 +430,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     links = g.links.map(([a, b]) => [a, b]);
     adj = nodes.map(() => new Set()); for (const [a, b] of links) { adj[a].add(b); adj[b].add(a); }
     byId = new Map(nodes.map(n => [n.id, n.i])); hubs = nodes.slice(0, 8);
+    baseLen = null; redeAtual = null; // o trabalho é reconstruído sobre o grafo novo
     layout3();
     state.notes = g.notes; sel = null;
     etch(); updateStrip();
@@ -460,8 +522,14 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   let pinch = null;           // { d, k } — a fotografia do pinhole (distância entre dedos e escala) quando ele começou
   const notaAberta = () => !!(sel && pane.querySelector('h3'));
   function mostrarNota(aberta) { document.body.classList.toggle('bv-note', !!aberta); }
-  const groups = [...new Set(nodes.map(n => n.g))].sort();
+  let groups = [...new Set(nodes.map(n => n.g))].sort();
   const on = new Set(groups);
+  /* 1.58.0: os grupos novos (Agentes, Tarefas) entram ligados — mas se o dono
+     desligou um grupo à mão, a escolha dele mantém-se. */
+  function recalcularGrupos() {
+    groups = [...new Set(nodes.map(n => n.g))].sort();
+    for (const g of groups) if (!on.has(g)) on.add(g);
+  }
   function chips() {
     chipsEl.innerHTML = groups.map(g => `<button class="bv-chip${on.has(g) ? ' on' : ''}" data-g="${g}"><i style="background:${GROUP_COL[g] || '#B0ADA3'}"></i>${GROUP_NAME(g)}</button>`).join('') +
       `<button class="bv-chip live${freshOnly ? ' on' : ''}" data-g="__fresh">Novas hoje · ${state.newToday}</button>`;
@@ -552,11 +620,19 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
   function select(n) {
     sel = n;
     mostrarNota(true); // a folha sobe (no telemóvel); no ecrã grande o painel já lá estava
-    const out = [...adj[n.i]].map(i => nodes[i]).sort((a, b) => b.d - a.d);
+    const out = [...adj[n.i]].filter(Boolean).map(i => nodes[i]).sort((a, b) => b.d - a.d);
     const rd = state.reads.get(n.id), wr = state.written.get(n.id);
+    /* 1.58.0: um nó de trabalho diz o que é — a nota continua a ser uma nota. */
+    const ESTADO_PT = { aberta: 'a correr agora', espera: 'à espera de aprovação', 'na-fila': 'na fila', feita: 'concluída', falhou: 'falhou', outra: 'registada' };
+    const tipo = n.tipo === 'tarefa'
+      ? `<div class="bv-lab">Tarefa</div><p>${esc(ESTADO_PT[n.estado] || 'registada')}${n.agente ? ` · por ${esc(n.agente)}` : ''} · ${n.d} ligaç${n.d === 1 ? 'ão' : 'ões'}</p>`
+      : n.tipo === 'agente'
+        ? `<div class="bv-lab">Agente</div><p>${n.d} tarefa${n.d === 1 ? '' : 's'} nesta rede</p>`
+        : '';
     pane.innerHTML = X_NOTA + `<h3>${esc(n.id)}</h3><div class="bv-path"><i style="background:${GROUP_COL[n.g] || '#B0ADA3'}"></i>${esc(GROUP_NAME(n.g))} · ${n.d} link${n.d === 1 ? '' : 's'}${n.fresh ? ' · <span class="bv-g">novo hoje</span>' : ''}</div>` +
       (wr ? `<div class="bv-lab">Escrito por</div><p>${esc(wr.agent)} · ${timeStr(wr.ts)} · da tarefa «${esc(wr.task)}»</p>` : '') +
       (rd ? `<div class="bv-lab">Lido por último por</div><p>${esc(rd.agent)} · ${timeStr(rd.ts)}</p>` : '') +
+      tipo +
       `<div class="bv-lab">Links · ${out.length}</div>` + out.slice(0, 18).map(o => `<div class="bv-lk" data-i="${o.i}">${esc(o.id)}</div>`).join('') +
       (out.length > 18 ? `<div class="bv-more">+${out.length - 18} mais</div>` : '');
     pane.querySelectorAll('.bv-lk').forEach(el => el.addEventListener('click', () => { const t = nodes[+el.dataset.i]; select(t); centre(t); }));
@@ -584,7 +660,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
       bctx.fillStyle = GROUP_COL[n.g] || '#B0ADA3'; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
       if (n.fresh) { bctx.strokeStyle = GREEN; bctx.lineWidth = 1.5; bctx.beginPath(); bctx.arc(x, y, r + 3, 0, 7); bctx.stroke(); }
       if (sel === n) { bctx.strokeStyle = '#E8E6DF'; bctx.lineWidth = 1.5; bctx.beginPath(); bctx.arc(x, y, r + 4, 0, 7); bctx.stroke(); }
-      const label = n.d >= 18 || k > 2.2 || (hi && hi.has(n.i)) || (match && match.has(n.i)) || n.fresh;
+      const label = n.d >= 18 || k > 2.2 || (n.tipo && k > 1.35) || (hi && hi.has(n.i)) || (match && match.has(n.i)) || n.fresh;
       if (label) { bctx.fillStyle = dim ? 'rgba(232,230,223,.35)' : '#E8E6DF'; bctx.fillText(n.id, x + r + 4, y); }
       bctx.globalAlpha = 1;
     }
@@ -643,7 +719,7 @@ export function initBrain({ scene, brainGroup, getR, esc, hud, toScreen, getCame
     shellMat.uniforms.uRim.value.set(dark ? '#B9CBB4' : '#9FB79E');
     etch();
   }
-  return { read, readNote, write, setGraph, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow,
+  return { read, readNote, write, setGraph, setTrabalho, rede: () => redeAtual, setTheme, setOwner, setQuiet, tick, open, close, toggle, isOpen: () => openNow,
     /* 1.15.2: o grafo em ecrã pequeno, ao alcance do teste — a nota aberta, o que a folha mostra
        e a escala alcançável (o pinhole não se simula num jsdom; a conta sim) */
     nota: () => (sel ? sel.id : null),

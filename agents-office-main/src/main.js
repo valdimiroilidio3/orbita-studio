@@ -38,6 +38,15 @@ import {
   ANGULOS, AEREA, RAD_POR_PIXEL, direcaoDaCamara, rodar, inclinacaoValida,
   gestoDoScroll, gestoDoArrasto, etiquetaDoAngulo, proximoAngulo, INCLINACAO_BASE,
 } from './camera.js';
+/* 1.58.0 · O ESCRITÓRIO COMO INTERFACE (2 nov 2026). Cada sala diz o seu estado real,
+   os agentes activos têm um sinal discreto, clicar numa sala abre um painel contextual
+   com o que lá está, e a mesma informação existe em vista 2D — sem WebGL — para trabalho
+   intensivo. As contas vivem em `src/oficina.js` (puras, com testes); aqui só se ligam
+   ao three e ao DOM. */
+import {
+  initOficina, panoramaDaSala, panoramaHTML, estadoDaSala,
+  estadoDoRetrato, indicadorDeAgente, ORDEM_SALAS,
+} from './oficina.js';
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -509,6 +518,13 @@ for (const a of AGENTS) {
   warn.visible = false;
   scene.add(warn);
 
+  /* 1.58.0 · O SINAL DISCRETO. Um ponto pequeno por cima de quem está mesmo a trabalhar
+     (verde), à espera do teu OK (âmbar) ou falhou (vermelho). Nasce apagado e só acende
+     com trabalho real; sem ligação, fica apagado em vez de mentir. */
+  const sinal = makeActivityDot();
+  sinal.visible = false;
+  scene.add(sinal);
+
   // name pill (HTML) — clickable, same as clicking the agent
   const pill = document.createElement('div');
   pill.className = 'pill';
@@ -526,7 +542,7 @@ for (const a of AGENTS) {
   hud.appendChild(pill);
 
   R[a.id] = {
-    a, person, warn, pill, seat: person.position.clone(), seatRot: ANG + Math.PI,
+    a, person, warn, pill, sinal, seat: person.position.clone(), seatRot: ANG + Math.PI,
     stand: person.position.clone().add(rot(new THREE.Vector3(1.5, 0, 0.15))),
     state: 'idle', bob: Math.random() * 10, path: null, pathI: 0, speed: 9.5, ask: null, feed: [],
     station, desk, screenSet,
@@ -608,6 +624,12 @@ let focusDimTarget = 0, focusDim = 0;
 const dimSwapped = [];
 const dimCache = new Map();
 function dimTwin(m) {
+  /* 1.58.0 · um material SEM cor não se escurece. O orbe do Cérebro é um ShaderMaterial
+     (e há mais peças sem `color`), e o passe de foco chamava `m.color.clone()` sobre ele:
+     a primeira sala que se clicasse rebentava com «Cannot read properties of undefined
+     (reading 'clone')» — antes de a gaveta abrir. Devolver o próprio material mantém o
+     brilho do centro e deixa o resto da cena apagar-se como deve ser. */
+  if (!m || !m.color) return m;
   if (!dimCache.has(m.uuid)) {
     const d = m.clone();
     d.userData.baseColor = m.color.clone();
@@ -652,6 +674,60 @@ function tickDim(dt) {
    sala, por estado, lidas do fluxo ao vivo. Sem dados, o cartão mostra 0 e di-lo — não inventa. */
 let brainNotes = brain.state.notes;
 const DEPT_OF_SEAT = Object.fromEntries(AGENTS.map(a => [a.id, a.dept]));
+
+/* 1.58.0 · O QUE CADA SALA É, e não só quantos postos tem. A regra do estado é a MESMA
+   da mesa (`estadoAgentes` em `src/painel.js`, aplicada por `src/oficina.js`): não há
+   duas verdades sobre a mesma sala. O retrato é o do servidor; as tarefas são as que o
+   escritório já conhece. */
+const SALAS_3D = DEPT_KEYS.map((k) => ({ chave: k, nome: DEPTS[k].name, curto: DEPTS[k].short, cor: DEPTS[k].glass }));
+const AGENTES_3D = AGENTS.map((a) => ({ id: a.id, nome: a.name, sala: a.dept }));
+const ESTADO_DA_TAREFA_LOCAL = { doing: 'a-correr', next: 'na-fila', sched: 'na-fila', waiting: 'espera', done: 'feita', failed: 'falhou' };
+function tarefasDoEscritorio() {
+  const lista = (typeof tasks !== 'undefined' && tasks && Array.isArray(tasks.tasks)) ? tasks.tasks : [];
+  return lista.filter(Boolean).map((t) => ({
+    id: t.id,
+    titulo: t.title || t.titulo || '',
+    sala: t.dept || null,
+    agente: t.agent || null,
+    estado: ESTADO_DA_TAREFA_LOCAL[t.state] || 'outra',
+    quando: t.doneAt || t.addedAt || t.quando || null,
+  })).filter((t) => t.titulo);
+}
+const retratoAoVivo = () => (liveUi && liveUi.status && liveUi.status() === 'live' ? liveUi.all() : {});
+function panoramaDe(k) {
+  return panoramaDaSala({
+    sala: k,
+    nome: (DEPTS[k] && (DEPTS[k].name || DEPTS[k].short)) || k,
+    cor: (DEPTS[k] && DEPTS[k].glass) || '#5A5A5A',
+    tarefas: tarefasDoEscritorio(),
+    agentes: AGENTES_3D,
+    retrato: retratoAoVivo(),
+    ligado: !!(liveUi && liveUi.status && liveUi.status() === 'live'),
+  });
+}
+/** Escreve o estado em todos os cartões das salas (o mesmo número que a planta 2D). */
+function syncEstadoDasSalas() {
+  for (const k of DEPT_KEYS) {
+    const rt = deptRT[k];
+    if (!rt || !rt.stateEl) continue;
+    const e = estadoDaSala({
+      sala: k,
+      tarefas: tarefasDoEscritorio(),
+      agentes: AGENTES_3D,
+      retrato: retratoAoVivo(),
+      ligado: !!(liveUi && liveUi.status && liveUi.status() === 'live'),
+    });
+    /* o rótulo acessível diz sempre o estado — mesmo quando os números não mudaram
+       (o `syncBadgeLabels` reescreve-o nas actualizações, e sem isto ficava sem ele) */
+    rt.badge.setAttribute('aria-label', `${badgeLabel(k)} Estado: ${e.rotulo}. ${e.detalhe}`);
+    if (rt.stateValue === e.chave + e.rotulo) continue;
+    rt.stateValue = e.chave + e.rotulo;
+    rt.stateEl.dataset.state = e.chave;
+    rt.stateEl.style.setProperty('--estado', e.cor);
+    const b = rt.stateEl.querySelector('b');
+    if (b) b.textContent = e.curto;
+  }
+}
 const BB_ROWS = {
   emails: [['EM CURSO', () => deptCount('emails', 'live')], ['À ESPERA', () => deptCount('emails', 'waiting')], ['CONCLUÍDAS 24H', () => deptCount('emails', 'done')]],
   sales: [['EM CURSO', () => deptCount('sales', 'live')], ['À ESPERA', () => deptCount('sales', 'waiting')], ['CONCLUÍDAS 24H', () => deptCount('sales', 'done')]],
@@ -741,6 +817,15 @@ for (const k of [...DEPT_KEYS, 'brain']) {
     b.title = 'abrir o Cérebro (G)';
   }
   hud.appendChild(b);
+  /* 1.58.0 · o cartão passa a dizer o que a sala É, além de quantos postos tem. */
+  if (k !== 'brain') {
+    const st = document.createElement('div');
+    st.className = 'b-state';
+    st.dataset.state = 'sem-trabalho';
+    st.innerHTML = '<i aria-hidden="true"></i><b>SEM TRABALHO</b>';
+    b.appendChild(st);
+    deptRT[k].stateEl = st;
+  }
   deptRT[k].badge = b;
   deptRT[k].vals = (BB_ROWS[k] || []).map(row => String(row[1]()));
   deptRT[k].apprRow = b.querySelector('.b-appr');
@@ -774,7 +859,8 @@ function updateBillboards() {
     });
   }
 }
-liveUi.onChange((e) => { if (e.type === 'update' || e.type === 'status') { updateBillboards(); syncBadgeLabels(); } });
+liveUi.onChange((e) => { if (e.type === 'update' || e.type === 'status') { updateBillboards(); syncBadgeLabels(); syncEstadoDasSalas(); } });
+syncEstadoDasSalas(); // o primeiro retrato já diz o estado de cada sala
 
 /* ---------- controls: wheel zoom-to-cursor, drag pan, click to fly ---------- */
 const ray = new THREE.Raycaster();
@@ -887,11 +973,15 @@ addEventListener('pointerup', (e) => {
 });
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // typing in the bar, the big editor or a menu never fires a hotkey
+  /* 1.58.0: com a planta 2D aberta, as teclas são dela (setas, Enter, Esc, M) —
+     o escritório por trás não se põe a rodar a câmara a cada seta. */
+  if (typeof oficina !== 'undefined' && oficina && oficina.estaAberto() && e.key !== 'm' && e.key !== 'M') return;
   if (e.key === 'Escape' && forgeTerm.isOpen()) { forgeTerm.close(); return; }
   if (e.key === 'Escape') { if (tasks && tasks.calendar && tasks.calendar.isOpen()) { if (tasks.calendar.popOpen()) tasks.calendar.closePop(); else tasks.calendar.close(); } else if (brain.isOpen()) brain.close(); else if (tasks && tasks.isOpen()) tasks.close(); else zoomOut(); }
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
   else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar ficou com elas own keys (← → W M T)
   else if (e.key === 'l' || e.key === 'L') { a11y.toggle(document.activeElement); } // 26 out 2026: a lista do escritório
+  else if (e.key === 'm' || e.key === 'M') oficina.alternar(); // 1.58.0: a planta 2D (trabalho intensivo)
   else if (e.key === 'g' || e.key === 'G') brain.toggle(); // V3.6: the full-screen Brain graph
   else if (e.key === 'b' || e.key === 'B') { if (tasks) tasks.toggle(); } // V3: the company-wide board
   else if (e.key === '+' || e.key === '=') zoomStep(1.5);
@@ -1332,7 +1422,23 @@ function buildDeptRail(k) {
     <div class="b-metrics">${BB_ROWS[k].map((row, i) => `
       <div class="m-row"><span class="m-lab">${row[0]}</span><span class="m-val" data-rm="${k}-${i}">${row[1]()}</span></div>`).join('')}</div>
     ${tasks ? tasks.rowHTML(k) : ''}
-    <button type="button" class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}" aria-label="decisões à tua espera nesta sala — abrir a primeira">⚠ <span class="ap-n">${stuckIn(k).length}</span> <span class="ap-t">À ESPERA DE APROVAÇÃO</span></button>`;
+    <button type="button" class="b-appr" style="display:${stuckIn(k).length ? 'flex' : 'none'}" aria-label="decisões à tua espera nesta sala — abrir a primeira">⚠ <span class="ap-n">${stuckIn(k).length}</span> <span class="ap-t">À ESPERA DE APROVAÇÃO</span></button>
+    ${panoramaHTML(panoramaDe(k))}`;
+  const pv = rh.querySelector('.pra');
+  if (pv) pv.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-of]');
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const of = b.dataset.of;
+    if (of === 'abrir-2d') { oficina.abrir(k); return; }
+    if (of === 'abrir-tarefas') { if (tasks) tasks.openFor(k); return; }
+    if (of === 'aprovar' || of === 'rejeitar') {
+      const id = b.dataset.agente;
+      if (id && R[id] && R[id].state === 'stuck') resolveApproval(id, of === 'aprovar');
+      else if (id) openAgent(id, 'chat'); // não há decisão pendente: abre a conversa em vez de fingir uma
+      return;
+    }
+  });
   const trow = rh.querySelector('.b-tasks');
   if (trow) trow.addEventListener('click', () => tasks.toggle());
   rh.querySelector('.b-appr').addEventListener('click', () => {
@@ -1754,6 +1860,7 @@ function syncFromLive() {
     if (!d) {
       r.liveState = 'idle';
       if (!r.trip) { r.state = 'idle'; if (r.warn) r.warn.visible = false; }
+      actualizarSinal(id);
       continue;
     }
     const want = d.state === 'live' ? 'working'
@@ -1782,8 +1889,47 @@ function syncFromLive() {
     if (want !== 'stuck' && r.state === 'stuck') { r.state = want; if (r.warn) r.warn.visible = false; syncApprovals(); }
     else r.state = want;
     if (r.warn) r.warn.visible = want === 'stuck' || want === 'error';
+    actualizarSinal(id);
   }
   crew.direct(performance.now());
+}
+
+/* ---------- o sinal de actividade (1.58.0) ----------
+   Um sprite de 1 px de matéria: um ponto cheio com halo, sem texto. A cor diz o estado e a
+   opacidade respira devagar; quem pediu «menos movimento» fica com um ponto fixo. */
+function makeActivityDot() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  if (x) {
+    const g = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.45, 'rgba(255,255,255,.92)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 29, 0, 7); x.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, depthWrite: false }));
+  sp.scale.set(1.15, 1.15, 1);
+  sp.userData.sinal = true;
+  return sp;
+}
+/** Diz ao sprite o que mostrar. A fonte é o retrato do servidor — nada aqui é inventado. */
+function actualizarSinal(id) {
+  const r = R[id];
+  if (!r || !r.sinal) return;
+  const d = liveUi.forAgent(id);
+  const ligado = liveUi.status() === 'live';
+  const ind = indicadorDeAgente({ estado: estadoDoRetrato(d ? d.state : 'idle'), ligado });
+  r.sinal.visible = !!ind.activo;
+  r.sinalState = ind.chave;
+  if (ind.activo) {
+    r.sinal.material.color.set(ind.cor);
+    /* assenta já por cima da cabeça: sem isto, o primeiro instante do sinal seria
+       na origem do mundo — ou seja, dentro do Cérebro, no meio do átrio. */
+    const p = r.person.position;
+    r.sinal.position.set(p.x + 0.95, p.y + 6.3, p.z);
+    r.sinal.material.opacity = CALMO ? 0.62 : 0.6;
+  }
 }
 
 /* ---------- emotes ----------
@@ -1862,6 +2008,13 @@ function applyStandAndFacing(r, mode, now, dt, face) {
 function tickSim(now, dt) {
   if (now - lastLiveSync > 1200) { lastLiveSync = now; syncFromLive(); }
   for (const r of Object.values(R)) {
+    /* o sinal segue a pessoa que o acendeu — em pé, sentada ou a caminho do Cérebro */
+    if (r.sinal && r.sinal.visible) {
+      const p = r.person.position;
+      r.sinal.position.set(p.x + 0.95, p.y + 6.3, p.z);
+      const k = CALMO ? 0.62 : 0.5 + 0.22 * Math.sin(now / 900 + r.bob);
+      r.sinal.material.opacity = k;
+    }
     // 28 out 2026: quem está a caminho do Cérebro — ou a explicar ao grupo — é conduzido pelo
     // `crew`. Sai do laço aqui para não haver duas mãos a mexer no mesmo corpo.
     if (r.trip) { crew.tick(r, now, dt); continue; }
@@ -2080,6 +2233,51 @@ fetch('/api/ops/today').then(r => r.json()).then(d => {
   const fresh = !seen || (Date.now() - new Date(seen).getTime()) > 6 * 3600 * 1000;
   if (n && fresh && today) today.open();
 }).catch(() => {});
+/* ===========================================================================
+   1.58.0 · A PLANTA 2D E O PAINEL DA SALA (2 nov 2026)
+
+   O escritório é a cara da empresa, mas nem todo o trabalho se faz a olhar para
+   uma cena: em trabalho intensivo quer-se a mesma informação em texto, sem
+   animação, sem WebGL e sem esperar por um render. A planta mostra as seis
+   salas na mesma ordem do chão, com o estado real de cada uma e o painel da
+   sala escolhida — o MESMO painel que a gaveta 3D abre ao clicar numa sala.
+
+   Tudo o que a planta mostra vem de `getDados()`, que lê as mesmas fontes da
+   cena: `liveUi` (o retrato do servidor), as tarefas que o escritório conhece e
+   os agentes de `data.js`. Sem ligação, di-lo — não preenche o ecrã com zeros
+   que parecem factos.
+   =========================================================================== */
+const oficina = initOficina({
+  getDados: () => {
+    const rede = brain.rede ? brain.rede() : null;
+    return {
+      salas: ORDEM_SALAS.map((k) => ({ chave: k, nome: DEPTS[k].name, cor: DEPTS[k].glass })),
+      tarefas: tarefasDoEscritorio(),
+      agentes: AGENTES_3D,
+      retrato: retratoAoVivo(),
+      ligado: liveUi.status() === 'live',
+      brain: {
+        notas: brain.state.notes,
+        ligacoes: rede ? rede.contagens.ligacoes : 0,
+        resumo: rede ? rede.resumo : null,
+      },
+      agora: Date.now(),
+    };
+  },
+  onAbrirSala: (k) => { if (k && DEPTS[k]) enterFocus(k); },
+  onAbrirTarefas: (k) => { if (tasks) tasks.openFor(k); },
+  onAgente: (id) => openAgent(id, R[id] && R[id].state === 'stuck' ? 'chat' : 'live'),
+  onAprovar: (id) => resolveApproval(id, true),
+  onRejeitar: (id) => resolveApproval(id, false),
+});
+
+/* O trabalho entra no Cérebro: a cada retrato novo, ou de vez em quando, as
+   relações (agente → tarefa → nota) são reconstruídas. Nada se acumula. */
+function passarTrabalhoAoCerebro() {
+  try { brain.setTrabalho({ agentes: AGENTES_3D, tarefas: tarefasDoEscritorio() }); } catch { /* o grafo nunca derruba a cena */ }
+}
+passarTrabalhoAoCerebro();
+
 view.target.set(...overviewPos());
 addEventListener('resize', () => { if (!focused && !tween) view.target.set(...overviewPos()); });
 
@@ -2175,6 +2373,7 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 /* ---------- 1.53.0 · A LOJA DE APPS (botão, tecla A, ou o endereço #apps) ---------- */
 const apps = createApps({ doc: document });
 document.getElementById('zApps')?.addEventListener('click', () => apps.toggle());
+document.getElementById('z2d')?.addEventListener('click', () => oficina.alternar()); // 1.58.0: a planta 2D
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -2335,7 +2534,27 @@ window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openA
   /* 30 out 2026: os cartões das salas em ecrã pequeno — a escala e a arrumação, ao alcance
      do teste: uma conta que só se vê no telemóvel tem de poder provar-se fora dele. */
   badges: { escala: (w) => badgeFit(w), arrumar: (caixas) => { arrumarCartoes(caixas); return caixas; },
-    compacto: () => innerWidth <= 640 } };
+    compacto: () => innerWidth <= 640 },
+  /* 1.58.0 · o escritório como interface, ao alcance da inspeção e do teste:
+     o estado de cada sala, o sinal de cada agente e a planta 2D. */
+  interface: {
+    salas: () => Object.fromEntries(DEPT_KEYS.map((k) => {
+      const e = estadoDaSala({
+        sala: k, tarefas: tarefasDoEscritorio(), agentes: AGENTES_3D,
+        retrato: retratoAoVivo(), ligado: liveUi.status() === 'live',
+      });
+      return [k, { estado: e.chave, rotulo: e.rotulo, contagens: e.contagens, ultimaIdade: e.ultimaIdade }];
+    })),
+    sinais: () => Object.fromEntries(Object.values(R).filter((r) => r.sinal && r.sinal.visible)
+      .map((r) => [r.a.id, { estado: r.sinalState, cor: '#' + r.sinal.material.color.getHexString() }])),
+    /* «sincronizar agora»: relê o retrato do servidor e volta a acender o estado das
+       salas e os sinais dos agentes. É o que a reconexão faz — e o que o teste usa,
+       porque no harness de WebGL falso o ciclo de desenho morre no `render`. */
+    sincronizar: () => { syncFromLive(); syncEstadoDasSalas(); },
+    rede: () => (brain.rede ? brain.rede() : null),
+    planta: { abrir: (k) => oficina.abrir(k), fechar: () => oficina.fechar(), alternar: () => oficina.alternar(),
+      estaAberta: () => oficina.estaAberto(), escolhida: () => oficina.salaEscolhida(), dados: () => oficina.dados() },
+  } };
 
 /* AO VIVO: quando chega um retrato novo, o chip e (se estiver aberto) o painel acompanham. */
 liveUi.onChange(() => {
@@ -2389,6 +2608,9 @@ window.ORBITA = Object.assign(window.ORBITA || {}, {
 });
 
 let last = performance.now();
+/* 1.58.0: o estado das salas e a rede do Cérebro não mudam a 60 fps — quatro
+   segundos é o suficiente para não haver números velhos no ecrã. */
+let ultimoEstadoDasSalas = 0, ultimoTrabalhoNoCerebro = 0, ultimaPlanta = 0;
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   tickTween(now);
@@ -2400,6 +2622,9 @@ function loop(now) {
   tasks.tick(now);
   mcp.tick(now, dt, view, camera, focused, focusDim);
   syncOverviewBtn();
+  if (now - ultimoEstadoDasSalas > 4000) { ultimoEstadoDasSalas = now; syncEstadoDasSalas(); }
+  if (now - ultimoTrabalhoNoCerebro > 6000) { ultimoTrabalhoNoCerebro = now; passarTrabalhoAoCerebro(); }
+  if (oficina.estaAberto()) { if (now - ultimaPlanta > 1500) { ultimaPlanta = now; oficina.actualizar(); } }
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }
