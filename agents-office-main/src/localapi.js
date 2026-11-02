@@ -78,6 +78,7 @@ const vazio = () => ({
   projetos: [],
   tarefas: [],
   receitas: [],
+  faturas: [],
   mensagens: [],
   atividade: [],
 });
@@ -113,6 +114,36 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const cents = (eur) => Math.round((Number(eur) || 0) * 100);
   const dinheiro = (c) => (Number(c) || 0) / 100;
 
+  /* 1.56.0 · as faturas no modo local. O documento existe (número, linhas, IVA,
+     totais) e o número não salta — mas o PDF é gerado no servidor, e aqui não há
+     servidor: é isso que se diz, em vez de um botão que não faz nada. Esta conta
+     é a mesma de `api/_faturas.mjs` (`calcularTotais`), e o teste compara as duas. */
+  function faturasResumo(d) {
+    const lista = d.faturas || [];
+    const emitidas = lista.filter((f) => f.tipo !== 'nota_credito' && f.estado !== 'anulada');
+    const notas = lista.filter((f) => f.tipo === 'nota_credito');
+    const soma = (xs, k) => xs.reduce((n, x) => n + (Number(x[k]) || 0), 0);
+    const porMes = Object.entries((emitidas.concat(notas)).reduce((m, f) => {
+      const k = String(f.emitida_em || '').slice(0, 7) || 'sem data';
+      m[k] = (m[k] || 0) + (Number(f.total_centimos) || 0);
+      return m;
+    }, {})).map(([mes, totalCentimos]) => ({ mes, totalCentimos }));
+    return {
+      documentos: lista.length,
+      emitidas: emitidas.length,
+      anuladas: lista.filter((f) => f.tipo !== 'nota_credito' && f.estado === 'anulada').length,
+      notasCredito: notas.length,
+      baseCentimos: soma(emitidas, 'base_centimos') + soma(notas, 'base_centimos'),
+      ivaCentimos: soma(emitidas, 'iva_centimos') + soma(notas, 'iva_centimos'),
+      totalCentimos: soma(emitidas, 'total_centimos') + soma(notas, 'total_centimos'),
+      porMes: porMes.sort((a, b) => b.mes.localeCompare(a.mes)),
+      porCliente: [],
+      semDados: lista.length ? null : 'Ainda não há faturas emitidas. Uma fatura nasce de linhas escritas por ti — nada é inferido das entradas do saldo.',
+    };
+  }
+
+  const SEM_PDF_LOCAL = 'No modo local a fatura fica registada neste browser, mas o PDF é gerado no servidor — e este modo não tem servidor. Liga a base de dados (SUPABASE_URL + chave) para o documento sair em PDF.';
+
   function saldo(d) {
     const janela = 90, desde = agora() - janela * 86400000;
     const dentro = d.receitas.filter((r) => new Date(r.at).getTime() >= desde);
@@ -135,6 +166,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         nota: 'no modo local não há chamadas de IA: as chaves e o motor vivem no servidor. Este custo é 0 por ausência de consumo, não por medição',
       },
       custosPorProjeto: [], custosPorLead: [],
+      faturacao: { ...faturasResumo(d), avisoEmitente: null },
       tarefas: { total: (d.tarefas || []).length, custoCentimos: 0, semCusto: (d.tarefas || []).length },
       entradas: dentro.slice(0, 40),
       semDados: {
@@ -523,6 +555,92 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       t.finished_at = new Date(agora()).toISOString();
       gravar(d);
       return { ok: true, tarefa: t };
+    }
+
+    /* --- 1.56.0 · as faturas (o documento existe; o PDF precisa de servidor) --- */
+    if (caminhoLimpo === '/ops/faturas' && metodo === 'GET') {
+      return {
+        ok: true,
+        faturas: [...(d.faturas || [])].sort((a, b) => String(b.emitida_em).localeCompare(String(a.emitida_em))),
+        resumo: faturasResumo(d),
+        taxasIva: [23, 13, 6, 0],
+        motivosIsencao: ['Isento — artigo 9.º do CIVA', 'Isento — artigo 14.º do CIVA'],
+        emitente: { aviso: 'No modo local não há emitente configurado: o nome e o NIF da tua empresa só existem no servidor (ORBITA_EMITENTE_NOME, ORBITA_EMITENTE_NIF).' },
+        correio: { configurado: false, aviso: 'Sem servidor não há envio por email — o PDF também precisa dele.' },
+        nota: 'O total faturado não é receita. A receita do saldo é o dinheiro que entrou; a fatura é o que foi cobrado.',
+        aviso: SEM_PDF_LOCAL,
+      };
+    }
+    if (caminhoLimpo === '/ops/faturas' && metodo === 'POST') {
+      const nome = limpo(corpo?.cliente?.nome);
+      if (!nome) throw falha(400, 'a fatura precisa do nome do cliente');
+      const nif = String(corpo?.cliente?.nif || '').replace(/\s+/g, '');
+      if (nif && !/^\d{9}$/.test(nif)) throw falha(400, `o NIF «${nif}» tem de ter 9 dígitos`);
+      if (!nif && !corpo?.consumidorFinal) throw falha(400, 'falta o NIF do cliente — ou marca «consumidor final» para emitir sem NIF');
+      const taxa = Number(corpo?.ivaTaxa ?? 23);
+      if (![23, 13, 6, 0].includes(taxa)) throw falha(400, 'o IVA tem de ser 23, 13, 6 ou 0 %');
+      if (taxa === 0 && !limpo(corpo?.motivoIsencao)) throw falha(400, 'uma fatura isenta tem de dizer o motivo');
+      const linhas = (Array.isArray(corpo?.linhas) ? corpo.linhas : []).map((l) => {
+        const descricao = limpo(l?.descricao);
+        if (!descricao) throw falha(400, 'cada linha precisa de uma descrição');
+        const quantidade = Number(l?.quantidade) || 0;
+        if (quantidade <= 0) throw falha(400, 'a quantidade tem de ser maior do que zero');
+        const precoCentimos = Math.round(Number(l?.precoEuros ?? 0) * 100);
+        if (precoCentimos < 0) throw falha(400, 'o preço não pode ser negativo');
+        return { descricao, quantidade, precoCentimos, totalCentimos: Math.round(quantidade * precoCentimos) };
+      });
+      if (!linhas.length) throw falha(400, 'a fatura precisa de pelo menos uma linha');
+      const base = linhas.reduce((n, l) => n + l.totalCentimos, 0);
+      if (base <= 0) throw falha(400, 'o total da fatura tem de ser maior do que zero');
+      const iva = Math.round((base * taxa) / 100);
+      const serie = String(new Date(agora()).getUTCFullYear());
+      const numero = (d.faturas || []).filter((f) => f.serie === serie).reduce((n, f) => Math.max(n, f.numero), 0) + 1;
+      const fatura = {
+        id: novoId('f'), serie, numero, codigo: `${serie}/${String(numero).padStart(4, '0')}`,
+        tipo: 'fatura', estado: 'emitida',
+        cliente_nome: nome, cliente_nif: nif || null,
+        cliente_email: limpo(corpo?.cliente?.email) || null,
+        cliente_morada: limpo(corpo?.cliente?.morada) || null,
+        consumidor_final: !nif, linhas,
+        iva_taxa: taxa, motivo_isencao: taxa === 0 ? limpo(corpo.motivoIsencao) : null,
+        base_centimos: base, iva_centimos: iva, total_centimos: base + iva, moeda: 'EUR',
+        nota: limpo(corpo?.nota) || null,
+        emitida_em: new Date(agora()).toISOString(),
+        enviada_em: null, enviada_para: null, fatura_origem: null,
+        semPdf: SEM_PDF_LOCAL,
+      };
+      d.faturas = [...(d.faturas || []), fatura];
+      escrever(d, 'fatura', `fatura ${fatura.codigo} para «${nome}» (${dinheiro(fatura.total_centimos).toFixed(2)} €)`);
+      gravar(d);
+      return { ok: true, fatura, aviso: SEM_PDF_LOCAL };
+    }
+    if (/^\/ops\/faturas\/[^/]+\/anular$/.test(caminhoLimpo) && metodo === 'POST') {
+      const f = (d.faturas || []).find((x) => x.id === seg[1]);
+      if (!f) throw falha(404, 'fatura não encontrada');
+      if (f.estado === 'anulada') throw falha(409, 'esta fatura já foi anulada');
+      const motivo = limpo(corpo?.motivo);
+      if (motivo.length < 3) throw falha(400, 'diz o motivo da anulação');
+      f.estado = 'anulada'; f.motivo_anulacao = motivo; f.anulada_em = new Date(agora()).toISOString();
+      const nc = {
+        ...f, id: novoId('f'), tipo: 'nota_credito', estado: 'emitida', codigo: `${f.codigo}-NC`,
+        base_centimos: -Math.abs(f.base_centimos), iva_centimos: -Math.abs(f.iva_centimos),
+        total_centimos: -Math.abs(f.total_centimos), fatura_origem: f.id,
+        emitida_em: new Date(agora()).toISOString(), enviada_em: null, enviada_para: null,
+      };
+      d.faturas.push(nc);
+      escrever(d, 'fatura', `fatura ${f.codigo} anulada — nota de crédito ${nc.codigo}`);
+      gravar(d);
+      return { ok: true, fatura: f, notaCredito: nc };
+    }
+    if (/^\/ops\/faturas\/[^/]+\/enviar$/.test(caminhoLimpo) && metodo === 'POST') {
+      const f = (d.faturas || []).find((x) => x.id === seg[1]);
+      if (!f) throw falha(404, 'fatura não encontrada');
+      return { ok: false, enviado: false, motivo: 'no modo local não há servidor de correio (RESEND_API_KEY vive no servidor), e sem PDF não havia o que anexar' };
+    }
+    if (/^\/ops\/faturas\/[^/]+$/.test(caminhoLimpo) && metodo === 'GET') {
+      const f = (d.faturas || []).find((x) => x.id === seg[1]);
+      if (!f) throw falha(404, 'fatura não encontrada');
+      return { ok: true, fatura: f, aviso: SEM_PDF_LOCAL };
     }
 
     /* --- dinheiro --- */

@@ -269,6 +269,42 @@ ausência de consumo, não uma medição.
 Cada execução tem um tecto de custo (`ORBITA_ORCAMENTO_CENTIMOS`): ao passar, falha com o valor
 escrito — não descobre no fim do mês. `spentToday()` (na app de operações) é o travão diário.
 
+## Faturas (passo 5b, 1.56.0)
+
+**O que é.** A receita é o dinheiro que entrou; a **fatura** é o documento que se
+entrega. São coisas diferentes e o produto não as soma: `/ops/saldo` mostra
+`faturacao` ao lado de `receita`, com a nota escrita no ecrã.
+
+- `GET /api/ops/faturas` — lista, resumo (por mês, por cliente, IVA liquidado,
+  anuladas, notas de crédito), taxas de IVA, motivos de isenção, o emitente lido
+  do ambiente e o estado do correio.
+- `POST /api/ops/faturas` — emite. `{cliente:{nome,nif,email,morada},
+  consumidorFinal, linhas:[{descricao,quantidade,precoEuros}], ivaTaxa,
+  motivoIsencao, nota}`. O número é `máximo + 1` na série (o ano), com chave única
+  `(serie, numero, tipo)`; em conflito relê e tenta o seguinte (5 tentativas).
+- `GET /api/ops/faturas/:id` — o documento e o caminho do PDF.
+- `POST /api/ops/faturas/:id/anular` — `{motivo}` (obrigatório, ≥3 caracteres).
+  A fatura fica `anulada` (não se apaga: o número fica gasto) e nasce a nota de
+  crédito com o mesmo número + `-NC` e valores negativos.
+- `POST /api/ops/faturas/:id/enviar` — `{para}` opcional (por omissão, o email do
+  cliente). Anexa o PDF. Sem `RESEND_API_KEY` devolve `enviado: false` e **não**
+  marca a fatura como enviada.
+- `GET /api/fatura-pdf?id=…&d=1` — o PDF, servido com a mesma porta da mesa (sem
+  sessão não sai um byte). `d=1` descarrega; sem isso abre no separador.
+
+**Regras.** IVA 23/13/6/0 % em cêntimos inteiros, arredondado uma vez no IVA da
+fatura; isenção obriga a motivo escrito no documento; NIF validado pelo dígito de
+controlo (módulo 11) e, sem NIF, o documento diz «Consumidor final (sem NIF)». O
+PDF é gerado por `api/_pdf.mjs` (Helvetica, WinAnsi, xref), sem dependências.
+
+**O emitente** vem do ambiente: `ORBITA_EMITENTE_NOME`, `ORBITA_EMITENTE_NIF`,
+`ORBITA_EMITENTE_MORADA` (e `ORBITA_EMAIL_FROM` para o correio). Sem nome e NIF o
+PDF escreve «Emitente por configurar» e o ecrã nomeia as variáveis em falta — não
+sai um documento que parece válido sem o ser.
+
+**Base.** `supabase/orbita_1_56_0.sql` (idempotente) cria `orbita_faturas`. Sem
+ela, a emissão falha com a tabela em falta em vez de guardar um documento a meio.
+
 ## A mesa de trabalho (leads e aprovação)
 
 O escritório 3D mostra os agentes; a **mesa** mostra o trabalho. `/app` (botão ▤ MESA na barra)
@@ -490,6 +526,11 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | Método | Rota | Para quê |
 |---|---|---|
 | GET | `/api/ops/summary` | Leads, funil, conversão, mensagens, custos, estado da fila |
+| GET/POST | `/api/ops/faturas` | Faturas e notas de crédito / emitir uma fatura |
+| GET | `/api/ops/faturas/:id` | Um documento, com o caminho do PDF |
+| POST | `/api/ops/faturas/:id/anular` | Anular com motivo e emitir a nota de crédito |
+| POST | `/api/ops/faturas/:id/enviar` | Enviar o PDF por email (Resend) |
+| GET | `/api/fatura-pdf?id=` | O PDF do documento (`&d=1` descarrega) |
 | GET | `/api/ops/leads?limit=&status=` | A lista, ordenada por nota |
 | GET | `/api/ops/leads/:id` | Um lead com o dossiê e as mensagens dele (a página de aprovação) |
 | GET/POST | `/api/ops/projetos` | Projetos / criar |

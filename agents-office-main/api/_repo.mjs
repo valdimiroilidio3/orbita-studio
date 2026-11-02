@@ -117,7 +117,9 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
   return {
     tipo: 'supabase',
     async health() {
-      const tabelas = ['orbita_leads', 'orbita_projects', 'orbita_tasks', 'orbita_messages', 'orbita_receitas', 'orbita_atividade'];
+      /* 1.56.0 · orbita_faturas entra na lista: sem ela o health não a via e a
+         fatura falhava só à primeira emissão. */
+      const tabelas = ['orbita_leads', 'orbita_projects', 'orbita_tasks', 'orbita_messages', 'orbita_receitas', 'orbita_atividade', 'orbita_faturas'];
       const faltam = [];
       for (const t of tabelas) {
         try { await pedir(`${t}?select=id&limit=1`, { head: false }); }
@@ -251,6 +253,17 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       },
     },
 
+    /* ---- 1.56.0 · as faturas: documentos com número, não totais soltos ---- */
+    faturas: {
+      async listar(limite = 500) {
+        return (await pedir(`orbita_faturas?select=*&order=emitida_em.desc&limit=${Math.min(5000, Math.max(1, limite))}`)) || [];
+      },
+      async porId(i) { return um(await pedir(`orbita_faturas?id=eq.${q(i)}&limit=1`)); },
+      /* a chave única (serie, numero, tipo) é o que impede dois números iguais */
+      async inserir(f) { return um(await pedir('orbita_faturas', { method: 'POST', body: f, prefer: 'return=representation' })); },
+      async patch(i, campos) { return um(await pedir(`orbita_faturas?id=eq.${q(i)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' })); },
+    },
+
     atividade: {
       async list(limit = 20) { return (await pedir(`orbita_atividade?select=*&order=at.desc&limit=${Math.min(200, limit)}`)) || []; },
       async add(tipo, texto) { return um(await pedir('orbita_atividade', { method: 'POST', body: { tipo, texto }, prefer: 'return=minimal' })); },
@@ -295,7 +308,24 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
           const linha = u?.custo_micro_usd !== undefined || u?.custo_desconhecido !== undefined
             ? u
             : { ...u, ...camposDeCusto(u) };
-          return um(await pedir('orbita_ai_uso', { method: 'POST', body: linha, prefer: 'return=minimal' }));
+          try {
+            return um(await pedir('orbita_ai_uso', { method: 'POST', body: linha, prefer: 'return=minimal' }));
+          } catch (e) {
+            /* A migração 1.55.0 ainda não foi aplicada nesta base? O PostgREST
+               recusa a LINHA INTEIRA por causa das colunas do custo — e sem este
+               recuo perdia-se também o uso (tokens, latência, erro), que existia
+               antes. Grava-se o que a base aceita e diz-se que o custo ficou de
+               fora, em vez de perder a chamada em silêncio. */
+            if (!/custo_|preco_|column .* does not exist|PGRST204/i.test(String(e?.message || e))) throw e;
+            const base = {
+              fornecedor: linha.fornecedor, modelo: linha.modelo, agente: linha.agente,
+              tipo: linha.tipo, ok: linha.ok, ms: linha.ms,
+              tokens_in: linha.tokens_in, tokens_out: linha.tokens_out, erro: linha.erro,
+            };
+            const r = um(await pedir('orbita_ai_uso', { method: 'POST', body: base, prefer: 'return=minimal' }));
+            if (r && typeof r === 'object') r.custo_perdido = true;
+            return r;
+          }
         },
         async latencias() {
           const linhas = (await pedir('orbita_ai_uso?select=fornecedor,modelo,ms&ok=eq.true&order=criado.desc&limit=300')) || [];
@@ -422,7 +452,7 @@ const agoraDe = () => new Date().toISOString();
 
 export function createMemRepo(seed = {}) {
   const d = {
-    leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [],
+    leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [], faturas: [],
     contas: [], sessoes: [],
     iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [], geracoes: [],
     ...JSON.parse(JSON.stringify(seed)),
@@ -498,6 +528,20 @@ export function createMemRepo(seed = {}) {
       async desde(iso, limite = 200) { return d.receitas.filter((r) => r.at >= iso).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limite); },
       async insert(r) { const novo = { id: id('r'), at: agora(), ...r }; d.receitas.push(novo); return novo; },
       async remove(i) { const antes = d.receitas.length; d.receitas = d.receitas.filter((r) => r.id !== i); return d.receitas.length < antes; },
+    },
+    faturas: {
+      async listar(limite = 500) { return [...d.faturas].sort((a, b) => String(b.emitida_em || '').localeCompare(String(a.emitida_em || ''))).slice(0, limite); },
+      async porId(i) { return d.faturas.find((f) => f.id === i) || null; },
+      async inserir(f) {
+        /* a mesma regra da base: (serie, numero, tipo) não se repete */
+        if (d.faturas.some((x) => x.serie === f.serie && x.numero === f.numero && x.tipo === f.tipo)) {
+          throw Object.assign(new Error('duplicate key value violates unique constraint "orbita_faturas_serie_numero_tipo_key"'), { status: 409 });
+        }
+        const nova = { ...f };
+        d.faturas.push(nova);
+        return nova;
+      },
+      async patch(i, campos) { const f = d.faturas.find((x) => x.id === i); if (!f) return null; Object.assign(f, campos); return f; },
     },
     atividade: {
       async list(limit = 20) { return [...d.atividade].sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit); },

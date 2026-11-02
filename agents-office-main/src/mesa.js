@@ -90,6 +90,7 @@ const NAV = [
   { k: 'contas', label: 'Contas', ic: 'contas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
+  { k: 'faturas', label: 'Faturas', ic: 'saldo' },
 ];
 
 const S = {
@@ -238,7 +239,7 @@ function parseHash() {
     return { name: 'hoje', id: null };
   }
   const [name, id] = cru.split('/');
-  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
+  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -407,6 +408,8 @@ async function boot(full = true) {
     if (S.route.name === 'papel' && !S.papelEstado) await carregarPapel(apiMesa);
     if (S.route.name === 'cine') await carregarCine(apiMesa, S.route.id);
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
+    /* 1.56.0 · as faturas só se lêem quando a página as mostra */
+    if (S.route.name === 'faturas') await loadFaturas();
     S.error = '';
   } catch (e) { S.error = e.message; }
   paintNav();
@@ -1284,6 +1287,152 @@ function viewConversas() {
 }
 
 /* ---------------- Saldo ---------------- */
+
+/* ---------------- Faturas (1.56.0) ----------------
+   O que aqui está e porquê: um documento fiscal é o único sítio do produto onde
+   um número errado custa dinheiro a sério. Por isso a lista mostra sempre o
+   número e o estado, a fatura anulada continua visível (riscada, com a nota de
+   crédito ao lado) e nada é calculado só no browser — os totais vêm do servidor,
+   que os gravou. O PDF é gerado lá; aqui só há um link para ele. */
+
+async function loadFaturas() {
+  const f = await call('/ops/faturas');
+  S.faturas = f;
+  return f;
+}
+
+const faturasDe = () => S.faturas || { faturas: [], resumo: {}, emitente: {}, correio: {} };
+
+function eurosTexto(c) {
+  return (Math.round(Number(c) || 0) / 100)
+    .toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+
+function linhasDaNovaFatura() {
+  if (!S.novaFatura) S.novaFatura = { linhas: [{ descricao: '', quantidade: '1', preco: '' }], iva: 23 };
+  return S.novaFatura;
+}
+
+function formFatura() {
+  const n = linhasDaNovaFatura();
+  const isento = Number(n.iva) === 0;
+  const opcoes = (faturasDe().taxasIva || [23, 13, 6, 0]);
+  return `<div class="card" style="margin-bottom:var(--s4)">
+    <div class="sec-h"><h3>Emitir uma fatura</h3><span class="count">o número é atribuído pelo servidor</span></div>
+    <div class="form" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)">
+      <label class="hint" for="fNome">Cliente<input class="in" id="fNome" placeholder="Clínica do Mondego"></label>
+      <label class="hint" for="fNif">NIF (9 dígitos)<input class="in" id="fNif" inputmode="numeric" placeholder="509442013"></label>
+      <label class="hint" for="fEmail">Email do cliente<input class="in" id="fEmail" type="email" placeholder="geral@cliente.pt"></label>
+      <label class="hint" for="fMorada">Morada (opcional)<input class="in" id="fMorada" placeholder="Rua, código postal, cidade"></label>
+    </div>
+    <div id="faturaLinhas" style="margin-top:var(--s3)">
+      ${n.linhas.map((l, i) => `<div class="form fatura-linha" style="display:grid;grid-template-columns:1fr 90px 130px 36px;gap:var(--s2);align-items:end;margin-bottom:var(--s2)">
+        <label class="hint">O que foi vendido<input class="in" data-campo="descricao" data-idx="${i}" value="${esc(l.descricao)}" placeholder="Site institucional — 4 páginas"></label>
+        <label class="hint">Qtd.<input class="in" data-campo="quantidade" data-idx="${i}" inputmode="decimal" value="${esc(l.quantidade)}"></label>
+        <label class="hint">Preço unit. (€)<input class="in" data-campo="preco" data-idx="${i}" inputmode="decimal" value="${esc(l.preco)}" placeholder="900,00"></label>
+        <button class="btn quiet" data-act="fatura-linha-menos" data-idx="${i}" title="remover esta linha" ${n.linhas.length === 1 ? 'disabled' : ''}>✕</button>
+      </div>`).join('')}
+      <button class="btn quiet small" data-act="fatura-linha-mais">+ Linha</button>
+    </div>
+    <div class="form" style="display:grid;grid-template-columns:140px 1fr;gap:var(--s3);margin-top:var(--s3)">
+      <label class="hint">IVA<select class="in" id="fIva">${opcoes.map(t => `<option value="${t}"${Number(n.iva) === t ? ' selected' : ''}>${t} %${t === 0 ? ' (isento)' : ''}</option>`).join('')}</select></label>
+      ${isento ? `<label class="hint">Motivo da isenção<input class="in" id="fIsencao" placeholder="Isento — artigo 9.º do CIVA"></label>` : '<span></span>'}
+    </div>
+    <label class="hint" style="display:block;margin-top:var(--s3)">Nota no documento (opcional)<input class="in" id="fNota" placeholder="Pagamento a 30 dias por transferência"></label>
+    <label class="hint" style="display:flex;gap:var(--s2);align-items:center;margin-top:var(--s3)">
+      <input type="checkbox" id="fConsumidor" ${n.consumidor ? 'checked' : ''}> Consumidor final (sem NIF — o documento di-lo)
+    </label>
+    <div class="acts" style="margin-top:var(--s4)">
+      <button class="btn primary small" data-act="fatura-criar">Emitir fatura</button>
+      <button class="btn quiet small" data-act="fatura-cancelar">Cancelar</button>
+    </div>
+    <div class="hint">A data vem do servidor. O número não salta: a fatura seguinte é sempre a última + 1, e uma anulada não devolve o número.</div>
+  </div>`;
+}
+
+
+/* lê o formulário da fatura para o estado (o repintar não pode perder o que está escrito) */
+function lerFormularioFatura() {
+  const n = linhasDaNovaFatura();
+  document.querySelectorAll('#faturaLinhas [data-campo]').forEach((el) => {
+    const i = Number(el.dataset.idx);
+    if (n.linhas[i]) n.linhas[i][el.dataset.campo] = el.value;
+  });
+  const iva = document.querySelector('#fIva');
+  if (iva) n.iva = Number(iva.value);
+  const cf = document.querySelector('#fConsumidor');
+  if (cf) n.consumidor = cf.checked;
+  return n;
+}
+
+/* o pedido da fatura a partir do que está no ecrã — sem inventar números */
+function pedidoDaFatura() {
+  const n = lerFormularioFatura();
+  const num = (v) => Number(String(v || '').replace(/\s/g, '').replace(',', '.'));
+  const linhas = n.linhas
+    .filter((l) => String(l.descricao || '').trim())
+    .map((l) => ({ descricao: String(l.descricao).trim(), quantidade: num(l.quantidade) || 0, precoEuros: num(l.preco) || 0 }));
+  return {
+    cliente: {
+      nome: $('#fNome')?.value || '',
+      nif: $('#fNif')?.value || '',
+      email: $('#fEmail')?.value || '',
+      morada: $('#fMorada')?.value || '',
+    },
+    consumidorFinal: !!n.consumidor,
+    ivaTaxa: Number(n.iva),
+    motivoIsencao: $('#fIsencao')?.value || '',
+    linhas,
+    nota: $('#fNota')?.value || '',
+  };
+}
+
+function viewFaturas() {
+  const d = faturasDe();
+  const lista = d.faturas || [];
+  const r = d.resumo || {};
+  const em = d.emitente || {};
+  const correio = d.correio || {};
+  const podeEscrever = may('write');
+  const data = (f) => String(f.emitida_em || f.criado || '').slice(0, 10).split('-').reverse().join('/');
+  const total = (f) => `<span class="${Number(f.total_centimos) < 0 ? 'bad' : ''}">${eurosTexto(f.total_centimos)}</span>`;
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Faturas',
+      sub: lista.length ? `${r.emitidas || 0} emitida(s) · ${r.anuladas || 0} anulada(s)${r.notasCredito ? ` · ${r.notasCredito} nota(s) de crédito` : ''} · ${eurosTexto(r.totalCentimos)}` : 'ainda não há faturas',
+      right: `${podeEscrever ? '<button class="btn small ghost" data-act="fatura-nova">+ Fatura</button>' : ''}${stopPill()}`,
+    })}
+    ${em.aviso ? `<div class="bf-aviso${S.modoLocal ? '' : ' mau'}" role="status"><b>${S.modoLocal ? 'Sem PDF no modo local.' : 'O emitente está incompleto.'}</b><span>${esc(em.aviso)}</span></div>` : ''}
+    ${S.modoLocal ? '<div class="localbar" role="status"><span>As faturas ficam registadas neste browser, com número e totais. O PDF e o email precisam da base de dados ligada: um documento fiscal não vive numa aba do browser.</span></div>' : ''}
+    ${correio.configurado === false ? `<div class="hint" style="margin-bottom:var(--s3)">${esc(correio.aviso || 'sem RESEND_API_KEY o email não sai')}</div>` : ''}
+    ${S.addingFatura ? formFatura() : ''}
+    ${lista.length ? `<div class="card"><table>
+      <thead><tr><th>número</th><th>cliente</th><th class="n">total</th><th class="n">ações</th></tr></thead>
+      <tbody>${lista.map(f => {
+        const anulada = f.estado === 'anulada';
+        const nc = f.tipo === 'nota_credito';
+        return `<tr${anulada ? ' style="opacity:.65"' : ''}>
+          <td><b>${esc(f.codigo)}</b><div class="count">${esc(data(f))}${nc ? ' · nota de crédito' : ''}${anulada ? ' · <span class="bad">anulada</span>' : ''}</div></td>
+          <td>${esc(f.cliente_nome)}<div class="count">${f.cliente_nif ? `NIF ${esc(f.cliente_nif)}` : 'consumidor final'}${f.enviada_em ? ` · enviada para ${esc(f.enviada_para || '')}` : ''}</div></td>
+          <td class="n">${total(f)}<div class="count">base ${eurosTexto(f.base_centimos)} · IVA ${Number(f.iva_taxa) === 0 ? 'isento' : `${esc(f.iva_taxa)} %`}</div></td>
+          <td class="n" style="white-space:nowrap">
+            ${S.modoLocal ? '' : `<a class="btn quiet small" href="/api/fatura-pdf?id=${encodeURIComponent(f.id)}&d=1" target="_blank" rel="noopener">PDF</a>`}
+            ${podeEscrever && !nc && !anulada ? `<button class="btn quiet small" data-act="fatura-enviar" data-id="${esc(f.id)}">Enviar</button>
+            <button class="btn quiet small" data-act="fatura-anular" data-id="${esc(f.id)}" title="anular e emitir a nota de crédito">Anular</button>` : ''}
+          </td></tr>`;
+      }).join('')}</tbody></table></div>`
+    : `<div class="card empty">${IC.vazio}<h3>Sem faturas</h3>
+        <p>Uma fatura nasce das linhas que escreveres — o que foi vendido, quanto, com que IVA. Nada é inferido do saldo: o que entrou em dinheiro e o que foi faturado são coisas diferentes, e a mesa mostra as duas separadas.</p>
+        ${podeEscrever ? '<button class="btn primary small" data-act="fatura-nova" style="margin-top:var(--s3)">Emitir a primeira</button>' : ''}</div>`}
+    ${r.semDados ? `<div class="hint" style="margin-top:var(--s3)">${esc(r.semDados)}</div>` : ''}
+    ${Number(r.documentos) > 1 ? `<div class="cards2" style="margin-top:var(--s4)">
+      <div class="card"><div class="sec-h"><h3>Por mês</h3></div><table><tbody>${r.porMes.map(m => `<tr><td>${esc(m.mes)}<div class="count">${m.documentos} documento(s)</div></td><td class="n">${eurosTexto(m.totalCentimos)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="card"><div class="sec-h"><h3>Por cliente</h3></div><table><tbody>${r.porCliente.slice(0, 8).map(c => `<tr><td>${esc(c.cliente)}<div class="count">${c.documentos} documento(s)</div></td><td class="n">${eurosTexto(c.totalCentimos)}</td></tr>`).join('')}</tbody></table></div>
+    </div>` : ''}
+    <div class="hint" style="margin-top:var(--s4)">${esc(d.nota || 'O total faturado não é receita.')}</div>
+  </div>`;
+}
+
 function viewSaldo() {
   const b = S.saldo;
   if (!b) return `<div class="wrap"><div class="skeleton">a ler o saldo…</div></div>`;
@@ -1355,6 +1504,15 @@ function viewSaldo() {
     ${(b.midia?.geracoes || 0) ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Mídia gerada</h3><span class="count">${b.midia.geracoes} peça(s) · ${money(b.midia.centimos || 0)}</span></div>
       <table><tbody>${(b.midia.porFornecedor || []).map(m => `<tr><td>${esc(m.fornecedorNome || m.fornecedor)}<div class="count">${m.geracoes} peça(s)${m.desconhecido ? ' · <span class="bad">algumas sem custo fiável</span>' : ''}</div></td><td class="n">${money(m.centimos || 0)}</td></tr>`).join('')}</tbody></table>
       <div class="hint">${esc(b.midia.nota)}</div></div>` : ''}
+    ${b.faturacao ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Faturado</h3><span class="count">não é receita — é o que foi cobrado</span></div>
+      <div class="money" style="margin-bottom:var(--s3)">
+        <div class="card"><b>${money(b.faturacao.totalCentimos || 0)}</b><small>${b.faturacao.emitidas || 0} fatura(s)${b.faturacao.notasCredito ? ` · ${b.faturacao.notasCredito} nota(s) de crédito` : ''}</small></div>
+        <div class="card"><b>${money(b.faturacao.ivaCentimos || 0)}</b><small>IVA liquidado</small></div>
+        <div class="card"><b>${b.faturacao.anuladas || 0}</b><small>anulada(s)</small></div>
+      </div>
+      ${b.faturacao.avisoEmitente ? `<div class="hint bad" style="margin-bottom:var(--s3)">${esc(b.faturacao.avisoEmitente)}</div>` : ''}
+      <div class="hint">O total faturado não entra na receita: uma fatura é o que se cobrou, a receita é o dinheiro que entrou. <a href="#/faturas">Ver as faturas</a></div>
+    </div>` : ''}
     ${(b.custosPorProjeto || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Custo por projeto</h3><span class="count">das tarefas ligadas</span></div>
       <table><tbody>${b.custosPorProjeto.map(p => `<tr><td>${esc(p.nome)}<div class="count">${p.tarefas} tarefa(s)</div></td><td class="n">${p.centimos != null ? money(p.centimos) : '<span class="bad">desconhecido</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${(b.custosPorLead || []).length ? `<div class="card" style="margin-top:var(--s4)"><div class="sec-h"><h3>Custo por lead</h3><span class="count">das tarefas ligadas</span></div>
@@ -1425,6 +1583,7 @@ function paint() {
               : S.route.name === 'contas' ? viewContas()
               : S.route.name === 'ia' ? vistaIA(S, { esc, hhmm, when })
             : S.route.name === 'conversas' ? viewConversas()
+              : S.route.name === 'faturas' ? viewFaturas()
               : viewSaldo());
 }
 
@@ -1951,6 +2110,54 @@ async function act(name, el, ev) {
       return;
     }
 
+
+    /* ---- 1.56.0 · faturas ---- */
+    if (name === 'fatura-nova') { S.addingFatura = true; S.novaFatura = null; paint(); return; }
+    if (name === 'fatura-cancelar') { S.addingFatura = false; S.novaFatura = null; paint(); return; }
+    if (name === 'fatura-linha-mais') {
+      const n = lerFormularioFatura();
+      n.linhas.push({ descricao: '', quantidade: '1', preco: '' });
+      paint();
+      return;
+    }
+    if (name === 'fatura-linha-menos') {
+      const n = lerFormularioFatura();
+      const i = Number(el.dataset.idx);
+      if (n.linhas.length > 1) n.linhas.splice(i, 1);
+      paint();
+      return;
+    }
+    if (name === 'fatura-criar') {
+      if (!$('#fNome')?.value?.trim()) { toast('Falta o nome do cliente.', true); return; }
+      const pedido = pedidoDaFatura();
+      if (!pedido.linhas.length) { toast('Escreve pelo menos uma linha: o que foi vendido e quanto.', true); return; }
+      if (Number(pedido.ivaTaxa) === 0 && !String(pedido.motivoIsencao).trim()) { toast('Uma fatura isenta tem de dizer o motivo (ex.: «Isento — artigo 9.º do CIVA»).', true); return; }
+      const r = await call('/ops/faturas', 'POST', pedido);
+      S.addingFatura = false;
+      S.novaFatura = null;
+      await loadFaturas().catch(() => null);
+      paint();
+      toast(`Fatura ${r.fatura?.codigo || ''} emitida — o PDF está na lista.`);
+      return;
+    }
+    if (name === 'fatura-enviar') {
+      const r = await call(`/ops/faturas/${encodeURIComponent(id)}/enviar`, 'POST', {});
+      if (!r.enviado) { toast(`Não saiu: ${r.motivo}`, true); return; }
+      await loadFaturas().catch(() => null);
+      paint();
+      toast(`Fatura enviada para ${r.para}.`);
+      return;
+    }
+    if (name === 'fatura-anular') {
+      const motivo = prompt('Porquê anular? (fica escrito na nota de crédito)');
+      if (!motivo) return;
+      const r = await call(`/ops/faturas/${encodeURIComponent(id)}/anular`, 'POST', { motivo });
+      await loadFaturas().catch(() => null);
+      paint();
+      toast(`Fatura anulada. Nota de crédito ${r.notaCredito?.codigo || ''} emitida.`);
+      return;
+    }
+
     if (name === 'receita') {
       const valor = Number(String($('#valor')?.value || '').replace(',', '.'));
       if (!valor) { toast('Diz o valor que entrou.', true); return; }
@@ -2044,6 +2251,7 @@ function start() {
     if (S.route.name === 'papel' && !S.papelEstado) { try { await carregarPapel(apiMesa); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'cine') { try { S.cine = null; await carregarCine(apiMesa, S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'faturas') { try { await loadFaturas(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'agentes') { try { await loadAgentes(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'contas') { try { await loadContas(); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'leads' && !S.pipeline) { try { await loadPipeline(); } catch (e) { toast(e.message, true); } }

@@ -42,6 +42,9 @@ export const FICHEIROS = [
   /* 1.55.0 · o dinheiro medido: custo por chamada (micro-USD) e por tarefa.
      Idempotente (`add column if not exists`). */
   'orbita_1_55_0.sql',
+  /* 1.56.0 · a fatura: a tabela dos documentos, com número único por série.
+     Idempotente (`create table if not exists` + `create unique index if not exists`). */
+  'orbita_1_56_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -69,9 +72,12 @@ export const COLUNAS_EXIGIDAS = {
   /* 1.55.0 · sem estas, o custo de uma chamada não fica gravado — e o saldo
      volta a ser uma soma de zeros. */
   orbita_ai_uso: ['custo_micro_usd', 'custo_desconhecido', 'preco_entrada', 'preco_saida', 'preco_fonte'],
+  /* 1.56.0 · sem estas, a fatura perde o número, o cliente ou os totais — e um
+     documento fiscal incompleto é pior do que não o haver. */
+  orbita_faturas: ['serie', 'numero', 'codigo', 'tipo', 'estado', 'cliente_nome', 'cliente_nif', 'linhas', 'iva_taxa', 'base_centimos', 'iva_centimos', 'total_centimos', 'emitida_em', 'fatura_origem'],
 };
 
-export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes'];
+export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes', 'orbita_faturas'];
 
 /** Lê um ficheiro do esquema. Existe separado para o teste poder injectar outro `fs`. */
 export function lerFicheiro(nome, { fs = fsPadrao, raiz = new URL('../supabase/', import.meta.url) } = {}) {

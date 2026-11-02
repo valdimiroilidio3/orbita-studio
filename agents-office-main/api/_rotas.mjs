@@ -16,6 +16,8 @@ import { criarECorrer, correrDeNovo } from './_tarefas.mjs';   // 1.53.2: as tar
 import { avaliarPorta } from './_porta.mjs';   // 1.54.0: a porta (contas, sessões, papéis)
 import * as MD from './_media.mjs';   // 1.54.3: a mídia gerada (imagem e vídeo)
 import { saldo as calcularSaldo, agregarUso, cambioDe, centimosDeMicro } from './_dinheiro.mjs';   // 1.55.0: dinheiro medido
+import { criarFatura, anularFatura, resumoFaturas, documentoDaFatura, emitenteDoAmbiente, avisoEmitente, TAXAS_IVA, MOTIVOS_ISENCAO } from './_faturas.mjs';   // 1.56.0: a fatura
+import { enviarEmail } from './_porta.mjs';   // 1.56.0: a fatura sai por correio
 
 
 const TIPOS_PROJETO = [
@@ -1406,11 +1408,82 @@ export async function responder(repo, {
       repo.projetos.list(500).catch(() => []),
       repo.geracoes.porPeriodo(desde, 5000).catch(() => []),
     ]);
+    /* 1.56.0 · o que foi faturado, ao lado do que entrou — não somado */
+    const faturas = await repo.faturas.listar(5000).catch(() => []);
+    const emitente = emitenteDoAmbiente(env);
     return { status: 200, corpo: {
       ...calcularSaldo({ receitas, uso, tarefas, leads, projetos, geracoes, env, janelaDias: dias }),
+      faturacao: { ...resumoFaturas(faturas), avisoEmitente: avisoEmitente(emitente) },
       presenca: { parado: false },
     } };
   }
+  /* ---- 1.56.0 · AS FATURAS (A3) ---------------------------------------------
+     A receita já se lançava à mão; o que faltava era o documento. Aqui emite-se
+     com número sem buracos, IVA configurável, PDF gerado no servidor e envio
+     por correio quando há chave. Os totais da fatura NÃO entram na receita do
+     saldo: uma fatura é o que se cobrou, a receita é o que entrou — somar as
+     duas contaria o mesmo dinheiro duas vezes. */
+  if (caminhoLimpo === '/ops/faturas' && m === 'GET') {
+    const lista = await repo.faturas.listar(5000).catch(() => []);
+    const emitente = emitenteDoAmbiente(env);
+    return { status: 200, corpo: {
+      ok: true,
+      faturas: lista,
+      resumo: resumoFaturas(lista),
+      taxasIva: TAXAS_IVA,
+      motivosIsencao: MOTIVOS_ISENCAO,
+      emitente: { ...emitente, aviso: avisoEmitente(emitente) },
+      correio: env.RESEND_API_KEY
+        ? { configurado: true, de: remetente(env) }
+        : { configurado: false, aviso: 'Sem RESEND_API_KEY a fatura não segue por email — o PDF descarrega-se na mesma.' },
+      nota: 'O total faturado não é receita. A receita do saldo é o dinheiro que entrou; a fatura é o que foi cobrado.',
+    } };
+  }
+  if (caminhoLimpo === '/ops/faturas' && m === 'POST') {
+    const r = await criarFatura(repo, corpo || {}, { agora: () => new Date() });
+    await repo.atividade.add('fatura', `fatura ${r.fatura.codigo} para «${r.fatura.cliente_nome}» (${(r.fatura.total_centimos / 100).toFixed(2)} €)`).catch(() => null);
+    return { status: 201, corpo: { ok: true, fatura: r.fatura, emitente: emitenteDoAmbiente(env) } };
+  }
+  if (seg[0] === 'ops' && seg[1] === 'faturas' && seg[2] && seg.length === 3 && m === 'GET') {
+    const f = await repo.faturas.porId(seg[2]);
+    if (!f) throw falha(404, 'fatura não encontrada');
+    return { status: 200, corpo: { ok: true, fatura: f, emitente: emitenteDoAmbiente(env), pdf: `/api/fatura-pdf?id=${encodeURIComponent(f.id)}` } };
+  }
+  if (seg[0] === 'ops' && seg[1] === 'faturas' && seg[2] && seg.length === 4 && m === 'POST' && seg[3] === 'anular') {
+    const r = await anularFatura(repo, seg[2], corpo?.motivo, { agora: () => new Date(), emitente: emitenteDoAmbiente(env) });
+    await repo.atividade.add('fatura', `fatura ${r.fatura.codigo} anulada — nota de crédito ${r.notaCredito.codigo}`).catch(() => null);
+    return { status: 200, corpo: { ok: true, fatura: r.fatura, notaCredito: r.notaCredito } };
+  }
+  if (seg[0] === 'ops' && seg[1] === 'faturas' && seg[2] && seg.length === 4 && m === 'POST' && seg[3] === 'enviar') {
+    const f = await repo.faturas.porId(seg[2]);
+    if (!f) throw falha(404, 'fatura não encontrada');
+    const para = limpo(corpo?.para) || f.cliente_email;
+    if (!para) throw falha(400, 'esta fatura não tem email do cliente — diz para onde enviar (campo «para»)');
+    const emitente = emitenteDoAmbiente(env);
+    const pdf = documentoDaFatura(f, { emitente, agora: () => new Date() });
+    const envio = await enviarEmail({
+      para,
+      assunto: `${f.tipo === 'nota_credito' ? 'Nota de crédito' : 'Fatura'} ${f.codigo} — ${emitente.nome || 'Órbita'}`,
+      texto: [
+        `Segue em anexo o documento ${f.codigo}.`,
+        `Total: ${(f.total_centimos / 100).toFixed(2).replace('.', ',')} €`,
+        f.estado === 'anulada' ? 'Este documento está ANULADO.' : '',
+        '',
+        emitente.nome || '', emitente.nif ? `NIF ${emitente.nif}` : '',
+        avisoEmitente(emitente) ? `[Nota interna] ${avisoEmitente(emitente)}` : '',
+      ].filter((x) => x !== '').join('\n'),
+      env, fetchImpl,
+      anexos: [{ filename: `${f.codigo.replace(/[^0-9A-Za-z-]/g, '-')}.pdf`, content: pdf.toString('base64') }],
+    });
+    if (!envio.enviado) {
+      /* não se marca como enviada uma fatura que não saiu */
+      return { status: 200, corpo: { ok: false, enviado: false, motivo: envio.motivo, pdf: `/api/fatura-pdf?id=${encodeURIComponent(f.id)}` } };
+    }
+    const actualizada = await repo.faturas.patch(f.id, { enviada_em: new Date().toISOString(), enviada_para: para }).catch(() => f);
+    await repo.atividade.add('fatura', `fatura ${f.codigo} enviada para ${para}`).catch(() => null);
+    return { status: 200, corpo: { ok: true, enviado: true, para, fatura: actualizada } };
+  }
+
   if (caminhoLimpo === '/ops/receita' && m === 'POST') {
     const c = cents(corpo?.euros);
     if (!c) throw falha(400, 'diz o valor que entrou');

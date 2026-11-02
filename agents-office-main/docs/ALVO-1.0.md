@@ -51,7 +51,7 @@ deploy READY → uma linha honesta na conversa.
 | **A1.1** | Briefing do projeto (briefing, Prompt Master, prompts de imagem) | projeto sem sítio onde começar | **1.54.2 ✅** | 🟠 alto | feito |
 | **A1.2** | Mídia do projeto (gerar imagem e vídeo, com custo e limites) | o briefing dizia o que fazer e nada saía | **1.54.3 ✅** | 🟠 alto | feito |
 | **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` dizia custo `0` | **1.55 ✅** | 🔴 alto | feito |
-| **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | 1.56 | 🟠 alto | 1–2 ciclos |
+| **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | **1.56 ✅** | 🟠 alto | feito |
 | **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.57 | 🟠 alto | 1 ciclo |
 | **A5** | Fiabilidade (timeouts, falhas, restauro provado) | falha silenciosa, restauro nunca testado | 1.58 | 🟠 alto | 1 ciclo |
 | **A6** | A Cara (nome, página, preço, vídeo, domínio) | produto sem porta de entrada pública | 1.59 | 🟡 médio | 1 ciclo |
@@ -262,16 +262,50 @@ consultado a uma fonte — a taxa é declarada.
 
 ---
 
-### A3 · Fatura — `1.56.0` 🟠
+### A3 · Fatura — `1.56.0` ✅
 
-Número sequencial sem buracos (contador transaccional), IVA configurável
-(23/6/isenção), PDF gerado no servidor (sem dependências pesadas: HTML → PDF com
-`pdf-lib` ou impressão do browser como fallback declarado), envio por email
-(A8), anulação com nota de crédito e motivo, listagem com totais por mês e por
-cliente. Sem Stripe nesta vaga.
+**O problema.** A receita entrava por um campo («entrou X €») e não havia
+documento. Um negócio não entrega um número no ecrã: entrega um papel com número,
+data, NIF, base, IVA e total — e, quando corre mal, uma nota de crédito que não
+deixa buracos na numeração.
 
-**Prova:** receita → fatura 2026/0001 → PDF com NIF, base, IVA, total →
-anulada → nota de crédito 2026/0001-NC.
+**O que ficou.** (código em `api/_faturas.mjs` e `api/_pdf.mjs`)
+
+- **Número sem buracos** — `máximo + 1` por série (o ano) e chave única
+  `(serie, numero, tipo)`. Conflito = lê outra vez e tenta o seguinte (5
+  tentativas). Anular não apaga: a fatura passa a `anulada` (o número fica gasto) e
+  a nota de crédito é uma linha nova, com o mesmo número + `-NC` e valores
+  negativos.
+- **IVA configurável** — 23/13/6/0 %, com motivo obrigatório na isenção. Cêntimos
+  inteiros, um só arredondamento (no IVA da fatura).
+- **NIF** — dígito de controlo (módulo 11). Sem NIF só como consumidor final, e o
+  documento di-lo.
+- **PDF no servidor, sem bibliotecas** — `_pdf.mjs` escreve os objectos, os
+  streams e a xref; Helvetica/Helvetica-Bold; WinAnsi (português e €). O teste
+  verifica os deslocamentos da xref objecto a objecto e lê o texto do documento.
+- **Emitente declarado** — `ORBITA_EMITENTE_NOME/NIF/MORADA`; em falta, o PDF
+  escreve «Emitente por configurar» e o ecrã nomeia as variáveis.
+- **Envio** — Resend com o PDF em anexo; sem `RESEND_API_KEY` diz o que falta e
+  **não** marca como enviada.
+- **Ecrã** — página «Faturas» (lista, formulário com linhas, IVA e isenção, por mês
+  e por cliente), aviso «Faturado não é receita» e o bloco no saldo. No modo local
+  a fatura existe com número e totais; o PDF e o email dizem que precisam da base.
+- **Base** — `supabase/orbita_1_56_0.sql`, idempotente, na ordem de `_esquema.mjs`.
+
+**Prova.** `faturas.test.mjs` (11): NIF válido e inválido; IVA 23/13/6/0 com o
+caso de 1 cêntimo; a sequência 2026/0001…0004 com a 0002 anulada pelo meio (o
+número 2 não volta); dois pedidos em corrida (o segundo leva o 3); as nove
+recusas; o PDF com `%PDF-1.4`, xref certa, NIF, base, IVA e total no texto; o
+emitente em falta escrito no documento; o resumo a abater a nota de crédito; as
+rotas de ponta a ponta (emitir → listar → enviar sem chave → enviar com Resend
+falso e o PDF em anexo → anular → 409 ao repetir); e o saldo com o faturado à
+parte da receita. `faturas-ui.test.mjs` (2) faz o mesmo no `dist/mesa.html` num
+DOM, incluindo o formulário que recusa um documento incompleto.
+
+**O que continua a não ser:** pagamento (Stripe), séries por tipo de documento,
+IVA por linha (é por fatura), envio por WhatsApp e assinatura digital. E o PDF
+não é certificado por software de facturação certificado — é um documento
+correcto, não um SAF-T.
 
 ---
 
