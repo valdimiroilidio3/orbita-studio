@@ -1,3 +1,41 @@
+## 1.57.2 — 2 nov 2026 · A MESA COMO CENTRO DE COMANDO
+
+A vista principal respondia a uma pergunta («o que precisa de ti?») e deixava as
+outras três por responder. Agora responde às quatro na primeira dobra: o que está
+a acontecer, o que foi concluído, o que precisa da minha aprovação e o que está
+bloqueado — e mostra o estado das salas sem obrigar a abrir o escritório.
+
+- **Resumo operacional no topo** — quatro cartões: «A acontecer agora» (tarefas a
+  correr, com a fila ao lado), «Concluído (24 h)» com a série real dos últimos
+  sete dias em barras, «Precisa de ti» (rascunhos + tarefas à espera) e
+  «Bloqueado» (tarefas falhadas + projetos sem QA). Cada cartão diz o que compõe
+  o número; sem dados, fica a zero com a razão escrita.
+- **Aprovações pendentes com acções claras** — uma fila só, ordenada por urgência
+  lida dos dados (mensagem para lead com nota alta vem primeiro): o rascunho abre
+  o cartão da decisão (`pick` → Aprovar/Rejeitar/Abrir) e a tarefa à espera tem
+  «Rejeitar» e «Aprovar» na própria linha.
+- **Atividade recente e próximos trabalhos** — o registo e as tarefas fechadas
+  numa linha do tempo por hora; «A seguir» mostra a correr, à espera de ti e na
+  fila, pela ordem em que entraram.
+- **Estado dos agentes sem abrir salas** — cada sala com ponto de estado (a
+  trabalhar, bloqueada, espera por ti, na fila, em descanso, sem trabalho), a
+  última atividade e as contagens reais; o topo da vista nem precisa do escritório.
+- **`/ops/agentes` deixou de mentir** — respondia `running: 0` escrito à mão, com
+  tarefas a correr. Agora conta as tarefas por sala (a correr, na fila, à espera,
+  feitas, falhadas), com a última e a última falha; a página de Agentes passou a
+  mostrar números verdadeiros e deixou de escrever «undefined · Comando».
+- **Primeira visita** — instalação sem leads, tarefas nem projetos mostra «Por
+  onde começar» com três caminhos reais (trazer leads, pedir trabalho, abrir um
+  projeto) em vez de quatro zeros sem saída.
+
+Código: `src/painel.js` (novo, funções puras: `resumoOperacional`,
+`filaDeAprovacao`, `estadoAgentes`, `atividadeRecente`, `proximosTrabalhos`,
+`bloqueios`, `serieConclusoes`, `idade`, `saudacao`, `fraseDoEstado`), a vista em
+`src/mesa.js` e a CSS `.cc-*` em `src/mesa.html`. Testes: `painel.test.mjs` (15) —
+contas puras, DOM com `dist/mesa.html` e `/api/rpc` falso, e a prova de que a
+tabela de salas por tipo é igual no browser, no servidor e no armazém local.
+Suite **938/938**. O que não fica provado: pixéis medidos num browser.
+
 ## 1.57.1 — 2 nov 2026 · OS BOTÕES (maiores, e a toda a largura do sistema, até ao terminal)
 
 Os botões eram o sítio mais frágil do sistema: 15 px de altura de texto, raios

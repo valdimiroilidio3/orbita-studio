@@ -62,6 +62,12 @@ const TIPOS_TAREFA = {
   qa: { label: 'Auditoria de qualidade' },
 };
 
+/* 1.57.2 · a mesma tabela do servidor e de `src/painel.js` (um teste confirma
+   que as três não divergem) */
+const DEPARTAMENTOS_POR_TIPO = {
+  investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia',
+};
+
 const DEPARTAMENTOS = [
   { id: 'comando', nome: 'Comando' },
   { id: 'prospeccao', nome: 'Prospecção' },
@@ -665,7 +671,32 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ops/clientes') return { clientes: [{ id: 'local', nome: 'Este browser', ativo: true }], activo: { id: 'local', nome: 'Este browser' } };
     if (caminhoLimpo === '/ops/pipeline') return pipeline(d);
     if (caminhoLimpo === '/ops/atividade') return { eventos: d.atividade.slice(0, Number(qs.get('limit')) || 20) };
-    if (caminhoLimpo === '/ops/agentes') return { departamentos: DEPARTAMENTOS.map((x) => ({ ...x, agentes: [] })), resumo: { total: d.tarefas.length, running: 0, awaiting: 0 }, modo: 'local' };
+    /* 1.57.2 · as mesmas contagens reais do servidor (ver `api/_rotas.mjs`) */
+    if (caminhoLimpo === '/ops/agentes') {
+      const quando = (t) => (t ? (t.finished_at || t.created_at || null) : null);
+      const porSala = new Map(DEPARTAMENTOS.map((x) => [x.id, []]));
+      for (const t of d.tarefas.filter(Boolean)) {
+        const id = DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando';
+        if (porSala.has(id)) porSala.get(id).push(t);
+      }
+      const departamentos = DEPARTAMENTOS.map((x) => {
+        const lista = porSala.get(x.id) || [];
+        const n = (estado) => lista.filter((t) => t.state === estado).length;
+        const ordenadas = lista.slice().sort((a, b) => String(quando(b) || '').localeCompare(String(quando(a) || '')));
+        const falha = ordenadas.find((t) => t.state === 'failed') || null;
+        return {
+          ...x, name: x.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '', agentes: [],
+          running: n('running'), awaiting: n('awaiting_approval'), queued: n('queued'),
+          succeeded: n('succeeded'), failed: n('failed'),
+          tarefas: { aCorrer: n('running'), naFila: n('queued'), porAprovar: n('awaiting_approval'), concluidas: n('succeeded'), falhadas: n('failed'), total: lista.length },
+          ultima: quando(ordenadas[0]) || null,
+          last: ordenadas[0] ? `${TIPOS_TAREFA[ordenadas[0].kind]?.label || ordenadas[0].kind}` : '',
+          ultimaFalha: falha ? { error: falha.error || '', quando: quando(falha) } : null,
+        };
+      });
+      const conta = (estado) => d.tarefas.filter((t) => t.state === estado).length;
+      return { departamentos, resumo: { total: d.tarefas.length, running: conta('running'), awaiting: conta('awaiting_approval'), queued: conta('queued'), succeeded: conta('succeeded'), failed: conta('failed') }, modo: 'local' };
+    }
     if (caminhoLimpo === '/ops/utilizadores') return { utilizadores: [], papeis: [] };
     if (caminhoLimpo === '/ops/sessoes') return { sessoes: [] };
     if (caminhoLimpo === '/ops/stop') return { ok: true, parado: !!corpo?.stop };

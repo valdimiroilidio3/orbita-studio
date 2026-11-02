@@ -24,6 +24,10 @@ import { decidirResposta } from './respostas.js';
 /* 1.57.0 · o progresso do projeto e o resumo da lead: contas puras, testáveis
    sem DOM (ver `src/projeto.js`) */
 import { progresso as progressoDoProjeto, resumoLead, iniciais, ABAS_PROJETO, abaValida } from './projeto.js';
+/* 1.57.2 · a mesa como centro de comando: as quatro perguntas do topo, a fila
+   de aprovações, o estado das salas e o que está bloqueado — contas puras,
+   testáveis sem DOM (ver `src/painel.js`) */
+import { resumoOperacional, filaDeAprovacao, estadoAgentes, atividadeRecente, proximosTrabalhos, bloqueios, saudacao, fraseDoEstado, plural } from './painel.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -419,6 +423,11 @@ async function boot(full = true) {
         iniciarCiclo(apiMesa);
       }
     }
+    /* 1.57.2 · o centro de comando responde com as tarefas, o registo e as
+       salas na mão. É a mesma leitura da página de tarefas — não uma nova. */
+    if (S.route.name === 'hoje') {
+      await Promise.all([loadTarefas().catch(() => null), loadAgentes().catch(() => null)]);
+    }
     if (S.route.name === 'tarefas') await loadTarefas();
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
@@ -542,33 +551,209 @@ function decisionCard() {
   </div>`;
 }
 
+/* ---------------- Visão geral: o centro de comando ---------------- */
+/*
+   1.57.2 · Quatro perguntas, quatro respostas na primeira dobra:
+
+     1. o que está a acontecer  → o cartão «A acontecer agora» e «A seguir»;
+     2. o que foi concluído     → «Concluído (24 h)» com a série de 7 dias;
+     3. o que precisa de ti     → a fila de aprovações, com Aprovar/Rejeitar;
+     4. o que está bloqueado    → tarefas falhadas e projetos sem QA.
+
+   O estado das salas aparece aqui, sem abrir o escritório: sai das tarefas
+   reais (`src/painel.js`), não de um campo decorativo. Tudo o que existia
+   antes continua: escolher um rascunho (`pick`), o cartão da decisão com
+   Aprovar/Rejeitar/Abrir, a pastilha de envios e as contas de leads.
+*/
+
+const ROTULO_TAREFA = {
+  investigar: 'Investigar o lead', mensagem: 'Escrever uma mensagem',
+  briefing: 'Escrever o briefing', codigo: 'Gerar o código', qa: 'Auditoria de qualidade',
+};
+
+const ESTADO_SALA = {
+  'a-trabalhar': 'A trabalhar',
+  bloqueado: 'Bloqueado',
+  'espera-ti': 'Espera por ti',
+  'na-fila': 'Na fila',
+  'em-descanso': 'Em descanso',
+  'sem-trabalho': 'Sem trabalho',
+};
+
+/** As barras pequenas do cartão «Concluído»: só contagens reais, um dia por barra. */
+function ccSpark(serie = []) {
+  if (!serie.length) return '';
+  const maior = Math.max(1, ...serie.map((d) => d.n));
+  return `<span class="cc-spark" aria-hidden="true" title="${esc(serie.map((d) => `${d.dia} ${d.n}`).join(' · '))}">
+    ${serie.map((d) => `<i style="height:${Math.max(12, Math.round((d.n / maior) * 100))}%" class="${d.n ? '' : 'vazio'}"></i>`).join('')}
+  </span>`;
+}
+
+function ccKpis(cc) {
+  return `<div class="cc-kpis">
+    ${cc.cartoes.map((c) => `<article class="cc-kpi ${c.tom}" aria-label="${esc(c.label)}: ${c.valor}">
+      <div class="cc-kpi-h"><span>${esc(c.label)}</span>${c.serie ? ccSpark(c.serie) : ''}</div>
+      <b>${c.valor}</b>
+      <div class="cc-kpi-n">${esc(c.nota)}</div>
+    </article>`).join('')}
+  </div>`;
+}
+
+function ccFila(fila, pick) {
+  if (!fila.length) {
+    return `<div class="cc-vazio">${IC.tick}
+      <div><b>Nada à espera de ti</b><span>Quando houver um rascunho ou uma tarefa que exija o teu OK, aparece aqui — com o texto pronto e os botões certos.</span></div>
+    </div>`;
+  }
+  return `<ul class="cc-rows">${fila.map((i) => {
+    const urg = `<span class="cc-urg ${i.urgencia}">${i.urgencia === 'alta' ? 'alta' : i.urgencia === 'media' ? 'média' : 'baixa'}</span>`;
+    const quando = i.idade ? `<span class="cc-quando">há ${esc(i.idade)}</span>` : '';
+    if (i.tipo === 'tarefa') {
+      return `<li class="cc-row">
+        <span class="cc-ic">${IC.tarefa}</span>
+        <div class="cc-row-t"><b>${esc(i.titulo)}</b><span>${esc(i.detalhe)} ${quando}</span></div>
+        ${urg}
+        <div class="cc-row-a">
+          <button class="btn ghost small" data-act="rejeitar-tarefa" data-id="${esc(i.id)}">Rejeitar</button>
+          <button class="btn primary small" data-act="aprovar-tarefa" data-id="${esc(i.id)}">Aprovar</button>
+        </div>
+      </li>`;
+    }
+    const on = pick && pick.id === i.id;
+    return `<li class="cc-row ${on ? 'on' : ''}">
+      <button class="cc-row-pick" data-act="pick" data-id="${esc(i.id)}" aria-pressed="${on}">
+        <span class="cc-ic">${i.tipo === 'autonomia' ? IC.ia : IC.enviar}</span>
+        <div class="cc-row-t"><b>${esc(i.titulo)}</b><span>${esc(i.detalhe)} ${quando}</span></div>
+        ${urg}
+        <span class="cc-open">${on ? 'Aberto' : 'Ver'}</span>
+      </button>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+function ccAgentes(ag) {
+  if (!ag.linhas.length) {
+    return `<div class="cc-vazio">${IC.agentes}
+      <div><b>Sem salas ligadas</b><span>O estado dos agentes vem das tarefas. Assim que houver uma tarefa, a sala dela aparece aqui.</span></div>
+    </div>`;
+  }
+  return `<ul class="cc-ags">
+    ${ag.linhas.map((l) => `<li class="cc-ag">
+      <span class="cc-dot ${esc(l.estado)}" aria-hidden="true"></span>
+      <div class="cc-ag-t"><b>${esc(l.nome)}</b>
+        <span>${esc(ESTADO_SALA[l.estado] || l.estado)}${l.ultimaIdade ? ` · há ${esc(l.ultimaIdade)}` : ''}</span></div>
+      <span class="cc-ag-c">${l.aCorrer ? `${l.aCorrer} a correr` : l.falhadas ? plural(l.falhadas, 'falha', 'falhas') : l.naFila ? `${l.naFila} na fila` : l.concluidas ? plural(l.concluidas, 'feita', 'feitas') : '—'}</span>
+    </li>`).join('')}
+  </ul>
+  <div class="cc-foot">${ag.resumo.aTrabalhar} a trabalhar · ${plural(ag.resumo.bloqueados, 'sala bloqueada', 'salas bloqueadas')} · ${ag.resumo.descanso} em descanso
+    <a href="#/agentes">ver todas as salas</a></div>`;
+}
+
+function ccTimeline(itens) {
+  if (!itens.length) {
+    return `<div class="cc-vazio">${IC.hoje}
+      <div><b>Ainda sem atividade</b><span>O que as salas fizerem aparece aqui por ordem: tarefas concluídas, falhas e registos da operação.</span></div>
+    </div>`;
+  }
+  return `<ul class="cc-tl">${itens.map((i) => `<li class="cc-tl-i ${esc(i.tom)}">
+    <span class="cc-tl-q">${esc(hhmm(i.quando))}</span>
+    <div><b>${esc(i.titulo)}</b>${i.detalhe ? `<span>${esc(i.detalhe)}</span>` : ''}</div>
+  </li>`).join('')}</ul>`;
+}
+
+function ccProximos(lista) {
+  if (!lista.length) {
+    return `<div class="cc-vazio">${IC.tarefa}
+      <div><b>Nada marcado</b><span>Sem tarefas a correr nem na fila. Uma tarefa nova nasce num lead ou na página de tarefas.</span></div>
+    </div>`;
+  }
+  return `<ul class="cc-rows">${lista.map((t) => `<li class="cc-row cc-row-simples">
+    <span class="cc-ic">${IC.tarefa}</span>
+    <div class="cc-row-t"><b>${esc(t.titulo)}</b><span>${[t.entidade ? `ligada a ${esc(t.entidade)}` : '', t.idade ? `há ${esc(t.idade)}` : ''].filter(Boolean).join(' · ') || esc(TASK_LABEL[t.estado] || t.estado)}</span></div>
+    <span class="tag ${TASK_TAG[t.estado] || ''}">${esc(TASK_LABEL[t.estado] || t.estado)}</span>
+  </li>`).join('')}</ul>`;
+}
+
+function ccBloqueios(lista) {
+  if (!lista.length) {
+    return `<div class="cc-vazio ok">${IC.tick}
+      <div><b>Nada bloqueado</b><span>Sem tarefas falhadas nem projetos à espera de QA.</span></div>
+    </div>`;
+  }
+  return `<ul class="cc-rows">${lista.map((b) => `<li class="cc-row cc-row-simples risco">
+    <span class="cc-ic">${IC.vazio}</span>
+    <div class="cc-row-t"><b>${esc(b.titulo)}</b><span>${esc(b.motivo)}${b.idade ? ` · há ${esc(b.idade)}` : ''}</span></div>
+    ${b.rota ? `<a class="cc-open" href="${esc(b.rota)}">Abrir</a>` : `<a class="cc-open" href="#/tarefas">Abrir</a>`}
+  </li>`).join('')}</ul>`;
+}
+
 function viewHoje() {
-  const list = decisions();
   const pick = pickDecision();
-  const n = list.length;
-  return `<div class="wrap">
+  const agora = Date.now();
+  const tarefas = Array.isArray(S.tarefas) ? S.tarefas : [];
+  const rotulos = { ...ROTULO_TAREFA, ...Object.fromEntries((S.tiposTarefa || []).map((t) => [t.id, t.label])) };
+  const cc = resumoOperacional({ tarefas, hoje: S.today, projetos: S.projetos || [], agora });
+  const ag = estadoAgentes({ departamentos: S.agentes?.departamentos || [], tarefas, agora });
+  const fila = filaDeAprovacao({ hoje: S.today, tarefas, rotulos, agora });
+  const timeline = atividadeRecente({ eventos: S.atividade?.eventos || [], tarefas, rotulos, limite: 8 });
+  const proximos = proximosTrabalhos({ tarefas, rotulos, limite: 6, agora });
+  const presos = bloqueios({ tarefas, projetos: S.projetos || [], rotulos, agora, limite: 5 });
+  const primeiro = String(S.eu?.user?.name || '').split(/\s+/)[0] || '';
+  /* instalação mesmo vazia: em vez de quatro zeros sem saída, três caminhos
+     reais (leads, tarefa, projeto) e a frase que diz o que acontece a seguir */
+  const vazio = !tarefas.length && !(S.today?.decidir || []).length
+    && !(S.leads || []).length && !(S.projetos || []).length;
+  const quem = primeiro ? `, ${primeiro}` : '';
+
+  return `<div class="wrap cc">
     ${headHTML({
-      title: 'Hoje',
-      sub: `${esc(LONG_DATE)}${n ? ` · <b>${n}</b> ${n === 1 ? 'lead à espera' : 'leads à espera'} da tua decisão` : ' · nada à espera de ti'}`,
-      right: stopPill(),
+      title: 'Visão geral',
+      sub: `${esc(saudacao(agora))}${esc(quem)} · ${esc(fraseDoEstado(cc))} · <span class="count">${esc(LONG_DATE)}</span>`,
+      right: `<button class="btn ghost small" data-act="reload" title="voltar a ler tarefas, atividade e decisões">↻ Actualizar</button>${stopPill()}`,
     })}
-    ${statsHTML()}
-    <div class="split">
-      <div>
-        <div class="sec-h"><h2>Precisa de ti</h2><span class="count">${n ? `${n} por decidir` : 'em dia'}</span></div>
-        <div class="list">${list.map(d => {
-          const l = d.lead || {};
-          const on = pick && d.id === pick.id;
-          return `<button class="item ${on ? 'on' : ''}" data-act="pick" data-id="${esc(d.id)}">
-            <div class="who"><div class="nm">${esc(l.name || 'Autonomia')}</div>
-              <div class="mt">${esc(d.kind === 'autonomia' ? 'proposta de autonomia' : [l.category, l.city].filter(Boolean).join(' · ') || d.channel)}</div></div>
-            ${d.kind === 'autonomia' ? '<span class="badge blue">novo</span>' : scoreBadge(l.score)}
-          </button>`;
-        }).join('') || `<div class="card empty">${IC.vazio}<h3>Sem decisões pendentes</h3>
-          <p>Um rascunho aparece aqui assim que houver um. Para haver rascunhos, é preciso haver leads: procura-os em ◈ LEADS no escritório, ou escreve à mão na página de um lead.</p></div>`}</div>
+    ${ccKpis(cc)}
+    ${vazio ? `<section class="card cc-card cc-start" aria-labelledby="ccStart">
+      <div class="sec-h"><h2 id="ccStart">Por onde começar</h2><span class="count">a mesa está vazia</span></div>
+      <p class="hint" style="margin-top:0">Ainda não há leads, tarefas nem projetos guardados. Nada aqui é simulado: os números ficam a zero até existir trabalho a sério.</p>
+      <div class="cc-start-l">
+        <a class="cc-start-i" href="#/leads"><b>1 · Trazer leads</b><span>Pesquisar empresas por cidade e nicho, ou escrever um lead à mão.</span></a>
+        <a class="cc-start-i" href="#/tarefas"><b>2 · Pedir trabalho</b><span>Criar uma tarefa (investigar, mensagem, briefing, código, QA) e vê-la correr.</span></a>
+        <a class="cc-start-i" href="#/projetos"><b>3 · Abrir um projeto</b><span>Um projeto nasce de um lead e leva o briefing até à entrega.</span></a>
       </div>
-      <div>${decisionCard()}</div>
+    </section>` : ''}
+    <div class="cc-grid">
+      <div class="cc-col">
+        <section class="card cc-card" aria-labelledby="ccAprov">
+          <div class="sec-h"><h2 id="ccAprov">Aprovações pendentes</h2>
+            <span class="count">${fila.length ? `${fila.length} à espera` : 'em dia'}</span></div>
+          ${ccFila(fila, pick)}
+        </section>
+        ${pick ? decisionCard() : ''}
+        <section class="card cc-card" aria-labelledby="ccAtiv">
+          <div class="sec-h"><h2 id="ccAtiv">Atividade recente</h2><span class="count">últimos registos</span></div>
+          ${ccTimeline(timeline)}
+        </section>
+      </div>
+      <aside class="cc-side">
+        <section class="card cc-card" aria-labelledby="ccSalas">
+          <div class="sec-h"><h2 id="ccSalas">Estado dos agentes</h2>
+            <span class="count">${ag.resumo.aTrabalhar ? `${ag.resumo.aTrabalhar} a trabalhar` : 'sem trabalho em curso'}</span></div>
+          ${ccAgentes(ag)}
+        </section>
+        <section class="card cc-card" aria-labelledby="ccProx">
+          <div class="sec-h"><h2 id="ccProx">A seguir</h2><span class="count">${proximos.length ? `${proximos.length} em aberto` : 'em dia'}</span></div>
+          ${ccProximos(proximos)}
+        </section>
+        <section class="card cc-card" aria-labelledby="ccBloq">
+          <div class="sec-h"><h2 id="ccBloq">Bloqueado</h2><span class="count">${presos.length ? plural(presos.length, 'preso', 'presos') : 'nada'}</span></div>
+          ${ccBloqueios(presos)}
+        </section>
+      </aside>
     </div>
+    <section class="cc-leads" aria-labelledby="ccLeads">
+      <div class="sec-h"><h2 id="ccLeads">Leads e custos</h2><span class="count">os mesmos números de sempre</span></div>
+      ${statsHTML()}
+    </section>
   </div>`;
 }
 
@@ -1423,7 +1608,7 @@ function viewAgentes() {
     <div class="hint" style="margin-bottom:var(--s4)">O estado vem da base de dados: um agente só aparece «a trabalhar» quando tem uma tarefa em curso. Sem tarefa, não há movimento.</div>
     <div class="steps" style="grid-template-columns:repeat(3,1fr);margin-bottom:var(--s4)">
       ${deptos.map(d => `<li class="${d.running ? 'now' : d.failed ? 'bad' : d.awaiting ? '' : 'done'}">
-        <b>${esc(d.n)} · ${esc(d.name)}</b>
+        <b>${esc(d.name || d.nome || d.id)}</b>
         <small>${esc(d.role)}</small>
         <div class="mt" style="margin-top:var(--s2);font-size:11px">${d.running ? 'a trabalhar' : d.awaiting ? 'espera aprovação' : d.queued ? 'com trabalho na fila' : d.failed ? 'com falhas' : d.succeeded ? 'sem trabalho pendente' : 'sem tarefas'}</div>
         <div class="count" style="margin-top:var(--s2)">${d.succeeded} feitas · ${d.failed} falhadas · ${d.queued} na fila</div>
@@ -2088,6 +2273,7 @@ async function act(name, el, ev) {
       const r = await call(`/ops/tarefas/${encodeURIComponent(id)}/${name === 'aprovar-tarefa' ? 'aprovar' : 'rejeitar'}`, 'POST', { note: 'revisto na mesa' });
       toast(name === 'aprovar-tarefa' ? 'Aprovada e registada.' : 'Rejeitada.');
       await loadTarefas();
+      await loadAgentes().catch(() => null);
       paint();
       return;
     }
