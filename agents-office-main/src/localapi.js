@@ -104,6 +104,7 @@ function falha(status, message, extra = {}) {
    dizer coisas diferentes sobre o mesmo lead. */
 import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca as confiancaDoLead,
   verificacao as verificacaoDoLead, proximaAccao, qualificacao as qualificacaoDoLead, nomeDoFicheiro } from './crm.js';
+import { NIVEIS_AUTONOMIA } from './motores.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -709,6 +710,72 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     }
 
     /* --- dinheiro --- */
+    /* 1.60.0 · a autonomia no modo local: as mesmas regras do servidor, guardadas
+       neste browser. Sem casos não se sobe — e a resposta diz quantos faltam. */
+    if (caminhoLimpo === '/ops/autonomia' && metodo === 'GET') {
+      const MIN_CASOS = 50, MIN_TAXA = 0.95;
+      const estat = new Map();
+      for (const msg of d.mensagens) {
+        const escopo = limpo(msg.scope) || `${limpo(msg.channel) || 'email'}:geral`;
+        const e = estat.get(escopo) || { escopo, aprovadas: 0, rejeitadas: 0 };
+        if (['aprovada', 'enviada'].includes(msg.status)) e.aprovadas += 1;
+        else if (['rejeitada', 'bloqueada'].includes(msg.status)) e.rejeitadas += 1;
+        estat.set(escopo, e);
+      }
+      const escopos = new Set([...estat.keys(), ...(d.autonomia || []).map((r) => r.escopo)]);
+      const lista = [...escopos].map((escopo) => {
+        const e = estat.get(escopo) || { escopo, aprovadas: 0, rejeitadas: 0 };
+        const decididas = e.aprovadas + e.rejeitadas;
+        const taxa = decididas ? e.aprovadas / decididas : null;
+        const r = (d.autonomia || []).find((x) => x.escopo === escopo) || null;
+        const nivel = r && NIVEIS_AUTONOMIA[r.nivel] ? r.nivel : 'pedir_sempre';
+        const faltamCasos = Math.max(0, MIN_CASOS - decididas);
+        const podeSubir = nivel !== 'autonomo' && !faltamCasos && !(taxa != null && taxa < MIN_TAXA);
+        return {
+          escopo, nivel, rotulo: NIVEIS_AUTONOMIA[nivel].rotulo,
+          casos: decididas, aprovadas: e.aprovadas, rejeitadas: e.rejeitadas,
+          taxa, autor: r?.decidido_por || null, quando: r?.decidido_em || null, motivo: r?.motivo || null,
+          podeSubir,
+          porque: podeSubir ? `há ${decididas} casos com ${Math.round((taxa || 0) * 100)}% aprovados`
+            : faltamCasos ? `faltam ${faltamCasos} caso(s) decididos à mão para poder subir (mínimo ${MIN_CASOS})` : 'já está no nível máximo',
+          minimos: { casos: MIN_CASOS, taxa: MIN_TAXA },
+        };
+      });
+      return { ok: true, lista, resumo: {
+        total: lista.length,
+        autonomos: lista.filter((x) => x.nivel === 'autonomo').length,
+        propostos: lista.filter((x) => x.nivel === 'proposto').length,
+        pedemSempre: lista.filter((x) => x.nivel === 'pedir_sempre').length,
+        nota: 'Uma acção sensível exige sempre aprovação humana, mesmo em «autónomo».',
+      } };
+    }
+    if (/^\/ops\/autonomia\/[^/]+\/(subir|descer)$/.test(caminhoLimpo) && metodo === 'POST') {
+      const escopo = decodeURIComponent(seg[1]);
+      const descer = seg[2] === 'descer';
+      const doEscopo = d.mensagens.filter((x) => (limpo(x.scope) || `${limpo(x.channel) || 'email'}:geral`) === escopo);
+      const aprovadas = doEscopo.filter((x) => ['aprovada', 'enviada'].includes(x.status)).length;
+      const rejeitadas = doEscopo.filter((x) => ['rejeitada', 'bloqueada'].includes(x.status)).length;
+      const decididas = aprovadas + rejeitadas;
+      const taxa = decididas ? aprovadas / decididas : null;
+      const atual = (d.autonomia || []).find((x) => x.escopo === escopo) || null;
+      const atualNivel = atual && NIVEIS_AUTONOMIA[atual.nivel] ? atual.nivel : 'pedir_sempre';
+      const forcar = corpo?.force === true;
+      if (!descer && !forcar && (decididas < 50 || taxa == null || taxa < 0.95)) {
+        throw falha(409, decididas < 50
+          ? `ainda só há ${decididas} caso(s) deste tipo — o mínimo para subir é 50`
+          : `a taxa aprovada é ${Math.round((taxa || 0) * 100)}% — o mínimo para subir é 95%`);
+      }
+      const nivel = descer ? 'pedir_sempre' : atualNivel === 'pedir_sempre' ? 'proposto' : 'autonomo';
+      const registo = {
+        escopo, nivel, casos: decididas, taxa,
+        motivo: limpo(corpo?.motivo || corpo?.reason) || (descer ? 'descida para «pede-me sempre»' : 'subida pedida na mesa'),
+        decidido_por: 'dono (modo local)', decidido_em: new Date(agora()).toISOString(),
+      };
+      d.autonomia = (d.autonomia || []).filter((x) => x.escopo !== escopo).concat([registo]);
+      escrever(d, 'autonomia', `${escopo}: ${NIVEIS_AUTONOMIA[atualNivel].rotulo} → ${NIVEIS_AUTONOMIA[nivel].rotulo}`);
+      gravar(d);
+      return { ok: true, autonomia: registo, nivel, rotulo: NIVEIS_AUTONOMIA[nivel].rotulo, casos: decididas, taxa };
+    }
     if (caminhoLimpo === '/ops/saldo') return { ...saldo(d), presenca: { parado: false } };
     if (caminhoLimpo === '/ops/receita' && metodo === 'POST') {
       const centimos = cents(corpo?.euros);

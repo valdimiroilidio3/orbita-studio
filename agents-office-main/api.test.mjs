@@ -328,3 +328,96 @@ test('21 · mudar o site invalida a verificação: a confiança não fica a dize
   assert.equal(ficha.corpo.verificacao.estado, 'por_verificar');
   assert.notEqual(ficha.corpo.confianca.nivel, 'alta');
 });
+
+/* ============================================================================
+   1.60.0 · A AUTONOMIA E OS MOTORES, do lado do servidor (2 nov 2026)
+
+   O nível de autonomia de um tipo de trabalho não é um menu: sobe com casos
+   decididos à mão e uma taxa alta, desce sem pedir justificação, e cada decisão
+   fica com autor e data. Uma acção sensível exige sempre aprovação humana — e
+   isso prova-se no servidor, não só no ecrã.
+   ========================================================================== */
+
+const mensagemDecidida = (i, status, escopo = 'email:geral') => ({
+  id: `m_${i}`, status, scope: escopo, channel: 'email', subject: `Proposta ${i}`,
+  body: 'Olá', lead_id: 'l1', created_at: new Date(2026, 9, 1, 0, i % 60).toISOString(),
+});
+
+test('22 · a autonomia começa em «pede-me sempre» e diz quantos casos faltam', async () => {
+  const api = createMemRepo();
+  const r = await chamar(api, '/ops/autonomia');
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.ok, true);
+  assert.equal(r.corpo.lista.length, 0, 'sem mensagens decididas não há tipos a avaliar');
+  assert.equal(r.corpo.resumo.autonomos, 0);
+  assert.match(r.corpo.resumo.nota, /aprovação humana/);
+});
+
+test('23 · subir sem casos é recusado (409) com a razão escrita — e nada muda', async () => {
+  const api = createMemRepo();
+  await assert.rejects(
+    () => chamar(api, '/ops/autonomia/email:geral/subir', 'POST', { reason: 'quero' }),
+    (e) => e.status === 409 && /mínimo para subir é 50/.test(e.message),
+  );
+  assert.equal((await chamar(api, '/ops/autonomia')).corpo.lista.length, 0);
+});
+
+test('24 · com 50 casos e 95% aprovados, sobe um degrau; descer é imediato', async () => {
+  const api = createMemRepo();
+  const mensagens = [];
+  for (let i = 0; i < 50; i += 1) mensagens.push(mensagemDecidida(i, i < 48 ? 'aprovada' : 'rejeitada'));
+  api._dados.mensagens.push(...mensagens);
+
+  const antes = (await chamar(api, '/ops/autonomia')).corpo.lista.find((x) => x.escopo === 'email:geral');
+  assert.equal(antes.casos, 50);
+  assert.equal(antes.taxa, 0.96);
+  assert.equal(antes.nivel, 'pedir_sempre');
+  assert.equal(antes.podeSubir, true);
+
+  const subiu = await chamar(api, '/ops/autonomia/email:geral/subir', 'POST', { reason: 'casos a mais para ignorar' });
+  assert.equal(subiu.status, 200);
+  assert.equal(subiu.corpo.nivel, 'proposto', 'sobe um degrau de cada vez');
+  assert.equal(subiu.corpo.autonomia.decidido_por, 'dono', 'a decisão fica com autor');
+  assert.ok(subiu.corpo.autonomia.decidido_em, 'e com data');
+
+  const segundo = await chamar(api, '/ops/autonomia/email:geral/subir', 'POST', {});
+  assert.equal(segundo.corpo.nivel, 'autonomo');
+  const terceiro = await chamar(api, '/ops/autonomia/email:geral/subir', 'POST', {});
+  assert.equal(terceiro.status, 200);
+  assert.equal(terceiro.corpo.nivel, 'autonomo', 'não passa do máximo');
+
+  const desceu = await chamar(api, '/ops/autonomia/email:geral/descer', 'POST', {});
+  assert.equal(desceu.corpo.nivel, 'pedir_sempre');
+  assert.match(desceu.corpo.motivo, /pede-me sempre/);
+  assert.ok(api._dados.atividade.some((a) => /autonomia/i.test(JSON.stringify(a))), 'a decisão deixa rasto na atividade');
+});
+
+test('25 · a taxa baixa também impede a subida, e a mensagem diz a taxa real', async () => {
+  const api = createMemRepo();
+  const mensagens = [];
+  for (let i = 0; i < 60; i += 1) mensagens.push(mensagemDecidida(i, i < 30 ? 'aprovada' : 'rejeitada'));
+  api._dados.mensagens.push(...mensagens);
+  const r = (await chamar(api, '/ops/autonomia')).corpo.lista.find((x) => x.escopo === 'email:geral');
+  assert.equal(r.podeSubir, false);
+  assert.match(r.porque, /50%/);
+  await assert.rejects(() => chamar(api, '/ops/autonomia/email:geral/subir', 'POST', {}), (e) => e.status === 409 && /95%/.test(e.message));
+});
+
+test('26 · a subida forçada fica registada como forçada', async () => {
+  const api = createMemRepo();
+  const r = await chamar(api, '/ops/autonomia/whatsapp:geral/subir', 'POST', { force: true });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.nivel, 'proposto');
+  assert.match(r.corpo.motivo, /forçada/i);
+  assert.match(r.corpo.motivo, /sem os casos mínimos/i);
+});
+
+test('27 · um tipo sem decisões continua em «pede-me sempre» e o resumo não o esconde', async () => {
+  const api = createMemRepo();
+  api._dados.autonomia.push({ id: 'au_1', escopo: 'email:sem-site', nivel: 'autonomo', casos: 80, taxa: 0.99, decidido_por: 'dono', decidido_em: '2026-10-01T10:00:00.000Z' });
+  const corpo = (await chamar(api, '/ops/autonomia')).corpo;
+  assert.equal(corpo.lista.length, 1);
+  assert.equal(corpo.resumo.autonomos, 1);
+  assert.equal(corpo.lista[0].autor, 'dono');
+  assert.equal(corpo.lista[0].nivel, 'autonomo');
+});
