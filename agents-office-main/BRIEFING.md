@@ -1,5 +1,10 @@
 # Briefing do projeto — briefing, Prompt Master e prompts de imagem
 
+> **1.54.3:** a geração de mídia já existe — mas noutra área, e a partir daqui.
+> Esta aba continua a dar **prompts**; quem os transforma em imagem e vídeo é o
+> cartão **Mídia do projeto** (ver `MEDIA.md`). O Prompt Master e os prompts de
+> imagem continuam a não ser gerados no servidor como ficheiros.
+>
 > 1.54.2 · 2 nov 2026. Pedido do dono: *«ao iniciar um projeto a partir de uma
 > lead, permitir que o usuário gere e edite um briefing, crie um Prompt Master
 > personalizado e obtenha prompts de imagem relacionados ao projeto. Tudo deve

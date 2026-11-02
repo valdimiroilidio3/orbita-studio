@@ -16,6 +16,9 @@ import { vistaCine, carregarCine, accaoCine, ligarCine } from './cine.js';
 /* 1.54.2 · Briefing do projeto: briefing editável, Prompt Master e prompts de
    imagem — as três coisas ligadas à lead e ao projeto. */
 import { vistaBriefing, carregarBriefing, accaoBriefing, ligarBriefing, podeSair } from './briefing.js';
+/* 1.54.3 · a mídia do projeto: gerar imagem e vídeo a partir do briefing,
+   com estimativa antes de gastar e estado que sobrevive a um recarregar. */
+import { vistaMedia, carregarMedia, accaoMedia, ligarMedia, iniciarCiclo, pararCiclo } from './media.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -100,6 +103,8 @@ const S = {
   ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
   /* 1.54.2 · briefing do projeto (briefing, Prompt Master, prompts de imagem) */
   briefing: null,
+  /* 1.54.3 · a mídia gerada (imagem e vídeo) do projeto aberto */
+  media: null,
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -377,6 +382,12 @@ async function boot(full = true) {
       /* o briefing vive no projeto: lê-se com ele, e uma falha aqui não tapa a
          página (a vista do briefing mostra a razão e um botão para tentar) */
       await carregarBriefing(apiMesa, S.route.id).catch(() => null);
+      /* 1.54.3 · a mídia lê-se com o projeto; se houver trabalhos a decorrer,
+         o ciclo retoma sozinho — recarregar a página não perde o estado */
+      const M = await carregarMedia(apiMesa, S.route.id).catch(() => null);
+      if (M && (M.dados?.geracoes || []).some((g) => ['aguardando', 'em_processamento'].includes(g.estado))) {
+        iniciarCiclo(apiMesa);
+      }
     }
     if (S.route.name === 'tarefas') await loadTarefas();
     if (S.route.name === 'agentes') await loadAgentes();
@@ -925,6 +936,7 @@ function viewProjeto() {
     </div>
     ${pipeline(p)}
     ${briefingDoProjeto(p)}
+    ${vistaMedia(S, { projeto: p })}
     <div class="card" style="margin-top:var(--s4)">
       <div class="sec-h"><h3>Construção</h3><span class="count">${esc(p.kind || 'landing')} · código, qualidade e entrega</span></div>
       <p class="hint" style="margin-top:0">${esc(p.brief || 'O código nasce do briefing guardado: gera-se a partir do que está escrito e confirmado, não do que se imagina.')}</p>
@@ -1351,6 +1363,8 @@ async function act(name, el, ev) {
   if (String(name).startsWith('cine-') && await accaoCine(name, el, apiMesa)) return;
   /* 1.54.2 · briefing: abas, gravar, rascunho da IA, Prompt Master, imagens */
   if (String(name).startsWith('bf-') && await accaoBriefing(name, el, apiMesa)) return;
+  /* 1.54.3 · mídia: tipo, opções, estimativa, gerar, cancelar, repetir, compor */
+  if (String(name).startsWith('md-') && await accaoMedia(name, el, apiMesa)) return;
   const note = () => $('#leadNote');
   const setNote = (msg, bad) => { const n = note(); if (n) { n.textContent = msg; n.classList.toggle('bad', !!bad); } else toast(msg, bad); };
   try {
@@ -1930,10 +1944,21 @@ function start() {
     }
     S.route = destino;
     S.pick = null;
+    /* o ciclo da mídia é do projeto aberto: fora dele não há nada para seguir */
+    if (destino.name !== 'projeto') pararCiclo(apiMesa);
     if (S.route.name !== 'ia') pararSeguimento();
     if (S.route.name !== 'papel') fecharCamera();
     if (S.route.name === 'lead' && S.route.id) { try { await loadLead(S.route.id); } catch (e) { toast(e.message, true); } }
-    if (S.route.name === 'projeto' && S.route.id) { try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); } }
+    if (S.route.name === 'projeto' && S.route.id) {
+      try { await loadProjeto(S.route.id); } catch (e) { toast(e.message, true); }
+      /* 1.54.2/1.54.3 · o briefing e a mídia vivem no projeto: ao mudar de projeto
+         por hash têm de ser lidos OUTRA VEZ. Sem isto, a mesa mostrava «a abrir o
+         briefing…» para sempre ao saltar de um projeto para outro. */
+      await carregarBriefing(apiMesa, S.route.id, { forcar: true }).catch(() => null);
+      const M = await carregarMedia(apiMesa, S.route.id, { forcar: true }).catch(() => null);
+      if (M && (M.dados?.geracoes || []).some((g) => ['aguardando', 'em_processamento'].includes(g.estado))) iniciarCiclo(apiMesa);
+      else pararCiclo(apiMesa);
+    }
     if (S.route.name === 'papel' && !S.papelEstado) { try { await carregarPapel(apiMesa); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'cine') { try { S.cine = null; await carregarCine(apiMesa, S.route.id); } catch (e) { toast(e.message, true); } }
     if (S.route.name === 'tarefas') { try { await loadTarefas(); } catch (e) { toast(e.message, true); } }
@@ -1948,6 +1973,7 @@ function start() {
   ligarPapel(apiMesa, { rota: () => S.route.name });
   ligarCine(apiMesa, { rota: () => S.route.name });
   ligarBriefing(apiMesa);
+  ligarMedia(apiMesa);
   boot(true);
 }
 

@@ -14,6 +14,7 @@ import { VERSAO } from './_versao.mjs';
 import { remetente } from './_prontidao.mjs';   // 1.41.0: o «from» do correio, com um nome só
 import { criarECorrer, correrDeNovo } from './_tarefas.mjs';   // 1.53.2: as tarefas correm a sério
 import { avaliarPorta } from './_porta.mjs';   // 1.54.0: a porta (contas, sessões, papéis)
+import * as MD from './_media.mjs';   // 1.54.3: a mídia gerada (imagem e vídeo)
 
 
 const TIPOS_PROJETO = [
@@ -1194,6 +1195,87 @@ export async function responder(repo, {
     if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
     await repo.atividade.add('briefing', `prompts de imagem de «${projeto.name}» ${r.via === 'ia' ? 'escritos pela IA' : 'montados por regras'}`).catch(() => null);
     return { status: 200, corpo: { ok: true, imagens: r.imagens, via: r.via, motivo: r.motivo, ...r.vista } };
+  }
+
+  /* ---- 1.54.3 · A MÍDIA GERADA (imagem e vídeo) ---------------------------
+     O motor está em `api/_media.mjs` (limites, custos, estados, idempotência) e
+     o fornecedor em `api/_media/fornecedores.mjs` (Pollinations para imagem;
+     composição no browser para vídeo). Aqui só se decide o contrato HTTP:
+
+       GET  /ops/projetos/:id/media            o estado da área de mídia
+       POST /ops/projetos/:id/media/estimativa estimativa antes de confirmar
+       POST /ops/projetos/:id/media            criar a geração (confirmado:true)
+       GET  /ops/media/:id                     estado (e um passo de avanço)
+       POST /ops/media/:id/cancelar            cancelar (só antes de sair daqui)
+       POST /ops/media/:id/repetir             nova tentativa (pode custar)
+       POST /ops/media/:id/classificar         conceito ↔ aprovado para uso
+       POST /ops/media/:id/ficheiro            o vídeo composto no browser
+
+     Todos os POST são escrita: a porta exige `write` antes de cá chegar. Os
+     bytes do ficheiro saem por `/api/ficheiro?id=…` (com sessão), nunca por uma
+     URL do fornecedor.
+     ---------------------------------------------------------------------- */
+  const projetoDaMidia = async (id) => {
+    const p = await repo.projetos.byId(id);
+    if (!p) throw falha(404, 'projeto não encontrado');
+    return p;
+  };
+  const leadDoProjeto = async (projeto) => (projeto.lead_id ? repo.leads.byId(projeto.lead_id).catch(() => null) : null);
+  const respostaMD = (r) => ({ status: r.status || (r.ok ? 200 : 400), corpo: {
+    ok: !!r.ok,
+    ...(r.erro ? { error: r.erro, codigo: r.codigo || null } : {}),
+    ...(r.geracao ? { geracao: MD.vista(r.geracao) } : {}),
+    ...(r.aviso ? { aviso: r.aviso } : {}),
+    ...(r.nota ? { nota: r.nota } : {}),
+    ...(r.repetido ? { repetido: true } : {}),
+    ...(r.uso ? { uso: r.uso } : {}),
+    ...(r.custo ? { custo: r.custo } : {}),
+  } });
+
+  if (seg[0] === 'ops' && seg[1] === 'projetos' && seg[2] && seg[3] === 'media' && seg.length === 4 && m === 'GET') {
+    const projeto = await projetoDaMidia(seg[2]);
+    const lead = await leadDoProjeto(projeto);
+    return { status: 200, corpo: await MD.vistaDoProjeto(repo, { projeto, lead, conta, env, fetchImpl }) };
+  }
+
+  if (seg[0] === 'ops' && seg[1] === 'projetos' && seg[2] && seg[3] === 'media' && seg[4] === 'estimativa' && seg.length === 5 && m === 'POST') {
+    await projetoDaMidia(seg[2]);
+    const tipo = limpo(corpo?.tipo) || 'imagem';
+    if (!MD.TIPOS.includes(tipo)) throw falha(400, 'só se estimam imagens ou vídeos');
+    const val = await import('./_media/fornecedores.mjs').then((x) => x.validarOpcoes({
+      tipo, formato: corpo?.formato, resolucao: corpo?.resolucao, duracao: corpo?.duracao, movimento: corpo?.movimento,
+    }));
+    if (!val.ok) throw falha(400, val.erros.join('; '));
+    const custo = MD.estimar({ tipo, opcoes: val.opcoes }, env);
+    const uso = await MD.usoDe(repo, { conta, projetoId: seg[2], env });
+    return { status: 200, corpo: { ok: true, tipo, opcoes: val.opcoes, custo, uso, confirmar: {
+      obrigatoria: true,
+      porque: custo.confiavel ? 'a geração só começa depois de confirmares' : 'o custo deste fornecedor é desconhecido: confirma só se aceitares um valor que não se pode estimar',
+    } } };
+  }
+
+  if (seg[0] === 'ops' && seg[1] === 'projetos' && seg[2] && seg[3] === 'media' && seg.length === 4 && m === 'POST') {
+    const projeto = await projetoDaMidia(seg[2]);
+    const lead = await leadDoProjeto(projeto);
+    const r = await MD.criar(repo, { projeto, lead, conta, pedido: corpo || {}, env });
+    if (r.ok && !r.repetido) {
+      await repo.atividade.add('media', `${r.geracao.tipo === 'video' ? 'vídeo' : 'imagem'} pedida para «${projeto.name}»`).catch(() => null);
+    }
+    return respostaMD(r);
+  }
+
+  if (seg[0] === 'ops' && seg[1] === 'media' && seg[2] && seg.length === 3 && m === 'GET') {
+    const r = await MD.ler(repo, seg[2], { env, fetchImpl, avancarAuto: qs.get('avancar') !== '0' });
+    if (!r.ok) throw falha(r.status || 404, r.erro);
+    return { status: 200, corpo: { ok: true, geracao: MD.vista(r.geracao) } };
+  }
+
+  if (seg[0] === 'ops' && seg[1] === 'media' && seg[2] && seg.length === 4 && m === 'POST') {
+    const acao = seg[3];
+    if (acao === 'cancelar') return respostaMD(await MD.cancelar(repo, seg[2]));
+    if (acao === 'repetir') return respostaMD(await MD.repetir(repo, seg[2], { env }));
+    if (acao === 'classificar') return respostaMD(await MD.classificar(repo, seg[2], { classificacao: limpo(corpo?.classificacao) }));
+    if (acao === 'ficheiro') return respostaMD(await MD.guardarFicheiro(repo, seg[2], { corpo: corpo || {}, env }));
   }
 
   /* ---- tarefas: criam-se E correm (1.53.2) ----------------------------------

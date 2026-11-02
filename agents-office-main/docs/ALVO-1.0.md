@@ -49,6 +49,7 @@ deploy READY → uma linha honesta na conversa.
 |---|---|---|---|---|---|
 | **A1** | A Porta (auth real, papéis, sessões) | qualquer visitante é dono | 1.54 | 🔴 crítico | 2 ciclos |
 | **A1.1** | Briefing do projeto (briefing, Prompt Master, prompts de imagem) | projeto sem sítio onde começar | **1.54.2 ✅** | 🟠 alto | feito |
+| **A1.2** | Mídia do projeto (gerar imagem e vídeo, com custo e limites) | o briefing dizia o que fazer e nada saía | **1.54.3 ✅** | 🟠 alto | feito |
 | **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` diz custo `0` | 1.55 | 🔴 alto | 1 ciclo |
 | **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | 1.56 | 🟠 alto | 1–2 ciclos |
 | **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.57 | 🟠 alto | 1 ciclo |
@@ -179,6 +180,33 @@ editor rico, e o arquivo é a linha jsonb `orbita_ai_config` chave `briefing`
 **Prova:** 825 testes (`node --test`, 28 novos em `briefing.test.mjs`), build da
 mesa e o percurso em jsdom sobre o bundle real (abas, origens, gravação, aviso de
 desactualizado). Detalhe em `BRIEFING.md`.
+
+### A1.2 · Mídia do projeto — `1.54.3` ✅ **FEITO** (2 nov 2026)
+
+**Pedido do dono:** *«geração direta de imagens e vídeos no SaaS, a partir do
+briefing e dos prompts associados a uma lead, com progresso, controle de custos
+e os resultados encontráveis no projeto»*.
+
+**O que passou a ser verdade:** o projeto gera **imagem** (Pollinations, no
+servidor) e **vídeo** (composição no browser com as imagens do projeto — não é
+vídeo generativo, e diz-se); estimativa de custo **antes** de confirmar, com
+tabela configurável e «desconhecido» quando não há preço; limites por utilizador,
+por projeto e simultâneos, verificados antes do fornecedor; estados persistidos
+que sobrevivem a recarregar; idempotência por chave (dois cliques, um trabalho);
+nova tentativa limitada e «repetir» a avisar do custo; cancelar só antes de o
+pedido sair; ficheiros num bucket **privado** servidos com sessão; classificação
+«conceito de IA» ↔ «aprovado para uso».
+
+**O que continua a não ser:** vídeo por IA (não há caminho gratuito), custo real
+quando o fornecedor não o devolve, progresso percentual vindo do fornecedor,
+isolamento por organização (uma instalação, uma organização).
+
+**Prova:** 851 testes (25 novos em `media.test.mjs`), build da mesa e percurso no
+bundle real em jsdom (estimar → confirmar → gerar → galeria → recarregar).
+Detalhe em `MEDIA.md`.
+
+**Nota de numeração:** o A2 mantém a **1.55** — esta frente entrou na série 1.54
+(1.54.3), como o briefing (1.54.2).
 
 ### A2 · Dinheiro verdadeiro — `1.55.0` 🔴
 
@@ -374,9 +402,11 @@ Sem estas cinco respostas, A1, A2, A5 e A10 avançam na mesma. As outras esperam
 A 1.54.0 fecha a produção **até existir uma conta**. Depois do deploy:
 
 1. Aplicar as migrações (`/api/setup?token=…` aplica todas, ou uma a uma com
-   `&so=orbita_1_54_0.sql` e `&so=orbita_1_54_1.sql`). A 1.54.2 **não traz
-   ficheiro SQL**: o briefing vive em `orbita_ai_config`, que vem do
-   `orbita_ia.sql` — se o Cine abre, o briefing também.
+   `&so=orbita_1_54_0.sql`, `&so=orbita_1_54_1.sql` e `&so=orbita_1_54_3.sql`). A
+   1.54.2 **não traz ficheiro SQL** (o briefing vive em `orbita_ai_config`, que
+   vem do `orbita_ia.sql`). A **1.54.3** traz: `orbita_1_54_3.sql` cria a tabela
+   `orbita_geracoes` e o bucket **privado** `orbita-media` — sem ele a mídia não
+   guarda ficheiros, e a interface diz exactamente isso.
 2. Abrir `/app` → o ecrã diz «Criar a primeira conta».
 3. Preencher nome, email, palavra-passe (12+) e **colar o `SETUP_TOKEN`** no
    campo que apareceu.

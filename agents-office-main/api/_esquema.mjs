@@ -36,6 +36,9 @@ export const FICHEIROS = [
   'orbita_1_54_0.sql',
   /* 1.54.1 · a confirmação da conta por email (as três colunas). */
   'orbita_1_54_1.sql',
+  /* 1.54.3 · a mídia gerada: a tabela das gerações e o bucket privado dos
+     ficheiros. Idempotente: `create table if not exists` e `on conflict do nothing`. */
+  'orbita_1_54_3.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -57,6 +60,9 @@ export const COLUNAS_EXIGIDAS = {
   /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
   orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira', 'confirmado_em', 'confirmar_hash', 'confirmar_expira'],
   orbita_sessoes: ['conta_id', 'token_hash', 'expira', 'revogada'],
+  /* 1.54.3 · sem estas, uma geração perde o vínculo (projeto, lead, quem) ou o
+     custo — e a auditoria da mídia fica a mentir. */
+  orbita_geracoes: ['chave', 'projeto_id', 'lead_id', 'conta_id', 'tipo', 'fornecedor', 'prompt', 'opcoes', 'estado', 'custo_estimado', 'custo_moeda', 'classificacao', 'ficheiro'],
 };
 
 export const TABELAS_DA_MESA = ['orbita_leads', 'orbita_messages', 'orbita_tasks', 'orbita_projects', 'orbita_atividade', 'orbita_receitas', 'orbita_contas', 'orbita_sessoes'];

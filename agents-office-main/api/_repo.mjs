@@ -336,20 +336,83 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         async listar(limit = 30) { return (await pedir(`orbita_media_jobs?select=*&order=criado.desc&limit=${Math.min(100, limit)}`)) || []; },
       },
     },
+
+    /* ---- 1.54.3 · as gerações de mídia (imagem e vídeo) ----
+       Cada linha é um pedido: o prompt QUE FOI ENVIADO, as opções, quem pediu,
+       a lead, o projeto, o fornecedor, o modelo, o estado e o custo. A `chave`
+       é única e é o que impede um duplo clique de gerar (e cobrar) duas vezes. */
+    geracoes: {
+      async criar(g) {
+        return um(await pedir('orbita_geracoes', { method: 'POST', body: g, prefer: 'return=representation' }));
+      },
+      async actualizar(id, campos) {
+        const r = await pedir(`orbita_geracoes?id=eq.${q(id)}`, {
+          method: 'PATCH', body: { ...campos, actualizado: campos.actualizado || new Date().toISOString() },
+          prefer: 'return=representation',
+        });
+        return um(r);
+      },
+      async porId(id) { return um(await pedir(`orbita_geracoes?select=*&id=eq.${q(id)}&limit=1`)); },
+      async porChave(chave) {
+        if (!chave) return null;
+        return um(await pedir(`orbita_geracoes?select=*&chave=eq.${q(chave)}&limit=1`));
+      },
+      async listarPorProjeto(projetoId, limite = 60) {
+        return (await pedir(`orbita_geracoes?select=*&projeto_id=eq.${q(projetoId)}&order=criado.desc&limit=${Math.min(200, limite)}`)) || [];
+      },
+      async contarDesde(contaId, iso) {
+        const l = await pedir(`orbita_geracoes?select=id&conta_id=eq.${q(contaId)}&criado=gte.${q(iso)}&limit=500`);
+        return Array.isArray(l) ? l.length : 0;
+      },
+      async contarDoProjetoDesde(projetoId, iso) {
+        const l = await pedir(`orbita_geracoes?select=id&projeto_id=eq.${q(projetoId)}&criado=gte.${q(iso)}&limit=500`);
+        return Array.isArray(l) ? l.length : 0;
+      },
+      async contarActivas(contaId) {
+        const l = await pedir(`orbita_geracoes?select=id&conta_id=eq.${q(contaId)}&estado=in.(aguardando,em_processamento)&limit=100`);
+        return Array.isArray(l) ? l.length : 0;
+      },
+      async apagarDoProjeto(projetoId) {
+        const r = await pedir(`orbita_geracoes?projeto_id=eq.${q(projetoId)}`, { method: 'DELETE', prefer: 'return=representation' });
+        return Array.isArray(r) ? r.length : 0;
+      },
+      /* a reivindicação atómica: só UM pedido consegue passar este `estado=eq.aguardando`
+         para `em_processamento`. É o que impede duas chamadas simultâneas de
+         gerarem (e cobrarem) a mesma imagem duas vezes. */
+      async reivindicar(id, agora = new Date().toISOString()) {
+        const r = await pedir(`orbita_geracoes?id=eq.${q(id)}&estado=eq.aguardando`, {
+          method: 'PATCH',
+          body: { estado: 'em_processamento', actualizado: agora },
+          prefer: 'return=representation',
+        });
+        const linha = um(r);
+        if (!linha) return null;
+        const tentativas = Number(linha.tentativas || 0) + 1;
+        return um(await pedir(`orbita_geracoes?id=eq.${q(id)}`, {
+          method: 'PATCH', body: { tentativas }, prefer: 'return=representation',
+        })) || linha;
+      },
+      /* o «pump»: quem faz avançar os trabalhos que ninguém está a olhar */
+      async listarPendentes(limite = 5) {
+        return (await pedir(`orbita_geracoes?select=*&estado=eq.aguardando&order=criado.asc&limit=${Math.min(20, limite)}`)) || [];
+      },
+    },
   };
 }
 
 /* ---------- a mesma interface, em memória (testes) ---------- */
+const agoraDe = () => new Date().toISOString();
+
 export function createMemRepo(seed = {}) {
   const d = {
     leads: [], projetos: [], tarefas: [], mensagens: [], receitas: [], atividade: [],
     contas: [], sessoes: [],
-    iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [],
+    iaRuns: [], iaSteps: [], iaUso: [], iaConfig: {}, iaMemoria: [], mediaJobs: [], geracoes: [],
     ...JSON.parse(JSON.stringify(seed)),
   };
   let n = 0;
   const id = (p) => `${p}_${++n}`;
-  const agora = () => new Date().toISOString();
+  const agora = agoraDe;
   return {
     tipo: 'memoria',
     _dados: d,
@@ -480,6 +543,50 @@ export function createMemRepo(seed = {}) {
         async actualizar(i, campos) { const j = d.mediaJobs.find((x) => x.id === i); if (!j) return null; Object.assign(j, campos); return j; },
         async porId(i) { return d.mediaJobs.find((x) => x.id === i) || null; },
         async listar(limit = 30) { return d.mediaJobs.slice(0, limit); },
+      },
+    },
+
+    /* 1.54.3 · as gerações de mídia, com a mesma interface do Supabase */
+    geracoes: {
+      async criar(g) {
+        if (g.chave && d.geracoes.some((x) => x.chave === g.chave)) {
+          throw Object.assign(new Error('chave de geração repetida'), { status: 409 });
+        }
+        const nova = { id: id('g'), criado: agora(), actualizado: agora(), estado: 'aguardando', tentativas: 0, ...g };
+        d.geracoes.unshift(nova);
+        return nova;
+      },
+      async actualizar(i, campos) {
+        const g = d.geracoes.find((x) => x.id === i);
+        if (!g) return null;
+        Object.assign(g, campos, { actualizado: campos.actualizado || agora() });
+        return g;
+      },
+      async porId(i) { return d.geracoes.find((x) => x.id === i) || null; },
+      async porChave(chave) { return chave ? (d.geracoes.find((x) => x.chave === chave) || null) : null; },
+      async listarPorProjeto(projetoId, limite = 60) {
+        return d.geracoes.filter((g) => g.projeto_id === projetoId).slice(0, limite);
+      },
+      async contarDesde(contaId, iso) { return d.geracoes.filter((g) => g.conta_id === contaId && String(g.criado) >= iso).length; },
+      async contarDoProjetoDesde(projetoId, iso) { return d.geracoes.filter((g) => g.projeto_id === projetoId && String(g.criado) >= iso).length; },
+      async contarActivas(contaId) {
+        return d.geracoes.filter((g) => g.conta_id === contaId && ['aguardando', 'em_processamento'].includes(g.estado)).length;
+      },
+      async apagarDoProjeto(projetoId) {
+        const antes = d.geracoes.length;
+        d.geracoes = d.geracoes.filter((g) => g.projeto_id !== projetoId);
+        return antes - d.geracoes.length;
+      },
+      async reivindicar(i, agora = agoraDe()) {
+        const g = d.geracoes.find((x) => x.id === i);
+        if (!g || g.estado !== 'aguardando') return null;
+        g.estado = 'em_processamento';
+        g.tentativas = Number(g.tentativas || 0) + 1;
+        g.actualizado = agora;
+        return g;
+      },
+      async listarPendentes(limite = 5) {
+        return [...d.geracoes].filter((g) => g.estado === 'aguardando').reverse().slice(0, limite);
       },
     },
   };

@@ -184,6 +184,10 @@ export async function renderizarVideo({
   plano, doc = (typeof document !== 'undefined' ? document : null), Grabador = (typeof MediaRecorder !== 'undefined' ? MediaRecorder : null),
   agora = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
   espera = (ms) => new Promise((r) => setTimeout(r, ms)), fps = 30,
+  /* 1.54.3 · o progresso é real (fotogramas feitos / fotogramas previstos) e por
+     isso pode mostrar-se; `bitsPorSegundo` desce quando o ficheiro tem de caber
+     num pedido HTTP (a área de mídia usa 1,2 Mbps para ~1,5 MB em 10 s). */
+  aoProgresso = null, bitsPorSegundo = 3_500_000,
 } = {}) {
   if (!plano || !plano.ok) return { ok: false, motivo: (plano && plano.motivo) || 'não há plano para gravar' };
   if (!doc) return { ok: false, motivo: 'este ambiente não tem canvas: o vídeo faz-se no browser' };
@@ -200,7 +204,7 @@ export async function renderizarVideo({
   const inicio = agora();
   const fluxo = canvas.captureStream ? canvas.captureStream(fps) : null;
   if (!fluxo) return { ok: false, motivo: 'o canvas não deixa capturar imagem neste browser' };
-  const grabador = new Grabador(fluxo, { mimeType: mime, videoBitsPerSecond: 3_500_000 });
+  const grabador = new Grabador(fluxo, { mimeType: mime, videoBitsPerSecond: bitsPorSegundo });
   const pedacos = [];
   grabador.ondataavailable = (e) => { if (e && e.data && e.data.size) pedacos.push(e.data); };
   const parado = new Promise((resolve) => { grabador.onstop = () => resolve(); });
@@ -223,6 +227,10 @@ export async function renderizarVideo({
           largura, altura, p: t, movimento: p.movimento,
           conceito: plano.conceito, indice: k, total: planos.length,
         });
+        if (aoProgresso) {
+          const feitos = k + Math.min(1, t);
+          try { aoProgresso(+(feitos / planos.length).toFixed(3), { plano: k + 1, total: planos.length }); } catch { /* quem desenha não parte a gravação */ }
+        }
         await espera(1000 / 24);
       }
     }
