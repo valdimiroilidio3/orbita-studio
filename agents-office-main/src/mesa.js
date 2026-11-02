@@ -13,6 +13,9 @@ import { vistaIA, accaoIA, carregarIA, pararSeguimento, abrirRun } from './ia.js
 import { vistaPapel, carregarPapel, accaoPapel, ligarPapel, fecharCamera } from './papel.js';
 /* 1.48.0 · Cine: um lead, um projecto criativo (Master Prompt + peças) */
 import { vistaCine, carregarCine, accaoCine, ligarCine } from './cine.js';
+/* 1.54.2 · Briefing do projeto: briefing editável, Prompt Master e prompts de
+   imagem — as três coisas ligadas à lead e ao projeto. */
+import { vistaBriefing, carregarBriefing, accaoBriefing, ligarBriefing, podeSair } from './briefing.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -95,6 +98,8 @@ const S = {
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
   /* 1.18.0 · Control Center da IA */
   ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
+  /* 1.54.2 · briefing do projeto (briefing, Prompt Master, prompts de imagem) */
+  briefing: null,
 };
 const $ = sel => document.querySelector(sel);
 const main = () => $('#main');
@@ -367,7 +372,12 @@ async function boot(full = true) {
       await loadCommon();
     }
     if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
-    if (S.route.name === 'projeto' && S.route.id) await loadProjeto(S.route.id);
+    if (S.route.name === 'projeto' && S.route.id) {
+      await loadProjeto(S.route.id);
+      /* o briefing vive no projeto: lê-se com ele, e uma falha aqui não tapa a
+         página (a vista do briefing mostra a razão e um botão para tentar) */
+      await carregarBriefing(apiMesa, S.route.id).catch(() => null);
+    }
     if (S.route.name === 'tarefas') await loadTarefas();
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
@@ -806,10 +816,10 @@ function viewLead() {
       ${projetoDoLead
         ? `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="tag ${PROJ_TAG[projetoDoLead.status]}">${esc(PROJ_LABEL[projetoDoLead.status] || projetoDoLead.status)}</span></div>
             <p class="hint" style="margin-top:0">${esc(projetoDoLead.name)}</p>
-            <div class="acts" style="margin-top:var(--s3)"><a class="btn primary small" href="#/projeto/${esc(projetoDoLead.id)}">Abrir projeto</a></div></div>`
+            <div class="acts" style="margin-top:var(--s3)"><a class="btn primary small" href="#/projeto/${esc(projetoDoLead.id)}">Abrir briefing e projeto</a></div></div>`
         : `<div class="card"><div class="sec-h"><h3>Projeto</h3><span class="count">ainda não existe</span></div>
-            <p class="hint" style="margin-top:0">Um projeto nasce desta oportunidade: o briefing é escrito com o que já se sabe e o código é gerado a partir dele. Um negócio, um projeto.</p>
-            <div class="acts" style="margin-top:var(--s3)"><button class="btn primary small" data-act="criar-projeto" data-id="${esc(l.id)}">Criar projeto</button></div></div>`}
+            <p class="hint" style="margin-top:0">Iniciar o projeto abre o briefing já preenchido com o que a ficha desta lead sustenta. Depois: Prompt Master, prompts de imagem e o código — um negócio, um projeto.</p>
+            <div class="acts" style="margin-top:var(--s3)"><button class="btn primary small" data-act="criar-projeto" data-id="${esc(l.id)}">Iniciar projeto</button></div></div>`}
       ${leadHistory()}
       ${next.length ? `<div class="card"><div class="sec-h"><h3>Funil</h3><span class="count">sem saltos</span></div>
         <div class="acts" style="margin-top:0">${next.map(s => `<button class="btn ghost small" data-act="estado" data-id="${esc(l.id)}" data-status="${s}">Marcar ${esc(statusLabel[s])}</button>`).join('')}</div>
@@ -866,6 +876,15 @@ function qaReport(qa) {
     ${qa.navegador ? `<div class="hint">Testes de navegador: ${qa.navegador.executado ? 'correram' : 'não correram'} — ${esc(qa.navegador.motivo)}</div>` : ''}`;
 }
 
+/* 1.54.2 · o briefing vive dentro do projeto: uma aba para o briefing editável,
+   outra para o Prompt Master, outra para os prompts de imagem. */
+function briefingDoProjeto(p) {
+  if (!S.briefing || S.briefing.projetoId !== p.id) {
+    return `<div class="card" style="margin-top:var(--s4)"><div class="skeleton">a abrir o briefing…</div></div>`;
+  }
+  return vistaBriefing(S, { projeto: p });
+}
+
 function viewProjetos() {
   const list = S.projetos;
   const r = S.projetosResumo || {};
@@ -905,18 +924,19 @@ function viewProjeto() {
       <div class="head-acts"><span class="tag ${PROJ_TAG[p.status] || ''}">${esc(PROJ_LABEL[p.status] || p.status)}</span></div>
     </div>
     ${pipeline(p)}
+    ${briefingDoProjeto(p)}
     <div class="card" style="margin-top:var(--s4)">
-      <div class="sec-h"><h3>Briefing</h3><span class="count">${esc(p.kind)} · ${esc(p.stack)}</span></div>
-      <p class="hint" style="margin-top:0">${esc(p.brief || 'Sem briefing escrito. Edita o projeto para acrescentar objetivos.')}</p>
-      ${p.goals.length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
-      ${p.acceptance.length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
+      <div class="sec-h"><h3>Construção</h3><span class="count">${esc(p.kind || 'landing')} · código, qualidade e entrega</span></div>
+      <p class="hint" style="margin-top:0">${esc(p.brief || 'O código nasce do briefing guardado: gera-se a partir do que está escrito e confirmado, não do que se imagina.')}</p>
+      ${(p.goals || []).length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
+      ${(p.acceptance || []).length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
       <div class="acts" style="margin-top:var(--s4)">
         ${podeGerar && may('write') ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
         ${podeQa && may('write') ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
         ${podeAprovar && may('approve') ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
         ${podeEntregar && qa?.passed && may('approve') ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
         ${p.preview_url ? `<a class="btn ghost" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
-        ${d.files.length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
+        ${(d.files || []).length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
       </div>
       <div class="hint" id="leadNote">${p.status === 'rascunho' ? 'O primeiro passo escreve os ficheiros no disco — nada é publicado.' : 'A entrega só passa com QA aprovado e ficheiros iguais aos auditados.'}</div>
     </div>
@@ -924,18 +944,18 @@ function viewProjeto() {
       <div class="card">
         <div class="sec-h"><h3>Qualidade</h3><span class="count">${qa ? esc(hhmm(qa.at)) + ' · ' + esc(when(qa.at)) : 'nunca correu'}</span></div>
         ${qaReport(qa)}
-        ${d.changes?.length ? `<div class="hint bad">Ficheiros alterados depois do QA: ${d.changes.map(c => esc(c.file)).join(', ')}. Corre o QA outra vez.</div>` : ''}
+        ${(d.changes || []).length ? `<div class="hint bad">Ficheiros alterados depois do QA: ${d.changes.map(c => esc(c.file)).join(', ')}. Corre o QA outra vez.</div>` : ''}
       </div>
       <div class="card">
-        <div class="sec-h"><h3>Ficheiros</h3><span class="count">${d.files.length}</span></div>
-        ${d.files.length ? `<table><tbody>${d.files.map(f => `<tr><td>${esc(f.file)}${f.changed ? ' <span class="tag perdido">alterado</span>' : ''}</td><td class="n">${(f.size / 1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`
+        <div class="sec-h"><h3>Ficheiros</h3><span class="count">${(d.files || []).length}</span></div>
+        ${(d.files || []).length ? `<table><tbody>${d.files.map(f => `<tr><td>${esc(f.file)}${f.changed ? ' <span class="tag perdido">alterado</span>' : ''}</td><td class="n">${(f.size / 1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`
           : '<div class="hint">Ainda não há ficheiros. Gera o código para os escrever.</div>'}
       </div>
     </div>
     <div class="cards2" style="margin-top:var(--s4)">
       <div class="card">
         <div class="sec-h"><h3>Entregas</h3><span class="count">preview · Vercel · GitHub</span></div>
-        ${d.deliveries.length ? `<table><tbody>${d.deliveries.map(x => `<tr><td>${esc(x.target)}</td><td><span class="tag ${x.status === 'concluido' ? 'respondeu' : 'perdido'}">${esc(x.status)}</span></td><td class="n">${esc(when(x.at))}</td></tr>`).join('')}</tbody></table>`
+        ${(d.deliveries || []).length ? `<table><tbody>${d.deliveries.map(x => `<tr><td>${esc(x.target)}</td><td><span class="tag ${x.status === 'concluido' ? 'respondeu' : 'perdido'}">${esc(x.status)}</span></td><td class="n">${esc(when(x.at))}</td></tr>`).join('')}</tbody></table>`
           : '<div class="hint">Nada entregue ainda.</div>'}
         <div class="acts" style="margin-top:var(--s3)">
           <button class="btn ghost small" data-act="entregar-vercel">Vercel</button>
@@ -944,8 +964,8 @@ function viewProjeto() {
         <div class="hint">Vercel e GitHub só avançam com credenciais no .env — e uma recusa diz exactamente o que falta.</div>
       </div>
       <div class="card">
-        <div class="sec-h"><h3>Histórico</h3><span class="count">${d.events.length}</span></div>
-        <ul class="feed">${d.events.slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
+        <div class="sec-h"><h3>Histórico</h3><span class="count">${(d.events || []).length}</span></div>
+        <ul class="feed">${(d.events || []).slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
       </div>
     </div>
   </div>`;
@@ -1329,6 +1349,8 @@ async function act(name, el, ev) {
   if (String(name).startsWith('papel-') && await accaoPapel(name, el, apiMesa)) return;
   /* 1.48.0 · cine: escrever o plano, gerar, aprovar, apagar */
   if (String(name).startsWith('cine-') && await accaoCine(name, el, apiMesa)) return;
+  /* 1.54.2 · briefing: abas, gravar, rascunho da IA, Prompt Master, imagens */
+  if (String(name).startsWith('bf-') && await accaoBriefing(name, el, apiMesa)) return;
   const note = () => $('#leadNote');
   const setNote = (msg, bad) => { const n = note(); if (n) { n.textContent = msg; n.classList.toggle('bad', !!bad); } else toast(msg, bad); };
   try {
@@ -1645,8 +1667,12 @@ async function act(name, el, ev) {
 
     if (name === 'criar-projeto') {
       const leadId = S.lead?.id || id;
+      /* 1.54.2 · «iniciar projeto»: cria o projeto e ABRE o briefing, com o que a
+         ficha da lead sustenta. Se o projeto já existir, abre-se esse — uma lead,
+         um projeto. O rascunho da IA é um pedido à parte (o projeto não espera
+         por um modelo para ficar acessível). */
       const r = await call(`/ops/leads/${encodeURIComponent(leadId)}/projeto`, 'POST', { kind: 'landing' });
-      toast('Projeto criado a partir do lead.');
+      toast(r.existente ? 'Este lead já tinha projeto — abri o que existe.' : 'Projeto iniciado a partir do lead.');
       await boot(false);
       location.hash = `#/projeto/${r.projeto.id}`;
       return;
@@ -1894,7 +1920,15 @@ function start() {
     if (e.key === 'Escape') document.querySelectorAll('details[open]').forEach(d => d.removeAttribute('open'));
   });
   window.addEventListener('hashchange', async () => {
-    S.route = parseHash();
+    const destino = parseHash();
+    /* 1.54.2 · alterações no briefing por gravar pedem confirmação antes de
+       serem substituídas por outra página (o texto escrito vive no estado, por
+       isso um repintar não o perde — sair da página sim) */
+    if (!podeSair(apiMesa, destino)) {
+      if (S.briefing?.projetoId) location.hash = `#/projeto/${encodeURIComponent(S.briefing.projetoId)}`;
+      return;
+    }
+    S.route = destino;
     S.pick = null;
     if (S.route.name !== 'ia') pararSeguimento();
     if (S.route.name !== 'papel') fecharCamera();
@@ -1913,6 +1947,7 @@ function start() {
   ligarImportacao();
   ligarPapel(apiMesa, { rota: () => S.route.name });
   ligarCine(apiMesa, { rota: () => S.route.name });
+  ligarBriefing(apiMesa);
   boot(true);
 }
 

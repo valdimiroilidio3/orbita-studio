@@ -485,8 +485,14 @@ Todos devolvem JSON `{ ok, … }`. Os erros trazem uma frase em português.
 | GET | `/api/ops/leads?limit=&status=` | A lista, ordenada por nota |
 | GET | `/api/ops/leads/:id` | Um lead com o dossiê e as mensagens dele (a página de aprovação) |
 | GET/POST | `/api/ops/projetos` | Projetos / criar |
-| POST | `/api/ops/leads/:id/projeto` | Criar o projeto de um lead |
+| POST | `/api/ops/leads/:id/projeto` | Iniciar o projeto de um lead — **uma lead, um projeto**: se já existir, abre-se esse (200); `{novo:true}` cria outro |
 | GET | `/api/ops/projetos/:id` | Projeto com ficheiros, QA, entregas e histórico |
+| GET/PUT | `/api/ops/projetos/:id/briefing` | O briefing do projeto (15 campos, com a origem de cada um) / gravar — `409` se `base` já não for o hash actual |
+| POST | `/api/ops/projetos/:id/briefing/rascunho` | A IA escreve o que falta no briefing; `502` com o motivo quando não responde |
+| POST | `/api/ops/projetos/:id/briefing/restaurar` | Repor uma versão anterior (a actual fica no histórico) |
+| GET | `/api/ops/projetos/:id/briefing/versoes` | As versões anteriores do Prompt Master e dos prompts de imagem |
+| POST | `/api/ops/projetos/:id/master` | O Prompt Master do briefing **guardado** (IA ou regras, com `via` e `motivo`) |
+| POST | `/api/ops/projetos/:id/imagens` | Os prompts de imagem (4 finalidades) — **não** gera imagens |
 | POST | `/api/ops/projetos/:id/gerar` · `/qa` · `/aprovar` · `/entregar` | O pipeline |
 | GET | `/api/ops/projetos/:id/zip` | Os ficheiros em ZIP |
 | GET/POST | `/api/ops/tarefas` | Tarefas / criar (`correr: true` executa já) |

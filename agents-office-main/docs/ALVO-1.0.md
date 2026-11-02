@@ -48,6 +48,7 @@ deploy READY → uma linha honesta na conversa.
 | ID | Frente | Mata hoje | Versão | Impacto | Esforço |
 |---|---|---|---|---|---|
 | **A1** | A Porta (auth real, papéis, sessões) | qualquer visitante é dono | 1.54 | 🔴 crítico | 2 ciclos |
+| **A1.1** | Briefing do projeto (briefing, Prompt Master, prompts de imagem) | projeto sem sítio onde começar | **1.54.2 ✅** | 🟠 alto | feito |
 | **A2** | Dinheiro verdadeiro (custo por chamada) | `/ops/saldo` diz custo `0` | 1.55 | 🔴 alto | 1 ciclo |
 | **A3** | Fatura (número, IVA, PDF, envio) | receita à mão, sem documento | 1.56 | 🟠 alto | 1–2 ciclos |
 | **A4** | Primeiro cliente (onboarding, CSV, checklist) | não há «começar do zero» | 1.57 | 🟠 alto | 1 ciclo |
@@ -62,6 +63,11 @@ deploy READY → uma linha honesta na conversa.
 
 **Regra de ouro:** A1 **fecha** antes de qualquer frente nova. Um item de A8–A11
 que apareça pelo caminho não salta a fila — entra numa vaga, com o seu ID.
+
+**A1.1** é a excepção que o dono autorizou, e está escrita para não haver dúvida:
+a 2 nov 2026 pediu o briefing do projeto (briefing editável, Prompt Master e
+prompts de imagem) **antes** do A2. Entrou na série 1.54 (1.54.2) para não mexer
+na numeração das outras frentes: **o A2 continua a ser a 1.55**.
 
 ---
 
@@ -147,6 +153,32 @@ com cookie válido → 200; membro a `DELETE /ops/leads/x` → **403**; 6 tentat
 erradas → 429; e todos os 764 testes verdes **mais** os novos.
 
 ---
+
+### A1.1 · Briefing do projeto — `1.54.2` ✅ **FEITO** (2 nov 2026)
+
+**Pedido do dono:** *«ao iniciar um projeto a partir de uma lead, permitir que o
+usuário gere e edite um briefing, crie um Prompt Master personalizado e obtenha
+prompts de imagem relacionados ao projeto»*.
+
+**O que passou a ser verdade:** «Iniciar projeto» no lead cria **um** projeto por
+lead (o segundo só a pedido explícito) e abre o briefing com o que a ficha
+sustenta; 15 campos editáveis com a origem de cada um («da lead», «sugerido pela
+IA», «escrito por ti», «não informado»); rascunho da IA validado que só preenche
+vazios; gravação com 409 contra escrita por cima de outra pessoa; **Prompt
+Master** gerado a partir do briefing guardado, pela IA quando há motor e por
+regras (com o motivo) quando não há; quatro **prompts de imagem** com finalidade,
+lugar, composição, direção de arte, formato e restrições, incluindo a nota de que
+a imagem de equipa **não é** a equipa real; histórico que preserva versões e
+permite repor; aviso de «desactualizado» quando o briefing muda; `403` para um
+`leitor` — verificado no servidor.
+
+**O que continua a não ser:** não se geram imagens nem vídeo nesta etapa, não há
+editor rico, e o arquivo é a linha jsonb `orbita_ai_config` chave `briefing`
+(partilhada com o Cine), sem migração nova.
+
+**Prova:** 825 testes (`node --test`, 28 novos em `briefing.test.mjs`), build da
+mesa e o percurso em jsdom sobre o bundle real (abas, origens, gravação, aviso de
+desactualizado). Detalhe em `BRIEFING.md`.
 
 ### A2 · Dinheiro verdadeiro — `1.55.0` 🔴
 
@@ -342,7 +374,9 @@ Sem estas cinco respostas, A1, A2, A5 e A10 avançam na mesma. As outras esperam
 A 1.54.0 fecha a produção **até existir uma conta**. Depois do deploy:
 
 1. Aplicar as migrações (`/api/setup?token=…` aplica todas, ou uma a uma com
-   `&so=orbita_1_54_0.sql` e `&so=orbita_1_54_1.sql`).
+   `&so=orbita_1_54_0.sql` e `&so=orbita_1_54_1.sql`). A 1.54.2 **não traz
+   ficheiro SQL**: o briefing vive em `orbita_ai_config`, que vem do
+   `orbita_ia.sql` — se o Cine abre, o briefing também.
 2. Abrir `/app` → o ecrã diz «Criar a primeira conta».
 3. Preencher nome, email, palavra-passe (12+) e **colar o `SETUP_TOKEN`** no
    campo que apareceu.

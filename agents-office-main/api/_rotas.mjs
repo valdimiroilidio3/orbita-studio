@@ -886,15 +886,48 @@ export async function responder(repo, {
       return { status: 200, corpo: { ok: true, lead: atualizado } };
     }
   }
+  /* 1.54.2 · «iniciar projeto» a partir de uma lead.
+     Uma lead, um projeto: se já existir, ABRE-SE o que existe em vez de criar
+     outro ao lado (era o que acontecia, e ficavam dois projetos para o mesmo
+     negócio). Para criar mesmo um segundo, o cliente diz `novo: true`.
+     O briefing nasce aqui, com o que a ficha da lead sustenta — sem chamar a
+     IA neste pedido: a geração é um pedido próprio (`/briefing/rascunho`), para
+     o projeto ficar acessível mesmo quando o modelo demora ou não responde. */
   if (seg[0] === 'ops' && seg[1] === 'leads' && seg.length === 4 && seg[3] === 'projeto' && m === 'POST') {
     const lead = await repo.leads.byId(seg[2]);
     if (!lead) throw falha(404, 'lead não encontrado');
+    const bf = await import('./_briefing.mjs');
+    const existentes = await repo.projetos.list().catch(() => []);
+    const jaTem = existentes.find((p) => p.lead_id === lead.id) || null;
+    if (jaTem && corpo?.novo !== true) {
+      const aberto = await bf.abrirRegisto(repo, { projeto: jaTem, lead });
+      if (aberto.ok && aberto.criado) {
+        /* projeto anterior a esta versão: o briefing nasce agora, só com os
+           factos da ficha (nenhum texto de ninguém é tocado) */
+        await bf.gravarRegisto(repo, aberto.arquivo, aberto.registo);
+        await repo.atividade.add('briefing', `briefing aberto com o que a ficha de «${lead.name}» sustenta`).catch(() => null);
+      }
+      return { status: 200, corpo: {
+        projeto: jaTem, existente: true,
+        briefing: aberto.ok ? bf.vistaDoRegisto(aberto.registo, { projeto: jaTem }) : null,
+      } };
+    }
     const projeto = await repo.projetos.insert({
       name: lead.name, client: lead.name, niche: lead.category, city: lead.city,
       kind: limpo(corpo?.kind) || 'landing', status: 'rascunho', lead_id: lead.id,
     });
     await repo.atividade.add('projeto', `projeto «${projeto.name}» a partir do lead`);
-    return { status: 201, corpo: { projeto } };
+    const aberto = await bf.abrirRegisto(repo, { projeto, lead });
+    if (aberto.ok) {
+      const guardado = await bf.gravarRegisto(repo, aberto.arquivo, aberto.registo);
+      if (guardado.ok) {
+        await repo.atividade.add('briefing', `briefing de «${projeto.name}» começou com os dados da lead`).catch(() => null);
+      }
+    }
+    return { status: 201, corpo: {
+      projeto, existente: false,
+      briefing: aberto.ok ? bf.vistaDoRegisto(aberto.registo, { projeto }) : null,
+    } };
   }
 
   /* ---- mensagens ---- */
@@ -1040,6 +1073,127 @@ export async function responder(repo, {
     const projeto = await repo.projetos.byId(seg[2]);
     if (!projeto) throw falha(404, 'projeto não encontrado');
     return { status: 200, corpo: { project: projeto, qa: null, files: [], historico: [] } };
+  }
+
+  /* ---- 1.54.2 · O BRIEFING, O PROMPT MASTER E OS PROMPTS DE IMAGEM --------
+     O motor está em `api/_briefing.mjs`: campos, origens, validação, o prompt
+     por regras, a IA e o arquivo. Aqui decide-se o contrato HTTP:
+
+       GET    /ops/projetos/:id/briefing            o que está guardado
+       PUT    /ops/projetos/:id/briefing            grava (aceita POST também)
+       POST   /ops/projetos/:id/briefing/rascunho   a IA escreve o que falta
+       POST   /ops/projetos/:id/briefing/restaurar  repõe uma versão anterior
+       GET    /ops/projetos/:id/briefing/versoes    o histórico, com o texto
+       POST   /ops/projetos/:id/master              Prompt Master do briefing guardado
+       POST   /ops/projetos/:id/imagens             prompts de imagem do briefing
+
+     Quem escreve precisa de papel de operador ou acima: são POST/PUT, e a porta
+     (`_porta.mjs`) exige `write` a toda a escrita antes de chegar aqui — um
+     `leitor` recebe 403 e há um teste que o prova. As leituras exigem só sessão.
+     ---------------------------------------------------------------------- */
+  const projetoComLead = async (id) => {
+    const projeto = await repo.projetos.byId(id);
+    if (!projeto) throw falha(404, 'projeto não encontrado');
+    const lead = projeto.lead_id ? await repo.leads.byId(projeto.lead_id).catch(() => null) : null;
+    return { projeto, lead };
+  };
+  /* o motor só se constrói quando é preciso: uma leitura do briefing não gasta
+     uma linha de IA nem uma chave */
+  const motorDoBriefing = async () => {
+    try {
+      const { criarMotor } = await import('./_ia/motor.mjs');
+      return criarMotor({ repo, env, fetchImpl });
+    } catch { return null; }
+  };
+  const porQuem = () => (conta ? (conta.nome || conta.email || 'conta') : 'mesa');
+
+  /* só os formatos que existem: o resto cai no 404 do fim, em vez de responder
+     «projeto não encontrado» a um pedido que nem era sobre um projeto */
+  const rotaDoBriefing = seg[0] === 'ops' && seg[1] === 'projetos' && !!seg[2] && seg[3] === 'briefing'
+    && ((seg.length === 4 && ['GET', 'PUT', 'POST'].includes(m))
+      || (seg.length === 5 && ((seg[4] === 'rascunho' && m === 'POST')
+        || (seg[4] === 'restaurar' && m === 'POST')
+        || (seg[4] === 'versoes' && m === 'GET'))));
+
+  if (rotaDoBriefing) {
+    const bf = await import('./_briefing.mjs');
+    const { projeto, lead } = await projetoComLead(seg[2]);
+
+    if (seg.length === 4 && m === 'GET') {
+      const r = await bf.lerBriefing(repo, { projeto, lead });
+      return { status: r.ok ? 200 : 400, corpo: {
+        ok: r.ok, ...(r.vista || { erro: r.erro }),
+        campos: bf.CAMPOS, etiquetas: bf.ETIQUETA_ORIGEM,
+        ...(r.semRegisto ? { semRegisto: true } : {}),
+      } };
+    }
+
+    if (seg.length === 4 && (m === 'PUT' || m === 'POST')) {
+      const r = await bf.guardarBriefing(repo, {
+        projeto, lead, valores: corpo?.valores, origens: corpo?.origens,
+        base: limpo(corpo?.base) || null, por: porQuem(),
+      });
+      if (!r.ok) {
+        if (r.codigo === 'conflito') return { status: 409, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+        throw falha(503, r.erro || 'a base não guardou o briefing');
+      }
+      await repo.atividade.add('briefing', `briefing de «${projeto.name}» gravado`).catch(() => null);
+      return { status: 200, corpo: { ok: true, ...r.vista, ignorados: r.ignorados, campos: bf.CAMPOS, etiquetas: bf.ETIQUETA_ORIGEM } };
+    }
+
+    if (seg.length === 5 && seg[4] === 'rascunho' && m === 'POST') {
+      const motor = await motorDoBriefing();
+      const r = await bf.rascunharBriefing(repo, {
+        projeto, lead, motor, substituir: corpo?.substituir === true, por: porQuem(),
+      });
+      if (r.ok) {
+        await repo.atividade.add('briefing', `rascunho do briefing de «${projeto.name}» pedido à IA`).catch(() => null);
+        return { status: 200, corpo: { ok: true, via: r.via, modelo: r.modelo || null, ...r.vista, motivo: r.motivo || null, campos: bf.CAMPOS } };
+      }
+      /* a IA não respondeu: o projeto continua acessível e diz-se porquê */
+      return { status: r.codigo === 'completo' ? 409 : 502, corpo: {
+        ok: false, codigo: r.codigo, erro: r.erro, dica: r.dica,
+        ...(r.vista || {}), campos: bf.CAMPOS,
+      } };
+    }
+
+    if (seg.length === 5 && seg[4] === 'restaurar' && m === 'POST') {
+      const r = await bf.restaurarVersao(repo, {
+        projeto, lead, tipo: limpo(corpo?.tipo) === 'imagens' ? 'imagens' : 'master',
+        id: limpo(corpo?.id), por: porQuem(),
+      });
+      if (!r.ok) return { status: 404, corpo: { ok: false, codigo: r.codigo, erro: r.erro } };
+      await repo.atividade.add('briefing', `versão anterior reposta em «${projeto.name}»`).catch(() => null);
+      return { status: 200, corpo: { ok: true, ...r.vista } };
+    }
+
+    if (seg.length === 5 && seg[4] === 'versoes' && m === 'GET') {
+      const arquivo = await bf.lerArquivo(repo);
+      const registo = arquivo.projetos[projeto.id] || null;
+      return { status: 200, corpo: {
+        ok: true,
+        master: (registo?.masterHistorico || []).map((v) => ({ id: v.id, versao: v.versao, via: v.via, criado: v.criado, substituidoEm: v.substituidoEm || null, texto: v.texto })),
+        imagens: (registo?.imagensHistorico || []).map((v) => ({ id: v.id, via: v.via, criado: v.criado, substituidoEm: v.substituidoEm || null, prompts: v.prompts })),
+        nota: 'as versões anteriores nunca são apagadas por uma regeneração; ficam aqui até ao tecto do arquivo',
+      } };
+    }
+  }
+
+  if (seg[0] === 'ops' && seg[1] === 'projetos' && seg[2] && (seg[3] === 'master' || seg[3] === 'imagens') && seg.length === 4 && m === 'POST') {
+    const bf = await import('./_briefing.mjs');
+    const { projeto, lead } = await projetoComLead(seg[2]);
+    if (seg[3] === 'master') {
+      const motor = await motorDoBriefing();
+      const r = await bf.gerarMaster(repo, { projeto, lead, motor, instrucao: limpo(corpo?.instrucao), por: porQuem() });
+      if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+      await repo.atividade.add('briefing', `Prompt Master de «${projeto.name}» ${r.via === 'ia' ? 'escrito pela IA' : 'montado por regras'}`).catch(() => null);
+      return { status: 200, corpo: { ok: true, master: r.master, via: r.via, motivo: r.motivo, ...r.vista } };
+    }
+    const motor = await motorDoBriefing();
+    const r = await bf.gerarImagens(repo, { projeto, lead, motor, por: porQuem() });
+    if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, ...(r.vista || {}) } };
+    await repo.atividade.add('briefing', `prompts de imagem de «${projeto.name}» ${r.via === 'ia' ? 'escritos pela IA' : 'montados por regras'}`).catch(() => null);
+    return { status: 200, corpo: { ok: true, imagens: r.imagens, via: r.via, motivo: r.motivo, ...r.vista } };
   }
 
   /* ---- tarefas: criam-se E correm (1.53.2) ----------------------------------
