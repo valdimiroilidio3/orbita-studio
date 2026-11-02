@@ -1511,11 +1511,44 @@ export async function responder(repo, {
   if (caminhoLimpo === '/ops/clientes') return { status: 200, corpo: { clientes: [{ id: 'base', nome: 'Órbita Studio', ativo: true }], activo: { id: 'base', nome: 'Órbita Studio' } } };
   if (caminhoLimpo === '/ops/pipeline') return { status: 200, corpo: resumoPipeline(await repo.leads.list(500)) };
   if (caminhoLimpo === '/ops/atividade') return { status: 200, corpo: { eventos: await repo.atividade.list(Number(qs.get('limit')) || 20) } };
+  /* 1.57.2 · o estado das salas, medido nas tarefas.
+     Antes esta rota escrevia `running: 0` à mão: a página dizia sempre que nada
+     estava a correr, mesmo com uma tarefa a correr. Agora cada sala leva as
+     contagens reais (a correr, na fila, à espera de ti, feitas, falhadas), a
+     última tarefa e a última falha — e o resumo soma o que existe. */
   if (caminhoLimpo === '/ops/agentes') {
-    const tarefas = await repo.tarefas.list(100);
+    /* uma linha vazia no repositório não é uma tarefa: filtra-se antes de contar */
+    const tarefas = (await repo.tarefas.list(200)).filter(Boolean);
+    const quando = (t) => (t ? (t.finished_at || t.created_at || null) : null);
+    const porSala = new Map(DEPARTAMENTOS.map((d) => [d.id, []]));
+    for (const t of tarefas) {
+      const id = DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando';
+      if (porSala.has(id)) porSala.get(id).push(t);
+    }
+    const departamentos = DEPARTAMENTOS.map((d) => {
+      const lista = porSala.get(d.id) || [];
+      const n = (estado) => lista.filter((t) => t.state === estado).length;
+      const ordenadas = lista.slice().sort((a, b) => String(quando(b) || '').localeCompare(String(quando(a) || '')));
+      const falha = ordenadas.find((t) => t.state === 'failed') || null;
+      return {
+        ...d, name: d.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '', agentes: [],
+        /* as contagens, nos dois nomes (o antigo e o novo) para nada partir */
+        running: n('running'), awaiting: n('awaiting_approval'), queued: n('queued'),
+        succeeded: n('succeeded'), failed: n('failed'),
+        tarefas: { aCorrer: n('running'), naFila: n('queued'), porAprovar: n('awaiting_approval'), concluidas: n('succeeded'), falhadas: n('failed'), total: lista.length },
+        ultima: quando(ordenadas[0]) || null,
+        last: ordenadas[0] ? `${TIPOS_TAREFA[ordenadas[0].kind]?.label || ordenadas[0].kind} · ${String(quando(ordenadas[0]) || '').slice(0, 16).replace('T', ' ')}` : '',
+        ultimaFalha: falha ? { error: falha.error || '', quando: quando(falha) } : null,
+      };
+    });
+    const conta = (estado) => tarefas.filter((t) => t.state === estado).length;
     return { status: 200, corpo: {
-      departamentos: DEPARTAMENTOS.map((x) => ({ ...x, agentes: [] })),
-      resumo: { total: tarefas.length, running: 0, awaiting: tarefas.filter((t) => t.state === 'awaiting_approval').length },
+      departamentos,
+      resumo: {
+        total: tarefas.length,
+        running: conta('running'), awaiting: conta('awaiting_approval'),
+        queued: conta('queued'), succeeded: conta('succeeded'), failed: conta('failed'),
+      },
       modo: 'base',
     } };
   }
