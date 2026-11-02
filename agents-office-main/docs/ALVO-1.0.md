@@ -292,7 +292,7 @@ deixa buracos na numeração.
   a fatura existe com número e totais; o PDF e o email dizem que precisam da base.
 - **Base** — `supabase/orbita_1_56_0.sql`, idempotente, na ordem de `_esquema.mjs`.
 
-**Prova.** `faturas.test.mjs` (11): NIF válido e inválido; IVA 23/13/6/0 com o
+**Prova.** `faturas.test.mjs` (12): NIF válido e inválido; IVA 23/13/6/0 com o
 caso de 1 cêntimo; a sequência 2026/0001…0004 com a 0002 anulada pelo meio (o
 número 2 não volta); dois pedidos em corrida (o segundo leva o 3); as nove
 recusas; o PDF com `%PDF-1.4`, xref certa, NIF, base, IVA e total no texto; o
@@ -300,7 +300,9 @@ emitente em falta escrito no documento; o resumo a abater a nota de crédito; as
 rotas de ponta a ponta (emitir → listar → enviar sem chave → enviar com Resend
 falso e o PDF em anexo → anular → 409 ao repetir); e o saldo com o faturado à
 parte da receita. `faturas-ui.test.mjs` (2) faz o mesmo no `dist/mesa.html` num
-DOM, incluindo o formulário que recusa um documento incompleto.
+DOM, incluindo o formulário que recusa um documento incompleto. O décimo
+segundo teste prova o caso da migração por aplicar: a emissão falha com o nome do
+SQL e a página diz isso, em vez de renumerar a partir do 1.
 
 **O que continua a não ser:** pagamento (Stripe), séries por tipo de documento,
 IVA por linha (é por fatura), envio por WhatsApp e assinatura digital. E o PDF
