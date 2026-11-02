@@ -21,6 +21,9 @@ import { vistaBriefing, carregarBriefing, accaoBriefing, ligarBriefing, podeSair
 import { vistaMedia, carregarMedia, accaoMedia, ligarMedia, iniciarCiclo, pararCiclo } from './media.js';
 /* 1.54.4 · um 404 de rota ≠ um 404 de recurso (a decisão é pura e está testada) */
 import { decidirResposta } from './respostas.js';
+/* 1.57.0 · o progresso do projeto e o resumo da lead: contas puras, testáveis
+   sem DOM (ver `src/projeto.js`) */
+import { progresso as progressoDoProjeto, resumoLead, iniciais, ABAS_PROJETO, abaValida } from './projeto.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -70,6 +73,7 @@ const IC = {
   tick: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5 5L20 6.5"/></svg>',
   chev: '<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
   lupa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+  copiar: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M15 5.5A2.5 2.5 0 0 0 12.5 3H6a3 3 0 0 0-3 3v6.5A2.5 2.5 0 0 0 5.5 15"/></svg>',
   pastas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3l2 2.5h8A2.5 2.5 0 0 1 21 10v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17Z"/></svg>',
   tarefa: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 5.6 8 8.5 5"/><path d="M4 12.5 5.6 14l2.9-3"/><path d="M4 18.5 5.6 20l2.9-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/></svg>',
   ia: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M9.5 15.5h5"/></svg>',
@@ -79,7 +83,7 @@ const IC = {
 };
 
 const NAV = [
-  { k: 'hoje', label: 'Hoje', ic: 'hoje' },
+  { k: 'hoje', label: 'Visão geral', ic: 'hoje' },
   { k: 'leads', label: 'Leads', ic: 'leads' },
   { k: 'papel', label: 'Papel', ic: 'papel' },
   { k: 'cine', label: 'Cine', ic: 'cine' },
@@ -99,6 +103,8 @@ const S = {
   lead: null, leadMessages: [], dossier: null, editandoLead: false,
   pick: null, filter: 'todos', q: '', busy: false, error: '', adding: false,
   projetos: [], projeto: null, tipos: [], token: null, addingProject: false,
+  /* 1.57.0 · a aba aberta na página do projeto (Briefing por omissão) */
+  projetoTab: 'briefing',
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
@@ -274,6 +280,14 @@ function paintSideFoot() {
       <div class="mrow"><span class="lbl">Leads com nota alta</span><b>${alta} / ${total || 0}</b></div>
       <div class="bar"><i style="width:${pct}%"></i></div>
       <small>Custos de API (30 d): ${s ? money(s.custos?.apiCentimos) : '—'}</small>
+    </div>
+    <!-- 1.57.0 · o cartão do fundo: só números que existem (o custo das APIs na
+         janela de 30 dias). Não há aqui planos nem quotas inventadas. -->
+    <div class="plan">
+      <div class="plan-t">Consumo de APIs</div>
+      <div class="plan-v">${s ? money(s.custos?.apiCentimos) : '—'}</div>
+      <div class="plan-s">últimos 30 dias · ${clientes.length ? esc(clientes.find(c => c.id === activo)?.nome || 'sem espaço') : 'sem espaço de cliente'}</div>
+      <a class="plan-b" href="#/saldo">Ver consumo ${IC.chev}</a>
     </div>`;
   const sel = $('#espaco');
   if (sel) sel.addEventListener('change', async () => {
@@ -361,7 +375,11 @@ async function loadPipeline() {
 async function loadProjeto(id) {
   try {
     const r = await call(`/ops/projetos/${encodeURIComponent(id)}`);
-    S.projeto = r;
+    /* 1.57.0 · o painel lateral mostra a lead; sem ela, diz que não há. A
+       falha desta leitura não pode derrubar o projeto inteiro. */
+    const leadId = r?.project?.lead_id;
+    const lead = leadId ? await call(`/ops/leads/${encodeURIComponent(leadId)}`).then((x) => x?.lead || null).catch(() => null) : null;
+    S.projeto = { ...r, lead };
     S.projetoErro = null;
   } catch (e) {
     /* 404 = este projeto não existe (ou foi apagado). Dizer a verdade, com um
@@ -566,16 +584,63 @@ function filteredLeads() {
   });
 }
 
-function searchBar() {
+/* 1.57.0 · a pesquisa global mudou-se para o cabeçalho (é a mesma em todas as
+   páginas). Aqui só se desenha a lista de resultados; a caixa e o atalho Ctrl+K
+   vivem no cabeçalho. */
+function resultadosBusca() {
   const r = S.results;
-  return `<div style="margin-bottom:var(--s4)">
-    <div class="search">${IC.lupa}<input id="gq" type="search" placeholder="Pesquisar leads, projetos e tarefas…" value="${esc(S.gq || '')}" aria-label="pesquisa global"></div>
-    ${r ? (r.total ? `<div class="card" style="margin-top:var(--s2)">
-      ${r.grupos.map(g => `<div class="sec-h" style="margin-top:0"><h3 style="font-size:var(--t-s)">${esc(g.label)}</h3><span class="count">${g.itens.length}</span></div>
-        <ul class="feed">${g.itens.map(i => `<li><a href="${esc(i.route)}" style="text-decoration:none;color:inherit"><b>${esc(i.name || i.title || i.id)}</b> <span class="count">${esc(i.city || i.client || i.kindLabel || '')}</span></a></li>`).join('')}</ul>`).join('')}
-    </div>` : `<div class="hint" style="margin-top:var(--s2)">Nada encontrado para «${esc(r.query)}» — nem leads, nem projetos, nem tarefas.</div>`)
-      : (r === null && S.gq ? '' : '')}
+  if (!S.gq || String(S.gq).trim().length < 2) return '';
+  if (!r) return `<div class="hres" hidden></div>`;
+  if (!r.total) return `<div class="hres"><div class="vazio">Nada encontrado para «${esc(r.query)}» — nem leads, nem projetos, nem tarefas.</div></div>`;
+  return `<div class="hres" role="listbox" aria-label="resultados da pesquisa">
+    ${r.grupos.filter(g => g.itens.length).map(g => `<div class="sec-h"><h3>${esc(g.label)}</h3><span class="count">${g.itens.length}</span></div>
+      ${g.itens.map(i => `<a role="option" href="${esc(i.route)}"><b>${esc(i.name || i.title || i.id)}</b>${(i.city || i.client || i.kindLabel) ? ` <span class="count">${esc(i.city || i.client || i.kindLabel)}</span>` : ''}</a>`).join('')}`).join('')}
   </div>`;
+}
+
+/* 1.57.0 · o cabeçalho da aplicação: pesquisa global com Ctrl+K, o número de
+   decisões à espera, e a conta (nome, espaço, papel) com menu. Tudo com dados
+   que existem — sem avatar inventado, sem quota fictícia. */
+function paintHead() {
+  const el = $('#appHead');
+  if (!el) return;
+  /* no ecrã de entrada não há cabeçalho: não há sessão para pesquisar nem conta
+     para mostrar (uma barra vazia de 76 px só roubava altura ao formulário) */
+  el.hidden = !!S.needLogin;
+  if (S.needLogin) { el.innerHTML = ''; return; }
+  const user = S.eu?.user || null;
+  const nome = user?.name || user?.email || 'modo local';
+  const org = S.clientes?.activo?.nome || user?.organizacao || (S.eu?.local ? 'neste browser' : 'Órbita');
+  const espera = S.today?.decidir?.length || 0;
+  el.innerHTML = `
+    <div class="hsearch">
+      ${IC.lupa}
+      <input id="gq" type="search" placeholder="Pesquisar leads, projetos e tarefas…" value="${esc(S.gq || '')}"
+        aria-label="pesquisa global" aria-keyshortcuts="Control+K" autocomplete="off">
+      <kbd>Ctrl K</kbd>
+      ${resultadosBusca()}
+    </div>
+    <div class="hacts">
+      <a class="hicon" href="#/hoje" title="${espera ? espera + ' decisão(ões) à espera' : 'sem decisões à espera'}" aria-label="${espera ? espera + ' decisões à espera' : 'nenhuma decisão à espera'}">
+        ${IC.hoje}${espera ? `<span class="ndot">${espera > 9 ? '9+' : espera}</span>` : ''}
+      </a>
+      <details class="hmenu huser">
+        <summary aria-label="conta de ${esc(nome)}">
+          <span class="av">${esc(iniciais(nome))}</span>
+          <span class="who"><b>${esc(nome)}</b><span>${esc(org)}</span></span>
+          ${IC.chev}
+        </summary>
+        <div class="hmenu-l">
+          <div style="padding:8px 10px 6px"><b style="font-size:13.5px;display:block">${esc(nome)}</b><span class="count">${esc(papelLabel() || 'sem papel definido')}</span></div>
+          <div class="sep"></div>
+          ${may('admin') ? '<a href="#/contas">Contas e acessos</a>' : ''}
+          <a href="#/saldo">Consumo e saldo</a>
+          <a href="#/faturas">Faturas</a>
+          <div class="sep"></div>
+          <button type="button" data-act="sair">Sair</button>
+        </div>
+      </details>
+    </div>`;
 }
 
 function pipelineCard() {
@@ -647,7 +712,6 @@ function viewLeads() {
     })}
     ${procurarLeadsForm()}
     ${S.adding ? novoLeadForm() : ''}
-    ${searchBar()}
     ${pipelineCard()}
     <div class="tools">
       <div class="search">${IC.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho…" value="${esc(S.q)}" aria-label="procurar leads"></div>
@@ -920,7 +984,6 @@ function viewProjetos() {
       right: `${may('write') ? '<button class="btn small ghost" data-act="novo-projeto">+ Projeto</button>' : ''}${stopPill()}`,
     })}
     ${S.addingProject ? novoProjetoForm() : ''}
-    ${searchBar()}
     ${list.length ? `<div class="rows">${list.map(p => `<button class="row" data-act="ver-projeto" data-id="${esc(p.id)}" style="grid-template-columns:1fr 150px 130px">
       <div><div class="nm">${esc(p.name)}</div><div class="mt">${esc([p.client, p.city].filter(Boolean).join(' · ') || 'sem cliente')} · ${esc((S.tipos.find(t => t.id === p.kind) || {}).label || p.kind)}</div></div>
       <div class="cell hide-m">${esc(when(p.updated_at))}</div>
@@ -930,6 +993,75 @@ function viewProjetos() {
         <p>Um projeto nasce de um lead: abre um, escolhe «Criar projeto» e o briefing é escrito com o que já se sabe. A partir daí: código gerado, auditoria de qualidade, aprovação e entrega.</p>
         <div class="acts" style="justify-content:center"><a class="btn primary" href="#/leads" style="max-width:240px">Ver os leads</a></div></div>`}
   </div>`;
+}
+
+/* ---------------- 1.57.0 · a página do projeto ----------------
+   O que mudou, e porquê: o projeto tinha o briefing, a mídia e a construção
+   empilhados na mesma coluna, cada um com a sua cabeça e as suas abas. A pessoa
+   não sabia onde estava. Agora há um sítio só, com o caminho (Projetos / nome),
+   as quatro abas e duas colunas: o trabalho à esquerda, o acompanhamento à
+   direita.
+
+   Regras que se mantêm: nada é inventado (o progresso vem das etapas reais, o
+   resumo da lead dos campos guardados), nenhuma acção existente desapareceu
+   (construção, QA, ficheiros, entregas e histórico continuam abaixo, com os
+   mesmos `data-act`), e o formulário do briefing continua a ser o mesmo —
+   `vistaBriefing` só deixou de desenhar as abas dele, que passaram a ser as
+   desta página. */
+
+const ICONE_ABA = {
+  briefing: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h5M10 17h5"/></svg>',
+  master: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z"/><path d="M18 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"/></svg>',
+  imagens: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 16 4.5-4.5 3.5 3.5 3-3L20 16"/><circle cx="9" cy="9.5" r="1.3"/></svg>',
+  video: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 11 5-3v8l-5-3z"/></svg>',
+};
+
+/** «26 out 2026» — a data que se lê numa etapa concluída. */
+function dataCurta(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }).replace('.', '');
+}
+
+function cartaoProgresso(pr) {
+  const rotulo = { feito: 'Concluído', activo: 'Em andamento', pendente: 'Pendente' };
+  return `<section class="card pj-panel" aria-labelledby="pjProgresso">
+    <header class="pj-panel-h">
+      <h2 id="pjProgresso">Progresso do projeto</h2>
+      <span class="pj-pct" title="média das cinco etapas: concluída = 1, em andamento = 0,5">${pr.pct}%</span>
+    </header>
+    <div class="pj-bar" role="progressbar" aria-valuenow="${pr.pct}" aria-valuemin="0" aria-valuemax="100" aria-label="progresso do projeto"><i style="width:${pr.pct}%"></i></div>
+    <ol class="pj-steps">
+      ${pr.etapas.map((e) => `<li class="pj-step ${e.estado}">
+        <span class="pj-dot" aria-hidden="true">${e.estado === 'feito' ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>' : ''}</span>
+        <span class="pj-step-nm">${esc(e.nome)}</span>
+        <span class="pj-step-st">${esc(e.nota || rotulo[e.estado])}</span>
+      </li>`).join('')}
+    </ol>
+    <p class="pj-note">${pr.feitas} de ${pr.etapas.length} etapas concluídas. A percentagem sai do estado real de cada uma — não é um número escrito à mão.</p>
+  </section>`;
+}
+
+function cartaoLead(lead) {
+  return `<section class="card pj-panel" aria-labelledby="pjLead">
+    <header class="pj-panel-h">
+      <h2 id="pjLead">Resumo da lead</h2>
+      ${lead.existe && lead.linhas.some((l) => l.chave === 'contacto' && l.copiavel)
+        ? `<button class="pj-copy" data-act="proj-copiar" data-valor="${esc(lead.linhas.find((l) => l.chave === 'contacto').valor)}" aria-label="copiar o contacto da lead" title="copiar o contacto">${IC.copiar}</button>`
+        : ''}
+    </header>
+    ${lead.existe ? `<dl class="pj-lead">
+      ${lead.linhas.map((l) => `<div class="pj-lead-row">
+        <dt>${esc(l.label)}</dt>
+        <dd>${l.href
+          ? `<a href="${esc(l.href)}">${esc(l.valor)}</a>`
+          : esc(l.valor)}</dd>
+      </div>`).join('')}
+    </dl>
+    <a class="pj-lead-link" href="#/lead/${esc(S.projeto?.lead?.id || '')}">Abrir a lead completa</a>`
+      : `<p class="pj-note">${esc(lead.nota)}</p>`}
+  </section>`;
 }
 
 function viewProjeto() {
@@ -950,65 +1082,117 @@ function viewProjeto() {
       </div>
     </div>`;
   }
+
   const p = d.project;
   const qa = d.qa;
+  const aba = abaValida(S.projetoTab);
   const podeGerar = ['rascunho', 'gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'].includes(p.status);
   const podeQa = ['gerado', 'qa_falhou', 'qa_passou', 'aprovado', 'entregue'].includes(p.status);
   const podeAprovar = p.status === 'qa_passou' && qa?.passed;
   const podeEntregar = ['aprovado', 'entregue'].includes(p.status) && qa?.passed;
-  return `<div class="wrap">
-    <div style="margin-bottom:var(--s3)"><a href="#/projetos" class="btn quiet small">‹ Projetos</a></div>
-    <div class="head">
-      <div><h1 style="font-size:34px">${esc(p.name)}</h1>
-        <div class="sub">${esc([p.client, p.city, p.niche].filter(Boolean).join(' · '))}${p.lead_id ? ` · <a href="#/lead/${esc(p.lead_id)}" style="text-decoration:underline">ver o lead</a>` : ''}</div></div>
-      <div class="head-acts"><span class="tag ${PROJ_TAG[p.status] || ''}">${esc(PROJ_LABEL[p.status] || p.status)}</span></div>
-    </div>
-    ${pipeline(p)}
-    ${briefingDoProjeto(p)}
-    ${vistaMedia(S, { projeto: p })}
-    <div class="card" style="margin-top:var(--s4)">
-      <div class="sec-h"><h3>Construção</h3><span class="count">${esc(p.kind || 'landing')} · código, qualidade e entrega</span></div>
-      <p class="hint" style="margin-top:0">${esc(p.brief || 'O código nasce do briefing guardado: gera-se a partir do que está escrito e confirmado, não do que se imagina.')}</p>
-      ${(p.goals || []).length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
-      ${(p.acceptance || []).length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
-      <div class="acts" style="margin-top:var(--s4)">
-        ${podeGerar && may('write') ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
-        ${podeQa && may('write') ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
-        ${podeAprovar && may('approve') ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
-        ${podeEntregar && qa?.passed && may('approve') ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
-        ${p.preview_url ? `<a class="btn ghost" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
-        ${(d.files || []).length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
-      </div>
-      <div class="hint" id="leadNote">${p.status === 'rascunho' ? 'O primeiro passo escreve os ficheiros no disco — nada é publicado.' : 'A entrega só passa com QA aprovado e ficheiros iguais aos auditados.'}</div>
-    </div>
-    <div class="cards2" style="margin-top:var(--s4)">
-      <div class="card">
-        <div class="sec-h"><h3>Qualidade</h3><span class="count">${qa ? esc(hhmm(qa.at)) + ' · ' + esc(when(qa.at)) : 'nunca correu'}</span></div>
-        ${qaReport(qa)}
-        ${(d.changes || []).length ? `<div class="hint bad">Ficheiros alterados depois do QA: ${d.changes.map(c => esc(c.file)).join(', ')}. Corre o QA outra vez.</div>` : ''}
-      </div>
-      <div class="card">
-        <div class="sec-h"><h3>Ficheiros</h3><span class="count">${(d.files || []).length}</span></div>
-        ${(d.files || []).length ? `<table><tbody>${d.files.map(f => `<tr><td>${esc(f.file)}${f.changed ? ' <span class="tag perdido">alterado</span>' : ''}</td><td class="n">${(f.size / 1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`
-          : '<div class="hint">Ainda não há ficheiros. Gera o código para os escrever.</div>'}
-      </div>
-    </div>
-    <div class="cards2" style="margin-top:var(--s4)">
-      <div class="card">
-        <div class="sec-h"><h3>Entregas</h3><span class="count">preview · Vercel · GitHub</span></div>
-        ${(d.deliveries || []).length ? `<table><tbody>${d.deliveries.map(x => `<tr><td>${esc(x.target)}</td><td><span class="tag ${x.status === 'concluido' ? 'respondeu' : 'perdido'}">${esc(x.status)}</span></td><td class="n">${esc(when(x.at))}</td></tr>`).join('')}</tbody></table>`
-          : '<div class="hint">Nada entregue ainda.</div>'}
-        <div class="acts" style="margin-top:var(--s3)">
-          <button class="btn ghost small" data-act="entregar-vercel">Vercel</button>
-          <button class="btn ghost small" data-act="entregar-github">GitHub</button>
+
+  /* as abas «Imagens» e «Vídeo» são a mesma vista com o tipo fixo: quem manda o
+     tipo é `vistaMedia` (tipoFixo), não uma escrita lateral a meio do render */
+
+  const pr = progressoDoProjeto({ projeto: p, briefing: S.briefing, media: S.media });
+  const lead = resumoLead(d.lead || null);
+  const sub = [p.niche, p.client, p.city].filter(Boolean).join(' · ') || 'sem nicho nem cliente';
+  const painel = aba === 'briefing'
+    ? vistaBriefing(S, { projeto: p, painel: 'briefing', semAbas: true })
+    : aba === 'master'
+      ? vistaBriefing(S, { projeto: p, painel: 'master', semAbas: true })
+      : vistaMedia(S, { projeto: p, tipoFixo: aba === 'imagens' ? 'imagem' : 'video', semCabeca: true });
+
+  return `<div class="wrap pj">
+    <nav class="pj-crumbs" aria-label="caminho">
+      <a href="#/projetos">Projetos</a><span aria-hidden="true">/</span><span aria-current="page">${esc(p.name)}</span>
+    </nav>
+
+    <header class="pj-head">
+      <div class="pj-id">
+        <span class="pj-ic" aria-hidden="true">${esc(iniciais(p.name))}</span>
+        <div class="pj-id-t">
+          <h1>${esc(p.name)}</h1>
+          <p class="pj-sub">${esc(sub)}</p>
         </div>
-        <div class="hint">Vercel e GitHub só avançam com credenciais no .env — e uma recusa diz exactamente o que falta.</div>
       </div>
-      <div class="card">
-        <div class="sec-h"><h3>Histórico</h3><span class="count">${(d.events || []).length}</span></div>
-        <ul class="feed">${(d.events || []).slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
+      <div class="pj-head-acts">
+        <span class="tag pj-status ${PROJ_TAG[p.status] || ''}">${esc(PROJ_LABEL[p.status] || p.status)}</span>
+        <details class="pj-menu">
+          <summary class="pj-menu-b" aria-label="mais acções do projeto" title="mais acções">⋯</summary>
+          <div class="pj-menu-l" role="menu">
+            ${p.lead_id ? `<a role="menuitem" href="#/lead/${esc(p.lead_id)}">Ver a lead</a>` : ''}
+            ${p.preview_url ? `<a role="menuitem" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
+            ${(d.files || []).length ? `<button role="menuitem" data-act="zip">Obter .zip</button>` : ''}
+            <button role="menuitem" data-act="reload">Actualizar</button>
+          </div>
+        </details>
+      </div>
+    </header>
+
+    <div class="pj-tabs-bar">
+      <div class="pj-tabs" role="tablist" aria-label="secções do projeto">
+        ${ABAS_PROJETO.map((a) => `<button class="pj-tab${aba === a.id ? ' on' : ''}" role="tab" aria-selected="${aba === a.id}" id="pjTab-${a.id}" aria-controls="pjPainel" data-act="proj-tab" data-tab="${a.id}">
+          ${ICONE_ABA[a.id] || ''}<span>${esc(a.label)}</span>
+        </button>`).join('')}
       </div>
     </div>
+
+    <div class="pj-grid" id="pjPainel" role="tabpanel" aria-labelledby="pjTab-${aba}">
+      <div class="pj-main">
+        ${painel || `<div class="card"><div class="skeleton">a abrir esta secção…</div></div>`}
+      </div>
+      <aside class="pj-aside">
+        ${cartaoProgresso(pr)}
+        ${cartaoLead(lead)}
+      </aside>
+    </div>
+
+    <section class="pj-more" aria-label="construção e entrega">
+      <div class="card" style="margin-top:var(--s4)">
+        <div class="sec-h"><h3>Construção</h3><span class="count">${esc(p.kind || 'landing')} · código, qualidade e entrega</span></div>
+        <p class="hint" style="margin-top:0">${esc(p.brief || 'O código nasce do briefing guardado: gera-se a partir do que está escrito e confirmado, não do que se imagina.')}</p>
+        ${(p.goals || []).length ? `<div class="why-grid" style="margin-top:var(--s3)">${p.goals.slice(0, 6).map(g => `<div class="why"><span class="tick">${IC.tick}</span><span>${esc(g)}</span></div>`).join('')}</div>` : ''}
+        ${(p.acceptance || []).length ? `<div class="hint">Critérios de aceitação: ${p.acceptance.map(a => esc(a)).join(' · ')}</div>` : ''}
+        <div class="acts" style="margin-top:var(--s4)">
+          ${podeGerar && may('write') ? `<button class="btn ${p.status === 'rascunho' ? 'primary' : 'ghost'}" data-act="gerar">${p.status === 'rascunho' ? 'Gerar o código' : 'Gerar outra vez'}</button>` : ''}
+          ${podeQa && may('write') ? `<button class="btn ${['gerado', 'qa_falhou'].includes(p.status) ? 'primary' : 'ghost'}" data-act="qa">Correr o QA</button>` : ''}
+          ${podeAprovar && may('approve') ? `<button class="btn primary" data-act="aprovar-projeto"${qa?.passed ? '' : ' disabled'}>Aprovar</button>` : ''}
+          ${podeEntregar && qa?.passed && may('approve') ? `<button class="btn ${p.status === 'aprovado' ? 'primary' : 'ghost'}" data-act="entregar">Entregar preview</button>` : ''}
+          ${p.preview_url ? `<a class="btn ghost" href="${esc(p.preview_url)}" target="_blank" rel="noopener">Abrir preview</a>` : ''}
+          ${(d.files || []).length ? `<button class="btn ghost" data-act="zip">Obter .zip</button>` : ''}
+        </div>
+        <div class="hint" id="leadNote">${p.status === 'rascunho' ? 'O primeiro passo escreve os ficheiros no disco — nada é publicado.' : 'A entrega só passa com QA aprovado e ficheiros iguais aos auditados.'}</div>
+      </div>
+      <div class="cards2" style="margin-top:var(--s4)">
+        <div class="card">
+          <div class="sec-h"><h3>Qualidade</h3><span class="count">${qa ? esc(hhmm(qa.at)) + ' · ' + esc(when(qa.at)) : 'nunca correu'}</span></div>
+          ${qaReport(qa)}
+          ${(d.changes || []).length ? `<div class="hint bad">Ficheiros alterados depois do QA: ${d.changes.map(c => esc(c.file)).join(', ')}. Corre o QA outra vez.</div>` : ''}
+        </div>
+        <div class="card">
+          <div class="sec-h"><h3>Ficheiros</h3><span class="count">${(d.files || []).length}</span></div>
+          ${(d.files || []).length ? `<table><tbody>${d.files.map(f => `<tr><td>${esc(f.file)}${f.changed ? ' <span class="tag perdido">alterado</span>' : ''}</td><td class="n">${(f.size / 1024).toFixed(1)} KB</td></tr>`).join('')}</tbody></table>`
+            : '<div class="hint">Ainda não há ficheiros. Gera o código para os escrever.</div>'}
+        </div>
+      </div>
+      <div class="cards2" style="margin-top:var(--s4)">
+        <div class="card">
+          <div class="sec-h"><h3>Entregas</h3><span class="count">preview · Vercel · GitHub</span></div>
+          ${(d.deliveries || []).length ? `<table><tbody>${d.deliveries.map(x => `<tr><td>${esc(x.target)}</td><td><span class="tag ${x.status === 'concluido' ? 'respondeu' : 'perdido'}">${esc(x.status)}</span></td><td class="n">${esc(when(x.at))}</td></tr>`).join('')}</tbody></table>`
+            : '<div class="hint">Nada entregue ainda.</div>'}
+          <div class="acts" style="margin-top:var(--s3)">
+            <button class="btn ghost small" data-act="entregar-vercel">Vercel</button>
+            <button class="btn ghost small" data-act="entregar-github">GitHub</button>
+          </div>
+          <div class="hint">Vercel e GitHub só avançam com credenciais no .env — e uma recusa diz exactamente o que falta.</div>
+        </div>
+        <div class="card">
+          <div class="sec-h"><h3>Histórico</h3><span class="count">${(d.events || []).length}</span></div>
+          <ul class="feed">${(d.events || []).slice(0, 12).map(e => `<li><b>${esc(e.action.replace('projeto.', ''))}</b> <span class="count">${esc(when(e.at))}</span><br><span class="hint">${esc(String(e.detail || '').slice(0, 120))}</span></li>`).join('') || '<li class="hint">Sem eventos.</li>'}</ul>
+        </div>
+      </div>
+    </section>
   </div>`;
 }
 
@@ -1556,6 +1740,7 @@ function avisoLocal() {
 }
 
 function paint() {
+  paintHead();
   if (S.needLogin) { main().innerHTML = viewLogin(); return; }
   if (S.modoLocal) { main().innerHTML = avisoLocal(); }
   /* a barra de estado: verde quando a base responde, âmbar quando se trabalha neste browser */
@@ -1907,7 +2092,25 @@ async function act(name, el, ev) {
       return;
     }
     if (name === 'novo-projeto') { S.addingProject = !S.addingProject; paint(); return; }
-    if (name === 'ver-projeto') { location.hash = `#/projeto/${encodeURIComponent(id)}`; return; }
+    if (name === 'ver-projeto') { S.projetoTab = 'briefing'; location.hash = `#/projeto/${encodeURIComponent(id)}`; return; }
+    /* 1.57.0 · as abas do projeto: só mudam o que se vê, o estado do projeto
+       (briefing por gravar, mídia em curso) atravessa-as inteiro */
+    if (name === 'proj-tab') {
+      S.projetoTab = abaValida(el?.dataset?.tab);
+      paint();
+      return;
+    }
+    if (name === 'proj-copiar') {
+      const valor = el?.dataset?.valor || '';
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(valor);
+        else throw new Error('sem área de transferência');
+        toast(`Copiado: ${valor}`);
+      } catch {
+        toast(`Não consegui copiar. O contacto é ${valor}`, true);
+      }
+      return;
+    }
 
     if (name === 'guardar-projeto') {
       const v = k => String($('#' + k)?.value || '').trim();
@@ -2259,6 +2462,23 @@ function start() {
     paintNav();
     paint();
     main().scrollIntoView({ block: 'start' });
+  });
+  /* 1.57.0 · Ctrl+K / Cmd+K põe o cursor na pesquisa global; Esc tira-o */
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+      const i = document.querySelector('#gq');
+      if (i) { e.preventDefault(); i.focus(); i.select?.(); }
+    }
+    if (e.key === 'Escape') {
+      const i = document.activeElement;
+      if (i && i.id === 'gq') { i.blur(); S.gq = ''; S.results = null; paint(); }
+    }
+  });
+  /* os menus de detalhes fecham-se ao clicar fora deles */
+  document.addEventListener('click', e => {
+    document.querySelectorAll('details[open]').forEach(d => {
+      if ((d.classList.contains('pj-menu') || d.classList.contains('hmenu')) && !d.contains(e.target)) d.open = false;
+    });
   });
   ligarImportacao();
   ligarPapel(apiMesa, { rota: () => S.route.name });
