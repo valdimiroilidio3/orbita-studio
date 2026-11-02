@@ -78,7 +78,10 @@
   .brand .mark::after {
     content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--blue);
   }
-  .nav { display: flex; flex-direction: column; gap: 2px; }
+  /* 12 secções não cabem em todos os ecrãs: é a lista que desliza, não a página
+     — o cartão do fundo fica sempre à vista */
+  .nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+  .nav a > span:first-of-type { flex: 1; }
   .nav a {
     display: flex; align-items: center; gap: 10px; min-height: 40px;
     padding: 9px var(--s3); border-radius: var(--r-s);
