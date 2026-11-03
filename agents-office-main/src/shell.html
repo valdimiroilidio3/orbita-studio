@@ -189,6 +189,31 @@
   #zoomCtl button.wide:hover { color: var(--cream); }
   #zoomCtl button.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
   #zoomCtl button.cam:hover { box-shadow: 0 10px 26px rgba(21,20,20,.18); }
+  /* =========================================================================
+     1.62.0 · O ESCRITÓRIO É OPCIONAL (telemóvel)
+
+     O botão da planta diz o que VAI FAZER («Ver em 3D» quando estás na planta),
+     porque um botão que só tem um ícone obriga a experimentar. O aviso do modo
+     aparece 4 s e sai — não fica a tapar a cena.
+     ========================================================================= */
+  #zoomCtl button[data-modo="planta"] { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  .modo-oficina {
+    position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px);
+    max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px;
+    background: color-mix(in srgb, var(--ink) 92%, transparent); color: var(--cream);
+    border-radius: 14px; font-size: 13px; line-height: 1.4; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease);
+    z-index: 40;
+  }
+  .modo-oficina.on { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 640px) {
+    .modo-oficina { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); font-size: 12.5px; }
+    #zoomCtl button { width: 52px; height: 52px; }   /* alvo de dedo, não de rato */
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .modo-oficina { transition: none !important; transform: translate(-50%, 0); }
+  }
+
 
   /* dept badges — zoom-out layer */
   .badge {
@@ -3121,6 +3146,8 @@
 <canvas id="scene" role="img" aria-label="Escritório isométrico com seis salas em volta de um cérebro central e quarenta e sete agentes — arrasta no vazio para rodar a câmara" aria-describedby="sceneHelp"></canvas>
 <p id="sceneHelp" class="sr-only">Uma vista 3D de um escritório: seis salas à volta de um cérebro central, cada uma com o seu chão de vidro colorido e as suas secretárias com agentes. Tudo o que aqui se vê também está escrito em texto: prime a tecla L, ou a ligação «Saltar para a lista do escritório», para abrir a lista das salas e dos agentes e os percorrer com Tab e Enter.</p>
 <div id="hud"></div>
+<!-- 1.62.0 · o que a vista faz e onde está a outra: aparece ao trocar de vista -->
+<div id="modoOficina" class="modo-oficina" role="status" aria-live="polite"></div>
 <div id="topbar">
   <!-- 26 out 2026: a marca diz o que o produto é. Saiu o «BETA» e o «V1»: a etiqueta passa a
        ler-se «ÓRBITA AGENTES», e é estável — não muda quando o servidor fica ao vivo. -->

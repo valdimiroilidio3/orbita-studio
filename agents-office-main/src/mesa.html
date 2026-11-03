@@ -708,6 +708,62 @@
   }
 
   /* =========================================================================
+     1.62.0 · A FOLHA DE BUSCA (telemóvel)
+
+     Uma folha que sobe de baixo, com o campo no topo (onde o polegar chega
+     depois de rolar), resultados em cartões de 44 px e a criação de uma tarefa
+     a partir do resultado escolhido. No desktop nada disto aparece: lá há o
+     Ctrl K e a caixa do cabeçalho.
+     ========================================================================= */
+  .hbusca { display: none; }
+  @media (max-width: 820px) {
+    .hbusca { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center;
+      border-radius: 10px; color: var(--muted); background: transparent; border: 0; }
+    .hbusca:active { background: #F2F4F7; }
+    .hbusca .ic { width: 20px; height: 20px; }
+    .app-head .hsearch { display: none; }
+  }
+
+  .busca { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(18, 20, 24, .42); }
+  .busca[hidden] { display: none; }
+  .busca-painel { width: min(620px, 100%); max-height: 92dvh; display: flex; flex-direction: column;
+    background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -12px 40px rgba(18,20,24,.18);
+    padding-bottom: env(safe-area-inset-bottom, 0); }
+  @media (min-width: 821px) {
+    .busca { align-items: center; }
+    .busca-painel { border-radius: 18px; max-height: 80vh; }
+  }
+  .busca-topo { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--hair); }
+  .busca-topo h2 { font-size: 13px; font-weight: 650; color: var(--muted); margin: 0; flex: none; }
+  .busca-campo { position: relative; flex: 1; min-width: 0; }
+  .busca-campo .ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: var(--faint); }
+  .busca-campo input { width: 100%; height: 44px; border: 1px solid var(--hair); border-radius: 12px;
+    background: #F7F8FA; padding: 0 12px 0 36px; font: inherit; font-size: 16px; color: var(--ink); }
+  .busca-campo input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .busca-x { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--hair); background: var(--card);
+    font: inherit; font-size: 20px; line-height: 1; color: var(--muted); flex: none; }
+  .busca-corpo { overflow: auto; padding: 10px 14px 18px; -webkit-overflow-scrolling: touch; }
+  .busca-nota { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px; }
+  .busca-nota.bad { color: var(--risk, #b3261e); }
+  .busca-grupo { margin-bottom: 14px; }
+  .busca-grupo > h3 { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); margin: 0 0 6px; }
+  .busca-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 52px;
+    border: 1px solid var(--hair); border-radius: 12px; margin-bottom: 6px; background: var(--card); }
+  .busca-item a { flex: 1; min-width: 0; display: grid; gap: 1px; color: inherit; }
+  .busca-item b { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .busca-item span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .busca-item .btn { flex: none; min-height: 40px; }
+  .busca-recentes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .busca-recentes button { min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--hair);
+    background: #F7F8FA; font: inherit; font-size: 13.5px; color: var(--ink); }
+  .busca-rodape { display: flex; gap: 8px; padding: 8px 14px 12px; border-top: 1px solid var(--hair); }
+  .busca-rodape .btn { flex: 1; min-height: 46px; }
+  @media (prefers-reduced-motion: reduce) {
+    .busca-painel { animation: none !important; }
+  }
+
+  /* =========================================================================
      1.61.0 · EXECUÇÕES — a execução transparente
 
      O desenho serve uma pergunta de cada vez: em que estado está, o que fez, o
@@ -1497,6 +1553,9 @@
 <!-- 1.60.0 · a barra de uma mão: a primeira decisão à espera, com a acção
      principal ao alcance do polegar. Só aparece quando há algo para decidir. -->
 <div class="mobar" id="mobar" role="region" aria-label="decisões à espera" hidden></div>
+  <!-- 1.62.0 · a busca ao alcance do polegar: a mesma pesquisa do Ctrl K, numa
+       folha que se abre com um toque e devolve resultados em cartões. -->
+  <div class="busca" id="buscaSheet" role="dialog" aria-modal="true" aria-labelledby="buscaT" hidden></div>
 <nav class="tabbar" id="tabbar" aria-label="secções (telemóvel)"></nav>
 <!-- 1.37.0 · o X de voltar também no telemóvel: em ecrãs estreitos a barra lateral
      (onde ele vive) desaparece, e sem isto só se saía da mesa pelo endereço. -->

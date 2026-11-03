@@ -1,3 +1,56 @@
+## 1.62.0 — 3 nov 2026 · A BUSCA AO ALCANCE DO POLEGAR E O ESCRITÓRIO OPCIONAL
+
+Fecham-se os dois buracos que sobravam do pedido 6: no telemóvel não havia
+**pesquisa global** (só o `Ctrl K`, e um atalho de teclado não é uma porta num
+telefone) e o **escritório 3D** abria sempre, mesmo num ecrã de 5 polegadas.
+
+### A folha de busca (telemóvel)
+- Um botão de pesquisa no cabeçalho — **aparece só onde o campo do cabeçalho
+  está escondido**, e abre uma folha que sobe de baixo.
+- A mesma pesquisa do `/ops/pesquisa`, com os resultados em **cartões por grupo**
+  (leads, projetos, tarefas, mensagens), cada um a abrir a ficha.
+- **Criação rápida**: cada resultado com lead ou projeto oferece uma tarefa;
+  o tipo vem do verbo escrito («testa» → QA, «corrige» → código, «escreve» →
+  mensagem, «investigar» → investigação) e **diz porquê**. Uma tarefa criada a
+  partir da busca vai sempre **à espera da tua aprovação** — pesquisar não é
+  mandar.
+- Um resultado sem lead nem projeto **não** cria uma tarefa vazia: diz o que
+  falta.
+- **Recentes** guardados neste browser (sem sugestões inventadas), consultas
+  abaixo de duas letras não fazem pedido, e um erro da pesquisa aparece escrito
+  — nunca como «sem resultados».
+- `Ctrl K` continua igual no computador; no telemóvel passa a abrir a folha.
+
+### O escritório é opcional no telemóvel
+- No telefone abre-se na **planta 2D** (seis salas, estado real, sem WebGL); o
+  **3D fica no botão ao lado**, que passa a dizer **«Ver em 3D»** (e «Planta 2D»
+  quando já estás no 3D) — um botão diz o que vai fazer, não onde estás.
+- A escolha **fica guardada**: quem escolhe o 3D não volta a apanhar a planta.
+- `prefers-reduced-motion` abre na planta: quem pediu menos movimento não leva
+  com uma cena animada por omissão. No computador nada muda.
+- **Zoom com dois dedos** no 3D: a pinça aplica a razão das distâncias ao zoom
+  da câmara, com os mesmos limites e a dizer quando travou (conta pura em
+  `src/camera.js`, provada).
+- Alvos de toque de 52 px nos botões da câmara e um aviso de 4 s que explica
+  onde está a outra vista.
+
+### Um teste que apodrecia
+`crm-ui.test.mjs` tinha uma data fixa («2026-10-30», «atrasada há 3 dias») e
+passou a falhar no dia seguinte, porque a linha calcula o atraso com o relógio
+real. A data do fixture passou a ser relativa a hoje.
+
+### O que continua por fazer
+- **Prova visual no telemóvel: não feita.** Há testes de DOM sobre o bundle
+  publicado (folha de busca, cartões, recentes, criação de tarefa) e testes
+  puros do modo do escritório e da pinça — mas não houve telefone nem browser
+  real neste ambiente.
+- `scene.smoke.mjs` falha **antes e depois** desta versão (duas verificações de
+  cena: aviso de motor e número de malhas dos avatares). Não foi tocado.
+- As migrações `orbita_1_56_0`, `1_59_0`, `1_60_0` e `1_61_0` continuam à espera
+  de serem aplicadas na base.
+
+---
+
 ## 1.61.0 — 2 nov 2026 · EXECUÇÃO TRANSPARENTE
 
 O pedido: «quero ver o que o agente fez, com que dados, o que mudou — e poder

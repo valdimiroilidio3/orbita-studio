@@ -37,6 +37,7 @@ import { doorPlan } from './circulation.js';
 import {
   ANGULOS, AEREA, RAD_POR_PIXEL, direcaoDaCamara, rodar, inclinacaoValida,
   gestoDoScroll, gestoDoArrasto, etiquetaDoAngulo, proximoAngulo, INCLINACAO_BASE,
+  zoomDaPinca,   // 1.62.0: o zoom pelos dois dedos
 } from './camera.js';
 /* 1.58.0 · O ESCRITÓRIO COMO INTERFACE (2 nov 2026). Cada sala diz o seu estado real,
    os agentes activos têm um sinal discreto, clicar numa sala abre um painel contextual
@@ -47,6 +48,9 @@ import {
   initOficina, panoramaDaSala, panoramaHTML, estadoDaSala,
   estadoDoRetrato, indicadorDeAgente, ORDEM_SALAS,
 } from './oficina.js';
+/* 1.62.0 · o escritório é opcional no telemóvel: a planta abre primeiro e o 3D
+   fica a um botão. A decisão é pura e está provada em `escritorio.test.mjs`. */
+import { modoInicial, lerModo, gravarModo, proximoModo, rotuloDoBotao, fraseDoModo } from './escritorio-modo.js';
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -911,8 +915,26 @@ function algoSob(nx, ny) {
     || ray.intersectObjects(clickTargets, false).length > 0
     || ray.intersectObjects(mcp.sprites, false).length > 0;
 }
-let drag = null;
+/* 1.62.0 · DOIS DEDOS = ZOOM. Num telefone não há roda; a pinça aplica a razão
+   entre a distância dos dedos ao zoom da câmara (conta em `camera.js`, provada
+   em `camera.test.mjs`). Com dois dedos no ecrã, o arrasto de um dedo pára — o
+   gesto passa a ser um só. */
+const dedos = new Map();
+let pinca = null;
+const distanciaDe = () => {
+  const [a, b] = [...dedos.values()];
+  if (!a || !b) return 0;
+  return Math.hypot(a.x - b.x, a.y - b.y);
+};
 canvas.addEventListener('pointerdown', (e) => {
+  dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (dedos.size === 2) {
+    drag = null;                 // o arrasto de um dedo não continua por baixo da pinça
+    pinca = { dist: distanciaDe(), zoom: view.zoom };
+    canvas.classList.remove('girando');
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* sem captura */ }
+    return;
+  }
   const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;
   const vazio = !algoSob(nx, ny);
   drag = {
@@ -924,8 +946,23 @@ canvas.addEventListener('pointerdown', (e) => {
   if (drag.modo === 'rodar') { try { canvas.setPointerCapture(e.pointerId); } catch { /* sem captura */ } }
 });
 // o botão direito não abre o menu: é uma pega para rodar
+canvas.addEventListener('pointercancel', (e) => { dedos.delete(e.pointerId); if (dedos.size < 2) pinca = null; drag = null; });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('pointermove', (e) => {
+  if (dedos.has(e.pointerId)) dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinca && dedos.size >= 2) {
+    const d = distanciaDe();
+    const r = zoomDaPinca(pinca.zoom, pinca.dist, d);
+    if (r.aplicado) {
+      tween = null; view.arc = 0;
+      view.zoom = r.zoom;
+      applyCamera();
+      syncOverviewBtn();
+    }
+    pinca.dist = d || pinca.dist;
+    pinca.zoom = r.zoom;
+    return;
+  }
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -945,6 +982,8 @@ addEventListener('pointermove', (e) => {
   drag.x = e.clientX; drag.y = e.clientY;
 });
 addEventListener('pointerup', (e) => {
+  dedos.delete(e.pointerId);
+  if (dedos.size < 2) pinca = null;
   const wasDrag = drag && drag.moved;
   drag = null;
   canvas.classList.remove('girando');
@@ -981,7 +1020,7 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'p' || e.key === 'P') { if (tasks && tasks.calendar) tasks.calendar.toggle(); } // V3.2.1 (16 Sep 2026): the calendar
   else if (tasks && tasks.calendar && tasks.calendar.isOpen()) return; // the calendar ficou com elas own keys (← → W M T)
   else if (e.key === 'l' || e.key === 'L') { a11y.toggle(document.activeElement); } // 26 out 2026: a lista do escritório
-  else if (e.key === 'm' || e.key === 'M') oficina.alternar(); // 1.58.0: a planta 2D (trabalho intensivo)
+  else if (e.key === 'm' || e.key === 'M') alternarVista(); // 1.58.0/1.62.0: a planta 2D (trabalho intensivo)
   else if (e.key === 'g' || e.key === 'G') brain.toggle(); // V3.6: the full-screen Brain graph
   else if (e.key === 'b' || e.key === 'B') { if (tasks) tasks.toggle(); } // V3: the company-wide board
   else if (e.key === '+' || e.key === '=') zoomStep(1.5);
@@ -2373,7 +2412,63 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 /* ---------- 1.53.0 · A LOJA DE APPS (botão, tecla A, ou o endereço #apps) ---------- */
 const apps = createApps({ doc: document });
 document.getElementById('zApps')?.addEventListener('click', () => apps.toggle());
-document.getElementById('z2d')?.addEventListener('click', () => oficina.alternar()); // 1.58.0: a planta 2D
+/* ---------- 1.62.0 · A VISTA DO ESCRITÓRIO: 2D NO TELEMÓVEL, 3D A UM TOQUE ----------
+   O escritório é a marca, não pode ser o obstáculo: no telefone abre-se na planta
+   (leve, sem WebGL) e o 3D fica no mesmo botão. A escolha fica guardada — quem
+   disser «quero o 3D» não volta a apanhar a planta. */
+function armazemDoModo() {
+  try { return globalThis.localStorage || null; } catch { return null; }
+}
+const decisaoDoModo = (() => {
+  const perguntar = (q) => { try { return matchMedia(q).matches; } catch { return false; } };
+  const toque = perguntar('(pointer: coarse)') || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+  return modoInicial({
+    guardado: lerModo(armazemDoModo()),
+    toque,
+    estreito: perguntar('(max-width: 820px)'),
+    movimentoReduzido: perguntar('(prefers-reduced-motion: reduce)'),
+    semArmazem: !armazemDoModo(),
+  });
+})();
+let modoOficina = decisaoDoModo.modo;
+function syncModoBtn() {
+  const b = document.getElementById('z2d');
+  if (!b) return;
+  const r = rotuloDoBotao(modoOficina);
+  b.title = r.titulo;
+  b.setAttribute('aria-label', r.aria);
+  b.setAttribute('aria-pressed', modoOficina === 'planta' ? 'true' : 'false');
+  b.classList.toggle('on', modoOficina === 'planta');
+  b.dataset.modo = modoOficina;
+}
+function aplicarModo({ guardar = true } = {}) {
+  const aberta = oficina.estaAberto();
+  if (modoOficina === 'planta' && !aberta) oficina.abrir();
+  if (modoOficina === '3d' && aberta) oficina.fechar();
+  if (guardar) gravarModo(armazemDoModo(), modoOficina);
+  syncModoBtn();
+}
+function alternarVista() {
+  modoOficina = proximoModo(modoOficina);
+  aplicarModo();
+  /* a frase diz onde está a outra vista: um botão sem explicação é um mistério */
+  announceModo();
+}
+function announceModo() {
+  const hud = document.getElementById('modoOficina');
+  if (!hud) return;
+  hud.textContent = fraseDoModo(modoOficina);
+  hud.classList.add('on');
+  clearTimeout(announceModo._t);
+  announceModo._t = setTimeout(() => hud.classList.remove('on'), 4200);
+}
+document.getElementById('z2d')?.addEventListener('click', alternarVista);
+syncModoBtn();
+/* No arranque: se a vista é a planta, abre-se quando a cena já tem dados (senão
+   mostrava salas vazias por um instante). O 3D continua por trás, pronto. */
+setTimeout(() => {
+  if (modoOficina === 'planta') { oficina.abrir(); syncModoBtn(); }
+}, 900);
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;

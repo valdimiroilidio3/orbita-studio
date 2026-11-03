@@ -126,6 +126,30 @@ export const RAD_POR_PIXEL = 0.0042;
  *   · Alt, botão do meio ou direito → RODA (para quem já tem o hábito);
  *   · arrastar sobre uma secretária/agente → MOVE (o clique continua a abrir a ficha).
  */
+/**
+ * 1.62.0 · O ZOOM PELOS DOIS DEDOS.
+ * Num telefone não há roda. A pinça mede a distância entre dois dedos antes e
+ * depois e aplica a MESMA razão ao zoom — sem saltos, e nunca fora dos limites
+ * que a câmara já respeita (0,72 a 5,2). Devolve também `aplicado` e `motivo`,
+ * para a interface poder explicar-se (dizer «já está no máximo» é melhor do que
+ * não responder e parecer avariado).
+ */
+export function zoomDaPinca(zoom, antes, agora, { min = 0.72, max = 5.2 } = {}) {
+  const z = Number(zoom) || 1;
+  const a = Number(antes) || 0;
+  const b = Number(agora) || 0;
+  if (a <= 0 || b <= 0) return { zoom: z, aplicado: false, motivo: 'faltam os dois dedos' };
+  const razao = b / a;
+  if (!Number.isFinite(razao) || razao <= 0) return { zoom: z, aplicado: false, motivo: 'a distância não é um número' };
+  const bruto = z * razao;
+  const final = Math.min(max, Math.max(min, bruto));
+  if (Math.abs(final - z) < 1e-4) {
+    return { zoom: z, aplicado: false, motivo: bruto >= max ? 'já está no máximo' : bruto <= min ? 'já está no mínimo' : 'sem mudança' };
+  }
+  const motivo = bruto >= max ? 'já está no máximo' : bruto <= min ? 'já está no mínimo' : (razao > 1 ? 'aproximou' : 'afastou');
+  return { zoom: final, aplicado: true, motivo };
+}
+
 export function gestoDoArrasto({ altKey = false, botao = 0, vazio = false, shiftKey = false } = {}) {
   if (altKey || botao === 1 || botao === 2) return 'rodar';
   if (shiftKey) return 'mover';

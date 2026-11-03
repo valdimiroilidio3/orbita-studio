@@ -25,7 +25,11 @@ const LEAD_OK = {
   website: 'https://clinicadomondego.pt', website_estado: 'ok',
   website_verificado_em: new Date(AGORA - 2 * DIA).toISOString(), website_motivo: 'respondeu 200 · 418 ms',
   source: 'pesquisa', fonte_url: 'https://exemplo.pt/lista', status: 'contactado', score: 61,
-  proxima_acao: 'Ligar a marcar reunião', proxima_acao_em: '2026-10-30', qualificacao: 88,
+  /* 1.62.0 · a data é relativa a HOJE: fixa («2026-10-30») o teste passava na
+     véspera e falhava no dia seguinte — a linha calcula o atraso com o relógio
+     real, não com o `AGORA` do fixture. */
+  proxima_acao: 'Ligar a marcar reunião',
+  proxima_acao_em: new Date(Date.now() - 3 * DIA).toISOString().slice(0, 10), qualificacao: 88,
 };
 const LEAD_DUP = {
   id: 'l2', name: 'Café Central', category: 'Restauração', city: 'Coimbra',
