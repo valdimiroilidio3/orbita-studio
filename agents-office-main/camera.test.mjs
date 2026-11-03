@@ -180,3 +180,34 @@ test('um clique sem arrastar continua a abrir a ficha (a rotação não come o c
   assert.match(up[0], /if \(wasDrag\) return;/, 'um arrasto não abre nada…');
   assert.match(up[0], /openAgent\(clicked/, '…e um clique sem arrasto continua a abrir o agente');
 });
+
+/* 1.62.0 · o zoom pelos dois dedos (telemóvel) */
+import { zoomDaPinca } from './src/camera.js';
+
+test('pinca: abrir os dedos aproxima, fechar afasta', () => {
+  const abrir = zoomDaPinca(1.2, 100, 160);
+  assert.equal(abrir.aplicado, true);
+  assert.ok(Math.abs(abrir.zoom - 1.92) < 1e-6);
+  assert.equal(abrir.motivo, 'aproximou');
+  const fechar = zoomDaPinca(1.2, 160, 100);
+  assert.ok(Math.abs(fechar.zoom - 0.75) < 1e-6);
+  assert.equal(fechar.motivo, 'afastou');
+});
+
+test('pinca: respeita os limites da câmara e diz porquê quando travou', () => {
+  const max = zoomDaPinca(5.0, 100, 400);
+  assert.equal(max.zoom, 5.2);
+  assert.equal(max.motivo, 'já está no máximo');
+  const min = zoomDaPinca(0.8, 400, 50);
+  assert.equal(min.zoom, 0.72);
+  assert.equal(min.motivo, 'já está no mínimo');
+  const travado = zoomDaPinca(5.2, 100, 200);
+  assert.equal(travado.aplicado, false, 'quando já está no máximo não se diz que mudou');
+});
+
+test('pinca: sem dois dedos não se inventa zoom', () => {
+  assert.equal(zoomDaPinca(1.5, 0, 120).aplicado, false);
+  assert.equal(zoomDaPinca(1.5, 120, 0).aplicado, false);
+  assert.match(zoomDaPinca(1.5, 0, 120).motivo, /dois dedos/);
+  assert.equal(zoomDaPinca(1.5, NaN, 120).aplicado, false);
+});

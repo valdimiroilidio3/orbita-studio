@@ -56,6 +56,15 @@ import {
   resumoDoRun, filaDeExecucao, avisosDaLista, quandoDe, ORDEM_ESTADOS,
 } from './execucao.js';
 
+/* 1.62.0 · A BUSCA AO ALCANCE DO POLEGAR (2 nov 2026). O `Ctrl K` não é uma
+   porta num telefone: há uma folha de busca a um toque, com os resultados em
+   cartões e a criação de uma tarefa a partir do resultado escolhido. A decisão do
+   que se mostra e do que se pode criar vive em `src/busca.js` (puro, testado). */
+import {
+  estadoDaBusca, tarefaDoResultado, juntarRecente, lerRecentes, gravarRecentes,
+  limparConsulta, CHAVE_RECENTES,
+} from './busca.js';
+
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
    `/api` atrás (a Vercel serve ficheiros estáticos). Em vez do cartão que mandava arrancar o
@@ -139,6 +148,8 @@ const S = {
   leadEventos: [], duplicados: null, mostrarDuplicados: false, aExportar: false,
   /* 1.60.0 · a autonomia por tipo (lida da base) — o resto dos motores vem de S.ia */
   autonomia: null, autonomiaErro: '',
+  /* 1.62.0 · a folha de busca: aberta, o que se escreveu, o que voltou e o erro */
+  buscaAberta: false, buscaQ: '', buscaRes: null, buscaCarregando: false, buscaErro: '', buscaRecentes: null,
   /* 1.61.0 · as execuções: a lista, a execução aberta e o filtro escolhido */
   execucoes: [], execucao: null, execucaoErro: '', execucaoFiltro: 'todas',
   execucoesRecentes: [],
@@ -910,6 +921,9 @@ function paintHead() {
       ${resultadosBusca()}
     </div>
     <div class="hacts">
+      <button type="button" class="hbusca" data-act="busca-abrir" aria-label="pesquisar" title="pesquisar leads, projetos e tarefas">
+        ${IC.lupa}
+      </button>
       <a class="hicon" href="#/hoje" title="${espera ? espera + ' decisão(ões) à espera' : 'sem decisões à espera'}" aria-label="${espera ? espera + ' decisões à espera' : 'nenhuma decisão à espera'}">
         ${IC.hoje}${espera ? `<span class="ndot">${espera > 9 ? '9+' : espera}</span>` : ''}
       </a>
@@ -2570,6 +2584,135 @@ function viewExecucao() {
   </div>`;
 }
 
+
+/* ===========================================================================
+   1.62.0 · A FOLHA DE BUSCA (telemóvel)
+
+   Abre com um toque, procura o mesmo que o `/ops/pesquisa`, mostra os grupos em
+   cartões e deixa criar uma tarefa a partir do resultado escolhido — sempre «à
+   espera da tua aprovação», porque uma pesquisa não é uma ordem.
+   =========================================================================== */
+function recentesDaBusca() {
+  if (S.buscaRecentes == null) {
+    let st = null;
+    try { st = globalThis.localStorage || null; } catch { st = null; }
+    S.buscaRecentes = lerRecentes(st);
+  }
+  return S.buscaRecentes || [];
+}
+
+function guardarRecentesDaBusca(q) {
+  let st = null;
+  try { st = globalThis.localStorage || null; } catch { st = null; }
+  S.buscaRecentes = juntarRecente(recentesDaBusca(), q);
+  gravarRecentes(st, S.buscaRecentes);
+}
+
+function pintarBusca() {
+  const el = document.getElementById('buscaSheet');
+  if (!el) return;
+  if (!S.buscaAberta) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  const st = estadoDaBusca({ consulta: S.buscaQ, resultado: S.buscaRes, aCarregar: S.buscaCarregando, erro: S.buscaErro });
+  const itens = (grupo) => grupo.itens.map((i) => `<div class="busca-item" data-id="${esc(i.id)}">
+      <a href="${esc(i.rota)}" data-act="busca-ir" data-id="${esc(i.id)}">
+        <b>${esc(i.titulo)}</b>${i.sub ? `<span>${esc(i.sub)}</span>` : ''}
+      </a>
+      ${i.podeCriarTarefa ? `<button class="btn ghost small" data-act="busca-tarefa" data-id="${esc(i.id)}" title="criar uma tarefa para este ${esc(i.entidade)}">Tarefa</button>` : ''}
+    </div>`).join('');
+  const recentes = recentesDaBusca();
+  const primeiro = st.modo === 'lista' ? st.grupos.flatMap((g) => g.itens).find((i) => i.podeCriarTarefa) || null : null;
+  el.hidden = false;
+  el.innerHTML = `<div class="busca-painel" role="document">
+    <div class="busca-topo">
+      <div class="busca-campo">${IC.lupa}
+        <input id="buscaQ" type="search" inputmode="search" autocomplete="off" enterkeyhint="search"
+          placeholder="Leads, projetos, tarefas…" aria-label="pesquisa global"
+          value="${esc(S.buscaQ)}" ${S.buscaCarregando ? 'aria-busy="true"' : ''}>
+      </div>
+      <button type="button" class="busca-x" data-act="busca-fechar" aria-label="fechar a pesquisa">×</button>
+    </div>
+    <div class="busca-corpo">
+      <div class="busca-nota${st.modo === 'erro' ? ' bad' : ''}" role="status">${esc(st.nota)}</div>
+      ${st.modo === 'lista' ? st.grupos.map((g) => `<div class="busca-grupo">
+          <h3>${esc(g.label)} · ${g.itens.length}</h3>${itens(g)}</div>`).join('') : ''}
+      ${(st.modo === 'curta' || st.modo === 'vazio') && recentes.length ? `<div class="busca-grupo">
+          <h3>Pesquisaste há pouco</h3>
+          <div class="busca-recentes">${recentes.map((q) => `<button type="button" data-act="busca-recente" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+        </div>` : ''}
+    </div>
+    <div class="busca-rodape">
+      <button type="button" class="btn primary" data-act="busca-tarefa" data-id="${esc(primeiro?.id || '')}"
+        ${primeiro ? `title="criar uma tarefa para «${esc(primeiro.titulo)}»"` : 'aria-disabled="true" title="uma tarefa precisa de um lead ou projeto: procura um e escolhe-o"'}>
+        ${primeiro ? `Tarefa: ${esc(primeiro.titulo)}` : 'Criar tarefa'}
+      </button>
+      <button type="button" class="btn ghost" data-act="tarefa-rapida">Nova tarefa</button>
+    </div>
+  </div>`;
+  const campo = el.querySelector('#buscaQ');
+  if (campo && document.activeElement?.id !== 'buscaQ') {
+    try { campo.focus({ preventScroll: true }); } catch { /* sem foco */ }
+  }
+}
+
+function abrirBusca() {
+  S.buscaAberta = true;
+  S.buscaErro = '';
+  pintarBusca();
+  const campo = document.getElementById('buscaQ');
+  if (campo) { try { campo.focus({ preventScroll: true }); } catch { /* sem foco */ } }
+}
+
+function fecharBusca() {
+  if (!S.buscaAberta) return;
+  S.buscaAberta = false;
+  S.buscaCarregando = false;
+  pintarBusca();
+}
+
+/* a pesquisa com uma pausa: uma letra a cada 240 ms não faz um pedido por letra */
+function procurarNaBusca(q) {
+  S.buscaQ = q;
+  S.buscaErro = '';
+  S.buscaRes = null;
+  clearTimeout(procurarNaBusca._t);
+  const curta = estadoDaBusca({ consulta: q }).modo === 'curta';
+  if (curta) { S.buscaCarregando = false; pintarBusca(); return; }
+  S.buscaCarregando = true;
+  pintarBusca();
+  procurarNaBusca._t = setTimeout(async () => {
+    const alvo = S.buscaQ;
+    try {
+      const r = await call('/ops/pesquisa?q=' + encodeURIComponent(alvo));
+      if (alvo !== S.buscaQ) return;   // resposta de uma consulta já substituída
+      S.buscaRes = r;
+      guardarRecentesDaBusca(alvo);
+    } catch (e) {
+      S.buscaErro = e.message;
+      S.buscaRes = null;
+    }
+    S.buscaCarregando = false;
+    pintarBusca();
+  }, 240);
+}
+
+function itemDaBusca(id) {
+  const grupos = S.buscaRes?.grupos || [];
+  for (const g of grupos) {
+    for (const i of g.itens || []) {
+      if (String(i.id) === String(id)) {
+        const entidade = String(i.route || '').startsWith('#/lead/') ? 'lead'
+          : String(i.route || '').startsWith('#/projeto/') ? 'projeto' : null;
+        return { id: String(i.id), titulo: i.name || i.title || i.id, sub: i.city || i.client || i.kindLabel || '', rota: i.route, grupo: g.label, entidade, podeCriarTarefa: !!entidade };
+      }
+    }
+  }
+  return null;
+}
+
 function paint() {
   paintHead();
   if (S.needLogin) { main().innerHTML = viewLogin(); return; }
@@ -2589,6 +2732,7 @@ function paint() {
     return;
   }
   paintMobar();
+  pintarBusca();
   pintar(S.route.name === 'hoje' ? viewHoje()
     : S.route.name === 'papel' ? vistaPapel(S, { esc })
     : S.route.name === 'cine' ? vistaCine(S, { esc, leadId: S.route.id })
@@ -2651,6 +2795,27 @@ async function act(name, el, ev) {
         : `${scope}: volta a pedir-te autorização.`);
       S.pick = null;
       await boot();
+      return;
+    }
+
+    /* ---------------- 1.62.0 · a folha de busca ---------------- */
+    if (name === 'busca-abrir') { abrirBusca(); return; }
+    if (name === 'busca-fechar') { fecharBusca(); return; }
+    if (name === 'busca-recente') { procurarNaBusca(el.dataset.q || ''); return; }
+    if (name === 'busca-ir') { fecharBusca(); return; }   // o link faz o resto (o hash muda a rota)
+    if (name === 'busca-tarefa') {
+      const item = itemDaBusca(id);
+      const plano = tarefaDoResultado({ consulta: S.buscaQ, item });
+      if (!plano.ok) { toast(plano.sem, true); return; }
+      const r = await call('/ops/tarefas', 'POST', plano.corpo);
+      const t = r.tarefa || {};
+      const dito = t.state === 'succeeded' ? 'concluída'
+        : t.state === 'awaiting_approval' ? 'à espera da tua aprovação'
+          : `não passou${t.error ? `: ${t.error}` : ''}`;
+      toast(`${plano.titulo} — ${dito}.`, t.state !== 'succeeded' && t.state !== 'awaiting_approval');
+      fecharBusca();
+      await loadTarefas().catch(() => null);
+      paint();
       return;
     }
 
@@ -3041,6 +3206,9 @@ async function act(name, el, ev) {
     /* 1.60.0 · criar trabalho depressa a partir do telemóvel: muda de página e
        abre o formulário, em vez de deixar o botão a piscar noutro ecrã */
     if (name === 'tarefa-rapida') {
+      /* 1.62.0 · se veio da folha de busca, a folha fecha: o formulário não fica
+         por baixo de um diálogo modal */
+      fecharBusca();
       S.route = { name: 'tarefas', id: null };
       S.addingTask = true;
       location.hash = '#/tarefas';
@@ -3401,6 +3569,12 @@ function start() {
     } catch (err) { toast(err.message, true); }
   });
   document.addEventListener('input', e => {
+    if (e.target.id === 'buscaQ') {
+      procurarNaBusca(e.target.value);
+      const campo = document.querySelector('#buscaQ');
+      if (campo && campo.selectionStart === campo.value.length) { try { campo.setSelectionRange(campo.value.length, campo.value.length); } catch { /* ok */ } }
+      return;
+    }
     if (e.target.id === 'gq') {
       S.gq = e.target.value;
       clearTimeout(start._gq);
@@ -3464,13 +3638,23 @@ function start() {
   /* 1.57.0 · Ctrl+K / Cmd+K põe o cursor na pesquisa global; Esc tira-o */
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+      /* 1.62.0 · no telemóvel o campo do cabeçalho está escondido: o atalho abre
+         a folha, em vez de focar um input que ninguém vê. */
+      const noTelefone = (() => { try { return matchMedia('(max-width: 820px)').matches; } catch { return false; } })();
       const i = document.querySelector('#gq');
+      if (noTelefone || !i) { e.preventDefault(); abrirBusca(); return; }
       if (i) { e.preventDefault(); i.focus(); i.select?.(); }
     }
     if (e.key === 'Escape') {
+      if (S.buscaAberta) { fecharBusca(); return; }
       const i = document.activeElement;
       if (i && i.id === 'gq') { i.blur(); S.gq = ''; S.results = null; paint(); }
     }
+  });
+  /* 1.62.0 · clicar no fundo escuro da folha de busca fecha-a (o painel não) */
+  document.addEventListener('click', (e) => {
+    const folha = document.getElementById('buscaSheet');
+    if (folha && !folha.hidden && e.target === folha) fecharBusca();
   });
   /* os menus de detalhes fecham-se ao clicar fora deles */
   document.addEventListener('click', e => {
