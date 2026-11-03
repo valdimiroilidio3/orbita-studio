@@ -31,7 +31,8 @@
     "test:ia": "node --test ia.test.mjs estudio.test.mjs",
     "test:pesquisa": "node --test pesquisa.test.mjs",
     "test:backup": "node --test backup.test.mjs",
-    "test:conectar": "node --test conectar.test.mjs"
+    "test:conectar": "node --test conectar.test.mjs",
+    "perf": "node perf.mjs"
   },
   "engines": {
     "node": ">=20"

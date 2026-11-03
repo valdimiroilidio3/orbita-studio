@@ -292,7 +292,12 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
 
   const prefs = loadPrefs(storage);
   const state = { mode: prefs.mode, model: prefs.model, effort: prefs.effort, auto: prefs.auto, favs: prefs.favs, tab: 'all', files: [], ctx: [], health: null, busy: false, mic: null,
-    catalogo: null, catalogoErro: '', catalogoPedido: false }; // 1.51.0 · a IA da Órbita
+    catalogo: null, catalogoErro: '', catalogoPedido: false,
+    /* 3 nov 2026 · «já perguntei» é diferente de «há motor». Com o servidor a responder 503 (de pé,
+       sem motor) ou numa vista estática, `health` e `catalogo` ficam os dois null: a regra antiga
+       concluía «ainda não sei» e o aviso nunca aparecia. Estes dois sinais dizem que a resposta
+       chegou — seja ela qual for — sem voltar a mostrar a frase antes de haver resposta. */
+    sondado: false, catalogoSondado: false };
   const save = () => savePrefs(storage, state);
 
   /* ---------------------------------------------------------------- avisos (toasts) */
@@ -313,6 +318,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
        servidor nenhum (a vista publicada, aberta em estático) o problema não é a chave da IA — é não
        haver Órbita a correr. A frase passa a dizer qual das duas é. */
     state.semServidor = !h && porque === 'sem-servidor';
+    state.sondado = true; // houve resposta do servidor (ou uma falha dele) — já se pode decidir o aviso
     /* uma escolha da Órbita (fornecedor|modelo) não se apaga por o CLI ter outros nomes */
     if (state.model && !dividirModelo(state.model) && h && Array.isArray(h.models) && !h.models.includes(state.model)) state.model = '';
     if (!state.favs.length && h && h.model) state.favs = [h.model];
@@ -348,6 +354,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       state.catalogo = null;
       state.catalogoErro = e && e.message ? e.message : 'sem resposta';
     }
+    state.catalogoSondado = true;
     renderModelButton(); renderList(); renderEfforts(); renderAviso();
     return state.catalogo;
   }
@@ -364,7 +371,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     /* Enquanto não se sabe (nem saúde nem catálogo chegaram), o aviso NÃO aparece:
        no instante antes das respostas mostrava «Sem motor de IA ligado» — a frase
        que o dono apontou — quando a IA estava a responder. Só se decide depois. */
-    const decido = state.health !== null || state.catalogo !== null;
+    const decido = state.sondado && state.catalogoSondado;
     el.pro.hidden = !decido || !!engine || orbita > 0;
     const t = el.pro.querySelector('.mc-pro-t');
     if (!t) return;

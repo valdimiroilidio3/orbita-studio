@@ -17,19 +17,21 @@ import { JSDOM } from 'jsdom';
 
 const HTML = fs.readFileSync(new URL('./dist/mesa.html', import.meta.url), 'utf8');
 const DIA = 24 * 3600 * 1000;
-const AGORA = Date.parse('2026-11-02T10:00:00Z');
+/* 3 nov 2026 · as datas desta ficha eram fixas (30/10, 31/10) e «atrasada há 3 dias» é calculado
+   com o relógio de quem corre o teste: no dia seguinte ficava vermelho sem nada estar partido.
+   Passam a ser relativas a hoje, ancoradas ao meio-dia local para o «há N dias» não oscilar com a
+   hora a que o teste corre (às 00:30 ou às 23:00 o mesmo instante pode contar dias diferentes). */
+const HOJE = (() => { const d = new Date(); d.setHours(12, 0, 0, 0); return d; })();
+const dia = (n) => { const d = new Date(HOJE); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const quando = (n, h = 9, m = 12) => { const d = new Date(HOJE); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d.toISOString(); };
 
 const LEAD_OK = {
   id: 'l1', name: 'Clínica do Mondego', category: 'Saúde', city: 'Coimbra',
   phone: '+351 239 000 111', email: 'geral@clinicadomondego.pt',
   website: 'https://clinicadomondego.pt', website_estado: 'ok',
-  website_verificado_em: new Date(AGORA - 2 * DIA).toISOString(), website_motivo: 'respondeu 200 · 418 ms',
+  website_verificado_em: quando(-2), website_motivo: 'respondeu 200 · 418 ms',
   source: 'pesquisa', fonte_url: 'https://exemplo.pt/lista', status: 'contactado', score: 61,
-  /* 1.62.0 · a data é relativa a HOJE: fixa («2026-10-30») o teste passava na
-     véspera e falhava no dia seguinte — a linha calcula o atraso com o relógio
-     real, não com o `AGORA` do fixture. */
-  proxima_acao: 'Ligar a marcar reunião',
-  proxima_acao_em: new Date(Date.now() - 3 * DIA).toISOString().slice(0, 10), qualificacao: 88,
+  proxima_acao: 'Ligar a marcar reunião', proxima_acao_em: dia(-3), qualificacao: 88,
 };
 const LEAD_DUP = {
   id: 'l2', name: 'Café Central', category: 'Restauração', city: 'Coimbra',
@@ -49,11 +51,11 @@ const FICHA = {
   dossier: null,
   messages: [],
   eventos: [
-    { id: 'e1', lead_id: 'l1', tipo: 'verificacao', texto: 'site verificado: respondeu 200 · 418 ms', autor: 'valdimiro@exemplo.pt', criado: '2026-10-31T09:12:00.000Z' },
-    { id: 'e2', lead_id: 'l1', tipo: 'proxima_acao', texto: 'próxima ação: Ligar a marcar reunião · 2026-10-30', autor: 'valdimiro@exemplo.pt', criado: '2026-10-30T08:00:00.000Z' },
+    { id: 'e1', lead_id: 'l1', tipo: 'verificacao', texto: 'site verificado: respondeu 200 · 418 ms', autor: 'valdimiro@exemplo.pt', criado: quando(-2, 9, 12) },
+    { id: 'e2', lead_id: 'l1', tipo: 'proxima_acao', texto: 'próxima ação: Ligar a marcar reunião · ' + dia(-3), autor: 'valdimiro@exemplo.pt', criado: quando(-4, 8, 0) },
   ],
   confianca: { pontos: 95, nivel: 'alta', razoes: ['site verificado e a responder (+40)'] },
-  verificacao: { estado: 'ok', rotulo: 'Site verificado', quando: '2026-10-31T09:12:00.000Z', dias: 2, motivo: 'respondeu 200 · 418 ms' },
+  verificacao: { estado: 'ok', rotulo: 'Site verificado', quando: quando(-2), dias: 2, motivo: 'respondeu 200 · 418 ms' },
   proxima: { estado: 'atrasada', texto: 'Ligar a marcar reunião', rotulo: 'atrasada há 3 dias', dias: -3 },
   qualificacao: { valor: 88, origem: 'guardada', rotulo: 'definida à mão' },
 };
@@ -197,7 +199,8 @@ test('6 · a ficha do lead mostra proveniência, confiança, próxima ação e q
   assert.match(t, /pesquisa/, 'a fonte aparece');
   assert.match(t, /exemplo\.pt\/lista/, 'o endereço da fonte também');
   assert.match(t, /respondeu 200 · 418 ms/, 'o motivo da verificação é o real');
-  assert.match(t, /31\/10\/2026|2026-10-31/, 'a data da verificação está à vista');
+  const [ano, mes, d] = dia(-2).split('-');
+  assert.ok(t.includes(`${d}/${mes}/${ano}`) || t.includes(dia(-2)), 'a data da verificação está à vista');
   assert.match(t, /88/);
   assert.match(t, /definida à mão/, 'a qualificação diz de onde veio');
   assert.match(t, /Próxima ação/);
@@ -264,4 +267,53 @@ test('11 · o CSS do CRM vai no bundle publicado, não só no código-fonte', ()
   assert.match(shell, /@media \(max-width: 1080px\)[\s\S]{0,400}\.row\.crm/);
   assert.match(shell, /@media \(max-width: 820px\)[\s\S]{0,400}\.row\.crm/);
   assert.ok(HTML.includes('.crm-chip'), 'o bundle publicado traz o CSS do CRM');
+});
+
+
+/* ---------- 3 nov 2026 · o CRM como sítio de trabalho, não só como ficha ---------- */
+
+test('12 · a lista põe à frente o que está atrasado, mesmo que tenha entrado por último', async () => {
+  /* a base devolve os leads na ordem em que entraram: o atrasado é o ÚLTIMO */
+  const { doc } = await abrir('#/leads', { '/ops/leads': { ok: true, leads: [LEAD_SEM, LEAD_DUP, LEAD_OK], pipeline: { fases: [], total: 3 } } });
+  const nomes = [...doc.querySelectorAll('.rows .row .nm')].map((n) => n.textContent.trim());
+  assert.deepEqual(nomes.slice(0, 1), ['Clínica do Mondego'],
+    'quem tem a próxima ação atrasada tem de estar no topo — é o trabalho de hoje');
+  assert.equal(nomes.length, 3, 'nenhum lead desaparece por causa da ordem');
+});
+
+test('13 · «Atrasadas» conta e filtra: só o que passou do prazo', async () => {
+  const { doc } = await abrir();
+  const chip = doc.querySelector('[data-act="filter"][data-k="atrasados"]');
+  assert.ok(chip, 'com uma ação atrasada tem de haver um filtro para ela');
+  assert.match(chip.textContent, /Atrasadas \(1\)/);
+  chip.click();
+  await esperar();
+  const nomes = [...doc.querySelectorAll('.rows .row .nm')].map((n) => n.textContent.trim());
+  assert.deepEqual(nomes, ['Clínica do Mondego'], 'o filtro mostra exactamente os atrasados');
+});
+
+test('14 · exportar a vista leva o que está à vista, não as 500 linhas da base', async () => {
+  const { doc, pedidos, descargas, dom } = await abrir();
+  /* sem filtro não há botão de «vista»: exportar tudo continua a ser um clique */
+  assert.equal(doc.querySelector('[data-act="csv-vista"]'), null, 'sem filtro, o botão de CSV é o de sempre');
+
+  doc.querySelector('[data-act="filter"][data-k="atrasados"]').click();
+  await esperar();
+  const botao = doc.querySelector('[data-act="csv-vista"]');
+  assert.ok(botao, 'com uma vista filtrada há de haver forma de exportar só ela');
+  assert.match(botao.textContent, /\(1\)/, 'o botão diz quantas linhas vai levar');
+
+  botao.click();
+  await esperar();
+  assert.equal(pedidos.filter((p) => p.caminho === '/ops/leads.csv').length, 0,
+    'a vista exporta-se no browser: não vai buscar as 500 ao servidor');
+  const blob = descargas.find((d) => typeof d.text === 'function');
+  assert.ok(blob, 'o ficheiro chegou ao browser');
+  const csv = await blob.text();
+  assert.match(csv, /Clínica do Mondego/, 'leva a linha que está à vista');
+  assert.doesNotMatch(csv, /Padaria do Bairro/, 'e não leva o que o filtro escondeu');
+  assert.match(csv, /Confiança/, 'leva as colunas do CRM (confiança e verificação), como o CSV completo');
+  const nome = descargas.filter((d) => d && d.nome).map((d) => d.nome)[0];
+  assert.match(nome, /^leads-\d{4}-\d{2}-\d{2}\.csv$/, 'o ficheiro leva a data no nome');
+  assert.match(dom.window.document.querySelector('#toast').textContent, /só os que estão à vista/);
 });

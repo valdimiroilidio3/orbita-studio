@@ -566,7 +566,9 @@ test('mídia: o «pump» de fundo exige o token do worker (e avança o que ficou
   assert.equal(comToken.status, 200);
   assert.equal(comToken.corpo.ok, true);
   const g = repo._dados.geracoes[0];
-  assert.ok(['aguardando', 'falhou'].includes(g.estado), `estado inesperado: ${g.estado}`);
+  /* 3 nov 2026 · com rede de verdade um fornecedor gratuito pode chegar ao fim (concluida).
+     O que este passo prova é que o pump avançou e escreveu o estado — seja qual for. */
+  assert.ok(['aguardando', 'falhou', 'concluida'].includes(g.estado), `estado inesperado: ${g.estado}`);
   assert.ok(g.tentativas >= 1, 'o pump tem de ter tentado');
 });
 

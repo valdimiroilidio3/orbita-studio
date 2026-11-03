@@ -1,0 +1,72 @@
+# Órbita — o gate automático.
+#
+# Dois trabalhos independentes:
+#   · gate   — o mesmo `check.mjs` que se corre à mão: integrações, operação, build, a camada
+#              do escritório (acessibilidade, tabuleiro, câmara, circulação, painel, botões),
+#              o palco 3D, um browser a sério e o servidor isolado;
+#   · suites — todas as 65 suites de `*.test.mjs`, que cobrem o resto (calendário, quadro,
+#              Cérebro, CRM, mídia, rotinas…).
+#
+# Se um passo ficar vermelho, o pull request fica vermelho com ele — em vez de se descobrir
+# no deploy que o gate já estava a mentir.
+name: verificação
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verificacao-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: agents-office-main
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # o mínimo que o package.json promete (engines >= 20)
+          cache: npm
+          cache-dependency-path: agents-office-main/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # O smoke abre um Chrome a sério. O ubuntu-latest traz o Google Chrome; o `channel: 'chrome'`
+      # do playwright-core usa esse, sem descarregar browsers. Noutra máquina: CHROME_PATH.
+      - name: Build + testes + smoke
+        run: node check.mjs
+
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: agents-office-main
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: agents-office-main/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # As suites leem `dist/`, que está versionado — constrói-se na mesma para provar que o
+      # bundle sai do código que está no commit.
+      - name: Build
+        run: node build.mjs
+
+      - name: Todas as suites
+        run: node --test

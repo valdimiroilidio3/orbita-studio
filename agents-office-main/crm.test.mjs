@@ -291,7 +291,10 @@ test('23 · o servidor, o modo local e a mesa usam estas contas — não as repe
 
   const mesa = fs.readFileSync(path.join(ROOT, 'src/mesa.js'), 'utf8');
   assert.match(mesa, /from '\.\/crm\.js'/, 'a mesa importa as mesmas contas');
-  assert.match(mesa, /crmCard\(\)/, 'a lista de leads mostra o cartão do funil');
+  /* 3 nov 2026 · o cartão passou a receber a lista à vista (`crmCard(list)`), para se poder
+     exportar só o que está filtrado: a asserção guarda o mesmo — a lista mostra o cartão. */
+  assert.match(mesa, /function crmCard\(/, 'a lista de leads mostra o cartão do funil');
+  assert.match(mesa, /\$\{crmCard\(list\)\}/, 'e passa-lhe a vista actual, não uma segunda contagem');
   for (const act of ['csv-leads', 'ver-duplicados', 'verificar-site', 'guardar-proxima', 'limpar-proxima']) {
     assert.match(mesa, new RegExp(`'${act}'`), `a ação «${act}» não está ligada`);
   }

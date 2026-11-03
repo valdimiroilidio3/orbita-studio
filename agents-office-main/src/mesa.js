@@ -8,6 +8,8 @@
 // aberto à mão e confirmado depois; o email só sai com token e consentimento, e a recusa é
 // mostrada por palavras; e nenhum número aparece sem vir da base de dados.
 import { createLocalApi } from './localapi.js';
+/* 3 nov 2026 · importar uma cópia por cima do que está aqui pergunta-se no diálogo da casa */
+import { confirmar } from './confirmar.js';
 import { vistaIA, accaoIA, carregarIA, pararSeguimento, abrirRun } from './ia.js';
 /* 1.47.0 · digitalizar papel: a câmara, a transcrição e a proposta de lead */
 import { vistaPapel, carregarPapel, accaoPapel, ligarPapel, fecharCamera } from './papel.js';
@@ -32,7 +34,8 @@ import { resumoOperacional, filaDeAprovacao, estadoAgentes, atividadeRecente, pr
    verificar (`src/crm.js`) — a mesa desenha o que elas dizem, não uma versão
    paralela da mesma verdade. */
 import { confianca as confiancaCRM, verificacao as verificacaoCRM, proximaAccao as proximaAccaoCRM,
-  qualificacao as qualificacaoCRM, resumoDoFunil, fraseDaCarteira, FASES, ESTADOS_SITE } from './crm.js';
+  qualificacao as qualificacaoCRM, resumoDoFunil, fraseDaCarteira, FASES, ESTADOS_SITE,
+  csvDeLeads as csvDeLeadsCRM, nomeDoFicheiro as nomeDoCSV } from './crm.js';
 
 /* 1.60.0 · MOTORES, AUTONOMIA E SALDO (2 nov 2026). O dono pediu que se
    percebesse, num sítio só: que motor está escolhido e o que ele sabe fazer
@@ -43,7 +46,7 @@ import { confianca as confiancaCRM, verificacao as verificacaoCRM, proximaAccao 
 import {
   perfis as perfisDeMotores, escolhaDoAgente, resumoDaAutonomia,
   resumoDoConsumo, acoesSensiveis, filaRapida, barraDeAprovacao,
-  cartoesDoPainel, CLASSES, NIVEIS_AUTONOMIA,
+  cartoesDoPainel, CLASSES, NIVEIS_AUTONOMIA, motorDaExecucao,
 } from './motores.js';
 
 /* 1.61.0 · EXECUÇÃO TRANSPARENTE (2 nov 2026). Pedido do dono: ver o que o
@@ -263,7 +266,14 @@ function ligarImportacao() {
       if (!f) return;
       try {
         const antes = (local || usarLocal()).estado();
-        if (antes.leads + antes.projetos > 0 && !confirm(`Isto substitui o que está aqui (${antes.leads} leads, ${antes.projetos} projetos). Continuar?`)) return;
+        if (antes.leads + antes.projetos > 0) {
+          const ok = await confirmar({
+            titulo: 'Substituir o que está aqui?',
+            texto: `Isto substitui o que está neste navegador: ${antes.leads} leads e ${antes.projetos} projetos. O que cá está perde-se.`,
+            confirmar: 'Substituir', cancelar: 'Guardar o que está', perigo: true,
+          });
+          if (!ok) return;
+        }
         const r = usarLocal().importar(await f.text());
         toast(`Cópia lida: ${r.leads} leads, ${r.projetos} projetos.`);
         await boot();
@@ -544,6 +554,12 @@ async function boot(full = true) {
     /* 1.60.0 · os motores leem o estado da IA, o uso e a autonomia de uma vez */
     if (S.route.name === 'motores') await carregarMotores();
     /* 1.61.0 · as execuções: a lista, ou uma execução e os seus passos */
+    /* 3 nov 2026 · quem está a ver uma execução tem de saber em que motor ela correu: a lista
+       de motores é lida aqui também (sem ela, o ecrã diria «não está nesta instalação» sobre
+       um motor que simplesmente ainda não tinha sido lido). */
+    if ((S.route.name === 'execucoes' || S.route.name === 'execucao') && !S.ia) {
+      await carregarIA(apiMesa).catch(() => null);
+    }
     if (S.route.name === 'execucoes') await carregarExecucoes();
     if (S.route.name === 'execucao' && S.route.id) await carregarExecucao(S.route.id);
     if (S.route.name === 'papel' && !S.papelEstado) await carregarPapel(apiMesa);
@@ -755,7 +771,7 @@ function ccAgentes(ag) {
     ${ag.linhas.map((l) => `<li class="cc-ag">
       <span class="cc-dot ${esc(l.estado)}" aria-hidden="true"></span>
       <div class="cc-ag-t"><b>${esc(l.nome)}</b>
-        <span>${esc(ESTADO_SALA[l.estado] || l.estado)}${l.ultimaIdade ? ` · há ${esc(l.ultimaIdade)}` : ''}</span></div>
+        <span>${esc(ESTADO_SALA[l.estado] || l.estado)}${l.titulo ? ` · <i class="cc-ag-o">${esc(l.titulo)}</i>` : ''}${l.ultimaIdade ? ` · há ${esc(l.ultimaIdade)}` : ''}</span></div>
       <span class="cc-ag-c">${l.aCorrer ? `${l.aCorrer} a correr` : l.falhadas ? plural(l.falhadas, 'falha', 'falhas') : l.naFila ? `${l.naFila} na fila` : l.concluidas ? plural(l.concluidas, 'feita', 'feitas') : '—'}</span>
     </li>`).join('')}
   </ul>
@@ -807,7 +823,7 @@ function viewHoje() {
   const tarefas = Array.isArray(S.tarefas) ? S.tarefas : [];
   const rotulos = { ...ROTULO_TAREFA, ...Object.fromEntries((S.tiposTarefa || []).map((t) => [t.id, t.label])) };
   const cc = resumoOperacional({ tarefas, hoje: S.today, projetos: S.projetos || [], agora });
-  const ag = estadoAgentes({ departamentos: S.agentes?.departamentos || [], tarefas, agora });
+  const ag = estadoAgentes({ departamentos: S.agentes?.departamentos || [], tarefas, rotulos, agora });
   const fila = filaDeAprovacao({ hoje: S.today, tarefas, rotulos, agora });
   const timeline = atividadeRecente({ eventos: S.atividade?.eventos || [], tarefas, rotulos, limite: 8 });
   const proximos = proximosTrabalhos({ tarefas, rotulos, limite: 6, agora });
@@ -873,14 +889,33 @@ function viewHoje() {
 }
 
 /* ---------------- Leads ---------------- */
+/* 3 nov 2026 · A ORDEM É A DO TRABALHO. Um CRM que mostra os leads pela ordem em que entraram
+   esconde o que está atrasado no fim da lista. Aqui a próxima ação manda: primeiro o que já
+   passou do prazo (o mais antigo primeiro), depois o de hoje, depois o que vem, e só no fim os
+   leads sem próximo passo. Empate desfaz-se pela nota e pelo nome, para a ordem ser estável. */
+const ORDEM_URGENCIA = { atrasada: 0, hoje: 1, futura: 2, sem_texto: 3, sem_data: 4, sem: 5 };
+function urgenciaDe(l) {
+  const p = proximaAccaoCRM(l);
+  return {
+    ordem: ORDEM_URGENCIA[p.estado] ?? 5,
+    dias: p.dias == null ? Number.MAX_SAFE_INTEGER : p.dias,
+    score: -(Number(l.score) || 0),
+    nome: String(l.name || ''),
+  };
+}
 function filteredLeads() {
   const q = S.q.trim().toLowerCase();
-  return S.leads.filter(l => {
+  const lista = S.leads.filter(l => {
+    if (S.filter === 'atrasados' && proximaAccaoCRM(l).estado !== 'atrasada') return false;
     if (S.filter === 'sem-site' && (l.website || l.domain)) return false;
     if (S.filter === 'novo' && l.status !== 'novo') return false;
     if (S.filter === 'responderam' && !['respondeu', 'reuniao', 'cliente'].includes(l.status)) return false;
     if (!q) return true;
     return [l.name, l.city, l.category, l.phone, l.email, l.website].filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
+  return lista.sort((a, b) => {
+    const x = urgenciaDe(a), y = urgenciaDe(b);
+    return x.ordem - y.ordem || x.dias - y.dias || x.score - y.score || x.nome.localeCompare(y.nome, 'pt');
   });
 }
 
@@ -1038,15 +1073,34 @@ function linhaDaProxima(l) {
   return `<div class="crm-prox" style="color:${cor}">→ ${esc(p.texto || 'sem texto')} · ${esc(p.rotulo)}</div>`;
 }
 
-function crmCard() {
+/* o mesmo download para as duas exportações: um clique, um ficheiro, e nenhum CSV vazio */
+function descarregarCSV(csv, nome) {
+  try {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* já revogado */ } }, 4000);
+    return true;
+  } catch {
+    console.log(csv);
+    return false;
+  }
+}
+
+function crmCard(lista = filteredLeads()) {
   const r = resumoDoFunil(S.leads);
   if (!r.total) return '';
+  const vista = Array.isArray(lista) ? lista : [];
+  const filtrada = !!(S.q.trim() || S.filter !== 'todos');
   return `<div class="card crm-card" style="margin-bottom:var(--s4)">
     <div class="sec-h">
       <h3>Carteira</h3>
       <span class="count">${esc(fraseDaCarteira(r))}</span>
       <span class="sp" style="flex:1"></span>
       ${may('read') ? `<button class="btn small ghost" data-act="csv-leads" title="descarregar todos os leads em CSV (abre no Excel)">↓ CSV</button>` : ''}
+      ${may('read') && filtrada && vista.length ? `<button class="btn small ghost" data-act="csv-vista" title="descarregar só as ${vista.length} linha(s) que estão à vista">↓ CSV desta vista (${vista.length})</button>` : ''}
       ${r.duplicados ? `<button class="btn small ghost" data-act="ver-duplicados" aria-expanded="${S.mostrarDuplicados ? 'true' : 'false'}">⚠ ${r.duplicados} duplicado${r.duplicados === 1 ? '' : 's'}</button>` : ''}
     </div>
     <div class="stats" style="margin-bottom:var(--s3)">
@@ -1086,7 +1140,12 @@ function viewLeads() {
   const list = filteredLeads();
   const total = S.leads.length;
   const alta = S.leads.filter(l => (l.score || 0) >= 60).length;
-  const chips = [['todos', 'Todos'], ['novo', 'Por contactar'], ['sem-site', 'Sem site'], ['responderam', 'Responderam']];
+  const atrasadas = S.leads.filter(l => proximaAccaoCRM(l).estado === 'atrasada').length;
+  const chips = [
+    ['todos', 'Todos'],
+    ...(atrasadas ? [['atrasados', `Atrasadas (${atrasadas})`]] : []),
+    ['novo', 'Por contactar'], ['sem-site', 'Sem site'], ['responderam', 'Responderam'],
+  ];
   const carteira = resumoDoFunil(S.leads);
   return `<div class="wrap">
     ${headHTML({
@@ -1096,7 +1155,7 @@ function viewLeads() {
     })}
     ${procurarLeadsForm()}
     ${S.adding ? novoLeadForm() : ''}
-    ${crmCard()}
+    ${crmCard(list)}
     ${pipelineCard()}
     <div class="tools">
       <div class="search">${IC.lupa}<input id="q" type="search" placeholder="Procurar por nome, cidade, nicho…" value="${esc(S.q)}" aria-label="procurar leads"></div>
@@ -2489,6 +2548,21 @@ function viewExecucao() {
   const podeA = d.accoes?.aprovar || podeAprovar(run);
   const reg = (d.registo && d.registo.length) ? d.registo : registoDoRun(run, d.passos || []);
 
+  /* 3 nov 2026 · item 5 do dono: a classe do motor (CLI com mãos · API de texto), as
+     capacidades e a regra de aprovação têm de estar à vista DURANTE a execução — não
+     só na página Motores. O que não estiver registado diz-se «não registado». */
+  const motoresDoRun = perfisDeMotores(S.ia?.fornecedores || []).lista;
+  const motorDoRun = motorDaExecucao({ fornecedor: r.fornecedor, modelo: r.modelo }, motoresDoRun, { listaCarregada: !!S.ia });
+  const motorDoPasso = (p) => {
+    if (!p.fornecedor && !p.modelo) return null;
+    return motorDaExecucao({ fornecedor: p.fornecedor, modelo: p.modelo }, motoresDoRun);
+  };
+  const chipDoPasso = (p) => {
+    const m = motorDoPasso(p);
+    if (!m || !m.classe) return '';
+    return ` <span class="mo-classe ${m.classe}" title="${esc(m.classeRotulo)} — ${esc(m.porque)}">${esc(m.curto)}</span>`;
+  };
+
   const acaoDoBotao = (o) => {
     const classes = o.id === 'aprovar' ? 'btn primary' : o.id === 'recusar' ? 'btn ghost bad' : 'btn ghost';
     const alvo = ['run-aprovar', 'run-recusar', 'run-retomar', 'run-repetir', 'run-cancelar'].includes(o.accao) ? ` data-id="${esc(run.id || id)}"` : '';
@@ -2499,7 +2573,7 @@ function viewExecucao() {
     <header class="run-step-h">
       <span class="run-step-n">${p.ordem}</span>
       <div><b>${esc(p.titulo)}</b>
-        <div class="ia-sub">${esc(p.agente || 'agente')}${p.modelo ? ` · ${esc(p.modelo)}` : ''} · ${esc(p.duracao)}</div></div>
+        <div class="ia-sub">${esc(p.agente || 'agente')}${chipDoPasso(p)}${p.modelo ? ` · ${esc(p.modelo)}` : ''} · ${esc(p.duracao)}</div></div>
       <span class="mo-chip" style="--c:${estadoDoRun({ estado: p.estado === 'a_espera' ? 'aguarda_aprovacao' : p.estado === 'em_execucao' ? 'a_correr' : p.estado === 'falhou' ? 'falhou' : p.estado }).cor}">${esc(p.estado === 'a_espera' ? 'à espera' : p.estado === 'em_execucao' ? 'a correr' : p.estado === 'falhou' ? 'falhou' : p.estado === 'cancelado' ? 'cancelado' : 'concluído')}</span>
     </header>
     ${p.temEntrada ? `<div class="run-bloco"><span class="run-k">Entrada · o que lhe foi pedido</span><div class="run-v">${esc(p.entrada)}</div></div>` : '<div class="run-bloco"><span class="run-k">Entrada</span><div class="run-v ia-sub">não ficou registada</div></div>'}
@@ -2534,7 +2608,23 @@ function viewExecucao() {
         <div><span>Tokens</span><b>${fmtNum(r.tokens)}</b></div>
         <div><span>Custo</span><b class="${r.custo.desconhecido ? 'bad' : ''}">${r.custo.desconhecido ? 'desconhecido' : money(r.custo.centimos)}</b></div>
         <div><span>Duração</span><b>${esc(r.duracao)}</b></div>
+        <div><span>Motor</span><b><span class="mo-classe ${motorDoRun.classe || 'desconhecida'}">${esc(motorDoRun.curto)}</span> ${esc(motorDoRun.nome)}</b></div>
         <div><span>Modelo</span><b>${esc(r.modelo || 'não registado')}</b></div>
+      </div>
+      <div class="run-motor" aria-label="o motor desta execução">
+        <div class="run-motor-h">
+          <span class="mo-classe ${motorDoRun.classe || 'desconhecida'}">${esc(motorDoRun.curto)}</span>
+          <b>${esc(motorDoRun.nome)}</b>
+          ${motorDoRun.modelo ? `<span class="ia-sub">${esc(motorDoRun.modelo)}</span>` : ''}
+          <span class="run-motor-est" title="a última prova de que este motor respondeu">${esc(motorDoRun.verificacao)}</span>
+        </div>
+        <p class="run-motor-p">${esc(motorDoRun.porque)}</p>
+        <ul class="run-motor-l">
+          <li><b>Ferramentas</b> ${motorDoRun.ferramentas === true ? 'aceita — correm no servidor, com registo' : motorDoRun.ferramentas === false ? 'não recebe — este motor responde com texto' : 'por declarar pelo fornecedor'}</li>
+          <li><b>Ficheiros</b> ${motorDoRun.ficheiros === true ? 'pode escrever nesta máquina' : motorDoRun.ficheiros === false ? 'não escreve no disco — é o servidor que guarda' : 'por declarar pelo fornecedor'}</li>
+          <li><b>Acções destrutivas</b> ${esc(motorDoRun.aprovacao)}${r.autorizacoes ? ` · ${r.autorizacoes} autorização(ões) nesta execução` : ''}</li>
+        </ul>
+        <a class="btn ghost small" href="#/motores">Motores, permissões e autonomia</a>
       </div>
       ${r.custo.desconhecido ? '<div class="hint">Custo desconhecido: o fornecedor usado não tem preço declarado. Zero seria uma mentira — não é grátis, é não medido.</div>' : ''}
       ${cancel.pedido ? `<div class="ia-faixa ${cancel.efectivo ? 'bad' : 'warn'}"><b>${cancel.efectivo ? 'Paragem efectiva' : 'Cancelamento pedido'}.</b>
@@ -2968,21 +3058,26 @@ async function act(name, el, ev) {
         const csv = String(r.csv || '');
         if (!csv) { toast('O servidor não devolveu o CSV — nada foi exportado.', true); return; }
         const nome = r.ficheiro || 'leads.csv';
-        try {
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = nome; a.rel = 'noopener';
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => { try { URL.revokeObjectURL(url); } catch { /* já revogado */ } }, 4000);
-          toast(`${r.linhas ?? '—'} lead(s) exportados para ${nome}.`);
-        } catch {
-          toast('Este browser não deixa descarregar ficheiros — o CSV ficou na consola.', true);
-          console.log(csv);
-        }
+        const baixou = descarregarCSV(csv, nome);
+        toast(baixou ? `${r.linhas ?? '—'} lead(s) exportados para ${nome}.`
+          : 'Este browser não deixa descarregar ficheiros — o CSV ficou na consola.', !baixou);
       } catch (e) {
         toast(`Não consegui exportar: ${e.message}`, true);
       } finally { S.aExportar = false; }
+      return;
+    }
+
+    if (name === 'csv-vista') {
+      /* 3 nov 2026 · quem filtrou «atrasadas» e vê três linhas não quer as 500 no ficheiro. O CSV
+         desta vista sai do que está no ecrã, com as mesmas contas do servidor (`src/crm.js`) —
+         e o nome do ficheiro leva a data, como o outro. */
+      const vista = filteredLeads();
+      if (!vista.length) { toast('Não há nada nesta vista para exportar — o ficheiro sairia vazio.', true); return; }
+      const csv = csvDeLeadsCRM(vista);
+      const nome = nomeDoCSV();
+      const baixou = descarregarCSV(csv, nome);
+      toast(baixou ? `${vista.length} lead(s) exportados — só os que estão à vista.`
+        : 'Este browser não deixa descarregar ficheiros — o CSV ficou na consola.', !baixou);
       return;
     }
 
@@ -3603,7 +3698,7 @@ function start() {
     /* 1.54.2 · alterações no briefing por gravar pedem confirmação antes de
        serem substituídas por outra página (o texto escrito vive no estado, por
        isso um repintar não o perde — sair da página sim) */
-    if (!podeSair(apiMesa, destino)) {
+    if (!(await podeSair(apiMesa, destino))) {
       if (S.briefing?.projetoId) location.hash = `#/projeto/${encodeURIComponent(S.briefing.projetoId)}`;
       return;
     }

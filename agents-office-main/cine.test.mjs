@@ -301,9 +301,13 @@ test('rotas /cine: estado diz o que há, e sem lead a resposta diz o que falta p
 
 test('rotas /cine: preparar, gerar, aprovar e ler o projecto — de ponta a ponta', async () => {
   const repo = createMemRepo({ leads: [{ ...CLINICA, dedupe_key: 'x', created_at: new Date().toISOString() }] });
+  /* 3 nov 2026 · sem `fetchImpl` este pedido saía para o fornecedor gratuito de texto e o
+     resultado dependia da rede nesse minuto (numa execução veio plano de IA, noutra de regras).
+     A prova quer o caminho das REGRAS, então a rede falha aqui de propósito. */
   const prep = await responder(repo, {
     caminho: '/cine/preparar', metodo: 'POST', env: {},
     corpo: { lead: CLINICA, brief: { formato: '16:9', objetivo: 'encher a agenda' } },
+    fetchImpl: async () => { throw new Error('sem rede neste teste'); },
   });
   assert.equal(prep.status, 200);
   assert.equal(prep.corpo.versao.via, 'regra');

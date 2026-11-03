@@ -28,7 +28,12 @@ const respostaOpenAI = (texto) => ({
 });
 const falha = (status = 500, msg = 'avaria') => ({ ok: false, status, ...corpo({ error: { message: msg } }) });
 
-test('gratis: existe como fornecedor, não precisa de chave e é o activo sem mais nada', () => {
+test('gratis: existe como fornecedor, não precisa de chave e é o activo sem mais nada', (t) => {
+  /* 3 nov 2026 · o caso descreve «numa instalação limpa». Num posto com o Claude Code
+     instalado o motor activo é o CLI — não é uma falha, é outra máquina. Diz-se e salta-se. */
+  if (resolve({}, null).candidates.some((c) => c.id === 'claude-cli' && c.available)) {
+    return t.skip('esta máquina tem o Claude Code instalado — não é a instalação limpa que este teste descreve');
+  }
   assert.ok(PRESETS.gratis, 'falta o fornecedor «gratis»');
   const d = define('gratis', {});
   assert.equal(why(d), null, 'a cadeia gratuita não pode exigir chave para estar disponível');
@@ -97,7 +102,10 @@ test('gratis: runner.ask devolve só o texto (é o que as salas consomem)', asyn
   assert.equal(texto, 'texto simples');
 });
 
-test('gratis: fixar um modelo põe-no à frente da cadeia (é assim que a barra escolhe)', async () => {
+test('gratis: fixar um modelo põe-no à frente da cadeia (é assim que a barra escolhe)', async (t) => {
+  if (resolve({}, null).candidates.some((c) => c.id === 'claude-cli' && c.available)) {
+    return t.skip('esta máquina tem o Claude Code instalado — o CLI local ganha à cadeia, como deve');
+  }
   limparFora();
   /* o dono escolheu «ovh/gpt-oss-120b» no canto de IA */
   const d = define('gratis', { ai: { models: { gratis: 'ovh/gpt-oss-120b' } } });

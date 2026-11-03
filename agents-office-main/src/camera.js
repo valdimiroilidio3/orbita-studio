@@ -156,3 +156,55 @@ export function gestoDoArrasto({ altKey = false, botao = 0, vazio = false, shift
   if (vazio) return 'rodar';
   return 'mover';
 }
+
+/* ---------- 3 nov 2026 · o telemóvel: pinça, duplo-toque e inércia ----------
+
+   O único gesto que existia num telefone era o arrasto de um dedo. A roda do rato não
+   existe lá, portanto o zoom só se conseguia pelos botões do dock — e ninguém os encontra
+   com o mapa debaixo do dedo. Estas três contas são as que faltavam, e ficam aqui (sem
+   three, sem DOM) para poderem ser provadas em `camera.test.mjs`.                     */
+
+/**
+ * Pinça de dois dedos. O zoom multiplica-se pela razão entre a distância de agora e a do
+ * início do gesto — usar o início (e não o frame anterior) faz com que um frame perdido
+ * não «escorregue» o zoom. Dedos em cima um do outro não dão gesto nenhum.
+ */
+export function zoomPorPinca(zoomInicial, distInicial, distAgora, { min = 0.72, max = 5.2 } = {}) {
+  const limitar = (z) => Math.min(max, Math.max(min, z));
+  const z0 = Number(zoomInicial), d0 = Number(distInicial), d1 = Number(distAgora);
+  if (!Number.isFinite(z0) || z0 <= 0) return min;
+  if (!Number.isFinite(d0) || !Number.isFinite(d1) || d0 < 1 || d1 < 1) return limitar(z0);
+  return limitar(z0 * (d1 / d0));
+}
+
+/** O meio entre dois dedos — é este o ponto do mapa que fica parado durante a pinça. */
+export function pontoMedio(a, b) {
+  return { x: (Number(a.x) + Number(b.x)) / 2, y: (Number(a.y) + Number(b.y)) / 2 };
+}
+
+/** Quanto tempo e que distância separam dois toques para ainda serem um duplo-toque. */
+export const JANELA_DUPLO_TOQUE = 300, RAIO_DUPLO_TOQUE = 28;
+
+/** O segundo toque conta se veio a tempo e no mesmo sítio (senão são dois toques soltos). */
+export function eDuploToque(anterior, agora, { janela = JANELA_DUPLO_TOQUE, raio = RAIO_DUPLO_TOQUE } = {}) {
+  if (!anterior || !agora) return false;
+  const dt = Number(agora.t) - Number(anterior.t);
+  if (!Number.isFinite(dt) || dt < 0 || dt > janela) return false;
+  const d = Math.hypot(Number(agora.x) - Number(anterior.x), Number(agora.y) - Number(anterior.y));
+  return Number.isFinite(d) && d <= raio;
+}
+
+/** O atrito do deslize, em 1/s. Alto de propósito: o escritório não é um carrossel. */
+export const ATRITO = 3.4;
+
+/** A velocidade que sobra ao fim de `dt` segundos de atrito exponencial (nunca inverte). */
+export function passoInercia(v, dt) {
+  const n = Number(v), t = Math.max(0, Number(dt) || 0);
+  if (!Number.isFinite(n)) return 0;
+  return n * Math.exp(-ATRITO * t);
+}
+
+/** Quando é que o deslize já não se vê: abaixo disto o mapa fica quieto (px/s). */
+export function inerciaAcabou(v, { minimo = 90 } = {}) {
+  return Math.abs(Number(v) || 0) < minimo;
+}

@@ -274,7 +274,7 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
   const modelImgs = {};
   if (topmodels) {
     topmodels.innerHTML = SEM_SERVIDOR
-      ? `<span class="tc-lab"><span class="dot"></span>MOTOR</span><span class="tc-none">sem servidor — o motor vive na tua máquina</span>`
+      ? `<span class="tc-lab" title="sem servidor — o motor vive na tua máquina"><span class="dot"></span>MOTOR</span><span class="tc-none">sem servidor — o motor vive na tua máquina</span>`
       : `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
     if (!SEM_SERVIDOR) Object.keys(MODELS).forEach((k, i) => {
       const L = LOGOS[k];

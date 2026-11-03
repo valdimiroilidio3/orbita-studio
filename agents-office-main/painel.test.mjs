@@ -319,3 +319,47 @@ test('DOM: a vista é uma só página, sem overflow horizontal declarado nos car
   assert.match(HTML, /@media \(max-width: 820px\)\s*\{[\s\S]*?\.cc-kpis\s*\{\s*grid-template-columns:\s*repeat\(2/s, 'no telemóvel dois cartões por linha');
   assert.match(HTML, /\.cc-row-t span\{?[^}]*overflow-wrap:\s*anywhere/s, 'texto longo não empurra a coluna');
 });
+
+
+/* ---------- 3 nov 2026 · item 1: a sala diz o que se passa lá dentro ---------- */
+
+test('a sala diz O QUE está a fazer — uma contagem não chega para não abrir a sala', () => {
+  const DEPTS = [...new Set(Object.values(DEPARTAMENTO_POR_TIPO))].map((id) => ({ id }));
+  const deptDe = (kind) => DEPARTAMENTO_POR_TIPO[kind] || 'comando';
+  const tarefa = (id, kind, state, created_at, extra = {}) => ({ id, kind, state, created_at, ...extra });
+
+  const ag = estadoAgentes({
+    departamentos: DEPTS,
+    tarefas: [
+      tarefa('t1', 'mensagem', 'running', '2026-11-03T10:00:00Z'),
+      tarefa('t2', 'briefing', 'succeeded', '2026-11-03T08:00:00Z'),
+      tarefa('t3', 'qa', 'failed', '2026-11-02T09:00:00Z', { error: 'link quebrado na página' }),
+    ],
+    rotulos: { mensagem: 'Mensagem ao lead', briefing: 'Briefing', qa: 'Qualidade' },
+    agora: Date.parse('2026-11-03T11:00:00Z'),
+  });
+
+  const trabalha = ag.linhas.find((l) => l.id === deptDe('mensagem'));
+  assert.equal(trabalha.titulo, 'Mensagem ao lead', 'a sala a trabalhar diz o trabalho que corre');
+  assert.equal(trabalha.aCorrerAgora, true);
+
+  const quieta = ag.linhas.find((l) => l.id === deptDe('briefing'));
+  assert.equal(quieta.titulo, 'Briefing', 'uma sala quieta diz o último trabalho que fez');
+  assert.equal(quieta.aCorrerAgora, false, 'e não se faz passar por ocupada');
+
+  const presa = ag.linhas.find((l) => l.id === deptDe('qa'));
+  assert.equal(presa.titulo, 'Qualidade');
+  assert.match(presa.erro, /link quebrado/, 'o motivo da falha vem com a sala, não escondido atrás de um clique');
+
+  assert.ok(ag.linhas.every((l) => 'titulo' in l), 'todas as salas respondem à mesma pergunta');
+});
+
+test('a mesa mostra o trabalho da sala na lista de agentes (sem abrir nenhuma)', () => {
+  const mesa = fs.readFileSync(new URL('./src/mesa.js', import.meta.url), 'utf8');
+  assert.match(mesa, /estadoAgentes\(\{ departamentos: S\.agentes\?\.departamentos \|\| \[\], tarefas, rotulos, agora \}\)/,
+    'a vista tem de passar os rótulos das tarefas às salas');
+  const ccAgentes = /function ccAgentes\(ag\)[\s\S]*?\n\}/.exec(mesa)[0];
+  assert.match(ccAgentes, /l\.titulo/, 'o que a sala está a fazer tem de aparecer na linha dela');
+  const css = fs.readFileSync(new URL('./src/mesa.html', import.meta.url), 'utf8');
+  assert.match(css, /\.cc-ag-o \{/, 'o título tem estilo próprio (e corta com reticências, não empurra a coluna)');
+});

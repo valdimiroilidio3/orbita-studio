@@ -24,6 +24,8 @@
    =========================================================================== */
 
 import { planoDoVideo, renderizarVideo, resumoDoVideo } from './estudio-video.js';
+/* 3 nov 2026 · gerar com custo desconhecido pergunta-se no diálogo da casa, não no `confirm` */
+import { confirmar } from './confirmar.js';
 
 const E = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -386,9 +388,12 @@ export async function accaoMedia(name, el, api) {
       return true;
     }
     if (M.estimativa.confiavel === false) {
-      const aceita = globalThis.confirm
-        ? globalThis.confirm('O custo desta geração é desconhecido (o fornecedor não tem preço configurado). Queres mesmo avançar?')
-        : true;
+      const aceita = await confirmar({
+        titulo: 'O custo desta geração é desconhecido',
+        texto: 'O fornecedor não tem preço configurado para este modelo, por isso não há estimativa. Podes avançar ou escolher outro modelo.',
+        confirmar: 'Avançar sem saber o custo', cancelar: 'Voltar',
+        perigo: true,
+      });
       if (!aceita) return true;
     }
     M.aGerar = true; M.aviso = null; api.paint();

@@ -673,20 +673,20 @@ test('acções: copiar usa a área de transferência quando existe, e diz quando
   }
 });
 
-test('acções: sair com alterações por gravar pede confirmação e respeita o «não»', () => {
+test('acções: sair com alterações por gravar pede confirmação e respeita o «não»', async () => {
   const api = fakeApi({});
   api.S.briefing = { ...estadoNovo('p1'), valores: { empresa: 'editado' }, sujo: true, dados: vistaExemplo() };
   const antes = globalThis.confirm;
   try {
     globalThis.confirm = () => false;
-    assert.equal(podeSair(api, { name: 'hoje', id: null }), false);
+    assert.equal(await podeSair(api, { name: 'hoje', id: null }), false);
     assert.equal(api.S.briefing.sujo, true, 'com «não», o trabalho fica onde está');
     globalThis.confirm = () => true;
-    assert.equal(podeSair(api, { name: 'hoje', id: null }), true);
+    assert.equal(await podeSair(api, { name: 'hoje', id: null }), true);
     assert.equal(api.S.briefing.sujo, false);
     /* mudar de aba dentro do mesmo projeto não pede nada */
     api.S.briefing.sujo = true;
-    assert.equal(podeSair(api, { name: 'projeto', id: 'p1' }), true);
+    assert.equal(await podeSair(api, { name: 'projeto', id: 'p1' }), true);
   } finally { globalThis.confirm = antes; }
 });
 

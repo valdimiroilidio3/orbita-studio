@@ -30,9 +30,27 @@
   :root {
     --cream: #FDFFF8; --ink: #151414; --grey: #5A5A5A;
     --hairline: rgba(21,20,20,.12);
-    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
-    --ui: Inter, -apple-system, "Helvetica Neue", sans-serif;
+    /* 3 nov 2026 · tipografia. «Instrument Serif» e «Inter» nunca eram carregadas: o browser caía
+       para Georgia (ou DejaVu, no Linux) e o produto mudava de voz conforme a máquina. As pilhas
+       passam a dizer a verdade e o Kode Mono — que já vem embutido — serve os números. */
+    --serif: Georgia, "Times New Roman", "DejaVu Serif", serif;
+    --ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --num: 'Kode Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --ease: cubic-bezier(.2,.8,.2,1);
+    /* 3 nov 2026 · movimento. Quatro durações e três curvas, para o produto ter um só ritmo:
+       toque · hover/seleção · painel · câmara. O briefing pedia 350–600 ms de câmara; a cena
+       usava 800 ms para abrir uma sala. */
+    --d1: 120ms; --d2: 180ms; --d3: 240ms; --d4: 320ms; --d-cam: 560ms;
+    --ease-out: cubic-bezier(.22,.61,.36,1);
+    --ease-inout: cubic-bezier(.4,0,.2,1);
+    --ease-spring: cubic-bezier(.16,1,.3,1);
+    /* raios e elevação — três degraus, não sete sombras diferentes */
+    --r1: 8px; --r2: 12px; --r3: 16px; --r4: 20px;
+    --sh1: 0 1px 2px rgba(21,20,20,.05);
+    --sh2: 0 1px 2px rgba(21,20,20,.05), 0 12px 28px -16px rgba(21,20,20,.30);
+    --sh3: 0 2px 4px rgba(21,20,20,.06), 0 28px 64px -28px rgba(21,20,20,.42);
+    /* o verde ácido da casa: só sobre superfícies escuras, para actividade e destaque */
+    --acid: #B9FF00; --acid-ink: #16180F;
     /* 26 out 2026 · tokens de design, desde o dia 1. Espaçamento em múltiplos de 4, escala
        tipográfica fixa, e três cores semânticas que querem dizer a mesma coisa em todo o lado. */
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
@@ -281,7 +299,15 @@
   /* V3.5: inside a department the strip centres in the bar and names the dept it feeds */
   #topconn.focus { position: absolute; left: 50%; transform: translateX(-50%); margin: 0; }
   /* V3.1: the model layer — Claude + ChatGPT run the office headless; wired to the Brain */
-  #topmodels { display: flex; align-items: center; gap: 7px; margin-right: 14px; }
+  #topmodels { display: flex; align-items: center; gap: 7px; margin-right: 14px; min-width: 0; }
+  /* 3 nov 2026 · a barra entre 1024 e 1280 px não tem largura para a frase inteira do estado
+     do motor («sem servidor — o motor vive na tua máquina»): o texto partia-se em três linhas
+     e o chip crescia para fora da barra (102 px de altura numa barra de 54, a 1024 px). Passa a
+     uma linha só, cortada com reticências — e abaixo de 1360 px fica apenas a etiqueta MOTOR
+     com o ponto de estado. A frase completa continua no `title`, e o compositor já diz o mesmo
+     por palavras quando não há motor. */
+  #topmodels .tc-none { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 1360px) { #topbar #topmodels .tc-none { display: none; } }
   #topmodels .tc-lab .dot { background: var(--ink); }
   #topconn .tc-lab, #topmodels .tc-lab {
     display: flex; align-items: center; gap: 6px; margin-right: 4px;
@@ -2232,7 +2258,7 @@
      cena, do calendário, do HOJE, dos LEADS e da OPERAÇÃO continuam a mandar.
      =========================================================================== */
   :root {
-    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Inter, system-ui, sans-serif;
+    --sf: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Inter, system-ui, sans-serif;
     --bar-h: 54px;
     --glass: rgba(253,255,248,.70);
     --glass-strong: rgba(253,255,248,.88);
@@ -2241,9 +2267,11 @@
     --glass-edge: rgba(21,20,20,.10);
     --fill-hover: rgba(21,20,20,.06);
     --fill-press: rgba(21,20,20,.11);
-    --accent: #0A84FF;
-    --accent-soft: rgba(10,132,255,.14);
-    --accent-ink: #0A62CC;
+    /* 3 nov 2026 · o azul de sistema sai. A selecção passa a ser tinta sobre papel — monocromático,
+       como o escritório — e o verde ácido fica reservado para o que está vivo. */
+    --accent: #1D1D1F;
+    --accent-soft: rgba(21,20,20,.07);
+    --accent-ink: #151414;
     --accent-bg: #1D1D1F;
     --accent-fg: #FDFFF8;
     --amber-bg: rgba(255,159,10,.14);
@@ -2258,8 +2286,8 @@
     --glass-edge: rgba(0,0,0,.5);
     --fill-hover: rgba(255,255,255,.085);
     --fill-press: rgba(255,255,255,.15);
-    --accent-soft: rgba(10,132,255,.22);
-    --accent-ink: #82BBFF;
+    --accent-soft: rgba(255,255,255,.12);
+    --accent-ink: #ECEAE3;
     --accent-bg: #F5F5F7;
     --accent-fg: #15161A;
     --amber-bg: rgba(255,159,10,.18);
@@ -2941,6 +2969,12 @@
     background: color-mix(in srgb, var(--cream) 80%, transparent); border: 1px solid var(--hairline); border-radius: 50%;
     color: var(--grey); font: inherit; font-size: 13px; cursor: pointer; }
   #railClose:hover { border-color: var(--ink); color: var(--ink); }
+  /* 3 nov 2026 · o ✕ caía por cima do canto do cabeçalho. Passa a ser um controlo do painel
+     (sombra curta, borda visível) e o cabeçalho reserva-lhe o lugar. */
+  #railClose { background: var(--cream); border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+    box-shadow: var(--sh1); transition: border-color var(--d2) var(--ease-out), color var(--d2) var(--ease-out); }
+  #railHeader { padding-right: 46px; }
+  #railHeader .b-name { padding-right: 4px; }
   @media (max-width: 640px) { #railClose { width: 44px; height: 44px; } }
   body.tp-folded #tpanel { top: auto; bottom: 18px; right: 18px; width: 214px; padding: 8px; gap: 0; }
   body.tp-folded #tpanel > *:not(.tp-fold) { display: none !important; }
@@ -3127,10 +3161,210 @@
     /* com a folha aberta, a placa da licença e o rodapé saem da frente (o dedo precisa do espaço) */
     body.bv-note #corner, body.bv-note .bv-foot { display: none; }
   }
-  /* telemóveis muito estreitos: a folha sobe menos e o rodapé encolhe */
-  @media (max-width: 380px) {
-    .bv-pane { max-height: 52vh; }
-    .bv-foot { display: none; } /* a instrução já está no cabeçalho e no aria-label */
+  /* ===========================================================================
+     3 nov 2026 · POLIMENTO VISUAL (uma camada só, no fim da folha)
+
+     O diagnóstico que esta camada corrige, por ordem de impacto:
+
+     1. O CARTÃO DA SALA media 270 px de largura — não por desenho, mas porque a
+        linha «A FAZER · SEGUINTE · CONCLUÍDO» tinha `white-space: nowrap` e
+        três etiquetas compridas numa fila. O cartão crescia para caber o texto e
+        tapava o escritório que existe para mostrar. Aqui a linha passa a três
+        colunas (rótulo por cima, número por baixo), a largura é fixa e a
+        hierarquia lê-se de cima para baixo: sala → agentes → trabalho → estado.
+     2. Havia três divisórias e três tamanhos de número dentro do mesmo cartão.
+        Fica uma divisória (a do trabalho) e uma escala: nome 9,5 · número 30 ·
+        métricas 17 · trabalho 13 · estado 8.
+     3. A coluna da câmara (11 botões redondos de 46 px) ocupava 566 px de altura
+        em cima da cena e dos cartões. Passa a um dock de duas colunas, e a cena
+        reserva-lhe espaço (main.js) para nenhum cartão lhe cair em cima.
+     4. O azul de sistema (#0A84FF) não pertence à identidade: a selecção passa a
+        ser tinta. O verde ácido (#B9FF00) aparece só onde há superfície escura —
+        o «+» da acção principal e o terminal.
+     5. Movimento: as durações e curvas passam a vir dos tokens (`--d1…--d-cam`,
+        `--ease-out`), o «AFASTAR» deixa de pulsar para sempre, e quem pediu
+        menos movimento perde a animação — não a informação.
+     =========================================================================== */
+
+  /* números que mudam não podem dançar: largura fixa em todos os contadores */
+  .badge .b-num, .badge .m-val, .b-tasks b,
+  #railHeader .b-num, #railHeader .m-val, #clock,
+  .oi-meta, #mStats .st-v, .tp-r3-note { font-variant-numeric: tabular-nums; }
+
+  /* um só anel de foco, igual em todo o produto */
+  :where(button, [role="button"], a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  /* ---------- o cartão da sala, na secretária ---------- */
+  @media (min-width: 641px) {
+    .badge {
+      width: 190px; min-width: 0; max-width: 190px;
+      padding: 11px 14px 10px; border-radius: var(--r3);
+      box-shadow: var(--sh2);
+      transition: box-shadow var(--d3) var(--ease-out), border-color var(--d3) var(--ease-out);
+    }
+    .badge:hover {
+      box-shadow: var(--sh3);
+      border-color: color-mix(in srgb, var(--ink) 22%, transparent);
+    }
+    .badge .b-name { font-size: 9.5px; font-weight: 600; letter-spacing: .13em; gap: 6px; }
+    .badge .dot { width: 7px; height: 7px; }
+    .badge .b-count { margin-top: 2px; gap: 5px; }
+    .badge .b-num { font-size: 30px; line-height: 1; letter-spacing: -.01em; }
+    .badge .b-lab { font-size: 7.5px; letter-spacing: .17em; }
+    .badge .b-metrics {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+      margin-top: 8px; padding-top: 7px; text-align: center;
+    }
+    .badge .m-row { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0; }
+    /* o rótulo comprido sai; fica o curto que a cena já escreve em data-short */
+    .badge .m-lab { display: block; font-size: 0; letter-spacing: .09em; white-space: nowrap; }
+    .badge .m-lab::after { content: attr(data-short); font-size: 7.5px; }
+    .badge .m-val { font-size: 17px; line-height: 1.05; }
+    .badge .b-state { margin-top: 7px; padding-top: 6px; font-size: 8px; letter-spacing: .12em; }
+    .badge .b-appr { margin-top: 6px; padding: 4px 6px; font-size: 8px; letter-spacing: .07em; gap: 4px; }
+    .badge::before { left: 50%; right: auto; width: 44px; transform: translateX(-50%); }
+    .badge.brainTag { width: auto; max-width: none; }
+    .badge.brainTag::before { left: 16px; right: 16px; width: auto; transform: none; }
+  }
+
+  /* a fila de trabalho: três colunas, nunca uma linha comprida */
+  .b-tasks {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    margin-top: 7px; padding-top: 6px;
+    font-size: 7.5px; letter-spacing: .09em; white-space: normal; text-align: center;
+  }
+  .b-tasks > span { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .b-tasks b { margin: 0; font-size: 13px; line-height: 1.1; }
+  #railHeader .b-tasks { grid-template-columns: repeat(3, 1fr); font-size: 8px; padding-top: 7px; }
+  #railHeader .b-tasks b { font-size: 17px; }
+
+  /* ---------- a câmara: um dock, não uma torre de botões ---------- */
+  @media (min-width: 901px) {
+    #zoomCtl {
+      right: 424px; bottom: 18px;
+      display: grid; grid-template-columns: repeat(2, 38px); gap: 4px;
+      padding: 6px; border-radius: 15px;
+      background: color-mix(in srgb, var(--cream) 94%, transparent);
+      border: 1px solid var(--hairline);
+      box-shadow: var(--sh2);
+    }
+    #zoomCtl button {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: transparent; border: 1px solid transparent;
+      box-shadow: none; font-size: 16px;
+      transition: background-color var(--d2) var(--ease-out), color var(--d2) var(--ease-out),
+                  border-color var(--d2) var(--ease-out);
+    }
+    #zoomCtl button:hover { background: var(--ink); color: var(--cream); border-color: var(--ink); box-shadow: none; }
+    #zoomCtl button.cam { font-size: 14px; }
+    #zoomCtl button.wide {
+      grid-column: span 2; width: auto; height: 28px;
+      font-size: 9px; letter-spacing: .12em; font-weight: 700;
+      border-color: var(--hairline);
+    }
+    #zoomCtl button.on { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+    #zoomCtl svg { width: 15px; height: 15px; }
+  }
+
+  /* ---------- a barra: selecção em tinta, nunca cortada a meio de uma palavra ---------- */
+  #topbar #topconn, #topbar #topmodels { min-width: 0; overflow: hidden; }
+  #topbar #topconn .tc-lab, #topbar #topmodels .tc-lab { overflow: hidden; text-overflow: ellipsis; }
+  #topbar #topconn.focus { overflow: visible; }
+  #topbar .m-group > button.on, #topbar .m-group > a.on,
+  body.calOpen #topbar .m-group > #topCal {
+    background: var(--ink); color: var(--cream);
+    box-shadow: 0 1px 2px rgba(21,20,20,.16);
+  }
+  #topbar .m-group > button.on .mb-i, #topbar .m-group > a.on .mb-i { opacity: 1; }
+  body.dark #topbar .m-group > button.on, body.dark #topbar .m-group > a.on,
+  body.dark.calOpen #topbar .m-group > #topCal { background: #F5F5F7; color: #15161A; }
+  #clock { font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+
+  /* ---------- os painéis: mais ar, a mesma hierarquia ---------- */
+  #tpanel {
+    width: 380px; border-radius: var(--r4); padding: 15px 15px 13px; gap: 10px;
+    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
+    box-shadow: var(--sh3);
+  }
+  #tpanel .tp-cmd { border-width: 1px; border-color: color-mix(in srgb, var(--ink) 18%, transparent); border-radius: var(--r3); }
+  #tpanel .tp-cmd:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent); }
+  #tpanel .tp-r2 { gap: 8px; flex-wrap: wrap; }
+  #tpanel .tp-r2 .tp-add { padding: 7px 12px; }
+  #tpanel .tp-add-k { color: var(--acid); opacity: 1; font-weight: 700; }
+  #tpanel .tp-r3-note { white-space: normal; line-height: 1.35; font-size: 9px; }
+  #tpanel .tp-tools > button { padding: 5px 9px; }
+  #tpanel .tp-head { align-items: flex-end; gap: 8px; }
+  #tpanel .tp-lab { font-size: 18px; line-height: 1.18; letter-spacing: .03em; }
+  #tpanel .tp-mode { vertical-align: 0; margin: 3px 0 0; display: inline-flex; align-items: center; }
+  #tpanel .tp-mode[hidden] { display: none !important; }
+  #tpanel .tp-scope { white-space: nowrap; font-size: 8px; letter-spacing: .12em; text-align: right; line-height: 1.3; }
+  #railHeader { border-radius: var(--r3); box-shadow: var(--sh2); transition: opacity var(--d4) var(--ease-out); padding-top: 12px; }
+  /* as três métricas do cartão são as mesmas contagens que a fila de trabalho logo abaixo —
+     dentro da gaveta não se diz duas vezes. O cabeçalho perde 90 px de altura. */
+  #railHeader .b-metrics { display: none; }
+  #railHeader .b-num { font-size: 34px; }
+  #railHeader .b-count { margin-top: 2px; }
+  #railHeader .pra { margin-top: 8px; padding-top: 8px; }
+  /* o «AFASTAR» é um botão do topo do painel; o compositor começa abaixo dele (antes
+     ficavam os dois na mesma linha e o botão tapava o campo) */
+  #tpanel { padding-top: 46px; }
+  @media (max-width: 640px) { #tpanel:not(.tp-folded) { padding-top: 46px; } }
+  /* o papel do agente numa linha só — «DIRECÇÃO E COORDENAÇÃO DE AGENTES · COMANDO» */
+  #rail .mh-role { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 9.5px; letter-spacing: .09em; }
+
+  /* aprovações: um selo âmbar parado. Pulsar para sempre é ruído, não urgência. */
+  .badge .b-appr, #topAppr, #railHeader .b-appr { animation: none; }
+  .badge .b-appr, #railHeader .b-appr { box-shadow: 0 0 0 1px rgba(242,184,75,.28); }
+
+  /* as pastilhas aparecem e desaparecem; no telemóvel não há transição (o CSS abaixo já o faz) */
+  .pill { transition: box-shadow var(--d2) var(--ease-out), border-color var(--d2) var(--ease-out),
+                      opacity var(--d3) var(--ease-out); }
+
+  /* em foco, a tira de motores cede o centro à sala (era aqui que o texto se cruzava) */
+  #topbar #topconn.focus {
+    position: static; transform: none; margin-left: 6px;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  }
+  #topbar #topconn.focus .tc-lab { overflow: hidden; text-overflow: ellipsis; }
+  body:has(#rail.open) #topbar #topmodels { display: none; }
+
+  /* o cartão responde ao toque sem saltar (o transform é da câmara, não do CSS) */
+  .badge:active { border-color: var(--ink); }
+
+  /* telemóvel: 124 px de cartão não seguram «CONCLUÍDO» a 7,5 px — a etiqueta saía fora da
+     borda. Desce o tipo e o espaço; a informação é a mesma. */
+  @media (max-width: 640px) {
+    .b-tasks { font-size: 6px; letter-spacing: .02em; gap: 2px; margin-top: 4px; padding-top: 4px; }
+    .b-tasks > span { gap: 0; }
+    .b-tasks b { font-size: 11px; }
+    /* o dock da câmara estava fora do ecrã à esquerda (right: 448px num ecrã de 430 px) */
+    #zoomCtl {
+      right: 10px; bottom: 76px; left: auto;
+      display: grid; grid-template-columns: repeat(3, 34px); gap: 4px;
+      padding: 5px; border-radius: 13px;
+      background: color-mix(in srgb, var(--cream) 94%, transparent);
+      border: 1px solid var(--hairline); box-shadow: var(--sh2);
+    }
+    #zoomCtl button { width: 34px; height: 34px; border-radius: 9px; background: transparent; border-color: transparent; box-shadow: none; font-size: 15px; }
+    #zoomCtl button.wide { grid-column: span 2; width: auto; height: 26px; font-size: 8.5px; border-color: var(--hairline); }
+    #zoomCtl svg { width: 14px; height: 14px; }
+    /* o «afastar» do painel ficava debaixo da placa da licença, no canto esquerdo */
+    body.tp-folded #tpanel { left: auto; right: 10px; }
+    #overviewBtn.right { left: 20px; right: auto; }
+  }
+
+  /* ---------- quem pediu menos movimento perde a animação, não a informação ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 </style>
 </head>
@@ -3502,13 +3736,15 @@
   <button id="zIn" title="ampliar (+)">+</button>
   <button id="zOut" title="reduzir (−)">−</button>
   <button id="zHome" title="visão geral (0)">⌂</button>
-  <button id="zIndex" title="lista do escritório (L)" aria-label="lista do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></button>
   <!-- 1.53.0 · os ângulos da câmara: rodar um quarto de volta ([ e ]), e a vista aérea (9).
-       O rótulo do meio não é decoração — diz em que vista se está. -->
-  <button id="zLeft" class="cam" title="rodar para a esquerda ([ ou Shift+scroll)" aria-label="rodar a câmara para a esquerda">‹</button>
-  <button id="zAngle" class="cam wide" title="rodar a câmara (], 0 endireita; Alt+arrastar e Shift+scroll também rodam)">NE</button>
-  <button id="zRight" class="cam" title="rodar para a direita (] ou Shift+scroll)" aria-label="rodar a câmara para a direita">›</button>
+       O rótulo do meio não é decoração — diz em que vista se está. 3 nov 2026: a vista aérea
+       subiu para junto do «casa» (as duas repõem a vista) e o rótulo do ângulo fecha a fila dos
+       giros — o dock de duas colunas enche-se sem buracos. -->
   <button id="zAerea" class="cam" title="vista aérea (9; Alt+arrastar inclina)" aria-label="vista aérea">◍</button>
+  <button id="zLeft" class="cam" title="rodar para a esquerda ([ ou Shift+scroll)" aria-label="rodar a câmara para a esquerda">‹</button>
+  <button id="zRight" class="cam" title="rodar para a direita (] ou Shift+scroll)" aria-label="rodar a câmara para a direita">›</button>
+  <button id="zAngle" class="cam wide" title="rodar a câmara (], 0 endireita; Alt+arrastar e Shift+scroll também rodam)">NE</button>
+  <button id="zIndex" title="lista do escritório (L)" aria-label="lista do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg></button>
   <!-- 1.53.0 · a loja de apps: as integrações que ligam mesmo, num sítio só -->
   <button id="zApps" title="apps e integrações (A)" aria-label="apps e integrações"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z"/></svg></button>
   <!-- 27 out 2026: o terminal da oficina também tem de ser encontrável sem saber atalhos -->

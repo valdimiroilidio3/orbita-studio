@@ -209,7 +209,7 @@ export function filaDeAprovacao({ hoje = null, tarefas = [], rotulos = {}, agora
  * Aceita as duas formas: as contagens que o servidor já juntou (`tarefas`) ou a
  * lista crua, que é somada aqui pelo tipo.
  */
-export function estadoAgentes({ departamentos = [], tarefas = [], agora = Date.now() } = {}) {
+export function estadoAgentes({ departamentos = [], tarefas = [], rotulos = {}, agora = Date.now() } = {}) {
   const lista = Array.isArray(tarefas) ? tarefas.filter(Boolean) : [];
   const porDept = new Map();
   for (const t of lista) {
@@ -235,6 +235,13 @@ export function estadoAgentes({ departamentos = [], tarefas = [], agora = Date.n
     const ultimaTarefa = minhas
       .slice()
       .sort((a, b) => String(quandoDaTarefa(b) || '').localeCompare(String(quandoDaTarefa(a) || '')))[0] || null;
+    /* 3 nov 2026 · o dono pediu o estado dos agentes «sem obrigar a abrir cada sala». Uma
+       contagem («1 a correr») não diz o que se passa lá dentro: a sala passa a dizer QUE
+       trabalho é esse — o que está a correr agora ou, se está quieta, o último que fez. */
+    const agoraNaSala = minhas.filter((t) => t.state === 'running')
+      .sort((a, b) => String(quandoDaTarefa(b) || '').localeCompare(String(quandoDaTarefa(a) || '')))[0] || null;
+    const referencia = agoraNaSala || ultimaTarefa;
+    const rotuloDa = (t) => (t ? (rotulos[t.kind] || t.kind || 'Tarefa') : null);
 
     let estado = 'sem-trabalho';
     if (aCorrer > 0) estado = 'a-trabalhar';
@@ -249,6 +256,9 @@ export function estadoAgentes({ departamentos = [], tarefas = [], agora = Date.n
       estado,
       aCorrer, naFila, porAprovar, concluidas, falhadas,
       ultima: quandoDaTarefa(ultimaTarefa) || d.ultima || null,
+      titulo: rotuloDa(referencia),
+      aCorrerAgora: !!agoraNaSala,
+      erro: referencia && referencia.state === 'failed' ? String(referencia.error || '').slice(0, 140) || null : null,
       ultimaIdade: idade(quandoDaTarefa(ultimaTarefa) || d.ultima, agora),
       ultimaFalha: d.ultimaFalha?.error || d.ultimaFalha || null,
     };

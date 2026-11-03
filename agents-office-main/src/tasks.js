@@ -1006,7 +1006,9 @@ export function initTasks(ctx) {
   }
   connect();
   // chips: filters with live counts
-  const CHIPS = [['all', 'All'], ['sched', 'Scheduled'], ['next', 'Backlog'], ['doing', 'em curso'], ['waiting', 'Waiting'], ['done', 'Done']];
+  /* 3 nov 2026 · os filtros eram os únicos textos em inglês num painel português
+     («All · Scheduled · Backlog · Waiting · Done» ao lado de «EM CURSO»). Uma língua só. */
+  const CHIPS = [['all', 'Tudo'], ['sched', 'Agendadas'], ['next', 'Em espera'], ['doing', 'Em curso'], ['waiting', 'À espera'], ['done', 'Feitas']];
   function chipsHTML() {
     const scope = scoped();
     const cnt = st => st === 'all' ? scope.length : st === 'sched' ? scopedRoutines().length + scope.filter(t => t.state === 'scheduled').length : scope.filter(t => t.state === st).length;

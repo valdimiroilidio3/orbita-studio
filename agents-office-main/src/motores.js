@@ -251,6 +251,53 @@ export function escolhaDoAgente(agente, lista = []) {
   };
 }
 
+/**
+ * 3 nov 2026 · O MOTOR DE UMA EXECUÇÃO, à vista enquanto ela corre.
+ *
+ * A página Motores diz tudo sobre os motores, mas a distinção que o dono pediu —
+ * um CLI tem mãos (corre nesta máquina, abre ficheiros, usa ferramentas) e uma
+ * API responde com texto (as ferramentas correm no servidor, se as pedir) — só
+ * serve de alguma coisa se estiver à frente de quem está a ver a execução.
+ *
+ * Não se inventa nada: sem registo diz-se «não registado»; um fornecedor que não
+ * está nesta instalação diz-se assim; o que o fornecedor não declarou fica «por
+ * declarar» (e não «não tem»).
+ */
+export function motorDaExecucao(alvo = {}, motores = [], { listaCarregada = true } = {}) {
+  const a = alvo || {};
+  const lista = Array.isArray(motores) ? motores : [];
+  const pedido = texto(a.fornecedor);
+  const modelo = texto(a.modelo);
+  const achado = pedido ? (lista.find((m) => m.id === pedido || m.nome === pedido) || null) : null;
+  const aprovacao = 'as acções destrutivas exigem sempre aprovação humana — nenhum motor as corre sozinho';
+
+  if (!achado) {
+    return {
+      conhecido: false, classe: null, curto: '—', classeRotulo: 'Motor não registado',
+      id: pedido || null, nome: pedido || modelo || 'não registado', modelo: modelo || null,
+      porque: !pedido && !modelo
+        ? 'esta execução não registou o motor que a correu'
+        : !listaCarregada
+          /* «não está nesta instalação» é uma afirmação; sem a lista lida não se sabe — diz-se */
+          ? `a lista de motores ainda não foi lida — abre Motores para ver se «${pedido || modelo}» existe`
+          : pedido
+            ? `o motor «${pedido}» não está nesta instalação`
+            : 'a execução registou o modelo mas não o fornecedor',
+      ferramentas: null, ficheiros: null, permissoes: [], estado: null,
+      verificacao: 'nunca verificado', aprovacao,
+    };
+  }
+  const tem = (id) => (achado.capacidades.find((c) => c.id === id) || {}).tem;
+  return {
+    conhecido: true, id: achado.id, nome: achado.nome, modelo: modelo || achado.modelo,
+    classe: achado.classe, curto: CLASSES[achado.classe].curto,
+    classeRotulo: CLASSES[achado.classe].rotulo, porque: CLASSES[achado.classe].porque,
+    ferramentas: tem('ferramentas'), ficheiros: tem('ficheiros'),
+    permissoes: achado.permissoes, estado: achado.estado,
+    verificacao: achado.verificacao.rotulo, aprovacao,
+  };
+}
+
 /** O nível de autonomia de um tipo de trabalho, dito por palavras. */
 export function nivelDeAutonomia(registo, { agora = Date.now() } = {}) {
   const r = registo || {};

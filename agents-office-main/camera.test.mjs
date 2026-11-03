@@ -14,6 +14,8 @@ import {
   ANGULOS, AEREA, INCLINACAO_MIN, INCLINACAO_MAX, INCLINACAO_BASE, RAD_POR_PIXEL,
   direcaoDaCamara, rodar, normalizarAngulo, inclinacaoValida, anguloActual,
   proximoAngulo, etiquetaDoAngulo, gestoDoScroll, gestoDoArrasto,
+  zoomPorPinca, pontoMedio, eDuploToque, passoInercia, inerciaAcabou,
+  JANELA_DUPLO_TOQUE, RAIO_DUPLO_TOQUE, ATRITO,
 } from './src/camera.js';
 
 const PI = Math.PI;
@@ -210,4 +212,65 @@ test('pinca: sem dois dedos não se inventa zoom', () => {
   assert.equal(zoomDaPinca(1.5, 120, 0).aplicado, false);
   assert.match(zoomDaPinca(1.5, 0, 120).motivo, /dois dedos/);
   assert.equal(zoomDaPinca(1.5, NaN, 120).aplicado, false);
+});
+
+/* ---------- 3 nov 2026 · o telemóvel: pinça, duplo-toque e deslize ---------- */
+
+test('a pinça dá zoom pela razão entre as distâncias, e nunca sai dos limites', () => {
+  // afastar os dedos ao dobro dobra o zoom; juntá-los a metade corta-o
+  perto(zoomPorPinca(1, 100, 200), 2);
+  perto(zoomPorPinca(2, 200, 100), 1);
+  // o limite é o mesmo da roda: não se entra no chão nem se sai para o espaço
+  assert.equal(zoomPorPinca(4, 100, 400), 5.2);
+  assert.equal(zoomPorPinca(1, 400, 10), 0.72);
+  // dedos em cima um do outro (ou um número inválido) não dão gesto nenhum
+  perto(zoomPorPinca(1.5, 0, 80), 1.5);
+  perto(zoomPorPinca(1.5, 80, 0), 1.5);
+  perto(zoomPorPinca(1.5, NaN, NaN), 1.5);
+  // um zoom inicial estragado não inventa um valor: cai no mínimo
+  assert.equal(zoomPorPinca(0, 100, 200), 0.72);
+});
+
+test('o meio entre dois dedos é o ponto que fica parado na pinça', () => {
+  assert.deepEqual(pontoMedio({ x: 100, y: 200 }, { x: 300, y: 400 }), { x: 200, y: 300 });
+  assert.deepEqual(pontoMedio({ x: -10, y: 5 }, { x: 10, y: -5 }), { x: 0, y: 0 });
+});
+
+test('duplo-toque: dois toques perto e depressa; longe ou devagar são dois toques soltos', () => {
+  assert.equal(eDuploToque({ x: 100, y: 100, t: 1000 }, { x: 108, y: 96, t: 1200 }), true);
+  assert.equal(eDuploToque({ x: 100, y: 100, t: 1000 }, { x: 100, y: 100, t: 1000 + JANELA_DUPLO_TOQUE + 1 }), false,
+    'fora da janela é um toque novo, não um duplo');
+  assert.equal(eDuploToque({ x: 100, y: 100, t: 1000 }, { x: 100 + RAIO_DUPLO_TOQUE + 1, y: 100, t: 1100 }), false,
+    'um dedo que escorregou não é o mesmo sítio');
+  assert.equal(eDuploToque(null, { x: 0, y: 0, t: 0 }), false, 'o primeiro toque nunca é duplo');
+  assert.equal(eDuploToque({ x: 0, y: 0, t: 100 }, { x: 0, y: 0, t: 50 }), false, 'tempo ao contrário não conta');
+});
+
+test('o deslize abranda com atrito e acaba — nunca fica a andar para sempre', () => {
+  const v0 = 1200; // px/s
+  const meio = passoInercia(v0, 0.2);
+  assert.ok(meio < v0 && meio > 0, 'a velocidade tem de descer sem inverter');
+  perto(meio, v0 * Math.exp(-ATRITO * 0.2));
+  // ao fim de um segundo resta ~3%: o mapa fica quieto em menos de um segundo
+  assert.ok(passoInercia(v0, 1) < v0 * 0.05);
+  assert.equal(passoInercia(NaN, 0.1), 0, 'um número estragado não põe o mapa a voar');
+  assert.equal(inerciaAcabou(10), true);
+  assert.equal(inerciaAcabou(-10), true);
+  assert.equal(inerciaAcabou(600), false);
+});
+
+test('main.js liga a pinça, o duplo-toque e a inércia — sem dedos presos', () => {
+  const m = readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+  /* a pinça usa a conta de `camera.js` que já está em produção desde a 1.62.0 */
+  assert.match(m, /zoomDaPinca\(pinca\.zoom, pinca\.dist, d\)/);
+  assert.match(m, /if \(dedos\.size === 2\)/, 'o segundo dedo cancela o arrasto');
+  assert.match(m, /pinca = \{ dist: distanciaDe\(\), zoom: view\.zoom \}/);
+  /* e o que faltava lá: o duplo-toque e o deslize que abranda em vez de parar a seco */
+  assert.match(m, /eDuploToque\(ultimoToque/, 'o segundo toque é reconhecido');
+  assert.match(m, /balanco = \{ vx: drag\.vx \* 1000, vy: drag\.vy \* 1000/, 'o deslize guarda a velocidade do dedo');
+  assert.match(m, /inerciaAcabou\(balanco\.vx\)/, 'e a câmara sabe quando parou');
+  assert.match(m, /inerciaAcabou\(/, 'e sabe quando parar');
+  /* dedos presos: soltar um dedo de uma pinça nunca é um clique, e o gesto limpa-se */
+  assert.match(m, /pointercancel[\s\S]{0,160}dedos\.delete\(e\.pointerId\)/);
+  assert.match(m, /if \(gestoDeDois\) \{ if \(!dedos\.size\) gestoDeDois = false; return; \}/);
 });

@@ -471,7 +471,9 @@ if (mIn && mSend) {
     ok(av.stats.hats >= 5, `poucos chapéus (${av.stats.hats}) — o dono pediu «alguns com chapéu»`);
     const SALAS = new Set(Object.values(av.looks).map((l) => l.suit));
     ok(SALAS.size === 6, `devia haver um fato por sala (seis cores), há ${SALAS.size}`);
-    ok(av.meshes > 0 && av.meshes <= 35 * 12, `avatares com demasiadas malhas: ${av.meshes}`);
+    /* 3 nov 2026 · o tecto era 35 × 12 desde que o elenco tinha 35 pessoas. O elenco passou a 47
+       (1.59.0) e a conta certa é 12 malhas por agente — o número não mudou, o elenco sim. */
+    ok(av.meshes > 0 && av.meshes <= AGENTS.length * 12, `avatares com demasiadas malhas: ${av.meshes}`);
     // cada posto tem as teclas (uma malha instanciada) e o rato (uma malha que se move)
     const semTeclas = Object.values(R).filter((r) => !r.caps || r.caps.count !== 57);
     ok(semTeclas.length === 0, `${semTeclas.length} postos sem as 57 teclas`);
@@ -1000,6 +1002,6 @@ if (falhas.length) {
   for (const f of falhas) console.error('  · ' + f);
   process.exit(1);
 }
-console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, 35 secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + 35 agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis), cartões de sala que encolhem e se arrumam no telemóvel, Cérebro responsivo com ✕ que fecha a sério e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
+console.log(`✓ cena: ${postos.length} postos, ${resumoPedido34}, ${resumoPedido36}, chão de vidro em 7 pods (${mapaCores}), ${resumoPlantas}, ${resumoAdereco}, ${resumoCirculacao}, ${AGENTS.length} secretárias pretas com LED na cor da sala, ${avatares}, terminal da oficina (tecla F), espelho acessível com 7 salas + ${AGENTS.length} agentes (tecla L), pé da escada com platô em 6 passadeiras, marca ÓRBITA AGENTES, configurações (tema · APIs · avisos · painéis), cartões de sala que encolhem e se arrumam no telemóvel, Cérebro responsivo com ✕ que fecha a sério e compositor da conversa, sem erros no bundle (${path.basename(ALVO)})`);
 if (ruido.length) console.log(`  (nota: ${ruido.length} erro(s) do three por o WebGL do harness ser falso — render targets)`);
 process.exit(0);

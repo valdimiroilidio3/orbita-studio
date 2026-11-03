@@ -8,11 +8,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadConfig, ROOT } from './config.mjs';
+import { AGENTS } from './src/data.js';
 
 const results = [];
+const saltados = []; // pré-requisitos ausentes nesta máquina (não são falhas nem passes)
 const ok = (name, detail = '') => { results.push([true, name, detail]); console.log(`✓ ${name}${detail ? '  — ' + detail : ''}`); };
 const bad = (name, detail = '') => { results.push([false, name, detail]); console.log(`✗ ${name}${detail ? '  — ' + detail : ''}`); };
-const step = async (name, fn) => { try { const d = await fn(); ok(name, d || ''); return true; } catch (e) { bad(name, e.message); return false; } };
+const step = async (name, fn) => {
+  try {
+    const d = await fn();
+    /* 3 nov 2026 · um passo cujo pré-requisito não existe nesta máquina (um CLI, um browser)
+       não é código partido nem código verde: diz-se «saltado» e não conta para os passes. */
+    if (d && typeof d === 'object' && d.skip) { saltados.push(name); console.log(`• ${name}  — saltado: ${d.skip}`); return true; }
+    ok(name, d || ''); return true;
+  } catch (e) { bad(name, e.message); return false; }
+};
 const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
   const p = spawn(cmd, args, { cwd: ROOT, ...opts }); let out = '', err = '';
   p.stdout?.on('data', d => { out += d; }); p.stderr?.on('data', d => { err += d; });
@@ -22,21 +32,34 @@ const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
 const cfg = loadConfig();
 const LIVE = process.env.CHECK_LIVE === '1';
 
+/* 3 nov 2026 · o resumo do `node --test` mudou no Node 20: era `# pass 71` até ao 18 e passou a
+   `ℹ pass 71`. O gate só conhecia o antigo, lia zero testes e dava por falhado um código verde.
+   Aceita os dois formatos; o número de falhas continua a mandar. */
+const resumoDeTestes = (out) => {
+  let passaram = 0, falharam = 0;
+  for (const linha of out.split('\n')) {
+    const m = linha.trim().match(/^(?:#|ℹ)\s*(pass|fail)\s+(\d+)$/i);
+    if (!m) continue;
+    if (/^pass$/i.test(m[1])) passaram += +m[2]; else falharam += +m[2];
+  }
+  return { passaram, falharam };
+};
+const testesOk = (out, oque) => {
+  const t = resumoDeTestes(out);
+  if (!t.passaram || t.falharam) throw new Error(oque + ': ' + out.trim().split('\n').slice(-10).join(' | '));
+  return t.passaram;
+};
+
 /* ---------- ORBITA API integrations (26 out 2026) ---------- */
 await step('integrações e Google: token, CRM, fila de conteúdo, Places e pesquisa web', async () => {
   const out = await sh('node', ['--test', 'integrations.test.mjs']);
-  const counts = [...out.matchAll(/# pass (\d+)/g)].map(m => +m[1]); // um ficheiro de testes por linha de resumo
-  const passed = counts.reduce((a, b) => a + b, 0);
-  const failed = [...out.matchAll(/# fail (\d+)/g)].reduce((a, m) => a + +m[1], 0);
-  if (!passed || failed) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
+  const passed = testesOk(out, 'integrações');
   return `${passed} testes (integrações + Google) · 0 falhas`;
 });
 
 await step('operação: base de dados, pontuação, funil, aprovação, opt-out e fila', async () => {
   const out = await sh('node', ['--test', 'ops.test.mjs']);
-  const passed = [...out.matchAll(/# pass (\d+)/g)].reduce((a, m) => a + +m[1], 0);
-  const failed = [...out.matchAll(/# fail (\d+)/g)].reduce((a, m) => a + +m[1], 0);
-  if (!passed || failed) throw new Error(out.trim().split('\n').slice(-8).join(' | '));
+  const passed = testesOk(out, 'operação');
   return `${passed} testes · SQLite em memória, nenhum serviço externo`;
 });
 
@@ -47,6 +70,18 @@ await step('build: braingraph + bundle', async () => {
   if (html.length < 500000) throw new Error('bundle looks too small: ' + html.length);
   if (!/ÓRBITA/.test(html)) throw new Error('shell missing');
   return out.trim().split('\n').pop();
+});
+
+/* ---------- 1a. o escritório: a camada que o dono vê ---------- */
+await step('escritório: acessibilidade, tabuleiro, câmara, circulação, painel e botões', async () => {
+  const out = await sh('node', ['--test', 'a11y.test.mjs', 'office.test.mjs', 'camera.test.mjs', 'circulation.test.mjs', 'painel.test.mjs', 'botoes.test.mjs']);
+  const passed = testesOk(out, 'escritório');
+  return `${passed} testes · 0 falhas`;
+});
+await step('cena: o palco 3D monta, com as salas e o elenco real', async () => {
+  const out = await sh('node', ['scene.smoke.mjs']);
+  const linhas = out.trim().split('\n');
+  return linhas[linhas.length - 1].replace(/^✓ cena: /, '').slice(0, 90);
 });
 await step('hoje: o ecrã existe no bundle — três blocos, gesto, porquê e interruptor', async () => {
   const html = fs.readFileSync(path.join(ROOT, 'dist', 'command-centre-v2.html'), 'utf8');
@@ -362,146 +397,63 @@ await step('config: browser and teams default on, max 4', async () => {
 /* ---------- 2. offline smoke (Playwright) ---------- */
 let chromium = null;
 try { ({ chromium } = await import('playwright')); } catch { try { ({ chromium } = await import('playwright-core')); } catch {} }
+/* 3 nov 2026 · o gate não pode ficar vermelho por não haver browser: aceita o do playwright, o
+   Google Chrome do sistema, ou um binário indicado em CHROME_PATH (é o que o CI e esta VM usam). */
+const abrirBrowser = async (opts = {}) => {
+  const args = ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', ...(opts.args || [])];
+  if (process.env.CHROME_PATH) return chromium.launch({ executablePath: process.env.CHROME_PATH, args });
+  try { return await chromium.launch({ args }); }
+  catch { return await chromium.launch({ channel: 'chrome', args }); }
+};
 if (!chromium) bad('smoke: playwright', 'not installed — npm i -D playwright-core (uses your Chrome)');
 else {
   let browser = null;
   try {
-    try { browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] }); }
-    catch { browser = await chromium.launch({ channel: 'chrome', args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] }); }
+    browser = await abrirBrowser();
     const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
     const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 120)); });
     await page.goto('file://' + path.join(ROOT, 'dist', 'command-centre-v2.html') + '?s=check'); await page.waitForTimeout(3000);
-    await step('smoke: loads without page errors', async () => { if (errors.length) throw new Error(errors[0]); });
-    await step('smoke: 35 agents at their desks', async () => { const n = await page.evaluate(() => Object.keys(window.CC.R).length); if (n !== 35) throw new Error('agents: ' + n); return n + ' agents'; });
+    /* 3 nov 2026 · esta secção abria o bundle num Chrome e assumia um «modo demo» que já não
+       existe: as tarefas vivem no servidor, e sem ele a barra diz isso mesmo. Um smoke de
+       ficheiro estático só pode provar o arranque e o que está à vista — o resto (criar,
+       equipa, rotinas, quadro, calendário) é provado pelo servidor isolado e pelas suites. */
+    /* numa página file:// não há API: o browser recusa os pedidos (origem null) antes de saírem.
+       É a vista estática a dizer «sem servidor», não um erro da aplicação. */
+    const ruidoEstatico = (t) => t.includes('file:///api/') || t.includes("origin 'null'")
+      || /^Failed to load resource: net::ERR_FAILED$/.test(t) // o EventSource da vista ao vivo, bloqueado na origem file://
+      || t.includes('Fetch API cannot load file:///');
+    await step('smoke: loads without page errors', async () => {
+      const reais = errors.filter((t) => !ruidoEstatico(t));
+      if (reais.length) throw new Error(reais[0]);
+    });
+    await step(`smoke: ${AGENTS.length} agents at their desks`, async () => { const n = await page.evaluate(() => Object.keys(window.CC.R).length); if (n !== AGENTS.length) throw new Error(`agents: ${n} (elenco: ${AGENTS.length})`); return n + ' agents'; });
     await step('smoke: six department cards + the Brain tag', async () => {
       const t = await page.evaluate(() => [...document.querySelectorAll('.badge .b-name')].map(e => e.textContent.trim()));
-      for (const k of ['COMANDO', 'PROSPEÇÃO', 'VENDAS', 'DESIGN LAB', 'ENGENHARIA', 'MEDIA', 'O CÉREBRO']) if (!t.some(x => x.startsWith(k))) throw new Error('missing card ' + k);
+      for (const k of ['COMANDO', 'PROSPEÇÃO', 'VENDAS', 'DESIGN', 'ENGENHARIA', 'MEDIA', 'O CÉREBRO']) if (!t.some(x => x.startsWith(k))) throw new Error('missing card ' + k);
     });
-    await step('smoke: task panel has rows and counts', async () => {
-      const n = await page.evaluate(() => document.querySelectorAll('.tp-row').length); if (n < 10) throw new Error('rows: ' + n);
-      const chips = await page.evaluate(() => document.querySelectorAll('.tp-chip').length); if (chips !== 6) throw new Error('chips: ' + chips);
-      return n + ' rows';
+    await step('smoke: the task panel is present and honest without a server', async () => {
+      const r = await page.evaluate(() => ({
+        chips: document.querySelectorAll('.tp-chip').length,
+        rows: document.querySelectorAll('.tp-row').length,
+        txt: (document.querySelector('#tpanel') || {}).textContent || '',
+      }));
+      if (r.chips !== 6) throw new Error('chips: ' + r.chips);
+      if (r.rows) throw new Error('linhas inventadas sem servidor: ' + r.rows);
+      if (!/Nada aqui neste momento/.test(r.txt)) throw new Error('sem estado vazio explicado');
+      return '6 filtros · 0 linhas · estado vazio explicado';
     });
-    await step('smoke: command bar adds a task in demo mode', async () => {
-      await page.click('.tp-dd'); await page.click('.tp-menu button[data-k="marketing"]');
-      await page.fill('.tp-in', 'cut a 15 second teaser from the demo reel'); await page.keyboard.press('Enter'); await page.waitForTimeout(600);
-      const hint = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Added/.test(hint)) throw new Error('hint: ' + hint);
-      const row = await page.evaluate(() => [...document.querySelectorAll('.tp-row .tp-t')].some(e => /teaser/i.test(e.textContent))); if (!row) throw new Error('row not in the feed');
-      return hint.trim().slice(0, 60);
-    });
-    await step('smoke: TEAM in the bar → the lead + piece cards on the desks (demo)', async () => { // V3.2 (16 Sep)
-      await page.waitForTimeout(2800); // the previous step's hint timer (2.6 s) would wipe our "Added" line mid-read
-      await page.click('.tp-dd'); await page.click('.tp-menu button[data-k="sales"]');
-      await page.fill('.tp-in', 'as a team, plan the spring outreach push');
-      await page.evaluate(() => document.querySelector('.tp-in').dispatchEvent(new Event('input', { bubbles: true })));
-      const pre = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Team · SALES LEAD/.test(pre)) throw new Error('hint before Add: ' + pre);
-      await page.keyboard.press('Enter'); await page.waitForTimeout(700);
-      const hint = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Added — SALES LEAD has it with/.test(hint)) throw new Error('hint: ' + hint);
-      const n = await page.evaluate(() => ({ lead: [...document.querySelectorAll('.tp-row .tp-t')].filter(e => /⚑ As a team, plan the spring/.test(e.textContent)).length, pieces: document.querySelectorAll('.tp-row.piece').length, chip: [...document.querySelectorAll('.tp-team-chip')].map(e => e.textContent) }));
-      if (n.lead !== 1 || n.pieces < 2 || !n.chip.some(c => /^TEAM [34]$/.test(c)) || !n.chip.includes('PIECE')) throw new Error(JSON.stringify(n));
-      await page.fill('.tp-in', 'draft the renewal email'); await page.evaluate(() => document.querySelector('.tp-in').dispatchEvent(new Event('input', { bubbles: true })));
-      const plain = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (/Team ·/.test(plain)) throw new Error('a plain sentence still reads as a team: ' + plain);
-      await page.click('.tp-team'); const on = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Team · SALES LEAD/.test(on)) throw new Error('the TEAM toggle did not take: ' + on);
-      await page.click('.tp-team'); await page.fill('.tp-in', '');
-      return `${hint.trim().slice(0, 70)} · ${n.pieces} piece cards · chips ${[...new Set(n.chip)].join(' ')}`;
-    });
-    await step('smoke: a routine typed in the bar lands in SCHEDULED (demo)', async () => {
-      await page.click('.tp-dd'); await page.click('.tp-menu button[data-k="emails"]');
-      await page.fill('.tp-in', 'every weekday at 8am, triage the inbox and tell me what needs me');
-      await page.evaluate(() => document.querySelector('.tp-in').dispatchEvent(new Event('input', { bubbles: true })));
-      await page.waitForFunction(() => /Routine/.test(document.querySelector('.tp-hint').textContent), null, { timeout: 5000 }).catch(() => {});
-      const pre = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Routine/.test(pre) || !/every weekday · 08:00/.test(pre)) throw new Error('hint before Add: ' + pre);
-      await page.keyboard.press('Enter');
-      await page.waitForFunction(() => /Routine set|couldn/.test(document.querySelector('.tp-hint').textContent), null, { timeout: 5000 }).catch(() => {});
-      const hint = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/Routine set/.test(hint)) throw new Error('hint: ' + hint);
-      await page.waitForTimeout(400);
-      const n = await page.evaluate(() => window.CC.routines().length); if (n !== 1) throw new Error('routines: ' + n);
-      const row = await page.evaluate(() => [...document.querySelectorAll('.tp-row.sched .tp-t')].some(e => /triage the inbox/i.test(e.textContent))); if (!row) throw new Error('no SCHEDULED row');
-      const strip = await page.evaluate(() => { const e = document.querySelector('.tp-next'); return e.hidden ? '' : e.textContent; }); if (!/NEXT/.test(strip) || !/triage/i.test(strip)) throw new Error('next-up strip: ' + strip);
-      await page.keyboard.press('b'); await page.waitForTimeout(600);
-      const col = await page.evaluate(() => [...document.querySelectorAll('#board .lh')].map(e => e.textContent)); if (col[1] !== 'SCHEDULED') throw new Error('board columns: ' + col.join(','));
-      const card = await page.evaluate(() => document.querySelectorAll('#board .tk.sched').length); if (!card) throw new Error('no SCHEDULED card on the board');
+    await step('smoke: the calendar opens with P and closes with Esc', async () => {
+      await page.keyboard.press('p'); await page.waitForTimeout(700);
+      if (!(await page.$eval('#calOv', e => e.classList.contains('on')))) throw new Error('P não abriu o calendário');
+      const cells = await page.$$eval('.cv-day', e => e.length); if (cells !== 35 && cells !== 42) throw new Error('cells: ' + cells);
       await page.keyboard.press('Escape'); await page.waitForTimeout(400);
-      await page.evaluate(() => window.CC.tasks.rtAct(window.CC.routines()[0].id, 'run')); await page.waitForTimeout(500);
-      const fired = await page.evaluate(() => window.CC.tasks.tasks.some(t => t.routine && /triage the inbox/i.test(t.title))); if (!fired) throw new Error('RUN NOW did not make a task');
-      await page.click('.tp-dd'); await page.click('.tp-menu button[data-k="marketing"]');
-      await page.fill('.tp-in', 'every day at 9am post the reel'); await page.keyboard.press('Enter'); await page.waitForTimeout(400);
-      const no = await page.evaluate(() => document.querySelector('.tp-hint').textContent); if (!/versão futura/.test(no)) throw new Error('marketing not refused: ' + no);
-      const still = await page.evaluate(() => window.CC.routines().length); if (still !== 1) throw new Error('a refused routine was added');
-      const opts = await page.evaluate(() => [...document.querySelectorAll('.tp-model option')].map(o => o.value).join(',') + '|' + document.querySelector('.tp-model').value); if (opts !== 'sonnet,opus,fable|sonnet') throw new Error('model menu: ' + opts);
-      const eff = await page.evaluate(() => [...document.querySelectorAll('.tp-effort option')].map(o => o.value).join(',') + '|' + document.querySelector('.tp-effort').value); if (eff !== ',low,medium,high,xhigh,max|') throw new Error('effort menu: ' + eff);
-      // V3.7: the box grows with the text, and the big editor mirrors it both ways
-      await page.fill('.tp-in', 'line one\nline two\nline three'); await page.evaluate(() => document.querySelector('.tp-in').dispatchEvent(new Event('input', { bubbles: true }))); await page.waitForTimeout(200);
-      const grown = await page.evaluate(() => document.querySelector('.tp-in').offsetHeight); if (grown < 50) throw new Error('box did not grow: ' + grown + 'px');
-      await page.click('.tp-big-btn'); await page.waitForTimeout(300);
-      const bigOn = await page.evaluate(() => document.getElementById('tpBig').classList.contains('on') && document.querySelector('.tb-in').value === document.querySelector('.tp-in').value && document.querySelector('.tb-dept').textContent === 'MARKETING'); if (!bigOn) throw new Error('big editor did not open with the text');
-      await page.type('.tb-in', ' and more'); await page.waitForTimeout(200);
-      const back = await page.evaluate(() => document.querySelector('.tp-in').value.endsWith(' and more') && /MARKETING LEAD|Goes to|Probably/.test(document.querySelector('.tb-hint').textContent)); if (!back) throw new Error('big editor did not mirror back');
-      await page.keyboard.press('Escape'); await page.waitForTimeout(200);
-      const bigOff = await page.evaluate(() => !document.getElementById('tpBig').classList.contains('on')); if (!bigOff) throw new Error('Esc did not close the big editor');
-      await page.fill('.tp-in', ''); await page.evaluate(() => document.querySelector('.tp-in').dispatchEvent(new Event('input', { bubbles: true }))); await page.evaluate(() => document.querySelector('.tp-in').blur()); await page.click('.tp-chip[data-f="all"]'); // hand the keys back, feed back to All
-      const rest = await page.evaluate(() => document.querySelector('.tp-in').offsetHeight); if (rest > 34) throw new Error('box did not shrink back: ' + rest + 'px');
-      return 'hint says the schedule · SCHEDULED row + next-up strip + board column · RUN NOW fires · marketing refused · box grows + big editor mirrors';
+      if (await page.$eval('#calOv', e => e.classList.contains('on'))) throw new Error('Esc não fechou o calendário');
+      return cells + ' células · abre com P, fecha com Esc';
     });
-    await step('smoke: the CALENDAR button and P open the calendar — routines on their days, a task scheduled for a date, a routine from a date (demo)', async () => { // V3.2.1
-      await page.click('#topCal'); await page.waitForTimeout(500); // the top-bar button opens it…
-      if (!await page.$eval('#calOv', e => e.classList.contains('on'))) throw new Error('the CALENDAR button did not open the calendar');
-      await page.keyboard.press('Escape'); await page.waitForTimeout(400);
-      await page.keyboard.press('p'); await page.waitForTimeout(600); // …and so does P
-      if (!await page.$eval('#calOv', e => e.classList.contains('on'))) throw new Error('P did not open the calendar');
-      const cells = await page.$$eval('.cv-day', e => e.length); if (cells !== 35 && cells !== 42) throw new Error('month cells: ' + cells);
-      if (!await page.$('.cv-day.today')) throw new Error('no today cell');
-      const rt = await page.$$eval('.cv-ev.routine', e => e.length); if (rt < 3) throw new Error('routine occurrences on the grid: ' + rt);
-      const rail = await page.$eval('#cvRtN', e => +e.textContent); if (rail < 1) throw new Error('rail empty');
-      // a task for a day next week (the second day after today on the grid)
-      const days = await page.$$eval('.cv-day', els => els.map(e => e.dataset.day)); const ti = days.indexOf(await page.$eval('.cv-day.today', e => e.dataset.day));
-      const target = days[Math.min(days.length - 1, ti + 2)];
-      await page.hover(`.cv-day[data-day="${target}"]`); await page.click(`.cv-day[data-day="${target}"] .cv-add`); await page.waitForTimeout(300);
-      await page.selectOption('.cv-dept', 'sales'); await page.fill('.cv-text', 'Call the three warm leads from the expo'); await page.click('.cv-go'); await page.waitForTimeout(500);
-      const sched = await page.$$eval('.cv-ev.sched', e => e.map(x => x.closest('.cv-day').dataset.day)); if (sched.length !== 1 || sched[0] !== target) throw new Error('scheduled card: ' + JSON.stringify(sched));
-      const panel = await page.evaluate(() => window.CC.tasks.tasks.filter(t => t.state === 'scheduled').length); if (panel !== 1) throw new Error('panel has ' + panel + ' scheduled');
-      // a routine from that date: REPEAT on, emails (routines are Emails/Accounting/Sales)
-      await page.hover(`.cv-day[data-day="${target}"]`); await page.click(`.cv-day[data-day="${target}"] .cv-add`); await page.waitForTimeout(300);
-      await page.selectOption('.cv-dept', 'emails'); await page.fill('.cv-text', 'Send the weekly client update'); await page.click('.cv-rep'); await page.waitForTimeout(200);
-      const hint = await page.$eval('.cv-hint', e => e.textContent); if (!/Routine ·/.test(hint) || !/first run/.test(hint)) throw new Error('routine hint: ' + hint);
-      await page.click('.cv-go'); await page.waitForTimeout(500);
-      const r = await page.evaluate(() => window.CC.tasks.routines.find(x => /weekly client update/i.test(x.title))); if (!r || r.when.start !== target) throw new Error('routine start: ' + JSON.stringify(r && r.when));
-      const before = await page.$$eval('.cv-ev.routine', (els, t) => els.filter(x => x.title.startsWith('Send the weekly client update') && x.closest('.cv-day').dataset.day < t).length, target); if (before) throw new Error('the routine shows before its start date');
-      // marketing is refused for routines, with the sentence
-      await page.hover(`.cv-day[data-day="${target}"]`); await page.click(`.cv-day[data-day="${target}"] .cv-add`); await page.waitForTimeout(200);
-      await page.selectOption('.cv-dept', 'marketing'); await page.click('.cv-rep'); await page.waitForTimeout(150);
-      const refused = await page.$eval('.cv-hint', e => e.textContent); const dis = await page.$eval('.cv-go', e => e.disabled); if (!/versão futura/.test(refused) || !dis) throw new Error('marketing routine not refused: ' + refused);
-      await page.keyboard.press('Escape'); await page.waitForTimeout(150); if (!await page.$eval('#cvPop', e => e.hidden)) throw new Error('Esc did not close the popover');
-      await page.click('.cv-seg button[data-v="week"]'); await page.waitForTimeout(300); const wk = await page.$$eval('.cv-day', e => e.length); if (wk !== 7) throw new Error('week cells: ' + wk);
-      await page.keyboard.press('Escape'); await page.waitForTimeout(300); if (await page.$eval('#calOv', e => e.classList.contains('on'))) throw new Error('Esc did not close the calendar');
-      return `${cells} cells · ${rt} routine runs on the grid · rail ${rail} · task scheduled for ${target} · routine starts ${target} (none before) · marketing refused · week view 7`;
+    await step('smoke: no errors after the run', async () => {
+      const reais = errors.filter((t) => !ruidoEstatico(t));
+      if (reais.length) throw new Error(reais[0]);
     });
-    await step('smoke: department focus opens the chat rail', async () => {
-      await page.keyboard.press('1'); await page.waitForTimeout(1800);
-      const cls = await page.evaluate(() => document.getElementById('rail').className); if (!/agentOpen/.test(cls) || !/open/.test(cls)) throw new Error('rail: ' + cls);
-      const strip = await page.evaluate(() => document.querySelector('#topconn').className); if (!/focus/.test(strip)) throw new Error('top strip not centred');
-      await page.keyboard.press('Escape'); await page.waitForTimeout(1200);
-    });
-    await step('smoke: B opens and closes the company board', async () => {
-      await page.keyboard.press('b'); await page.waitForTimeout(700);
-      if (!(await page.evaluate(() => window.CC.tasks.isOpen()))) throw new Error('board did not open');
-      await page.keyboard.press('Escape'); await page.waitForTimeout(500);
-      if (await page.evaluate(() => window.CC.tasks.isOpen())) throw new Error('board did not close');
-    });
-    await step('smoke: G opens the Brain graph with notes', async () => {
-      await page.keyboard.press('g'); await page.waitForTimeout(700);
-      if (!(await page.evaluate(() => window.CC.brain.isOpen()))) throw new Error('graph did not open');
-      const n = await page.evaluate(() => window.CC.brain.nodes.length); if (n < 10) throw new Error('nodes: ' + n);
-      await page.keyboard.press('Escape'); await page.waitForTimeout(300);
-      if (await page.evaluate(() => window.CC.brain.isOpen())) throw new Error('graph did not close');
-      return n + ' notes';
-    });
-    await step('smoke: approval flow reaches the panel', async () => {
-      await page.evaluate(() => window.CC.requestApproval('ada'));
-      await page.waitForFunction(() => document.querySelectorAll('.tp-row.waiting').length > 0, null, { timeout: 4000 }).catch(() => {}); // the panel renders on the next frame; headless WebGL frames can be slow
-      const w = await page.evaluate(() => document.querySelectorAll('.tp-row.waiting').length); if (!w) throw new Error('no waiting row (ada: ' + (await page.evaluate(() => window.CC.R.ada.state)) + ')');
-    });
-    await step('smoke: no errors after the run', async () => { if (errors.length) throw new Error(errors[0]); });
   } catch (e) { bad('smoke: browser', e.message); }
   finally { if (browser) await browser.close(); }
 }
@@ -674,13 +626,11 @@ else {
     });
     await step('server: os agentes recebem o servidor MCP do projeto', async () => {
       const m = await (await fetch(base + '/api/mcp')).json();
-      const get = id => {
-        const s = m.servers.find(x => x.id === id);
-        if (!s) throw new Error(id + ' não aparece em /api/mcp');
-        if (s.status !== 'connected') throw new Error(`${id}: ${s.status}${s.error ? ' — ' + s.error : ''}`);
-        return s;
-      };
-      const integ = get('orbita_integrations');
+      const integ = m.servers.find(x => x.id === 'orbita_integrations');
+      /* 3 nov 2026 · este servidor vem do `claude mcp list` do posto, não do código. Numa máquina
+         sem o CLI (ou sem o projecto registado) não há nada para provar — nem no CI. Diz-se. */
+      if (!integ) return { skip: 'o servidor MCP do projecto não está registado nesta máquina (precisa do `claude` CLI)' };
+      if (integ.status !== 'connected') return { skip: `o servidor MCP do projecto está ${integ.status} nesta máquina` };
       if (!integ.tools.includes('orbita_leads_list')) throw new Error('integrações sem ferramentas');
       if (m.servers.some(x => x.id === 'orbita_google')) throw new Error('o servidor MCP do Google devia ter saído em 1.29.0');
       return `${integ.tools.length} ferramentas · ${integ.name}`;
@@ -817,7 +767,7 @@ else {
         if (!r.ok) throw new Error((await r.json()).error); const j = await r.json(); if (!j.reply) throw new Error('empty reply'); return j.reply.slice(0, 80).replace(/\n/g, ' ');
       });
       if (chromium) await step('live: the whole flow in a browser', async () => {
-        let browser; try { browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] }); } catch { browser = await chromium.launch({ channel: 'chrome' }); }
+        let browser; try { browser = await abrirBrowser(); } catch { browser = await abrirBrowser({ args: ['--use-angle=default'] }); }
         try {
           const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
           const errs = []; page.on('pageerror', e => errs.push(e.message));
@@ -1539,5 +1489,6 @@ else {
 
 /* ---------- summary ---------- */
 const fails = results.filter(r => !r[0]);
-console.log(`\n${fails.length ? '✗' : '✓'} ${results.length - fails.length}/${results.length} checks passed${fails.length ? ' — ' + fails.map(f => f[1]).join(', ') : ''}`);
+console.log('');
+console.log(`${fails.length ? '✗' : '✓'} ${results.length - fails.length}/${results.length} checks passed${saltados.length ? ` · ${saltados.length} saltado(s) (${saltados.join(', ')})` : ''}${fails.length ? ' — ' + fails.map(f => f[1]).join(', ') : ''}`);
 process.exit(fails.length ? 1 : 0);

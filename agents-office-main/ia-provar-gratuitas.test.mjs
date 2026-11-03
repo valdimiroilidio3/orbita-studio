@@ -87,8 +87,13 @@ test('4 · escolher fornecedores explicitamente (o botão «provar estas») ', a
 
 /* ---------------- o escritório também arranca sem chave ---------------- */
 
-test('5 · sem chave nenhuma, o motor do escritório é a cadeia gratuita e responde', async () => {
+test('5 · sem chave nenhuma, o motor do escritório é a cadeia gratuita e responde', async (t) => {
   const { resolve, makeRunner } = await import('./providers.mjs');
+  /* 3 nov 2026 · «sem chave nenhuma» não é «sem motor nenhum»: num posto com o Claude Code
+     instalado é o CLI que responde, e faz bem. Este caso só faz sentido sem ele. */
+  if (resolve({}, null).candidates.some((c) => c.id === 'claude-cli' && c.available)) {
+    return t.skip('esta máquina tem o Claude Code instalado — não é a instalação sem motor que este teste descreve');
+  }
   const antes = { ...process.env };
   for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY', 'DEEPSEEK_API_KEY', 'XAI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'OPENCODE_API_KEY']) delete process.env[k];
   try {

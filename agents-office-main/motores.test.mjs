@@ -27,6 +27,7 @@ import {
   estadoDoMotor, perfilDoMotor, perfis, escolhaDoAgente, nivelDeAutonomia, podeAgirSozinho,
   requerAprovacao, acoesSensiveis, consumoPorMotor, resumoDoConsumo, filaRapida,
   barraDeAprovacao, cartoesDoPainel, resumoDaAutonomia, movimentoReduzido,
+  motorDaExecucao,
 } from './src/motores.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -351,4 +352,64 @@ test('29 · a mesa usa estas contas e não uma segunda opinião', () => {
   assert.match(shell, /\.mo-cards/);
   assert.match(shell, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(shell, /id="mobar"/);
+});
+
+
+/* ---------- 3 nov 2026 · item 5: o motor à vista DURANTE a execução ---------- */
+
+test('26 · a execução diz a classe do motor, as capacidades e a regra de aprovação', () => {
+  const ontem = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+  const lista = perfis([
+    { id: 'claude-cli', nome: 'Claude CLI', classe: 'cli', tools: true, configurado: true, estado: 'funcional', ultimoTeste: { ok: true, quando: ontem, ms: 900 } },
+    { id: 'openai', nome: 'OpenAI', classe: 'api', configurado: true, estado: 'funcional', capacidades: { ferramentas: false }, ultimoTeste: { ok: true, quando: ontem, ms: 400 } },
+    { id: 'por-declarar', nome: 'Fornecedor novo', classe: 'api', configurado: true, estado: 'por_testar' },
+  ]).lista;
+
+  /* um CLI tem mãos: corre nesta máquina, usa ferramentas e escreve ficheiros */
+  const cli = motorDaExecucao({ fornecedor: 'claude-cli', modelo: 'sonnet' }, lista);
+  assert.equal(cli.classe, 'cli');
+  assert.equal(cli.curto, 'CLI');
+  assert.equal(cli.ferramentas, true);
+  assert.equal(cli.ficheiros, true);
+  assert.equal(cli.modelo, 'sonnet', 'o modelo registado na execução manda sobre o do perfil');
+  assert.match(cli.porque, /corre nesta máquina/);
+  assert.match(cli.verificacao, /verificado/, 'a última prova tem de vir com a execução');
+  assert.match(cli.aprovacao, /aprovação humana/);
+
+  /* uma API responde com texto: as ferramentas não são dela */
+  const api = motorDaExecucao({ fornecedor: 'openai' }, lista);
+  assert.equal(api.classe, 'api');
+  assert.equal(api.ferramentas, false);
+  assert.match(api.porque, /responde com texto/);
+  /* o que o fornecedor não declarou fica por declarar — não é «não tem» */
+  assert.equal(motorDaExecucao({ fornecedor: 'por-declarar' }, lista).ferramentas, null);
+
+  /* o que não está registado diz-se, não se inventa */
+  const semRegisto = motorDaExecucao({}, lista);
+  assert.equal(semRegisto.classe, null);
+  assert.equal(semRegisto.nome, 'não registado');
+  assert.match(semRegisto.porque, /não registou o motor/);
+  const fora = motorDaExecucao({ fornecedor: 'xpto' }, lista);
+  assert.equal(fora.conhecido, false);
+  assert.match(fora.porque, /não está nesta instalação/);
+  assert.equal(fora.ferramentas, null, 'sem motor não se promete ferramenta nenhuma');
+
+  /* e sem a lista lida não se afirma que o motor não existe — diz-se que não se sabe */
+  const semLista = motorDaExecucao({ fornecedor: 'anthropic' }, [], { listaCarregada: false });
+  assert.match(semLista.porque, /ainda não foi lida/);
+  assert.doesNotMatch(semLista.porque, /não está nesta instalação/);
+});
+
+test('27 · o ecrã da execução mostra o motor enquanto corre', () => {
+  const mesa = fs.readFileSync(new URL('./src/mesa.js', import.meta.url), 'utf8');
+  const vista = /function viewExecucao\(\)[\s\S]*?\n\}\n/.exec(mesa);
+  assert.ok(vista, 'não encontrei o ecrã da execução');
+  assert.match(vista[0], /motorDaExecucao\(\{ fornecedor: r\.fornecedor, modelo: r\.modelo \}/,
+    'o ecrã tem de dizer que motor correu a execução');
+  assert.match(vista[0], /run-motor/, 'falta o bloco do motor');
+  assert.match(vista[0], /chipDoPasso/, 'cada passo devia dizer a classe do motor que o correu');
+  assert.match(vista[0], /acções destrutivas/i);
+  const css = fs.readFileSync(new URL('./src/mesa.html', import.meta.url), 'utf8');
+  assert.match(css, /\.run-motor \{/);
+  assert.match(css, /\.mo-classe\.desconhecida/);
 });

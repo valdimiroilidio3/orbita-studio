@@ -37,7 +37,7 @@ import { doorPlan } from './circulation.js';
 import {
   ANGULOS, AEREA, RAD_POR_PIXEL, direcaoDaCamara, rodar, inclinacaoValida,
   gestoDoScroll, gestoDoArrasto, etiquetaDoAngulo, proximoAngulo, INCLINACAO_BASE,
-  zoomDaPinca,   // 1.62.0: o zoom pelos dois dedos
+  zoomDaPinca, eDuploToque, passoInercia, inerciaAcabou, ATRITO,
 } from './camera.js';
 /* 1.58.0 · O ESCRITÓRIO COMO INTERFACE (2 nov 2026). Cada sala diz o seu estado real,
    os agentes activos têm um sinal discreto, clicar numa sala abre um painel contextual
@@ -154,6 +154,12 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true 
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
+/* 3 nov 2026 · as sombras passam a desenhar-se um frame sim, um não. O mapa custa um SEGUNDO
+   desenho de toda a cena (≈835 mil triângulos, medido em `perf.mjs`) e as pessoas andam
+   devagar: a 60 Hz isto são sombras a 30 Hz, com 16 ms de atraso — não se vê. A regra é por
+   FRAME, não por tempo, de propósito: num aparelho lento (30 fps) continua a poupar metade
+   do trabalho em vez de não poupar nada, que era o que uma regra em milissegundos faria. */
+renderer.shadowMap.autoUpdate = false;
 
 const scene = new THREE.Scene();
 
@@ -166,7 +172,10 @@ const CAM_DIST = 220;
 // float above their back rows instead of being shoved out to the screen edges.
 // V3.3: the Task Status panel owns the right ~430px at every zoom, so the overview target slides
 // along screen-right by half the panel width — the scene sits centred in what is left.
-const OVERVIEW = { base: [-9, 0, -9], zoom: 0.8 }; // (-9,-9) shifts the scene straight DOWN the screen, no sideways drift
+/* 3 nov 2026 · o escritório estava cortado nas bordas a 1440×900: a vista geral ocupava
+   exactamente o ecrã. Desce-se o zoom um passo (0,8 → 0,72) para a planta respirar dentro da
+   área que sobra entre a barra, o painel e os cartões. */
+const OVERVIEW = { base: [-8, 0, -8], zoom: 0.72 }; // (-8,-8) shifts the scene straight DOWN the screen, no sideways drift
 const SR_ = new THREE.Vector3(1, 0, -1).normalize();
 function overviewPos() {
   const pw = (tasks ? tasks.panelWidth() : 400) + 30;
@@ -180,6 +189,9 @@ const view = {
   tilt: INCLINACAO_BASE,                     // 0.92 = a altura de sempre
 };
 let tween = null;
+/* 3 nov 2026 · o deslize que fica depois de levantar o dedo (px/s). Vive aqui, ao lado do
+   tween, porque as duas coisas disputam a câmara: um toque ou um voo cancelam o deslize. */
+let balanco = null;
 const UPV = new THREE.Vector3(0, 1, 0);
 const isoWork = new THREE.Vector3();
 
@@ -212,7 +224,19 @@ function bezier(t) {
   return ((ay * u + by) * u + cy) * u;
 }
 
-function flyTo(targetPos, zoom, dur = 800, opts = {}) {
+/* 3 nov 2026 · movimento. A câmara tinha 800 ms por omissão (950 a abrir uma sala): lento para
+   uma acção que o dono repete vinte vezes. Passa a `--d-cam` (560 ms), e com
+   `prefers-reduced-motion` o salto é imediato — o estado é o mesmo, sem a viagem. */
+const CALM = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)'); } catch { return null; } })();
+const calmo = () => !!(CALM && CALM.matches);
+function flyTo(targetPos, zoom, dur = 560, opts = {}) {
+  if (calmo() || !dur) {
+    tween = null; view.arc = 0;
+    view.target.set(...targetPos); view.zoom = zoom;
+    applyCamera();
+    if (opts.onDone) opts.onDone();
+    return;
+  }
   tween = {
     t0: performance.now(), dur,
     fromT: view.target.clone(), toT: new THREE.Vector3(...targetPos),
@@ -235,23 +259,26 @@ function tickTween(now) {
 }
 
 /* ---------- lights: one warm key top-left + soft fill ---------- */
-const hemi = new THREE.HemisphereLight(0xfdfff8, 0xd8d4c8, 0.85);
+/* 3 nov 2026 · luz. A chave a 2,2 recortava as paredes e deixava o interior das salas preto;
+   sobe-se o ambiente e desce-se a chave — a cena fica legível sem perder o relevo. O chão
+   recebe uma sombra mais larga (radius 9) e mais leve (0,10). */
+const hemi = new THREE.HemisphereLight(0xfdfff8, 0xd8d4c8, 1.0);
 scene.add(hemi);
-const key = new THREE.DirectionalLight(0xfff1dd, 2.2);
+const key = new THREE.DirectionalLight(0xfff1dd, 1.95);
 key.position.set(-60, 90, 20);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.left = -95; key.shadow.camera.right = 95;
 key.shadow.camera.top = 95; key.shadow.camera.bottom = -95;
 key.shadow.camera.far = 400;
-key.shadow.radius = 7; key.shadow.blurSamples = 12;
+key.shadow.radius = 9; key.shadow.blurSamples = 12;
 key.shadow.bias = -0.0004;
 scene.add(key);
 
 // shadow catcher — makes the pods float over the cream page
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(500, 500),
-  new THREE.ShadowMaterial({ opacity: 0.13 })
+  new THREE.ShadowMaterial({ opacity: 0.10 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -7;
@@ -886,6 +913,7 @@ addEventListener('wheel', (e) => {
   if (e.target.closest && e.target.closest('#apps')) return; // a loja de apps rola por dentro
   e.preventDefault();
   tween = null;
+  balanco = null;
   view.arc = 0;
   const gesto = gestoDoScroll(e);
   if (gesto.tipo === 'rodar') {
@@ -915,21 +943,26 @@ function algoSob(nx, ny) {
     || ray.intersectObjects(clickTargets, false).length > 0
     || ray.intersectObjects(mcp.sprites, false).length > 0;
 }
-/* 1.62.0 · DOIS DEDOS = ZOOM. Num telefone não há roda; a pinça aplica a razão
-   entre a distância dos dedos ao zoom da câmara (conta em `camera.js`, provada
-   em `camera.test.mjs`). Com dois dedos no ecrã, o arrasto de um dedo pára — o
-   gesto passa a ser um só. */
-const dedos = new Map();
-let pinca = null;
-const distanciaDe = () => {
-  const [a, b] = [...dedos.values()];
-  if (!a || !b) return 0;
-  return Math.hypot(a.x - b.x, a.y - b.y);
-};
+let drag = null;
+/* 3 nov 2026 · O TELEMÓVEL NÃO TEM RODA. Um dedo move (ou roda, no vazio); dois dedos fazem
+   PINÇA e o ponto que está debaixo do meio deles fica onde está; um DUPLO-TOQUE aproxima no
+   vazio ou foca a sala; e no fim do arrasto a câmara continua a andar e abranda com atrito em
+   vez de parar a seco. Nada disto muda o desktop: a pinça só existe com dois dedos de toque e
+   o duplo-toque só no toque. As contas estão em `src/camera.js` e são provadas em
+   `camera.test.mjs`; aqui só se ligam aos eventos. */
+const dedos = new Map();     // pointerId → { x, y } dos dedos que estão em cima do mapa
+let pinca = null;            // { dist, zoom } enquanto há dois dedos
+let gestoDeDois = false;     // a pinça não pode acabar como um clique
+let esperaToque = 0;         // o toque simples espera 260 ms para ver se vem o segundo
+let ultimoToque = null;      // { x, y, t } — o primeiro toque de um possível duplo
 canvas.addEventListener('pointerdown', (e) => {
+  balanco = null; // tocar trava o deslize que vinha do gesto anterior
   dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (dedos.size === 2) {
-    drag = null;                 // o arrasto de um dedo não continua por baixo da pinça
+    /* dois dedos: o arrasto de um dedo pára (o segundo dedo cancela-o) e a pinça
+       toma conta do gesto, com a conta de `camera.js` provada em `camera.test.mjs` */
+    drag = null;
+    gestoDeDois = true;
     pinca = { dist: distanciaDe(), zoom: view.zoom };
     canvas.classList.remove('girando');
     try { canvas.setPointerCapture(e.pointerId); } catch { /* sem captura */ }
@@ -938,7 +971,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const nx = (e.clientX / innerWidth) * 2 - 1, ny = -(e.clientY / innerHeight) * 2 + 1;
   const vazio = !algoSob(nx, ny);
   drag = {
-    x: e.clientX, y: e.clientY, moved: false,
+    x: e.clientX, y: e.clientY, moved: false, t: performance.now(), vx: 0, vy: 0,
     /* vazio → roda; Shift → move; Alt/botão do meio → roda; sobre algo → move */
     modo: gestoDoArrasto({ altKey: e.altKey, botao: e.button, vazio, shiftKey: e.shiftKey }),
   };
@@ -950,7 +983,7 @@ canvas.addEventListener('pointercancel', (e) => { dedos.delete(e.pointerId); if 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('pointermove', (e) => {
   if (dedos.has(e.pointerId)) dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pinca && dedos.size >= 2) {
+  if (pinca && dedos.size >= 2) { // dois dedos em cima: quem manda é a pinça
     const d = distanciaDe();
     const r = zoomDaPinca(pinca.zoom, pinca.dist, d);
     if (r.aplicado) {
@@ -968,6 +1001,12 @@ addEventListener('pointermove', (e) => {
   if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
   if (!drag.moved) return;
   tween = null;
+  /* a velocidade do dedo: é ela que faz o mapa continuar a andar depois de o levantar */
+  const agoraMs = performance.now();
+  const passoMs = Math.max(1, agoraMs - drag.t);
+  drag.vx = drag.vx * 0.65 + (dx / passoMs) * 0.35;
+  drag.vy = drag.vy * 0.65 + (dy / passoMs) * 0.35;
+  drag.t = agoraMs;
   if (drag.modo === 'rodar') {
     /* rotação: horizontal dá a volta, vertical inclina (com limites — nunca passa por baixo do chão) */
     view.yaw = rodar(view.yaw, dx * 0.007);
@@ -983,8 +1022,14 @@ addEventListener('pointermove', (e) => {
 });
 addEventListener('pointerup', (e) => {
   dedos.delete(e.pointerId);
-  if (dedos.size < 2) pinca = null;
+  /* soltar um dedo de uma pinça nunca é um clique, e o dedo que fica não recomeça um arrasto */
+  if (pinca) { if (dedos.size < 2) pinca = null; return; }
+  if (gestoDeDois) { if (!dedos.size) gestoDeDois = false; return; }
   const wasDrag = drag && drag.moved;
+  /* 3 nov 2026 · o deslize: só no telemóvel, e nunca contra `prefers-reduced-motion` */
+  if (wasDrag && e.pointerType === 'touch' && !calmo()) {
+    balanco = { vx: drag.vx * 1000, vy: drag.vy * 1000, modo: drag.modo };
+  }
   drag = null;
   canvas.classList.remove('girando');
   if (wasDrag) return;
@@ -1003,12 +1048,79 @@ addEventListener('pointerup', (e) => {
     openAgent(clicked, R[clicked] && R[clicked].state === 'stuck' ? 'chat' : 'live');
     return;
   }
-  const hits = ray.intersectObjects(clickTargets, false);
-  if (hits.length) {
-    const dk = hits[0].object.userData.dept;
-    if (dk === 'brain') { brain.open(); return; } // V3.6: the Brain opens as the graph
-    if (dk !== focused) enterFocus(dk);
+  /* 3 nov 2026 · salas e vazio. No rato o toque é imediato; no telemóvel espera 260 ms para
+     ver se vem um segundo toque — e, se vier, o gesto é duplo-toque (focar ou aproximar). */
+  const alvo = { x: e.clientX, y: e.clientY };
+  if (e.pointerType !== 'touch') { tocarNaSala(alvo, false); return; }
+  const agora = performance.now();
+  if (eDuploToque(ultimoToque, { x: alvo.x, y: alvo.y, t: agora })) {
+    clearTimeout(esperaToque); esperaToque = 0; ultimoToque = null;
+    tocarNaSala(alvo, true);
+    return;
   }
+  ultimoToque = { x: alvo.x, y: alvo.y, t: agora };
+  clearTimeout(esperaToque);
+  esperaToque = setTimeout(() => { esperaToque = 0; tocarNaSala(alvo, false); }, 260);
+});
+
+/* a distância entre os dois dedos que estão em cima do mapa */
+const distanciaDe = () => {
+  const [a, b] = [...dedos.values()];
+  if (!a || !b) return 0;
+  return Math.hypot(a.x - b.x, a.y - b.y);
+};
+/* um passo de zoom com o ponto do ecrã parado — é o que a roda faz, e o que o duplo-toque faz */
+function aproximarVista(cx, cy, factor) {
+  const nx = (cx / innerWidth) * 2 - 1, ny = -(cy / innerHeight) * 2 + 1;
+  const before = worldAt(nx, ny);
+  view.zoom = clamp(view.zoom * factor, 0.72, 5.2);
+  applyCamera();
+  const after = worldAt(nx, ny);
+  if (before && after) view.target.add(before.sub(after));
+  balanco = null;
+  syncOverviewBtn();
+}
+/* o que um toque faz quando não caiu num agente nem numa placa */
+function tocarNaSala(p, duplo) {
+  const nx = (p.x / innerWidth) * 2 - 1, ny = -(p.y / innerHeight) * 2 + 1;
+  ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  const hits = ray.intersectObjects(clickTargets, false);
+  const dk = hits.length ? hits[0].object.userData.dept : null;
+  if (dk === 'brain') { brain.open(); return; } // V3.6: the Brain opens as the graph
+  if (dk) {
+    if (dk !== focused) enterFocus(dk);
+    else if (duplo) aproximarVista(p.x, p.y, 1.6); // já lá está: o duplo-toque chega mais perto
+    return;
+  }
+  if (duplo) aproximarVista(p.x, p.y, 1.9); // vazio: duplo-toque é um passo de zoom, como num mapa
+}
+/* o deslize do telemóvel: o mesmo arrasto de antes, agora a continuar sozinho e a abrandar */
+function tickInercia(dt) {
+  if (!balanco) return;
+  if (tween) { balanco = null; return; } // um voo para outra vista manda
+  const k = Math.exp(-ATRITO * dt);
+  balanco.vx *= k; balanco.vy *= k;
+  if (inerciaAcabou(balanco.vx) && inerciaAcabou(balanco.vy)) { balanco = null; return; }
+  const dx = balanco.vx * dt, dy = balanco.vy * dt;
+  if (balanco.modo === 'rodar') {
+    view.yaw = rodar(view.yaw, dx * 0.007);
+    view.tilt = inclinacaoValida(view.tilt + dy * 0.006);
+    syncAngleBtn();
+  } else {
+    const a = worldAt(0, 0);
+    const b = worldAt((dx / innerWidth) * 2, -(dy / innerHeight) * 2);
+    if (a && b) view.target.add(a.sub(b));
+  }
+  applyCamera();
+  syncOverviewBtn();
+}
+/* um gesto interrompido (chamada, notificação, rotação do ecrã) não deixa dedos presos */
+addEventListener('pointercancel', (e) => {
+  dedos.delete(e.pointerId);
+  if (dedos.size < 2) pinca = null;
+  if (!dedos.size) gestoDeDois = false;
+  drag = null; balanco = null;
+  canvas.classList.remove('girando');
 });
 addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; // typing in the bar, the big editor or a menu never fires a hotkey
@@ -1397,7 +1509,7 @@ function enterFocus(k, pendingAgentId) {
   if (k === 'brain') { // the Brain keeps its plain fly-in (AJ's call)
     focused = 'brain';
     if (tasks) tasks.onFocusChange('brain');
-    flyTo([LAYOUT.brain.pos[0], 0, LAYOUT.brain.pos[1] + 1.5], 3.1, 700);
+    flyTo([LAYOUT.brain.pos[0], 0, LAYOUT.brain.pos[1] + 1.5], 3.1, 560);
     syncOverviewBtn();
     return;
   }
@@ -1414,8 +1526,8 @@ function enterFocus(k, pendingAgentId) {
   applySceneDim(k);
   vignette.classList.add('on');
   const t = focusTarget(k);
-  flyTo(t.pos, t.zoom, 950, {
-    arc: RAIL_SIDE[k] === 'left' ? 0.10 : -0.10,
+  flyTo(t.pos, t.zoom, 620, {
+    arc: RAIL_SIDE[k] === 'left' ? 0.06 : -0.06,
     onDone: () => { if (pendingAgentId) openAgentRail(pendingAgentId, pendingTab, true); pendingTab = 'chat'; },
   });
   buildDeptRail(k);
@@ -1447,7 +1559,7 @@ function exitFocus(flyOut = true) {
   setTimeout(() => { if (!focused) rail.style.display = 'none'; }, 650);
   document.getElementById('overviewBtn').classList.remove('right');
   if (k !== 'brain' && deptRT[k] && deptRT[k].badge) deptRT[k].badge.style.display = '';
-  if (flyOut) flyTo(overviewPos(), OVERVIEW.zoom, 700);
+  if (flyOut) flyTo(overviewPos(), OVERVIEW.zoom, 560);
   syncOverviewBtn();
 }
 function buildDeptRail(k) {
@@ -1503,17 +1615,17 @@ function flyBillboardIntoRail(k) {
   const tLeft = side === 'left' ? 18 : innerWidth - railW + 18;
   const clone = badge.cloneNode(true);
   clone.style.cssText = `position:fixed;box-sizing:border-box;left:${from.left}px;top:${from.top}px;` +
-    `width:${from.width}px;margin:0;transform:none;transition:all .72s var(--ease);z-index:40;pointer-events:none;opacity:1;`;
+    `width:${from.width}px;margin:0;transform:none;transition:all .52s var(--ease);z-index:40;pointer-events:none;opacity:1;`;
   document.body.appendChild(clone);
   requestAnimationFrame(() => requestAnimationFrame(() => {
     clone.style.left = tLeft + 'px';
-    clone.style.top = (52 + 18) + 'px';
+    clone.style.top = (62 + 18) + 'px';
     clone.style.width = (railW - 36) + 'px';
   }));
   setTimeout(() => {
     clone.remove();
     document.getElementById('railHeader').classList.add('show');
-  }, 740);
+  }, 560);
 }
 function openAgentRail(id, tab = 'chat', fly = true) {
   const r = R[id];
@@ -1534,13 +1646,13 @@ function openAgentRail(id, tab = 'chat', fly = true) {
   renderLiveChip(id);
   setTab(tab);
   if (tasks && tasks.railFor) tasks.railFor(id); // V3.5: the agent's routines strip
-  if (fly) { const t = focusTarget(r.a.dept, r.seat); flyTo(t.pos, t.zoom, 500); }
+  if (fly) { const t = focusTarget(r.a.dept, r.seat); flyTo(t.pos, t.zoom, 480); }
 }
 // V3: the board opening/closing re-centres the pod without leaving focus
 function reframe() {
   if (!focused || focused === 'brain' || modalOpen) return;
   const t = focusTarget(focused);
-  flyTo(t.pos, t.zoom, 600);
+  flyTo(t.pos, t.zoom, 520);
 }
 function railBack() { // V3.4: "back" = back to the pod view, chat stays on the lead
   if (!focused || focused === 'brain') return;
@@ -2131,9 +2243,12 @@ function smooth(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * 
    2) em ecrã estreito, `arrumarCartoes()` empurra para baixo quem colidir com outro — os
       cartões deixam de se tapar, e nenhum sai do ecrã (o topo e o fundo são limites). */
 function badgeFit(w = innerWidth) {
-  if (w >= 900) return 1;                 // secretária: como sempre foi
-  if (w <= 400) return 0.88;              // telemóvel estreito
-  return 0.88 + 0.12 * ((w - 400) / 500); // 0,88 → 1,00 entre 400 e 900 px
+  /* 3 nov 2026 · a secretária larga não encolhe nada; entre 900 e 1200 px o cartão desce até
+     0,88 para os seis continuarem legíveis ao lado do painel das tarefas. */
+  if (w >= 1200) return 1;
+  if (w >= 900) return 0.88 + 0.12 * ((w - 900) / 300);
+  if (w <= 400) return 0.86;              // telemóvel estreito
+  return 0.86 + 0.02 * ((w - 400) / 500); // 0,86 → 0,88 em ecrãs pequenos
 }
 function arrumarCartoes(caixas) {
   const gap = 6, topo = 64, fundo = innerHeight - 8;
@@ -2159,9 +2274,12 @@ function tickLOD() {
   /* V3.3: os cartões nunca ficam por baixo do painel das tarefas. No telemóvel o painel é uma
      folha em baixo (não uma coluna à direita): descontar a largura dele empurrava os sete
      cartões todos para a margem esquerda. Aí o limite é a janela inteira (30 out 2026). */
+  /* 3 nov 2026 · o dock da câmara (≥901 px) ocupa 100 px à direita da cena: os cartões não lhe
+     podem cair em cima. É a razão por que a PROSPEÇÃO tapava os botões do zoom. */
+  const dockW = innerWidth >= 901 ? 104 : 0;
   const rightEdge = innerWidth <= 640
     ? innerWidth - 8
-    : innerWidth - ((tasks ? tasks.panelWidth() : 400) + 26);
+    : innerWidth - ((tasks ? tasks.panelWidth() : 400) + 26 + dockW);
   const caixas = [];
   for (const [k, d] of Object.entries(deptRT)) {
     if (focused === k && k !== 'brain') continue; // this billboard is docked in the rail
@@ -2182,7 +2300,8 @@ function tickLOD() {
     }
     caixas.push({ d, sx, sy, xf, left, top, bw, bh });
   }
-  if (innerWidth <= 640) arrumarCartoes(caixas); // telemóvel: um cartão não tapa outro
+  // telemóvel e ecrãs médios: um cartão não tapa outro (acima de 1200 há espaço para a composição)
+  if (innerWidth <= 1200) arrumarCartoes(caixas);
   for (const c of caixas) {
     // o mesmo ponto de ancoragem, agora com o desvio que a arrumação impôs
     const sx = c.left + (c.xf === 'translate(0,-50%)' ? 0 : c.xf === 'translate(-100%,-50%)' ? c.bw : c.bw / 2);
@@ -2192,6 +2311,10 @@ function tickLOD() {
     c.d.badge.style.pointerEvents = 'auto';
   }
   // name pills stay on at EVERY zoom (AJ's call) — smaller when far, full-size when near
+  /* 3 nov 2026 · hierarquia dos nomes. Na vista geral as 47 pastilhas empilhavam-se umas nas
+     outras por cima das salas e escondiam o escritório; ficam os chefes de sala (uma etiqueta
+     por sala) e, ao aproximar — ou dentro da sala — aparecem todos. A informação não muda:
+     muda só o que se mostra quando o ecrã não tem espaço para a mostrar bem. */
   const pillScale = 0.62 + 0.38 * smooth(1.2, 2.4, z);
   for (const r of Object.values(R)) {
     const p = r.person.position;
@@ -2199,7 +2322,9 @@ function tickLOD() {
     r.pill.style.display = 'block';
     r.pill.style.transform = `translate(${sx}px,${sy}px) translate(-50%,-100%) scale(${pillScale})`;
     const dimmed = focused && focused !== 'brain' && r.a.dept !== focused;
-    r.pill.style.opacity = dimmed ? 1 - 0.85 * focusDim : 1;
+    const comNome = focused ? r.a.lead : z >= 1.6;
+    r.pill.style.opacity = comNome ? (dimmed ? 1 - 0.85 * focusDim : 1) : 0;
+    r.pill.style.pointerEvents = comNome ? 'auto' : 'none';
     const alvoTab = focused === r.a.dept ? 0 : -1; // só a sala em foco põe as pastilhas no Tab
     if (r.pill.tabIndex !== alvoTab) r.pill.tabIndex = alvoTab;
   }
@@ -2559,6 +2684,12 @@ function tickLuz(now, dt) {
 
 window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
   a11y,
+  /* 3 nov 2026 · os números de UM frame, para o medidor `perf.mjs` poder dizer o que a GPU
+     recebe (chamadas de desenho, triângulos) sem o estimar de fora. É leitura: não mexe na cena.
+     `info` reinicia no início de cada `render`, por isso isto descreve o último frame desenhado. */
+  desempenho: () => ({ ...renderer.info.render, ...renderer.info.memory,
+    programas: renderer.info.programs ? renderer.info.programs.length : 0,
+    pixelRatio: renderer.getPixelRatio(), tamanho: { w: renderer.domElement.width, h: renderer.domElement.height } }),
   office: {
     depts: DEPTS, layout: LAYOUT, floors: floorReport(), plants: plantsRT, dressing: dressingRT,
     // 28 out 2026: a sala-mestre e a circulação, para se poder olhar para elas sem adivinhar
@@ -2703,12 +2834,17 @@ window.ORBITA = Object.assign(window.ORBITA || {}, {
 });
 
 let last = performance.now();
+let framesSemSombra = 99; // o primeiro frame desenha-a
 /* 1.58.0: o estado das salas e a rede do Cérebro não mudam a 60 fps — quatro
    segundos é o suficiente para não haver números velhos no ecrã. */
 let ultimoEstadoDasSalas = 0, ultimoTrabalhoNoCerebro = 0, ultimaPlanta = 0;
 function loop(now) {
+  /* 3 nov 2026 · performance: um separador escondido não desenha. O `rAF` do browser já abranda,
+     mas o `renderer.render` continuava a gastar GPU e a acender LEDs que ninguém vê. */
+  if (document.hidden) { last = now; requestAnimationFrame(loop); return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   tickTween(now);
+  tickInercia(dt);
   applyCamera();
   tickDim(dt);
   tickLeds(now, dt);
@@ -2720,6 +2856,8 @@ function loop(now) {
   if (now - ultimoEstadoDasSalas > 4000) { ultimoEstadoDasSalas = now; syncEstadoDasSalas(); }
   if (now - ultimoTrabalhoNoCerebro > 6000) { ultimoTrabalhoNoCerebro = now; passarTrabalhoAoCerebro(); }
   if (oficina.estaAberto()) { if (now - ultimaPlanta > 1500) { ultimaPlanta = now; oficina.actualizar(); } }
+  if (framesSemSombra >= 2) { framesSemSombra = 0; renderer.shadowMap.needsUpdate = true; } // ver o comentário no renderer
+  framesSemSombra++;
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }

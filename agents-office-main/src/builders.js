@@ -215,7 +215,7 @@ export function makePlinth(w, d, glassColor) {
   const glass = rbox(w - 0.88, d - 0.88, 0.12, new THREE.MeshPhysicalMaterial({
     color: L.glass, roughness: 0.06, metalness: 0.1,
     clearcoat: 1, clearcoatRoughness: 0.06,
-    transparent: true, opacity: 0.62, depthWrite: false,
+    transparent: true, opacity: 0.54, depthWrite: false,
   }), 0.66);
   glass.position.y = 0;
   part(glass, 'floorGlass', L.glass, { receiveShadow: false });
@@ -227,7 +227,7 @@ export function makePlinth(w, d, glassColor) {
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(w - 1.15, d - 1.15),
     new THREE.MeshBasicMaterial({
-      map: lightPoolTexture(), transparent: true, opacity: 0.38,
+      map: lightPoolTexture(), transparent: true, opacity: 0.26,
       depthWrite: false, toneMapped: false,
     })
   );
@@ -441,8 +441,11 @@ function deskMaterials(chip, glass) {
   if (deskMatCache.has(key)) return deskMatCache.get(key);
   const std = (o) => new THREE.MeshStandardMaterial({ metalness: 0, ...o });
   const M = {
-    body: std({ color: '#1C1E23', roughness: 0.40, metalness: 0.28 }),   // preto acetinado
-    edge: std({ color: '#33363E', roughness: 0.33, metalness: 0.50 }),   // aresta maquinada, um tom acima
+    /* 3 nov 2026 · o corpo era #1C1E23 com roughness .40: lia-se como plástico preto e, na vista
+       geral, as seis salas ficavam com manchas escuras. Grafite mate, um tom acima — a mesma peça,
+       a apanhar a luz em vez de a devolver. */
+    body: std({ color: '#26292F', roughness: 0.58, metalness: 0.18 }),   // grafite acetinado
+    edge: std({ color: '#3E434C', roughness: 0.38, metalness: 0.45 }),   // aresta maquinada
     matte: std({ color: '#101114', roughness: 0.95 }),                   // borracha: teclado, tapete, torre
     metal: std({ color: '#3A3D44', roughness: 0.3, metalness: 0.8 }),
     accent: std({ color: chip, roughness: 0.55 }),
@@ -453,7 +456,7 @@ function deskMaterials(chip, glass) {
     }),
     glassPanel: std({ color: '#0B0D10', roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.55 }),
     // a tecla: preta, com a luz da sala por baixo (é assim que um teclado retroiluminado se lê)
-    keycap: std({ color: '#1E2127', roughness: 0.58, emissive: glass, emissiveIntensity: 0.5 }),
+    keycap: std({ color: '#262A31', roughness: 0.62, emissive: glass, emissiveIntensity: 0.5 }),
   };
   deskMatCache.set(key, M);
   return M;
@@ -2023,7 +2026,7 @@ export function makeRoomWalls(w, d, chip, ink, label, opts = {}) {
   const capMat = new THREE.MeshStandardMaterial({ color: ink, roughness: 0.55, metalness: 0.1 });
   const glassMat = new THREE.MeshStandardMaterial({
     color: tint(room, 0.26), roughness: 0.08, metalness: 0.08,
-    transparent: true, opacity: 0.26, depthWrite: false, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.20, depthWrite: false, side: THREE.DoubleSide,
   });
   const coveMat = new THREE.MeshStandardMaterial({
     color: tint(room, 0.55), roughness: 0.4, metalness: 0.1, emissive: room, emissiveIntensity: 0.55,

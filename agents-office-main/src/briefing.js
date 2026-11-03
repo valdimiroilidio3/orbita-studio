@@ -27,6 +27,10 @@
        visual com a instrução de os substituir por material da lead.
    =========================================================================== */
 
+/* 3 nov 2026 · as duas perguntas que apagam ou repõem trabalho passam pelo diálogo da casa
+   (ver `src/confirmar.js`): o `confirm` do browser bloqueava a página toda. */
+import { confirmar } from './confirmar.js';
+
 const E = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const ABAS = [
@@ -120,15 +124,16 @@ export function podeGerar(valores = {}) {
   return !!v('empresa') && ['objetivo', 'descricao', 'produtos', 'publico', 'valor'].some((id) => v(id));
 }
 
-/** Sair da página com alterações por gravar pede confirmação. */
-export function podeSair(api, destino = null) {
+/** Sair da página com alterações por gravar pede confirmação (no diálogo da casa). */
+export async function podeSair(api, destino = null) {
   const B = api?.S?.briefing;
   if (!B || !B.sujo) return true;
   if (destino && destino.name === 'projeto' && destino.id === B.projetoId) return true;
-  const perguntar = globalThis.confirm;
-  const ok = typeof perguntar === 'function'
-    ? perguntar('Tens alterações no briefing por gravar. Sair sem gravar?')
-    : true;
+  const ok = await confirmar({
+    titulo: 'Tens alterações no briefing por gravar',
+    texto: 'Se saíres agora, o que escreveste desde a última gravação perde-se.',
+    confirmar: 'Sair sem gravar', cancelar: 'Continuar a editar', perigo: true,
+  });
   if (ok) { B.sujo = false; B.valores = { ...(B.dados?.briefing?.valores || {}) }; B.origens = { ...(B.dados?.briefing?.origens || {}) }; }
   return ok;
 }
@@ -467,7 +472,11 @@ export async function accaoBriefing(name, el, api) {
   }
 
   if (name === 'bf-descartar') {
-    const ok = globalThis.confirm ? globalThis.confirm('Descartar o que ainda não está gravado?') : true;
+    const ok = await confirmar({
+      titulo: 'Descartar o que ainda não está gravado?',
+      texto: 'O que escreveste desde a última gravação perde-se. O briefing que está gravado fica como está.',
+      confirmar: 'Descartar', cancelar: 'Manter', perigo: true,
+    });
     if (!ok) return true;
     B.valores = { ...(B.dados?.briefing?.valores || {}) };
     B.origens = { ...(B.dados?.briefing?.origens || {}) };
@@ -576,7 +585,11 @@ export async function accaoBriefing(name, el, api) {
 
   if (name === 'bf-restaurar') {
     const tipo = el?.dataset?.tipo === 'imagens' ? 'imagens' : 'master';
-    const ok = globalThis.confirm ? globalThis.confirm('Repor esta versão? A actual fica no histórico — nada é apagado.') : true;
+    const ok = await confirmar({
+      titulo: 'Repor esta versão?',
+      texto: 'A versão actual fica no histórico — nada é apagado.',
+      confirmar: 'Repor', cancelar: 'Deixar como está',
+    });
     if (!ok) return true;
     try {
       const r = await api.call(`/ops/projetos/${encodeURIComponent(id)}/briefing/restaurar`, 'POST', { tipo, id: el?.dataset?.id });
