@@ -201,6 +201,17 @@ export function checklist({ health = null, prontidao = null } = {}) {
     };
   }
   const leitura = health.modo === 'local' || health.error === 'sem chaves' ? 'local' : 'base';
+  /* 1.63.1 · Uma resposta com outra forma NÃO é um retrato. O servidor local
+     (`npm start`) responde `{ok:true, version, backend,…}` — sem `modo`, sem
+     `faltam`, sem `prontidao`. Ler isso como «está tudo bem» era exactamente a
+     mentira que esta versão existe para não dizer. */
+  const temRetrato = health.modo === 'base' || health.modo === 'local' || Array.isArray(health.faltam) || !!health.prontidao;
+  if (!temRetrato) {
+    return {
+      leitura: 'parcial', fonte: 'nenhuma', versao: String(health.version || health.versao || ''), base: '', itens: [],
+      notas: ['O `/api/health` respondeu, mas sem o retrato do esquema (não trouxe `modo`, `faltam` nem `prontidao`) — não sei dizer o que falta.'],
+    };
+  }
   let itens = [];
 
   /* a base não está ligada: não há tabelas para contar, e diz-se isso */
@@ -230,7 +241,8 @@ export function checklist({ health = null, prontidao = null } = {}) {
      em falta — e isso TEM de se poder dizer. Sem esta peça, a lista vazia
      confundia-se com «não sei» (e as duas coisas são o contrário uma da outra). */
   const semFalta = leitura === 'base' && health.ok === true
-    && !(Array.isArray(health.faltam) ? health.faltam.length : 0)
+    && health.modo === 'base'
+    && Array.isArray(health.faltam) && health.faltam.length === 0
     && !itens.some((i) => i.estado !== 'pronto');
   if (semFalta) {
     itens.push(item({
@@ -277,6 +289,7 @@ export function resumo(lista) {
 
 function fraseDoResumo({ leitura, itens, emFalta, criticos, essenciais, pronto }) {
   if (leitura === 'sem-leitura') return 'Não consegui ler a saúde desta instalação: não sei dizer o que falta.';
+  if (leitura === 'parcial') return 'O servidor respondeu, mas não com o retrato do esquema — não sei dizer o que falta.';
   if (leitura === 'local') return 'A base não está ligada — o resto do arranque não se pode avaliar até isto.';
   if (!itens.length) return 'A instalação não deu nenhuma peça para avaliar: não é a mesma coisa que estar pronta.';
   if (pronto) return 'Está tudo no sítio: nenhuma peça obrigatória em falta.';
