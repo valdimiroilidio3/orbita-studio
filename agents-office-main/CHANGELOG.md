@@ -1,3 +1,20 @@
+## 1.63.1 — 4 nov 2026 · UMA RESPOSTA COM OUTRA FORMA NÃO É UM RETRATO
+
+Apanhado ao abrir a mesa com o servidor local (`npm start`). O `/api/health` de
+cá não é o da Vercel: responde `{ok:true, version, backend, …}` — sem `modo`, sem
+`faltam`, sem `prontidao`. A 1.63.0 lia o `ok:true` e escrevia **«A base
+respondeu e o esquema está completo»**. Era exactamente a mentira que esta
+versão existe para não dizer.
+
+- A leitura passou a exigir o **retrato**: sem `modo`, `faltam` ou `prontidao` o
+  estado é `parcial` e a frase é «não sei dizer o que falta» — com o motivo.
+- «Está tudo no sítio» passou a exigir prova: `ok:true` **e** `modo:"base"` **e**
+  `faltam` vazio. Um `{ok:true}` sozinho não chega.
+- Dois testes novos (17 no total em `arranque.test.mjs`) — um com a forma exacta
+  do servidor local, outro a provar que «pronto» só se diz com prova.
+
+---
+
 ## 1.63.0 — 4 nov 2026 · O ARRANQUE: O QUE FALTA, PORQUE, E A ACÇÃO
 
 A instalação estava a dizer `{"ok":false}` a quem sabe ler JSON e «Criar a primeira

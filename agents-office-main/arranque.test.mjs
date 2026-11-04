@@ -131,6 +131,26 @@ test('o opcional fica no fim, não conta como crítico e não impede «pronto»'
   assert.equal(soOpcional.emFalta, 1, 'o opcional continua à vista, mesmo não travando nada');
 });
 
+test('1.63.1 · uma resposta do servidor local (outra forma) não vira «está tudo bem»', () => {
+  /* o `npm start` responde {ok:true, version, backend, …}: nenhum `modo`, nenhum `faltam` */
+  const c = checklist({ health: { ok: true, version: '1.63.1', backend: 'local', ai: [], leads: {} } });
+  assert.equal(c.leitura, 'parcial');
+  assert.equal(c.itens.length, 0);
+  assert.equal(c.versao, '1.63.1', 'a versão do servidor local usa outro nome e é lida na mesma');
+  const r = resumo(c);
+  assert.equal(r.pronto, false);
+  assert.match(r.frase, /não sei dizer o que falta/);
+  assert.doesNotMatch(r.frase, /tudo no sítio/);
+  assert.match(c.notas.join(' '), /sem o retrato do esquema/);
+});
+
+test('1.63.1 · «está tudo no sítio» só com prova: ok, modo base e faltam vazio', () => {
+  const semProva = resumo(checklist({ health: { ok: true } }));
+  assert.equal(semProva.pronto, false);
+  const comProva = resumo(checklist({ health: { ok: true, modo: 'base', faltam: [], prontidao: { criticasEmFalta: [], essenciaisEmFalta: [] } } }));
+  assert.equal(comProva.pronto, true);
+});
+
 test('sem base ligada o arranque não avalia tabelas e diz o que se perde', () => {
   const c = checklist({ health: { ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: '1.63.0', prontidao: { criticasEmFalta: ['Base de dados'], essenciaisEmFalta: [] } } });
   assert.equal(c.leitura, 'local');
