@@ -68,6 +68,15 @@ import {
   limparConsulta, CHAVE_RECENTES,
 } from './busca.js';
 
+/* 1.63.0 · O ARRANQUE (4 nov 2026). A instalação dizia `{"ok":false}` a quem sabe
+   ler JSON. Aqui a mesma verdade passa a ser uma lista: o que falta, porquê isso
+   trava o trabalho, e a acção concreta que o resolve. As contas estão em
+   `src/arranque.js` e são puras — esta camada só as desenha. */
+import {
+  checklist as checklistDoArranque, resumo as resumoDoArranque, passoASeguir,
+  fraseDaVerificacao, NOTA_REDEPLOY,
+} from './arranque.js';
+
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
    `/api` atrás (a Vercel serve ficheiros estáticos). Em vez do cartão que mandava arrancar o
@@ -137,6 +146,7 @@ const NAV = [
   { k: 'execucoes', label: 'Execuções', ic: 'ia' },
   { k: 'ia', label: 'IA', ic: 'ia' },
   { k: 'motores', label: 'Motores', ic: 'motor' },
+  { k: 'arranque', label: 'Arranque', ic: 'tick' },
   { k: 'contas', label: 'Contas', ic: 'contas' },
   { k: 'conversas', label: 'Conversas', ic: 'conversas' },
   { k: 'saldo', label: 'Saldo', ic: 'saldo' },
@@ -153,6 +163,9 @@ const S = {
   autonomia: null, autonomiaErro: '',
   /* 1.62.0 · a folha de busca: aberta, o que se escreveu, o que voltou e o erro */
   buscaAberta: false, buscaQ: '', buscaRes: null, buscaCarregando: false, buscaErro: '', buscaRecentes: null,
+  /* 1.63.0 · o arranque: a última leitura e a frase da última verificação
+     pedida à mão (o «resolvido»/«nada mudou» fica à vista depois do clique) */
+  arranque: null, arranqueFrase: '',
   /* 1.61.0 · as execuções: a lista, a execução aberta e o filtro escolhido */
   execucoes: [], execucao: null, execucaoErro: '', execucaoFiltro: 'todas',
   execucoesRecentes: [],
@@ -308,7 +321,7 @@ function parseHash() {
   }
   const [name, id] = cru.split('/');
   /* 1.61.0 · `execucoes` e `execucao/:id` entram na lista de rotas conhecidas. */
-  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia', 'motores', 'execucoes', 'execucao'];
+  const known = ['hoje', 'leads', 'papel', 'cine', 'conversas', 'saldo', 'faturas', 'lead', 'projetos', 'projeto', 'tarefas', 'agentes', 'contas', 'ia', 'motores', 'execucoes', 'execucao', 'arranque'];
   return { name: known.includes(name) ? name : 'hoje', id: id ? decodeURIComponent(id) : null };
 }
 
@@ -316,13 +329,13 @@ function paintNav() {
   if (S.needLogin) { $('#nav').innerHTML = ''; $('#tabbar').innerHTML = ''; return; }
   const cur = S.route.name === 'lead' ? 'leads' : S.route.name;
   const pend = S.today?.decidir?.length || 0;
-  const nav = NAV.filter(n => n.k !== 'contas' || may('admin')).map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
+  const nav = NAV.filter(n => (n.k !== 'contas' && n.k !== 'arranque') || may('admin')).map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span>${n.k === 'hoje' && pend ? `<span class="n">${pend}</span>` : ''}</a>`).join('');
   $('#nav').innerHTML = nav;
   // No telemóvel cabem seis: o resto (Conversas) fica a um toque a partir de Hoje.
   /* 1.60.0: no telemóvel, «Motores» entra na barra (é onde se vê o que corre e
      com que permissões); «Agentes» continua a um toque a partir de Hoje. */
   const TABS = ['hoje', 'leads', 'projetos', 'tarefas', 'motores', 'saldo'];
-  $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k) && (n.k !== 'contas' || may('admin')))
+  $('#tabbar').innerHTML = NAV.filter(n => TABS.includes(n.k) && (n.k !== 'contas' && n.k !== 'arranque' || may('admin')))
     .map(n => `<a href="#/${n.k}" class="${cur === n.k ? 'on' : ''}"${cur === n.k ? ' aria-current="page"' : ''}>${IC[n.ic]}<span>${n.label}</span></a>`).join('');
 }
 
@@ -468,6 +481,44 @@ async function loadCommon() {
   S.execucoesRecentes = execucoes?.runs || [];
 }
 
+/* ---------------- arranque (1.63.0) ----------------
+   Duas leituras, e a diferença importa:
+     · `/api/health` é um ficheiro plano e PÚBLICO — responde antes de haver
+       sessão, e é o que a primeira conta consegue ver;
+     · `/sistema/prontidao` é a lista completa (com o NOME de cada variável) e
+       só se lê com sessão. Sem sessão, mostram-se os grupos, não se adivinham
+       os nomes.
+   Nenhuma das duas é estimada: se o servidor não responder, o estado é
+   `sem-leitura` e a vista diz «não sei» — nunca «está tudo bem». */
+async function lerSaude() {
+  try {
+    const r = await fetch(API + '/health', { headers: { accept: 'application/json' }, cache: 'no-store' });
+    let j = null;
+    try { j = await r.json(); } catch { j = null; }
+    /* um servidor estático devolve o `index.html` com 200: isso não é saúde */
+    if (!j || typeof j !== 'object' || (!('ok' in j) && !j.error)) {
+      return { saude: null, motivo: `o \`/api/health\` respondeu ${r.status} sem um retrato legível — esta página pode estar a ser servida sem \`/api\`` };
+    }
+    return { saude: j, motivo: '' };
+  } catch (e) {
+    return { saude: null, motivo: `não consegui chegar ao \`/api/health\`: ${e.message}` };
+  }
+}
+
+async function loadArranque() {
+  const { saude, motivo } = await lerSaude();
+  let prontidao = null;
+  if (saude && S.eu) {
+    /* a lista completa é um extra: se a rota recusar, fica o resumo do health
+       e a vista continua verdadeira, só menos detalhada */
+    try { prontidao = await call('/sistema/prontidao'); } catch { prontidao = null; }
+  }
+  const c = checklistDoArranque({ health: saude, prontidao });
+  if (motivo) c.notas = [...(c.notas || []), motivo];
+  S.arranque = { ...c, quando: new Date().toISOString() };
+  return S.arranque;
+}
+
 async function loadTarefas() {
   const f = S.tarefaFiltro || {};
   const qs = new URLSearchParams({ limit: '100' });
@@ -526,7 +577,12 @@ async function loadLead(id) {
 async function boot(full = true) {
   try {
     if (full) {
-      if (!(await loadEu())) { paintNav(); paint(); return; }
+      if (!(await loadEu())) {
+        /* 1.63.0 · antes de existir conta, o arranque lê-se pelo `/api/health`,
+           que é público: quem chega vê o que falta em vez de uma porta às escuras */
+        if (S.primeiraConta) await loadArranque().catch(() => null);
+        paintNav(); paint(); return;
+      }
       await loadCommon();
     }
     if (S.route.name === 'lead' && S.route.id) await loadLead(S.route.id);
@@ -567,6 +623,9 @@ async function boot(full = true) {
     if (S.route.name === 'leads' && !S.pipeline) await loadPipeline();
     /* 1.56.0 · as faturas só se lêem quando a página as mostra */
     if (S.route.name === 'faturas') await loadFaturas();
+    /* 1.63.0 · o arranque relê-se sempre que a página abre: uma lista guardada
+       de ontem diria que falta o que já se resolveu */
+    if (S.route.name === 'arranque') await loadArranque().catch(() => null);
     S.error = '';
   } catch (e) { S.error = e.message; }
   paintNav();
@@ -1774,6 +1833,113 @@ function viewLogin() {
       ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
       ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
     </div>
+    ${primeira ? cartaoArranque() : ''}
+  </div>`;
+}
+
+/* ---------------- arranque: a lista que diz o que falta ---------------- */
+
+/* Uma peça escreve-se sempre do mesmo jeito: o que falta, em que grupo, porque
+   trava o trabalho, e a acção — com o texto à mão de copiar, porque quem lê isto
+   está numa página da Vercel com o campo aberto noutro separador. */
+function pecaArranque(i) {
+  const etiqueta = i.critico ? 'crítico' : i.opcional ? 'opcional' : 'essencial';
+  const acao = i.como
+    ? `<div class="arr-acao">
+        <span class="arr-onde">${esc(i.como.onde)}</span>
+        <code>${esc(i.como.texto)}</code>
+        <button class="btn quiet small" data-act="arranque-copiar" data-valor="${esc(i.como.texto)}" aria-label="copiar a acção de ${esc(i.titulo)}" title="copiar">${IC.copiar}</button>
+      </div>${i.como.nota ? `<div class="hint">${esc(i.como.nota)}</div>` : ''}`
+    : `<div class="hint">Sem acção automática aqui: os nomes das variáveis estão na página do arranque, com sessão aberta.</div>`;
+  return `<li class="arr-item${i.critico ? ' arr-critico' : ''}">
+    <div class="arr-onda">
+      <b>${esc(i.titulo)}</b>
+      <span class="arr-quem">${esc(i.grupoNome || 'Instalação')} · ${etiqueta}</span>
+      <div class="hint">${esc(i.porque)}</div>
+      ${acao}
+    </div>
+  </li>`;
+}
+
+/* O cartão do ecrã de entrada: existe para que «criar a primeira conta» deixe de
+   ser uma porta às escuras. Só mostra o que o `/api/health` sabe — grupos e
+   tabelas — porque ainda não há sessão para ler a lista completa. */
+function cartaoArranque() {
+  const a = S.arranque;
+  if (!a) {
+    return `<div class="card" id="arrCard" style="margin-top:var(--s4)">
+      <div class="sec-h"><h3>O que falta nesta instalação</h3><span class="count">a ler…</span></div>
+      <div class="hint">A perguntar ao <code>/api/health</code> o que já está no sítio.</div>
+    </div>`;
+  }
+  const r = resumoDoArranque(a);
+  const falta = a.itens.filter((i) => i.estado !== 'pronto' && !i.opcional).slice(0, 6);
+  return `<div class="card" id="arrCard" style="margin-top:var(--s4)" aria-live="polite">
+    <div class="sec-h"><h3>O que falta nesta instalação</h3>
+      <span class="count">${a.versao ? `versão ${esc(a.versao)}` : 'sem versão'}${r.leitura === 'base' ? '' : ' · leitura limitada'}</span></div>
+    <p class="arr-frase">${esc(r.frase)}</p>
+    ${falta.length ? `<ul class="arr-lista">${falta.map(pecaArranque).join('')}</ul>` : ''}
+    ${(a.notas || []).length ? `<div class="hint">${a.notas.map(esc).join(' ')}</div>` : ''}
+    ${S.arranqueFrase ? `<div class="hint" id="arrDiff">${esc(S.arranqueFrase)}</div>` : ''}
+    <div class="acts">
+      <button class="btn ghost small" data-act="verificar-arranque">Verificar outra vez</button>
+    </div>
+    <div class="hint">Nada aqui é estimado: é o que o <code>/api/health</code> desta instalação respondeu. ${esc(NOTA_REDEPLOY)}.</div>
+  </div>`;
+}
+
+/* A página do arranque, com sessão: a lista completa, grupo a grupo, com o nome
+   de cada variável e o ficheiro de cada migração. */
+function viewArranque() {
+  const a = S.arranque;
+  if (!a) {
+    return `<div class="wrap">${headHTML({ title: 'Arranque', sub: 'a ler o que falta nesta instalação' })}
+      <div class="card"><div class="skeleton">a ler o que falta…</div></div></div>`;
+  }
+  const r = resumoDoArranque(a);
+  const falta = a.itens.filter((i) => i.estado !== 'pronto');
+  const prontos = a.itens.filter((i) => i.estado === 'pronto');
+  const passo = passoASeguir(a);
+  const grupos = [];
+  for (const i of falta) {
+    const nome = i.grupoNome || 'Instalação';
+    let g = grupos.find((x) => x.nome === nome);
+    if (!g) { g = { nome, itens: [] }; grupos.push(g); }
+    g.itens.push(i);
+  }
+  return `<div class="wrap">
+    ${headHTML({
+      title: 'Arranque',
+      sub: `${a.versao ? `versão ${esc(a.versao)}` : 'versão desconhecida'} · ${a.base ? `base ${esc(a.base)}` : 'sem base ligada'} · lido ${esc(when(a.quando))}`,
+      right: '<button class="btn ghost small" data-act="verificar-arranque">Verificar outra vez</button>',
+    })}
+    <div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>${r.pronto ? 'Está pronto' : 'O que falta'}</h3>
+        <span class="count">${r.emFalta} em falta · ${r.prontos} no sítio</span></div>
+      <p class="arr-frase${r.pronto ? ' arr-ok' : ''}">${esc(r.frase)}</p>
+      ${passo ? `<div class="arr-passo">
+        <div class="arr-quem">a seguir</div>
+        <b>${esc(passo.titulo)}</b>
+        <div class="hint">${esc(passo.porque)}</div>
+        ${passo.como ? `<div class="arr-acao"><span class="arr-onde">${esc(passo.como.onde)}</span><code>${esc(passo.como.texto)}</code>
+          <button class="btn quiet small" data-act="arranque-copiar" data-valor="${esc(passo.como.texto)}" aria-label="copiar a acção de ${esc(passo.titulo)}" title="copiar">${IC.copiar}</button></div>` : ''}
+      </div>` : ''}
+      ${S.arranqueFrase ? `<div class="hint" id="arrDiff">${esc(S.arranqueFrase)}</div>` : ''}
+    </div>
+    ${grupos.map((g) => `<div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>${esc(g.nome)}</h3><span class="count">${g.itens.filter((i) => i.critico).length ? 'crítico' : 'essencial'}</span></div>
+      <ul class="arr-lista">${g.itens.map(pecaArranque).join('')}</ul>
+    </div>`).join('')}
+    ${prontos.length ? `<div class="card" style="margin-bottom:var(--s4)">
+      <div class="sec-h"><h3>Já está no sítio</h3><span class="count">${prontos.length}</span></div>
+      <ul class="arr-lista">${prontos.map((i) => `<li class="arr-item arr-feito">
+        <div class="arr-onda"><b>${IC.tick} ${esc(i.titulo)}</b>
+          <span class="arr-quem">${esc(i.grupoNome || 'Instalação')}${i.variavel ? ` · ${esc(i.variavel)}` : ''}</span></div>
+      </li>`).join('')}</ul>
+    </div>` : ''}
+    ${(a.notas || []).length ? `<div class="card"><div class="sec-h"><h3>O que não consegui ler</h3></div>
+      ${a.notas.map((n) => `<div class="hint">${esc(n)}</div>`).join('')}</div>` : ''}
+    <div class="hint" style="margin-top:var(--s4)">${esc(NOTA_REDEPLOY)}. Esta lista é a mesma que o <code>/api/health</code> resume e que o <code>/sistema/prontidao</code> detalha — não há uma segunda verdade.</div>
   </div>`;
 }
 
@@ -2835,6 +3001,7 @@ function paint() {
               : S.route.name === 'contas' ? viewContas()
               : S.route.name === 'ia' ? vistaIA(S, { esc, hhmm, when })
               : S.route.name === 'motores' ? viewMotores()
+              : S.route.name === 'arranque' ? viewArranque()
               : S.route.name === 'execucoes' ? viewExecucoes()
               : S.route.name === 'execucao' ? viewExecucao()
             : S.route.name === 'conversas' ? viewConversas()
@@ -2868,6 +3035,28 @@ async function act(name, el, ev) {
     if (name === 'filter') { S.filter = el.dataset.k; paint(); return; }
     if (name === 'ver-lead') { location.hash = `#/lead/${encodeURIComponent(id)}`; return; }
     if (name === 'reload') { await boot(true); return; }
+    /* 1.63.0 · verificar o arranque é voltar a LER — e dizer o que mudou (ou que
+       nada mudou, que é a resposta que evita a hora a carregar no mesmo botão) */
+    if (name === 'verificar-arranque') {
+      const antes = S.arranque;
+      S.arranqueFrase = '';
+      await loadArranque();
+      S.arranqueFrase = fraseDaVerificacao(antes, S.arranque);
+      paint();
+      toast(S.arranqueFrase, !S.arranque || S.arranque.leitura === 'sem-leitura');
+      return;
+    }
+    if (name === 'arranque-copiar') {
+      const valor = el?.dataset?.valor || '';
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('sem área de transferência');
+        await navigator.clipboard.writeText(valor);
+        toast('Copiado: ' + valor);
+      } catch {
+        toast('Não consegui copiar. O texto é: ' + valor, true);
+      }
+      return;
+    }
 
     if (name === 'toggle-stop') {
       const parado = !!S.today?.presenca?.parado;

@@ -1,3 +1,56 @@
+## 1.63.0 — 4 nov 2026 · O ARRANQUE: O QUE FALTA, PORQUE, E A ACÇÃO
+
+A instalação estava a dizer `{"ok":false}` a quem sabe ler JSON e «Criar a primeira
+conta» a quem só vê a página. Entre as duas coisas ficava o trabalho a sério —
+descobrir que faltava uma migração (`orbita_faturas`), que o grupo «Acesso» não
+tinha token nenhum, que o correio e o WhatsApp estavam desligados. Nada disto se
+via dentro da aplicação, e por isso «está bloqueado» não dizia *o que* fazer.
+
+### A lista (`src/arranque.js`, puro e testado)
+- Pega no que o servidor **já** diz — `/api/health` (público) e
+  `/sistema/prontidao` (com sessão) — e transforma-o em peças com três coisas
+  cada: **o que falta**, **porque trava o trabalho** e **a acção concreta**.
+- Cada tabela em falta aponta o **ficheiro** que a cria (`orbita_faturas` →
+  `orbita_1_56_0.sql`) e o endereço que a aplica (`/api/setup?token=…&so=…`).
+- Cada variável em falta diz **onde** se cria (Vercel → Settings → Environment
+  Variables, Resend, Meta…) e o que se escreve. Um teste confronta a tabela de
+  acções com `api/_prontidao.mjs` e falha se alguém inventar um nome.
+- **Nunca diz «pronto» sem leitura**: sem resposta do `/api/health` o estado é
+  `sem-leitura` e a frase é «não sei». Uma página servida sem `/api` (que devolve
+  HTML com 200) também não passa por saúde.
+- **Ordem de resolução**: primeiro o que falta, dentro disso o crítico antes do
+  essencial, e o opcional no fim — sem nunca desaparecer da lista.
+
+### Onde se vê
+- **No ecrã da primeira conta**: um cartão «O que falta nesta instalação» com a
+  versão, a tabela em falta e os grupos por configurar. A porta deixou de ser às
+  escuras, e o formulário continua onde estava.
+- **Numa página nova, `#/arranque`** (dono): a lista completa agrupada, a peça a
+  resolver **a seguir** em destaque, o que **já está no sítio** com o nome da
+  variável, e um botão para **copiar** cada acção.
+- **«Verificar outra vez»** volta a ler e diz o que mudou: `Resolvido: …`, ou
+  `Nada mudou desde a última leitura` **com a razão mais provável** — na Vercel
+  uma variável nova só entra no código que arranca depois de um Redeploy.
+- Uma variável que **desaparece** da lista não é anunciada como resolvida (pode
+  ter mudado de nome): só uma tabela que sai do `faltam` conta como prova.
+
+### O que continua por fazer
+- **As acções não são executadas por nós**: a lista diz o que fazer e copia o
+  texto; criar variáveis na Vercel e aplicar SQL continuam a ser actos de quem
+  tem a conta. Não há aqui nenhuma promessa de «resolver sozinho».
+- **Os deploys de commits directos continuam bloqueados** pela regra «Require
+  Verified Commits» do projecto na Vercel (o commit do merge do GitHub passa;
+  os commits de ferramentas, com assinatura não verificada, ficam `BLOCKED`).
+  Desligar essa regra é um acto no painel — não se resolve por código.
+- **A primeira conta continua a ser criada por ti** (com o `SETUP_TOKEN`, quando
+  ele existe): sem sessão não há como verificar nada ao vivo.
+- As migrações `orbita_1_56_0`, `1_59_0`, `1_60_0` e `1_61_0` continuam por
+  aplicar na base; esta versão passa a dizer isso dentro da aplicação.
+- `scene.smoke.mjs` continua a falhar **antes e depois** desta versão (aviso de
+  motor e número de malhas dos avatares). Não foi tocado.
+
+---
+
 ## 1.62.0 — 3 nov 2026 · A BUSCA AO ALCANCE DO POLEGAR E O ESCRITÓRIO OPCIONAL
 
 Fecham-se os dois buracos que sobravam do pedido 6: no telemóvel não havia
