@@ -184,7 +184,7 @@ test('6 · copiar a acção põe o texto à mão (e sem área de transferência,
   const botao = doc.querySelector('[data-act="arranque-copiar"]');
   assert.ok(botao, 'há um botão de copiar');
   const valor = botao.dataset.valor;
-  assert.match(valor, /\/api\/setup\?token=/);
+  assert.match(valor, /Aplicar o esquema/, 'copia-se a acção, não um endereço com o segredo dentro');
   botao.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await esperar(200);
   assert.match(texto(), /Copiado: |Não consegui copiar\. O texto é:/);

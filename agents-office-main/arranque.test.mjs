@@ -71,13 +71,19 @@ test('uma tabela em falta é uma peça crítica com o ficheiro certo e a acção
   assert.equal(t.id, 'tabela:orbita_faturas');
   assert.equal(t.critico, true);
   assert.equal(t.estado, 'falta');
-  assert.match(t.como.texto, /\/api\/setup\?token=/);
+  /* 1.65.1 · a acção aponta para a página (com sessão); o endereço antigo
+     passou para a nota, e o texto copiado já não leva um segredo dentro */
+  assert.match(t.como.onde, /Página do arranque/);
+  assert.match(t.como.texto, /Aplicar o esquema/);
   assert.match(t.como.texto, /orbita_1_56_0\.sql/);
+  assert.doesNotMatch(t.como.texto, /\/api\/setup/, 'o texto da acção não é um URL com token');
+  assert.match(t.como.nota, /\/api\/setup\?token=<SETUP_TOKEN>&so=orbita_1_56_0\.sql/);
   assert.match(t.como.nota, /ler=1/);
   assert.match(t.porque, /fatura/);
   /* e uma tabela sem mapeamento não inventa um ficheiro: manda o esquema todo */
   const [x] = itensDeTabelas(['orbita_inventada']);
-  assert.equal(x.como.texto, '/api/setup?token=<SETUP_TOKEN>');
+  assert.match(x.como.texto, /não tens de escolher ficheiro/);
+  assert.match(x.como.nota, /\/api\/setup\?token=<SETUP_TOKEN>, com/);
 });
 
 test('o resumo curto do health vira peças com o peso certo (crítico antes de essencial)', () => {
@@ -234,7 +240,7 @@ test('uma peça escreve-se numa linha: título, porquê e acção', () => {
   const l = linhaDaPeca(t);
   assert.match(l, /Falta a tabela orbita_faturas/);
   assert.match(l, /fatura/);
-  assert.match(l, /Abre no browser/);
+  assert.match(l, /Página do arranque/);
   assert.equal(linhaDaPeca({}), '');
 });
 
@@ -254,7 +260,7 @@ test('todas as tabelas da mesa têm um ficheiro do esquema conhecido', () => {
     assert.ok(TABELAS_COM_FICHEIRO.includes(t), `${t} não tem ficheiro mapeado em src/arranque.js`);
   }
   for (const t of TABELAS_COM_FICHEIRO) {
-    const f = itensDeTabelas([t])[0].como.texto.replace(/^.*so=/, '');
+    const f = (itensDeTabelas([t])[0].como.texto.match(/orbita_[\w.]+\.sql/) || [''])[0];
     assert.ok(FICHEIROS.includes(f), `${t} aponta para ${f}, que não está na ordem de aplicação`);
   }
 });
