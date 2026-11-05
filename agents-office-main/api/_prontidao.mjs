@@ -41,8 +41,13 @@ export const GRUPOS = [
     critico: true,
     porque: 'sem isto, qualquer pessoa com o endereço manda no escritório e gasta as chaves',
     itens: [
-      item('Token da API', 'fecha `/api/*`: 32 caracteres ou mais', ['ORBITA_API_TOKEN'], { minimo: 32 }),
-      item('Token de administração', 'protege a página e a mesa quando não há contas', ['ORBITA_ADMIN_TOKEN'], { minimo: 16 }),
+      /* 1.66.0 · estas duas linhas diziam que o token «fecha o /api/*» e que
+         «protege a página e a mesa». O /api/* já estava fechado pela porta
+         (sessões), e nenhum ficheiro lia os tokens: era pedido trabalho ao dono
+         por uma segurança que não existia. Agora existem (`api/_acesso.mjs`) e
+         é isto que eles fazem — nem mais, nem menos. */
+      item('Token da API', 'o caminho das máquinas: `Authorization: Bearer …` lê e escreve na API sem sessão (32 caracteres ou mais)', ['ORBITA_API_TOKEN'], { minimo: 32 }),
+      item('Token de administração', 'acesso total por token — aprova, entrega e pára envios sem sessão; contas continuam a pedir sessão (16+)', ['ORBITA_ADMIN_TOKEN'], { minimo: 16 }),
     ],
   },
   {

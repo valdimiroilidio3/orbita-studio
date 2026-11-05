@@ -20,6 +20,9 @@ import { createSupabaseRepo, envBase } from './_repo.mjs';
 import { comChave, MODELOS } from './_ia/catalogo.mjs';
 import { envDoPedido } from './_env.mjs';
 import { prontidaoCurta } from './_prontidao.mjs';
+/* 1.66.0 · nomes e booleanos dos dois tokens: prova, sem mostrar nenhum valor,
+   que a instalação os lê de facto */
+import { estadoDosTokens } from './_acesso.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -31,16 +34,17 @@ export default async function handler(req, res) {
      nenhum pedido a um fornecedor — isso é o `/ia/testar`, que é a sério. */
   const ia = { fornecedoresComChave: comChave(pedido).map((x) => x.id), modelosNoCatalogo: MODELOS.length };
   const prontidao = prontidaoCurta(pedido);
+  const acesso = estadoDosTokens(pedido);
 
   if (!env.pronto) {
-    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao });
+    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso });
     return;
   }
 
   try {
     const h = await createSupabaseRepo(env).health();
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso });
   } catch (e) {
-    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao });
+    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso });
   }
 }

@@ -35,8 +35,8 @@ const REDEPLOY = 'depois disto, Deployments → o último → Redeploy: uma vari
 const ACAO = {
   SUPABASE_URL: { onde: VERCEL, texto: 'SUPABASE_URL (Supabase → Project Settings → API → Project URL)' },
   SUPABASE_SECRET_KEY: { onde: VERCEL, texto: 'SUPABASE_SECRET_KEY (Supabase → API → a chave service_role / sb_secret_)' },
-  ORBITA_API_TOKEN: { onde: VERCEL, texto: 'ORBITA_API_TOKEN — 32 caracteres ou mais, gerados à sorte (não é uma palavra)', nota: 'fecha o `/api/*`: sem ele qualquer pessoa com o endereço gasta as chaves' },
-  ORBITA_ADMIN_TOKEN: { onde: VERCEL, texto: 'ORBITA_ADMIN_TOKEN — 16 caracteres ou mais', nota: 'protege a página e a mesa enquanto não há contas' },
+  ORBITA_API_TOKEN: { onde: VERCEL, texto: 'ORBITA_API_TOKEN — 32 caracteres ou mais, gerados à sorte (não é uma palavra)', nota: 'é o caminho das máquinas: `Authorization: Bearer …` lê e escreve na API sem sessão. A mesa em si é fechada pelas contas' },
+  ORBITA_ADMIN_TOKEN: { onde: VERCEL, texto: 'ORBITA_ADMIN_TOKEN — 16 caracteres ou mais', nota: 'acesso total por token (aprova, entrega, pára envios); contas e palavras-passe continuam a pedir sessão' },
   SETUP_TOKEN: { onde: VERCEL, texto: 'SETUP_TOKEN — 12 caracteres ou mais', nota: 'é o `?token=` que autoriza aplicar o SQL por `/api/setup`, e o que a primeira conta pede' },
   DATABASE_URL: { onde: VERCEL, texto: 'DATABASE_URL (Postgres → Connection string → URI)', nota: 'o `pg` precisa da ligação directa para criar as tabelas' },
   TAVILY_API_KEY: { onde: 'app.tavily.com', texto: 'TAVILY_API_KEY na Vercel', nota: 'sem ela não há pesquisa web nem leitura de páginas' },
@@ -188,7 +188,7 @@ const ACAO_DO_GRUPO = {
   'acesso': {
     onde: VERCEL,
     texto: 'ORBITA_API_TOKEN (32+ caracteres) e ORBITA_ADMIN_TOKEN (16+)',
-    nota: 'é o que fecha o `/api/*` e a mesa',
+    nota: 'é o caminho das máquinas para a API; a mesa e o `/api/*` já são fechados pela porta (contas e sessões)',
   },
   'esquema da base': {
     onde: 'Página do arranque, com sessão',
