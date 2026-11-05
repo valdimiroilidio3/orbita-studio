@@ -1580,6 +1580,15 @@
   .arr-erro { margin-top: var(--s3); font-size: var(--t-s); padding: 8px 10px; border-radius: var(--r-s);
     background: #FDF2F1; border: 1px solid #F2C3BE; color: #8f1d17; }
   #esqToken { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+  /* 1.65.0 · o valor gerado: mono, parte-se em linhas (32+ caracteres não cabem
+     num telemóvel) e o copiar fica ao lado, não em baixo */
+  .gen-bloco { margin-top: var(--s3); }
+  .gen-valor { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #F7F8FA; border: 1px solid var(--hair); border-radius: var(--r-s);
+    padding: 8px 10px; margin-bottom: 6px; }
+  .gen-valor code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+    word-break: break-all; flex: 1 1 220px; user-select: all; -webkit-user-select: all; }
+  @media (max-width: 820px) { .gen-valor .btn.small { min-height: 44px; } }
 
 </style>
 </head>

@@ -78,6 +78,9 @@ import {
   /* 1.64.0 · aplicar o esquema a partir daqui (o token vai no corpo, nunca no URL) */
   auditoriaLegivel, resultadoDaAplicacao, erroDoSetup,
 } from './arranque.js';
+/* 1.65.0 · os segredos que o dono tem de inventar geram-se aqui, com o mínimo
+   que `api/_prontidao.mjs` exige — e não ficam guardados em lado nenhum. */
+import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -1897,12 +1900,28 @@ function pecaArranque(i) {
         <button class="btn quiet small" data-act="arranque-copiar" data-valor="${esc(i.como.texto)}" aria-label="copiar a acção de ${esc(i.titulo)}" title="copiar">${IC.copiar}</button>
       </div>${i.como.nota ? `<div class="hint">${esc(i.como.nota)}</div>` : ''}`
     : `<div class="hint">Sem acção automática aqui: os nomes das variáveis estão na página do arranque, com sessão aberta.</div>`;
+  /* 1.65.0 · um segredo inventado por ti (token da API, da administração, do
+     setup) não se cola de lado nenhum: gera-se aqui, com o mínimo certo, e
+     mostra-se uma vez. O valor vive em `S.gerados` (memória da página). */
+  const gerado = i.variavel && S.gerados ? S.gerados[i.variavel] : '';
+  const podeGerar = i.estado !== 'pronto' && i.variavel && GERAVEIS.includes(i.variavel);
+  const gerador = !podeGerar ? '' : `<div class="gen-bloco">
+      ${gerado ? `<div class="gen-valor">
+        <code id="gen-${esc(i.variavel)}">${esc(gerado)}</code>
+        <button class="btn quiet small" data-act="arranque-copiar" data-valor="${esc(gerado)}" aria-label="copiar o valor gerado de ${esc(i.variavel)}" title="copiar">${IC.copiar}</button>
+      </div>
+      <div class="hint">${esc(avisoDoGerado(i.variavel, gerado.length))}</div>
+      <div class="hint">${PASSOS_DA_VERCEL.map(esc).join(' · ')}</div>`
+      : `<div class="hint">Este segredo é inventado: a Vercel não o dá. Ou colas um teu, ou geras um agora com o tamanho que o servidor exige.</div>`}
+      <button class="btn ghost small" data-act="arranque-gerar" data-var="${esc(i.variavel)}">${gerado ? 'Gerar outro' : 'Gerar um valor'}</button>
+    </div>`;
   return `<li class="arr-item${i.critico ? ' arr-critico' : ''}">
     <div class="arr-onda">
       <b>${esc(i.titulo)}</b>
       <span class="arr-quem">${esc(i.grupoNome || 'Instalação')} · ${etiqueta}</span>
       <div class="hint">${esc(i.porque)}</div>
       ${acao}
+      ${gerador}
     </div>
   </li>`;
 }
@@ -3155,6 +3174,15 @@ async function act(name, el, ev) {
         if (!seguir) return;
       }
       await pedirEsquema({ token: dado, ler: !aplicar, aplicar });
+      return;
+    }
+    if (name === 'arranque-gerar') {
+      const variavel = String(el?.dataset?.var || '');
+      const r = gerarSegredo(variavel);
+      if (!r.ok) { toast(r.motivo, true); return; }
+      S.gerados = { ...(S.gerados || {}), [variavel]: r.valor };
+      paint();
+      toast(`${avisoDoGerado(variavel, r.tamanho)}`, false);
       return;
     }
     if (name === 'arranque-copiar') {

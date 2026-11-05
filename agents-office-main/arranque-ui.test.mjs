@@ -282,3 +282,37 @@ test('12 · token recusado diz que é o token, e não fica guardado para o botã
   assert.equal(pedidosSetup.length, 1);
   assert.equal(pedidosSetup[0].token, 'token-errado');
 });
+
+test('13 · um segredo que o dono inventa gera-se na página, com o mínimo do servidor', async () => {
+  const { doc, w, texto } = await abrir({ hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA] });
+  const botao = doc.querySelector('[data-act="arranque-gerar"][data-var="ORBITA_API_TOKEN"]');
+  assert.ok(botao, 'ORBITA_API_TOKEN está em falta e não vem de fornecedor nenhum: tem de se poder gerar');
+  assert.equal(doc.querySelector('[data-act="arranque-gerar"][data-var="ORBITA_ADMIN_TOKEN"]'), null,
+    'o que já está no sítio não oferece «gerar»');
+  botao.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar();
+  const valor = doc.querySelector('#gen-ORBITA_API_TOKEN');
+  assert.ok(valor, 'o valor gerado aparece para copiar');
+  assert.ok(valor.textContent.trim().length >= 32, 'com os 32 caracteres que o servidor exige');
+  assert.match(valor.textContent.trim(), /^[0-9a-f]+$/, 'hexadecimal: nada que se perca ao copiar');
+  assert.match(texto(), /Copia agora/, 'diz que aparece uma vez');
+  assert.match(texto(), /Settings → Environment Variables/, 'diz onde colar');
+  assert.match(texto(), /Redeploy/, 'e que sem redeploy não chega à função');
+});
+
+test('14 · o valor gerado vive na página e não é guardado em lado nenhum', async () => {
+  const { doc, w } = await abrir({ hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA] });
+  doc.querySelector('[data-act="arranque-gerar"][data-var="ORBITA_API_TOKEN"]')
+    .dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar();
+  const valor = doc.querySelector('#gen-ORBITA_API_TOKEN').textContent.trim();
+  const guardado = [];
+  for (let i = 0; i < w.localStorage.length; i += 1) {
+    const k = w.localStorage.key(i);
+    guardado.push([k, w.localStorage.getItem(k)]);
+  }
+  assert.equal(guardado.some(([, v]) => String(v).includes(valor)), false,
+    'um token não pode acabar no localStorage');
+  assert.equal(w.location.href.includes(valor), false, 'nem no endereço');
+  assert.equal(doc.documentElement.innerHTML.split(valor).length - 1 >= 1, true, 'mas está à vista para copiar');
+});
