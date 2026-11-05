@@ -1,3 +1,45 @@
+## 1.64.0 — 4 nov 2026 · O ARRANQUE COM MÃOS
+
+A 1.63 dizia o que faltava e mandava abrir `/api/setup?token=…`. Isso é melhor do
+que nada, mas continuava a pedir à pessoa que construísse um endereço com um
+segredo dentro — e esse segredo ficava no histórico do browser, nos registos do
+servidor e no `Referer`. Esta versão tira o trabalho da mão de quem usa.
+
+### Aplicar o esquema a partir da página
+- Em `#/arranque` há agora um cartão com um campo para o **SETUP_TOKEN** e dois
+  botões: **«Ver o que falta na base»** (auditoria, não escreve nada) e
+  **«Aplicar o esquema»** (com a pergunta da casa antes).
+- O resultado diz o que se passa em português: quantas tabelas faltam e quais,
+  que colunas faltam por tabela, que ficheiros foram aplicados, e — se parou —
+  em que ficheiro parou e que o que passou ficou (um por transacção).
+- **O token vai no corpo do pedido**, não no endereço: `POST /api/setup` aceita
+  `{token, so?, ler?}`. O `GET` de sempre continua a funcionar (há quem o tenha
+  nos favoritos) e um método que não se serve é **405**, não uma aplicação às
+  cegas.
+- O token fica **só em memória**, e só depois de a instalação o aceitar: um token
+  recusado (404) não fica guardado para o clique seguinte. Nunca vai para o
+  `localStorage`.
+- Quem prova o resultado é a **saúde**: depois de aplicar, a página relê o
+  `/api/health` sozinha e mostra «Resolvido: …» — a resposta do SQL não é
+  tratada como prova de nada.
+
+### Os grupos também dizem o que fazer
+- No ecrã da primeira conta (sem sessão) só se conhecem os grupos. Cada grupo em
+  falta passou a trazer a acção concreta — «Acesso» diz `ORBITA_API_TOKEN` (32+)
+  e `ORBITA_ADMIN_TOKEN` (16+), «Correio» diz as três do Resend, «Esquema da
+  base» aponta para o cartão que agora aplica. Um teste confronta esta tabela com
+  `api/_prontidao.mjs`: um grupo inventado falha o teste.
+
+### O que continua por fazer
+- **As variáveis continuam a ser criadas por ti na Vercel**, e um Redeploy
+  depois: aplicação de esquema é a única acção que esta página corre sozinha.
+- **A primeira conta continua a ser criada por ti** (com o `SETUP_TOKEN`).
+- Os deploys de commits de ferramentas continuam `BLOCKED` pela regra «Require
+  Verified Commits» do projecto — o merge de PR passa.
+- `scene.smoke.mjs` continua a falhar antes e depois desta versão.
+
+---
+
 ## 1.63.1 — 4 nov 2026 · UMA RESPOSTA COM OUTRA FORMA NÃO É UM RETRATO
 
 Apanhado ao abrir a mesa com o servidor local (`npm start`). O `/api/health` de

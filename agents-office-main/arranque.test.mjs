@@ -18,7 +18,8 @@ import assert from 'node:assert/strict';
 import {
   checklist, itensDeTabelas, itensDeProntidao, itensDoResumo, resumo, passoASeguir,
   comparar, fraseDaVerificacao, linhaDaPeca, NOTA_REDEPLOY,
-  VARIAVEIS_CONHECIDAS, TABELAS_COM_FICHEIRO,
+  auditoriaLegivel, resultadoDaAplicacao, erroDoSetup,
+  VARIAVEIS_CONHECIDAS, TABELAS_COM_FICHEIRO, ACOES_DOS_GRUPOS,
 } from './src/arranque.js';
 import { GRUPOS } from './api/_prontidao.mjs';
 import { FICHEIROS, TABELAS_DA_MESA } from './api/_esquema.mjs';
@@ -263,4 +264,93 @@ test('itensDeProntidao aguenta um payload magro sem inventar itens', () => {
   assert.deepEqual(itensDeProntidao({}), []);
   assert.deepEqual(itensDoResumo(undefined), []);
   assert.deepEqual(itensDeProntidao({ grupos: [{ id: 'x', nome: 'X', itens: [{ nome: 'Sem variável', pronto: false }] }] }).map((i) => i.variavel), [null]);
+});
+
+/* ---------- 1.64.0 · aplicar o esquema: as duas leituras ---------- */
+
+test('a auditoria com tabelas em falta diz quantas e quais, e que nada se apaga', () => {
+  const a = auditoriaLegivel({
+    ok: false, modo: 'leitura', tabelas: ['orbita_leads', 'orbita_contas'],
+    faltamTabelas: ['orbita_faturas'], faltamColunas: {},
+  });
+  assert.equal(a.estado, 'faltam-tabelas');
+  assert.equal(a.ok, false);
+  assert.match(a.frase, /Faltam 1 tabela da mesa \(orbita_faturas\)/);
+  assert.match(a.frase, /não é apagado/);
+  assert.equal(a.colunasEmFalta, 0);
+});
+
+test('a auditoria com a base sã só o diz porque a resposta lista as tabelas', () => {
+  const comLista = auditoriaLegivel({ ok: true, tabelas: ['a', 'b'], faltamTabelas: [], faltamColunas: {} });
+  assert.equal(comLista.estado, 'pronta');
+  assert.equal(comLista.ok, true);
+  assert.match(comLista.frase, /2 tabelas/);
+  /* `{}` não é uma base sã: é uma resposta que não olhou para nada */
+  const vazia = auditoriaLegivel({});
+  assert.equal(vazia.estado, 'sem-resposta');
+  assert.equal(vazia.ok, false);
+  assert.match(vazia.frase, /não sei/);
+  assert.equal(auditoriaLegivel(null).estado, 'sem-resposta');
+  assert.equal(auditoriaLegivel([]).estado, 'sem-resposta');
+});
+
+test('as colunas em falta contam-se e nomeiam-se por tabela', () => {
+  const a = auditoriaLegivel({ tabelas: ['orbita_faturas'], faltamTabelas: [], faltamColunas: { orbita_faturas: ['serie', 'numero'] } });
+  assert.equal(a.estado, 'faltam-colunas');
+  assert.equal(a.colunasEmFalta, 2);
+  assert.match(a.frase, /2 colunas/);
+  assert.match(a.frase, /orbita_faturas: serie, numero/);
+});
+
+test('aplicar: o que passou fica aplicado e o que falhou diz onde parou', () => {
+  const bem = resultadoDaAplicacao({ ok: true, aplicados: ['orbita_mesa.sql', 'orbita_1_56_0.sql'], faltam: [] });
+  assert.equal(bem.estado, 'aplicado');
+  assert.match(bem.frase, /2 ficheiros/);
+  assert.match(bem.frase, /todas as tabelas/);
+
+  const parcial = resultadoDaAplicacao({ ok: true, aplicados: ['orbita_mesa.sql'], faltam: ['orbita_faturas'] });
+  assert.equal(parcial.ok, true);
+  assert.match(parcial.frase, /ainda faltam 1 tabela/);
+
+  const mal = resultadoDaAplicacao({ ok: false, aplicados: ['orbita_mesa.sql'], erro: 'orbita_1_56_0.sql: relation "x" already exists' });
+  assert.equal(mal.estado, 'parou');
+  assert.match(mal.frase, /Parou depois de orbita_mesa.sql/);
+  assert.match(mal.frase, /transacção/);
+
+  /* uma resposta sem razão não pode inventar uma */
+  const mudo = resultadoDaAplicacao({ ok: false });
+  assert.match(mudo.frase, /não sei se a base ficou a meio/);
+  assert.equal(resultadoDaAplicacao(null).estado, 'sem-resposta');
+  assert.match(resultadoDaAplicacao(null).frase, /não sei/);
+});
+
+test('os erros do /api/setup dizem o que aconteceu, sem repetir o token', () => {
+  assert.match(erroDoSetup(404, { error: 'não existe' }), /token/);
+  /* um 404 de rota (servidor sem `/api`) não é um token errado */
+  assert.match(erroDoSetup(404, { error: 'não encontrado' }), /não tem o .\/api\/setup./);
+  assert.doesNotMatch(erroDoSetup(404, { error: 'não encontrado' }), /token não é/);
+  assert.match(erroDoSetup(405, {}), /GET ou POST/);
+  assert.match(erroDoSetup(413, {}), /grande demais/);
+  assert.match(erroDoSetup(500, { erro: 'falta DATABASE_URL' }), /DATABASE_URL/);
+  assert.match(erroDoSetup(500, {}), /respondeu 500 sem dizer porquê/);
+  assert.equal(erroDoSetup(500, { erro: 'segredo-123' }).includes('segredo-123'), true, 'o erro do servidor não é escondido');
+});
+
+test('1.64.0 · sem sessão, cada grupo em falta traz a acção (não só o nome)', () => {
+  const c = checklist({ health: HEALTH_QUEBRADO });
+  const grupos = c.itens.filter((i) => i.tipo === 'grupo');
+  assert.ok(grupos.length >= 3);
+  const acesso = grupos.find((i) => i.grupo === 'acesso');
+  assert.ok(acesso.como, 'o grupo «Acesso» sem sessão tem de dizer o que fazer');
+  assert.match(acesso.como.texto, /ORBITA_API_TOKEN/);
+  assert.match(acesso.como.texto, /ORBITA_ADMIN_TOKEN/);
+  for (const g of grupos) assert.ok(g.como && g.como.texto, `${g.titulo} ficou sem acção`);
+});
+
+test('1.64.0 · nenhum grupo inventado na tabela de acções', () => {
+  const reais = new Set(GRUPOS.map((g) => String(g.nome).toLowerCase()));
+  assert.ok(ACOES_DOS_GRUPOS.length >= 6, 'a tabela não está vazia');
+  for (const chave of ACOES_DOS_GRUPOS) {
+    assert.ok(reais.has(chave), `«${chave}» não é um grupo de api/_prontidao.mjs`);
+  }
 });

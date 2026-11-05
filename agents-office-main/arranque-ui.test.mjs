@@ -66,9 +66,11 @@ const PORTA = {
  * `saudes` é a fila de respostas do `/api/health` (uma por leitura); a última
  * repete-se. `cru` devolve HTML em vez de JSON, como um servidor de ficheiros.
  */
-async function abrir({ hash = '#/hoje', sessao = false, saudes = [SAUDE_QUEBRADA], prontidao = PRONTIDAO, cru = false } = {}) {
+async function abrir({ hash = '#/hoje', sessao = false, saudes = [SAUDE_QUEBRADA], prontidao = PRONTIDAO, cru = false, setups = [] } = {}) {
   const leituras = [];
+  const pedidosSetup = [];
   let i = 0;
+  let is = 0;
   const dom = new JSDOM(HTML, {
     url: `https://mesa.test/${hash}`, runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
@@ -76,6 +78,14 @@ async function abrir({ hash = '#/hoje', sessao = false, saudes = [SAUDE_QUEBRADA
       w.matchMedia = (q) => ({ matches: /max-width: 820px/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
       w.fetch = async (url, opt = {}) => {
         const u = String(url);
+        /* 1.64.0 · o /api/setup passa a ser chamado pelo cartão do esquema */
+        if (u.includes('/api/setup')) {
+          const corpo = JSON.parse(opt.body || '{}');
+          pedidosSetup.push({ metodo: opt.method || 'GET', ...corpo });
+          const r = setups[Math.min(is, Math.max(0, setups.length - 1))] || { status: 404, corpo: { error: 'não existe' } };
+          is += 1;
+          return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.corpo };
+        }
         if (u.includes('/api/health')) {
           const corpo = saudes[Math.min(i, saudes.length - 1)];
           i += 1;
@@ -107,7 +117,7 @@ async function abrir({ hash = '#/hoje', sessao = false, saudes = [SAUDE_QUEBRADA
   /* o bundle inteiro vive num <script>: se ficasse no texto, qualquer asserção
      sobre uma variável casaria com o código em vez de com o ecrã */
   doc.querySelectorAll('script, style').forEach((n) => n.remove());
-  return { dom, doc, w: dom.window, leituras, texto: () => doc.body.textContent.replace(/\s+/g, ' ') };
+  return { dom, doc, w: dom.window, leituras, pedidosSetup, texto: () => doc.body.textContent.replace(/\s+/g, ' ') };
 }
 
 const esperar = (ms = 500) => new Promise((r) => setTimeout(r, ms));
@@ -191,4 +201,84 @@ test('7 · uma instalação pronta diz que está pronta — e não inventa traba
 test('8 · a rota do arranque não é uma rota inventada: o endereço #\/arranque abre a página', async () => {
   const { texto } = await abrir({ hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA] });
   assert.match(texto(), /lido (agora|há \d+ min)/);
+});
+
+/* ---------- 1.64.0 · aplicar o esquema a partir da página ---------- */
+
+const AUDITORIA_FALTA = {
+  status: 200,
+  corpo: {
+    ok: false, modo: 'leitura', versao: '1.64.0',
+    tabelas: ['orbita_leads', 'orbita_contas'], faltamTabelas: ['orbita_faturas'], faltamColunas: {},
+  },
+};
+
+const APLICADO = {
+  status: 200,
+  corpo: { ok: true, aplicados: ['orbita_mesa.sql', 'orbita_1_56_0.sql'], faltam: [], tabelas: ['orbita_faturas'] },
+};
+
+test('9 · o token colado na página vai no corpo do pedido — e a leitura mostra o que falta', async () => {
+  const { doc, w, pedidosSetup, texto } = await abrir({ hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA], setups: [AUDITORIA_FALTA] });
+  const campo = doc.querySelector('#esqToken');
+  assert.ok(campo, 'há um campo para o SETUP_TOKEN');
+  campo.value = 'segredo-que-nao-vai-no-url';
+  doc.querySelector('[data-act="esquema-ler"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar();
+  assert.equal(pedidosSetup.length, 1);
+  assert.equal(pedidosSetup[0].metodo, 'POST', 'o token não vai no endereço');
+  assert.equal(pedidosSetup[0].token, 'segredo-que-nao-vai-no-url');
+  assert.equal(pedidosSetup[0].ler, true);
+  assert.match(texto(), /Faltam 1 tabela da mesa \(orbita_faturas\)/);
+});
+
+test('10 · aplicar pergunta primeiro e, depois, releitura da saúde diz o que mudou', async () => {
+  const { doc, w, pedidosSetup, texto } = await abrir({
+    hash: '#/arranque', sessao: true,
+    saudes: [SAUDE_QUEBRADA, SAUDE_BOA],
+    setups: [AUDITORIA_FALTA, APLICADO],
+  });
+  doc.querySelector('#esqToken').value = 'token-bom';
+  doc.querySelector('[data-act="esquema-ler"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar();
+  assert.equal(pedidosSetup.length, 1);
+
+  doc.querySelector('[data-act="esquema-aplicar"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(150);
+  /* a pergunta é a da casa, não o `confirm` do browser */
+  const sim = doc.querySelector('[data-cf-sim]');
+  assert.ok(sim, 'aplicar pergunta antes de mexer na base');
+  assert.equal(pedidosSetup.length, 1, 'nada foi aplicado antes da resposta');
+  sim.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(700);
+  assert.equal(pedidosSetup.length, 2);
+  assert.equal(pedidosSetup[1].ler, false);
+  assert.equal(pedidosSetup[1].token, 'token-bom');
+  const t = texto();
+  assert.match(t, /2 ficheiros/, 'diz o que aplicou');
+  assert.match(t, /Resolvido: Falta a tabela orbita_faturas/, 'quem prova o depois é a saúde');
+});
+
+test('11 · sem token não se faz pedido nenhum — pede-se o token', async () => {
+  const { doc, w, pedidosSetup, texto } = await abrir({ hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA] });
+  doc.querySelector('[data-act="esquema-ler"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(200);
+  assert.equal(pedidosSetup.length, 0);
+  assert.match(texto(), /Cola o SETUP_TOKEN primeiro/);
+});
+
+test('12 · token recusado diz que é o token, e não fica guardado para o botão seguinte', async () => {
+  const { doc, w, pedidosSetup, texto } = await abrir({
+    hash: '#/arranque', sessao: true, saudes: [SAUDE_QUEBRADA],
+    setups: [{ status: 404, corpo: { error: 'não existe' } }],
+  });
+  doc.querySelector('#esqToken').value = 'token-errado';
+  doc.querySelector('[data-act="esquema-ler"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar();
+  assert.match(texto(), /O token não é o desta instalação/);
+  /* um segundo clique sem voltar a colar não pode reutilizar o token recusado */
+  doc.querySelector('[data-act="esquema-ler"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(200);
+  assert.equal(pedidosSetup.length, 1);
+  assert.equal(pedidosSetup[0].token, 'token-errado');
 });

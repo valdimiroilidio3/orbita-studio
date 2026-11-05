@@ -75,6 +75,8 @@ import {
 import {
   checklist as checklistDoArranque, resumo as resumoDoArranque, passoASeguir,
   fraseDaVerificacao, NOTA_REDEPLOY,
+  /* 1.64.0 · aplicar o esquema a partir daqui (o token vai no corpo, nunca no URL) */
+  auditoriaLegivel, resultadoDaAplicacao, erroDoSetup,
 } from './arranque.js';
 
 const API = '/api';
@@ -166,6 +168,9 @@ const S = {
   /* 1.63.0 · o arranque: a última leitura e a frase da última verificação
      pedida à mão (o «resolvido»/«nada mudou» fica à vista depois do clique) */
   arranque: null, arranqueFrase: '',
+  /* 1.64.0 · o esquema: o token fica em memória (nunca no localStorage), o
+     resultado da última auditoria/aplicação e o que a releitura da saúde disse */
+  esquemaToken: '', esquema: null, esquemaBusy: false, esquemaDepois: '',
   /* 1.61.0 · as execuções: a lista, a execução aberta e o filtro escolhido */
   execucoes: [], execucao: null, execucaoErro: '', execucaoFiltro: 'todas',
   execucoesRecentes: [],
@@ -517,6 +522,47 @@ async function loadArranque() {
   if (motivo) c.notas = [...(c.notas || []), motivo];
   S.arranque = { ...c, quando: new Date().toISOString() };
   return S.arranque;
+}
+
+/* 1.64.0 · o pedido ao `/api/setup`, em `POST` e com o token no corpo. Não passa
+   pelo `/api/rpc` de propósito: é uma rota própria (como o `/api/health`), e um
+   segredo não vai para o endereço por onde passa a lista de leads. */
+async function pedirEsquema({ token, ler, aplicar = false }) {
+  S.esquema = null;
+  S.esquemaDepois = '';
+  S.esquemaBusy = true;
+  paint();
+  try {
+    const r = await fetch(API + '/setup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ token, ler: !!ler }),
+    });
+    let j = null;
+    try { j = await r.json(); } catch { j = null; }
+    if (!r.ok) {
+      S.esquema = { tipo: 'erro', frase: erroDoSetup(r.status, j), estado: r.status };
+      /* um token que a instalação recusou não fica guardado */
+      if (r.status === 404) S.esquemaToken = '';
+    } else if (ler) {
+      /* o token fica em memória só depois de a instalação o aceitar — assim o
+         botão de aplicar não obriga a colá-lo outra vez */
+      S.esquemaToken = token;
+      S.esquema = { tipo: 'auditoria', leitura: auditoriaLegivel(j) };
+    } else {
+      S.esquemaToken = '';
+      S.esquema = { tipo: 'aplicacao', leitura: resultadoDaAplicacao(j) };
+      const antes = S.arranque;
+      await loadArranque();
+      /* quem prova o depois é a saúde, não a resposta do SQL */
+      S.esquemaDepois = fraseDaVerificacao(antes, S.arranque);
+      S.arranqueFrase = S.esquemaDepois;
+    }
+  } catch (e) {
+    S.esquema = { tipo: 'erro', frase: `Não consegui falar com o \`/api/setup\`: ${e.message}`, estado: 0 };
+  }
+  S.esquemaBusy = false;
+  paint();
 }
 
 async function loadTarefas() {
@@ -1888,6 +1934,49 @@ function cartaoArranque() {
   </div>`;
 }
 
+/* 1.64.0 · O CARTÃO QUE APLICA. A lista dizia «abre este endereço com o token»;
+   isso obrigava a pessoa a construir um URL com um segredo lá dentro (e esse
+   segredo ficava no histórico). Aqui cola-se o token uma vez, lê-se primeiro
+   (a auditoria não escreve nada) e aplica-se depois de uma pergunta. */
+function cartaoEsquema() {
+  const e = S.esquema;
+  const l = e && e.leitura ? e.leitura : null;
+  /* a auditoria e o resultado da aplicação não têm a mesma forma: uma diz o que
+     falta, a outra diz o que passou. O cartão aguenta as duas e não rebenta com
+     a que não tem os campos da outra. */
+  const faltamTabelas = l && Array.isArray(l.faltamTabelas) ? l.faltamTabelas : [];
+  const colunas = l && l.faltamColunas && typeof l.faltamColunas === 'object' ? Object.entries(l.faltamColunas) : [];
+  const resultado = !e ? '' : (e.tipo === 'erro'
+    ? `<div class="arr-erro" id="esqRes">${esc(e.frase)}</div>`
+    : `<div class="esq-res" id="esqRes">
+        <div class="esq-frase${l && l.ok ? ' ok' : ''}">${esc(l.frase)}</div>
+        ${faltamTabelas.length ? `<div class="hint">tabelas em falta: ${faltamTabelas.map(esc).join(', ')}</div>` : ''}
+        ${colunas.length ? `<div class="hint">colunas em falta: ${colunas.map(([t, cs]) => `${esc(t)}: ${(Array.isArray(cs) ? cs : []).map(esc).join(', ')}`).join(' · ')}</div>` : ''}
+        ${l && Array.isArray(l.aplicados) && l.aplicados.length ? `<div class="hint">aplicados: ${l.aplicados.map(esc).join(', ')}</div>` : ''}
+        ${S.esquemaDepois ? `<div class="hint" id="esqDepois">${esc(S.esquemaDepois)}</div>` : ''}
+      </div>`);
+  const preso = S.esquemaBusy ? ' aria-disabled="true"' : '';
+  return `<div class="card" id="esqCard" style="margin-bottom:var(--s4)" aria-live="polite">
+    <div class="sec-h"><h3>Aplicar o esquema da base</h3>
+      <span class="count">${S.esquemaBusy ? 'a falar com a base…' : '/api/setup'}</span></div>
+    <p class="hint" style="margin-top:0">Cola o <b>SETUP_TOKEN</b> desta instalação (Vercel → Settings → Environment Variables).
+      Fica só nesta página, em memória: não é guardado no browser nem vai no endereço — vai no corpo do pedido.
+      Primeiro lê-se (a leitura não escreve nada); aplicar vem depois de uma pergunta.</p>
+    <div class="form" style="grid-template-columns:1fr">
+      <input class="in" id="esqToken" type="password" autocomplete="off" spellcheck="false"
+        placeholder="${S.esquemaToken ? 'token já lido com sucesso — cola outro para trocar' : 'SETUP_TOKEN'}"
+        aria-label="token de setup da instalação">
+    </div>
+    <div class="acts">
+      <button class="btn ghost small" data-act="esquema-ler"${preso}>Ver o que falta na base</button>
+      <button class="btn primary small" data-act="esquema-aplicar"${preso}>Aplicar o esquema</button>
+    </div>
+    ${resultado}
+    <div class="hint">Aplicar corre os ficheiros SQL do esquema, um por transacção: cria o que falta e não apaga dados.
+      Quando termina, a lista de cima volta a ler a saúde sozinha — quem prova o resultado é ela, não a resposta do SQL.</div>
+  </div>`;
+}
+
 /* A página do arranque, com sessão: a lista completa, grupo a grupo, com o nome
    de cada variável e o ficheiro de cada migração. */
 function viewArranque() {
@@ -1926,6 +2015,7 @@ function viewArranque() {
       </div>` : ''}
       ${S.arranqueFrase ? `<div class="hint" id="arrDiff">${esc(S.arranqueFrase)}</div>` : ''}
     </div>
+    ${cartaoEsquema()}
     ${grupos.map((g) => `<div class="card" style="margin-bottom:var(--s4)">
       <div class="sec-h"><h3>${esc(g.nome)}</h3><span class="count">${g.itens.filter((i) => i.critico).length ? 'crítico' : 'essencial'}</span></div>
       <ul class="arr-lista">${g.itens.map(pecaArranque).join('')}</ul>
@@ -3044,6 +3134,27 @@ async function act(name, el, ev) {
       S.arranqueFrase = fraseDaVerificacao(antes, S.arranque);
       paint();
       toast(S.arranqueFrase, !S.arranque || S.arranque.leitura === 'sem-leitura');
+      return;
+    }
+    /* 1.64.0 · ler e aplicar o esquema a partir da página do arranque */
+    if (name === 'esquema-ler' || name === 'esquema-aplicar') {
+      if (S.esquemaBusy) return;
+      const aplicar = name === 'esquema-aplicar';
+      const campo = document.querySelector('#esqToken');
+      const dado = String(campo?.value || '').trim() || S.esquemaToken || '';
+      if (!dado) {
+        toast('Cola o SETUP_TOKEN primeiro: sem ele o `/api/setup` responde 404.', true);
+        return;
+      }
+      if (aplicar) {
+        const seguir = await confirmar({
+          titulo: 'Aplicar o esquema à base?',
+          texto: 'Correm os ficheiros SQL do esquema, um por transacção. Cria as tabelas e as colunas que faltam; não apaga dados.',
+          confirmar: 'Aplicar', cancelar: 'Agora não',
+        });
+        if (!seguir) return;
+      }
+      await pedirEsquema({ token: dado, ler: !aplicar, aplicar });
       return;
     }
     if (name === 'arranque-copiar') {
