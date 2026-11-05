@@ -1,3 +1,37 @@
+## 1.65.0 — 4 nov 2026 · OS SEGREDOS QUE FALTAVAM INVENTAR
+
+A 1.64 pôs a página a aplicar o esquema. Ficou a descoberto o passo anterior:
+«falta o `ORBITA_API_TOKEN` (32 caracteres ou mais)» é uma frase que manda
+trabalho para quem lê — inventar um valor bom, com o tamanho certo, sabendo que
+a Vercel **nunca mais o mostra** depois de gravar. As variáveis sensíveis são
+escritas às cegas.
+
+### Gerar em vez de adivinhar
+- Na página do arranque, cada segredo que **tu** inventas (`ORBITA_API_TOKEN`,
+  `ORBITA_ADMIN_TOKEN`, `SETUP_TOKEN`) tem agora um botão **«Gerar um valor»**.
+  O valor sai com o mínimo que `api/_prontidao.mjs` exige, em hexadecimal (só
+  `0-9a-f`: nada que se perca ao copiar), e fica à vista **uma vez** com o botão
+  de copiar ao lado.
+- Ao lado do valor está o caminho da Vercel por passos — *Settings → Environment
+  Variables → Add New → marcar Production → Save → Redeploy* — porque o
+  redeploy é o passo que todos esquecem: sem ele a variável não chega à função.
+- **Sem gerador aleatório não se inventa nada.** Se o browser não expuser
+  `crypto.getRandomValues` (página aberta sem HTTPS), a página não devolve um
+  valor previsível: diz que não dá e manda usar `openssl rand -hex 24`.
+- **O valor não fica guardado em lado nenhum**: vive na memória da página (sai
+  quando se sai), não vai para o `localStorage` nem para o endereço. Um teste
+  fixa isso, e outro fixa que o mínimo da página e o do servidor são o **mesmo
+  número** — não há duas verdades.
+- Chaves que vêm do fornecedor (Resend, Meta) continuam a colar-se: a página não
+  gera o que não é dela, e diz isso em vez de inventar um tamanho.
+
+### O que continua por fazer
+- As variáveis são criadas **por ti** na Vercel, e o Redeploy também.
+- A primeira conta e o esquema continuam a ser passos teus (agora dentro da app).
+- `scene.smoke.mjs` continua a falhar antes e depois desta versão.
+
+---
+
 ## 1.64.0 — 4 nov 2026 · O ARRANQUE COM MÃOS
 
 A 1.63 dizia o que faltava e mandava abrir `/api/setup?token=…`. Isso é melhor do
