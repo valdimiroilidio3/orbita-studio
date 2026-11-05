@@ -19,10 +19,10 @@ import { VERSAO } from './_versao.mjs';
 import { createSupabaseRepo, envBase } from './_repo.mjs';
 import { comChave, MODELOS } from './_ia/catalogo.mjs';
 import { envDoPedido } from './_env.mjs';
-import { prontidaoCurta } from './_prontidao.mjs';
+import { prontidaoCurta, GRUPOS } from './_prontidao.mjs';
 /* 1.66.0 · nomes e booleanos dos dois tokens: prova, sem mostrar nenhum valor,
    que a instalação os lê de facto */
-import { estadoDosTokens } from './_acesso.mjs';
+import { TOKENS, estadoDosTokens, nomesParecidos } from './_acesso.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -34,7 +34,14 @@ export default async function handler(req, res) {
      nenhum pedido a um fornecedor — isso é o `/ia/testar`, que é a sério. */
   const ia = { fornecedoresComChave: comChave(pedido).map((x) => x.id), modelosNoCatalogo: MODELOS.length };
   const prontidao = prontidaoCurta(pedido);
-  const acesso = estadoDosTokens(pedido);
+  /* 1.66.1 · cada nome é comparado com os que a app lê de facto: um
+     `ORBITA_APITOKEN` (sem o segundo `_`) aparece aqui como «quase», em vez de
+     ficar invisível. Só nomes, nunca valores. */
+  const conhecidos = [
+    ...GRUPOS.flatMap((g) => g.itens.flatMap((i) => i.aliases)),
+    ...TOKENS.map((t) => t.variavel),
+  ];
+  const acesso = { ...estadoDosTokens(pedido), nomesErrados: nomesParecidos(pedido, conhecidos) };
 
   if (!env.pronto) {
     res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso });

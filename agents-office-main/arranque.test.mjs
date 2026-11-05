@@ -19,7 +19,7 @@ import {
   checklist, itensDeTabelas, itensDeProntidao, itensDoResumo, resumo, passoASeguir,
   comparar, fraseDaVerificacao, linhaDaPeca, NOTA_REDEPLOY,
   auditoriaLegivel, resultadoDaAplicacao, erroDoSetup,
-  VARIAVEIS_CONHECIDAS, TABELAS_COM_FICHEIRO, ACOES_DOS_GRUPOS,
+  VARIAVEIS_CONHECIDAS, TABELAS_COM_FICHEIRO, ACOES_DOS_GRUPOS, itensDeNomesErrados,
 } from './src/arranque.js';
 import { GRUPOS } from './api/_prontidao.mjs';
 import { FICHEIROS, TABELAS_DA_MESA } from './api/_esquema.mjs';
@@ -359,4 +359,35 @@ test('1.64.0 · nenhum grupo inventado na tabela de acções', () => {
   for (const chave of ACOES_DOS_GRUPOS) {
     assert.ok(reais.has(chave), `«${chave}» não é um grupo de api/_prontidao.mjs`);
   }
+});
+
+test('1.66.1 · um nome quase certo vira uma peça que diz o nome certo (e manda a outra embora)', () => {
+  const health = {
+    ...HEALTH_QUEBRADO,
+    acesso: { ORBITA_API_TOKEN: { configurado: false, curto: false }, nomesErrados: [{ encontrado: 'ORBITA_APITOKEN', devia: 'ORBITA_API_TOKEN' }] },
+  };
+  const c = checklist({ health });
+  const peca = c.itens.find((i) => i.id === 'nome:ORBITA_APITOKEN');
+  assert.ok(peca, 'a peça do nome errado tem de aparecer');
+  assert.match(peca.titulo, /ORBITA_APITOKEN/);
+  assert.match(peca.como.texto, /ORBITA_API_TOKEN/);
+  assert.match(peca.como.nota, /Redeploy/);
+  assert.equal(peca.critico, true);
+  /* a peça do nome certo (a que dizia «Acesso por configurar») sai — fica a que
+     explica o que corrigir; e a do nome errado vem primeiro */
+  const generica = c.itens.find((i) => i.tipo === 'grupo' && i.grupo === 'acesso');
+  const posNome = c.itens.findIndex((i) => i.id === 'nome:ORBITA_APITOKEN');
+  if (generica) assert.ok(posNome < c.itens.indexOf(generica), 'o que corrigir vem antes do resumo do grupo');
+  const doToken = c.itens.filter((i) => i.tipo === 'variavel' && i.variavel === 'ORBITA_API_TOKEN');
+  assert.deepEqual(doToken.map((i) => i.id), ['nome:ORBITA_APITOKEN'],
+    'a variável certa aparece uma vez, e na peça que diz o que corrigir');
+  assert.ok(c.notas.some((n) => /nome quase certo/.test(n)));
+});
+
+test('1.66.1 · sem nomes errados nada muda na lista', () => {
+  const a = checklist({ health: HEALTH_QUEBRADO });
+  const b = checklist({ health: { ...HEALTH_QUEBRADO, acesso: { nomesErrados: [] } } });
+  assert.deepEqual(a.itens.map((i) => i.id), b.itens.map((i) => i.id));
+  assert.equal(itensDeNomesErrados(HEALTH_QUEBRADO).length, 0);
+  assert.equal(itensDeNomesErrados(null).length, 0);
 });

@@ -127,6 +127,34 @@ const item = (o) => ({
   opcional: !!o.opcional,
 });
 
+/**
+ * 1.66.1 · os nomes quase certos.
+ *
+ * Um `ORBITA_APITOKEN` na Vercel é indistinguível, para a app, de uma variável
+ * que não existe — e a lista ficava a dizer «Acesso por configurar» para sempre,
+ * sem pista nenhuma. O `/api/health` passou a devolver esses nomes em
+ * `acesso.nomesErrados`; aqui viram uma peça que diz qual é o nome certo.
+ */
+export function itensDeNomesErrados(health) {
+  const achados = Array.isArray(health?.acesso?.nomesErrados) ? health.acesso.nomesErrados : [];
+  return achados.filter((x) => x && x.encontrado && x.devia).map((x) => item({
+    id: `nome:${x.encontrado}`,
+    tipo: 'variavel',
+    grupo: 'acesso',
+    grupoNome: 'Acesso',
+    titulo: `O nome «${x.encontrado}» não é o que a app lê`,
+    variavel: x.devia,
+    porque: `uma variável com outro nome é como se não existisse: a app lê «${x.devia}» e o valor que lá está nunca chega a ser usado`,
+    critico: true,
+    como: {
+      onde: VERCEL,
+      texto: `renomeia ${x.encontrado} → ${x.devia} (apagar e criar com o nome certo também serve)`,
+      nota: REDEPLOY,
+    },
+    estado: 'falta',
+  }));
+}
+
 /** As tabelas que a base não tem, uma peça por tabela. */
 export function itensDeTabelas(faltam = []) {
   const lista = Array.isArray(faltam) ? faltam : [];
@@ -285,6 +313,17 @@ export function checklist({ health = null, prontidao = null } = {}) {
     ? itensDeProntidao(prontidao)
     : itensDoResumo(health.prontidao);
   itens = [...itens, ...completa];
+  /* 1.66.1 · antes de «falta a variável», verificar se ela está lá com o nome
+     trocado: a peça do nome errado poupa a procura toda */
+  const nomesErrados = itensDeNomesErrados(health);
+  if (nomesErrados.length) {
+    /* o mesmo nome certo não aparece duas vezes na lista (a peça do grupo já lá
+       está): manda a do nome errado, que diz o que corrigir */
+    const certos = new Set(nomesErrados.map((i) => i.variavel));
+    itens = itens.filter((i) => !(i.tipo === 'variavel' && i.estado !== 'pronto' && certos.has(i.variavel)));
+    itens = [...itens, ...nomesErrados];
+    notas.push('Há variáveis com o nome quase certo na Vercel: o valor existe, o nome não. A peça de cada uma diz o nome que a app lê.');
+  }
 
   /* A ordem é a ordem em que se resolve: primeiro o que falta, depois o que já
      está; dentro do que falta, o crítico antes do essencial e o opcional no fim;
