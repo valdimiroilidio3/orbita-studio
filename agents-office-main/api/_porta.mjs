@@ -18,6 +18,9 @@ import {
   novoToken, hashToken, tokenDoPedido, cookieDeSessao, cookieParaApagar, sessaoValida,
   criarLimitador, estadoDaPorta, precisaRenovar, HORAS_SESSAO,
 } from './_conta.mjs';
+/* 1.66.0 · o caminho das máquinas: um token no cabeçalho vale como sessão para a
+   API — sem nunca abrir contas nem palavras-passe. Ver `api/_acesso.mjs`. */
+import { quemPeloToken, estadoDosTokens, EXPLICACAO, ADMINISTRACAO } from './_acesso.mjs';
 
 const agoraIso = () => new Date().toISOString();
 export const limitador = criarLimitador({ janelaMs: 15 * 60 * 1000, max: 5 });
@@ -50,9 +53,14 @@ export async function lerSessao(repo, headers = {}) {
 }
 
 function corpoDoErro({ estado, env }) {
+  const tokens = estado && estado.tokens ? estado.tokens : null;
+  const porToken = !!(tokens && (tokens.ORBITA_API_TOKEN?.configurado || tokens.ORBITA_ADMIN_TOKEN?.configurado));
   return {
     error: 'entra', mode: 'sessao',
     hint: 'esta instalação tem contas: sem sessão válida não se lê nem se escreve nada',
+    /* 1.66.0 · quem chama isto de um script precisa de saber que há outro
+       caminho — e de qual é, sem lhe darmos nenhum segredo */
+    ...(porToken ? { tambemPorToken: EXPLICACAO.como } : {}),
     primeiraContaPossivel: !!estado.primeiraContaPossivel,
     estado,
   };
@@ -147,6 +155,9 @@ export async function avaliarPorta(repo, {
   const qs = new URLSearchParams(String(caminho || '').split('?')[1] || '');
   const m = String(metodo || 'GET').toUpperCase();
   const seguro = !!headers['x-forwarded-proto'] ? String(headers['x-forwarded-proto']) === 'https' : true;
+  /* o retrato da porta inclui os tokens: a mesa e o erro dizem se há caminho de
+     máquina, sem nunca mostrar o valor de nenhum */
+  const estadoDe = (temContas) => ({ ...estadoDaPorta({ temContas, env }), tokens: estadoDosTokens(env) });
 
   /* a porta está dormente? (memória/testes, `seguranca:false`, ou decisão explícita) */
   let dormente = seguranca === false;
@@ -155,7 +166,7 @@ export async function avaliarPorta(repo, {
   /* ---------- /auth/* : público, sempre ---------- */
   if (limpo === '/auth/eu' && m === 'GET') {
     const n = dormente ? 0 : await temContas(repo);
-    const estado = estadoDaPorta({ temContas: n > 0, env });
+    const estado = estadoDe(n > 0);
     const s = await lerSessao(repo, headers);
     if (s) {
       /* 1.54.1 · renovação com o uso: quem abre a Órbita a meio do prazo ganha
@@ -452,11 +463,28 @@ export async function avaliarPorta(repo, {
   if (dormente) return { conta: null };
 
   const n = await temContas(repo);
-  const estado = estadoDaPorta({ temContas: n > 0, env });
+  const estado = estadoDe(n > 0);
   if (estado.modo === 'aberta') return { conta: null };
 
-  const s = await lerSessao(repo, headers);
-  if (!s) return { resposta: { status: 401, corpo: corpoDoErro({ estado, env }) } };
+  let s = await lerSessao(repo, headers);
+  if (!s) {
+    /* 1.66.0 · sem sessão, ainda pode ser uma máquina com o token certo. Isto é
+       o que os `ORBITA_*_TOKEN` sempre disseram fazer — e agora fazem.
+       O token entra como QUEM É (operador ou dono) e passa pelo MESMO teste de
+       papel que uma conta: um operador por token também não aprova. Devolver
+       cedo daqui era dar acesso total a um token de operador — o teste 10 desta
+       versão existe precisamente por causa disso. */
+    const quem = quemPeloToken({ headers, corpo, env });
+    if (!quem) return { resposta: { status: 401, corpo: corpoDoErro({ estado, env }) } };
+    const segT = limpo.split('/').filter(Boolean);
+    if (segT[0] === 'ops' && ADMINISTRACAO.includes(segT[1])) {
+      return { resposta: { status: 403, corpo: {
+        error: 'contas e palavras-passe não se abrem com token',
+        hint: EXPLICACAO.contas, via: 'token', variavel: quem.variavel,
+      } } };
+    }
+    s = { sessao: null, conta: { id: quem.id, nome: quem.nome, email: '', papel: quem.papel, via: 'token', variavel: quem.variavel } };
+  }
 
   const papel = s.conta.papel;
   const seg = limpo.split('/').filter(Boolean);

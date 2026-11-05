@@ -1,3 +1,34 @@
+## 1.66.0 — 4 nov 2026 · O TOKEN FALAVA A SÉRIO
+
+Esta é a versão que fecha uma mentira antiga. A lista de prontidão pedia ao dono,
+desde a 1.41.0, dois segredos: «`ORBITA_API_TOKEN` — fecha o `/api/*`, 32
+caracteres ou mais» e «`ORBITA_ADMIN_TOKEN` — protege a página e a mesa». O dono
+inventava-os, colava-os na Vercel… e **nenhum ficheiro do servidor os lia**. O
+`/api/*` estava fechado, sim, mas pela porta, com sessões. Quem pede trabalho por
+uma segurança que não existe gasta a confiança toda de uma vez.
+
+### O que os dois tokens fazem agora (`api/_acesso.mjs`)
+- Um pedido a `/api/rpc` **sem sessão** pode trazer o token no cabeçalho:
+  `Authorization: Bearer …` ou `x-orbita-token: …` (ou no corpo, `token`). É o
+  caminho das máquinas: um script, um curl, uma integração — sem browser.
+- **Nunca no endereço.** Um token num URL fica no histórico, nos registos e no
+  `Referer` — foi a lição da 1.64, e há um teste que recusa `?token=…`.
+- `ORBITA_API_TOKEN` vale como **operador**: lê e escreve, não aprova nem envia.
+- `ORBITA_ADMIN_TOKEN` vale como **dono**: aprova, entrega, pára envios.
+- O token passa pelo **mesmo teste de papel** que uma conta. (Na primeira
+  tentativa, o token entrava e voltava logo com acesso total — o teste 10
+  apanhou-o; agora `s` cai no caminho comum.)
+- **Contas e palavras-passe não se abrem com token nenhum**: 403 com a razão
+  escrita. Um token roubado não cria um dono novo nem muda uma palavra-passe.
+- Variável vazia ou curta é como se não existisse; comparação sem sair à
+  primeira letra; e o `/api/health` passou a dizer `acesso.ORBITA_API_TOKEN.
+  {configurado, curto}` — prova, sem mostrar nenhum valor, de que a instalação
+  os lê de facto.
+- As frases da prontidão e da página do arranque passaram a descrever **isto** e
+  não o que nunca existiu.
+
+---
+
 ## 1.65.1 — 4 nov 2026 · UMA ACÇÃO, NÃO DUAS
 
 Na página de entrada (antes da primeira conta) a tabela em falta ainda dizia
