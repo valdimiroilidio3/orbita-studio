@@ -1,3 +1,18 @@
+## 1.65.1 — 4 nov 2026 · UMA ACÇÃO, NÃO DUAS
+
+Na página de entrada (antes da primeira conta) a tabela em falta ainda dizia
+«Abre no browser `/api/setup?token=…`» — a instrução que a 1.64 tinha acabado de
+tornar desnecessária. Duas instruções diferentes para a mesma coisa, uma delas
+com um segredo no endereço.
+
+- A acção de uma migração passou a ser a **página do arranque**: «Aplicar o
+  esquema (só `orbita_1_56_0.sql`, se for o caso)», com o cartão a ler primeiro
+  e a aplicar depois de confirmar.
+- O endereço antigo continua escrito — mas **na nota**, como alternativa para
+  quem ainda não tem conta, com `ler=1` para não escrever nada.
+
+---
+
 ## 1.65.0 — 4 nov 2026 · OS SEGREDOS QUE FALTAVAM INVENTAR
 
 A 1.64 pôs a página a aplicar o esquema. Ficou a descoberto o passo anterior:

@@ -86,14 +86,23 @@ const TABELA_PORQUE = {
   orbita_ai_runs: 'sem ela a execução não guarda autorizações nem cancelamentos',
 };
 
-const urlSetup = (ficheiro) => `/api/setup?token=<SETUP_TOKEN>&so=${ficheiro}`;
+/* 1.65.1 · a acção de uma migração deixou de ser «abre este endereço com o
+   segredo lá dentro». Quem tem sessão aplica-o no cartão da própria página; o
+   endereço antigo fica escrito como alternativa para quem ainda não tem conta —
+   na nota, não como o que se lê primeiro. */
+const urlSetup = (ficheiro) => (ficheiro
+  ? `/api/setup?token=<SETUP_TOKEN>&so=${ficheiro}`
+  : '/api/setup?token=<SETUP_TOKEN>');
 
 const acaoDaTabela = (tabela) => {
   const ficheiro = TABELA_FICHEIRO[tabela];
-  if (!ficheiro) {
-    return { onde: 'Abre no browser', texto: '/api/setup?token=<SETUP_TOKEN>', nota: 'sem `so`, aplica o esquema todo — o `/api/setup?ler=1` diz o que existe antes de mexer' };
-  }
-  return { onde: 'Abre no browser', texto: urlSetup(ficheiro), nota: '`&ler=1` só lê e não aplica nada; sem `so` aplica o esquema todo, um ficheiro por transacção' };
+  return {
+    onde: 'Página do arranque, com sessão',
+    texto: ficheiro
+      ? `Aplicar o esquema (só ${ficheiro}, se for o caso)`
+      : 'Aplicar o esquema (cria o que falta; não tens de escolher ficheiro)',
+    nota: `o cartão lê primeiro e só aplica depois de confirmares. Sem conta ainda, o endereço antigo serve: ${urlSetup(ficheiro)}, com \`ler=1\` para não escrever nada`,
+  };
 };
 
 const acaoDaVariavel = (variavel) => ACAO[variavel]
