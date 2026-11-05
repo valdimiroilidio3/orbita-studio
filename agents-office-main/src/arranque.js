@@ -164,6 +164,54 @@ export function itensDeProntidao(prontidao) {
 
 const grupoId = (g) => String(g.id || g.nome || '').toLowerCase();
 
+/* ---------- 1.64.0 · a acção de um GRUPO ----------
+   Antes de haver sessão só se conhecem os grupos (o `/api/health` não dá nomes de
+   variáveis). Isso deixava o cartão da primeira conta a dizer «o que falta» sem
+   dizer «o que fazer». Aqui está o que se faz — pelos mesmos nomes que o servidor
+   usa em `api/_prontidao.mjs`, e com um teste que falha se um grupo inventado
+   aparecer nesta tabela. */
+const ACAO_DO_GRUPO = {
+  'base de dados': {
+    onde: VERCEL,
+    texto: 'SUPABASE_URL e SUPABASE_SECRET_KEY (Supabase → Project Settings → API)',
+    nota: 'sem elas a mesa guarda só neste browser',
+  },
+  'acesso': {
+    onde: VERCEL,
+    texto: 'ORBITA_API_TOKEN (32+ caracteres) e ORBITA_ADMIN_TOKEN (16+)',
+    nota: 'é o que fecha o `/api/*` e a mesa',
+  },
+  'esquema da base': {
+    onde: 'Página do arranque, com sessão',
+    texto: 'SETUP_TOKEN → «Ver o que falta na base» → «Aplicar o esquema»',
+    nota: 'a página aplica o SQL por ti; o token vai no corpo do pedido, não no endereço',
+  },
+  'pesquisa': {
+    onde: 'app.tavily.com e myprojects.geoapify.com',
+    texto: 'TAVILY_API_KEY e GEOAPIFY_API_KEY na Vercel',
+    nota: 'sem elas não há prospeção: nem pesquisa web, nem empresas reais',
+  },
+  'correio': {
+    onde: 'resend.com',
+    texto: 'RESEND_API_KEY, ORBITA_FROM_EMAIL e RESEND_WEBHOOK_SECRET na Vercel',
+    nota: 'sem elas as mensagens ficam à espera e nunca saem',
+  },
+  'whatsapp': {
+    onde: 'Meta for Developers → WhatsApp',
+    texto: 'WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_APP_SECRET e WHATSAPP_VERIFY_TOKEN',
+    nota: 'sem elas o WhatsApp abre na app e confirma-se à mão',
+  },
+  'motor de ia': {
+    onde: 'pollinations.ai ou o fornecedor que escolheres',
+    texto: 'POLLINATIONS_API_KEY (opcional) ou uma chave de IA',
+    nota: 'sem chave nenhuma o escritório arranca na cadeia gratuita',
+  },
+  'digitalizar papel': {
+    onde: 'nada a fazer, na maioria dos casos',
+    texto: 'ORBITA_OCR_URL (opcional) — sem ela lê o motor de visão da casa',
+  },
+};
+
 /** O resumo curto que vem no `/api/health` (nomes de grupo, sem variáveis). */
 export function itensDoResumo(prontidaoCurta) {
   const nomes = [
@@ -179,7 +227,9 @@ export function itensDoResumo(prontidaoCurta) {
     porque: critico
       ? 'é um grupo crítico: sem ele não se lança'
       : 'é essencial: sem ele uma função fica desligada',
-    como: null,
+    /* 1.64.0 · sem sessão não se sabem os nomes das variáveis, mas sabe-se o que
+       fazer: um grupo sem acção era meia resposta */
+    como: ACAO_DO_GRUPO[String(n).toLowerCase()] || null,
     critico,
     estado: 'falta',
   }));
@@ -371,11 +421,109 @@ export function linhaDaPeca(i) {
   return [i?.titulo, i?.porque, acao].filter(Boolean).join(' · ');
 }
 
+/* ===========================================================================
+   1.64.0 · APLICAR O ESQUEMA A PARTIR DA APP
+
+   A lista do arranque dizia «falta a tabela orbita_faturas → abre este endereço
+   com o token». Isso é melhor do que nada, mas continua a pedir à pessoa que
+   construa um URL com um segredo dentro. A página passou a ter uma caixa onde se
+   cola o `SETUP_TOKEN` e dois botões: **ver o que falta** (auditoria, não escreve
+   nada) e **aplicar** (com confirmação). Estas duas funções são a leitura dessas
+   duas respostas — puras, para se poderem provar sem base nenhuma.
+   =========================================================================== */
+
+/** A resposta do `/api/setup?ler=1` (ou do `POST {ler:true}`), escrita para gente. */
+export function auditoriaLegivel(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) {
+    return {
+      estado: 'sem-resposta', ok: false, frase: 'Não houve resposta da auditoria — não sei o que falta na base.',
+      faltamTabelas: [], faltamColunas: {}, tabelas: [], colunasEmFalta: 0,
+    };
+  }
+  const faltamTabelas = Array.isArray(a.faltamTabelas) ? a.faltamTabelas.map(String) : [];
+  const faltamColunas = (a.faltamColunas && typeof a.faltamColunas === 'object' && !Array.isArray(a.faltamColunas))
+    ? a.faltamColunas : {};
+  const colunasEmFalta = Object.values(faltamColunas)
+    .reduce((n, lista) => n + (Array.isArray(lista) ? lista.length : 0), 0);
+  const tabelas = Array.isArray(a.tabelas) ? a.tabelas.map(String) : [];
+  const lista = (xs) => xs.slice(0, 4).join(', ') + (xs.length > 4 ? ` e mais ${xs.length - 4}` : '');
+  const colunas = Object.entries(faltamColunas)
+    .map(([t, cs]) => `${t}: ${(Array.isArray(cs) ? cs : []).join(', ')}`);
+
+  if (faltamTabelas.length) {
+    return {
+      estado: 'faltam-tabelas', ok: false, faltamTabelas, faltamColunas, tabelas, colunasEmFalta,
+      frase: `Faltam ${faltamTabelas.length} tabela${faltamTabelas.length === 1 ? '' : 's'} da mesa (${lista(faltamTabelas)}). Aplicar o esquema cria-as; o que já existe não é apagado.`,
+    };
+  }
+  if (colunasEmFalta) {
+    return {
+      estado: 'faltam-colunas', ok: false, faltamTabelas, faltamColunas, tabelas, colunasEmFalta,
+      frase: `As tabelas existem, mas faltam ${colunasEmFalta} coluna${colunasEmFalta === 1 ? '' : 's'} que o código usa — ${lista(colunas)}.`,
+    };
+  }
+  /* só se pode dizer «pronta» quando a resposta DIZ que as tabelas foram lidas:
+     um `{}` não é uma base sã, é uma resposta que não olhou para nada */
+  if (Array.isArray(a.tabelas)) {
+    return {
+      estado: 'pronta', ok: true, faltamTabelas, faltamColunas, tabelas, colunasEmFalta,
+      frase: `A base tem as ${tabelas.length} tabelas que a mesa usa e as colunas exigidas. Não há nada a aplicar.`,
+    };
+  }
+  return {
+    estado: 'sem-resposta', ok: false, faltamTabelas, faltamColunas, tabelas, colunasEmFalta,
+    frase: 'A auditoria respondeu, mas sem a lista de tabelas — não sei dizer se a base serve.',
+  };
+}
+
+/** A resposta de aplicar o esquema, escrita para gente. */
+export function resultadoDaAplicacao(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) {
+    return { estado: 'sem-resposta', ok: false, frase: 'Não houve resposta ao aplicar — não sei se ficou aplicado.', aplicados: [], faltam: [] };
+  }
+  const aplicados = Array.isArray(r.aplicados) ? r.aplicados.map(String) : [];
+  const faltam = Array.isArray(r.faltam) ? r.faltam.map(String) : [];
+  if (r.ok === true) {
+    return {
+      estado: 'aplicado', ok: true, aplicados, faltam,
+      frase: faltam.length
+        ? `Aplicado ${aplicados.join(', ') || 'o esquema'}, mas ainda faltam ${faltam.length} tabela(s): ${faltam.join(', ')}.`
+        : `Aplicado ${aplicados.length ? `${aplicados.length} ficheiro${aplicados.length === 1 ? '' : 's'} (${aplicados.join(', ')})` : 'o esquema'} — a base ficou com todas as tabelas da mesa.`,
+    };
+  }
+  const erro = String(r.erro || r.error || '').trim();
+  return {
+    estado: 'parou', ok: false, aplicados, faltam,
+    frase: erro
+      ? `Parou${aplicados.length ? ` depois de ${aplicados.join(', ')}` : ''}: ${erro}. Cada ficheiro corre numa transacção — o que passou ficou aplicado, o resto não.`
+      : 'A resposta diz que não ficou aplicado, mas não diz porquê — não sei se a base ficou a meio.',
+  };
+}
+
+/** O erro de um pedido ao `/api/setup` (404 = token errado, 500 = a base). */
+export function erroDoSetup(estado, corpo) {
+  const j = corpo && typeof corpo === 'object' ? corpo : {};
+  const frase = String(j.erro || j.error || '').trim();
+  if (estado === 404) {
+    /* o `/api/setup` responde 404 «não existe» quando o token não serve — mas uma
+       instalação servida sem `/api` também dá 404, com outra frase. Não se
+       confunde uma coisa com a outra: quem lê merece saber qual é. */
+    return /não existe/i.test(frase)
+      ? 'O token não é o desta instalação (ou o `SETUP_TOKEN` não está definido na Vercel).'
+      : 'Esta instalação não tem o `/api/setup` a responder (servida sem `/api`?): o esquema aplica-se pelo servidor local ou pelo endereço antigo com o token.';
+  }
+  if (estado === 405) return 'Esta versão do `/api/setup` só aceita GET ou POST.';
+  if (estado === 413) return 'O pedido era grande demais.';
+  if (frase) return frase;
+  return `O \`/api/setup\` respondeu ${estado || '?'} sem dizer porquê.`;
+}
+
 export const ESTADOS = ['pronto', 'falta'];
 
 /* Exportados para o teste poder confrontá-los com a verdade do servidor
    (`api/_prontidao.mjs` e `api/_esquema.mjs`): uma variável que aqui não exista
    não pode aparecer numa acção, e uma tabela do esquema tem de ter ficheiro. */
 export const VARIAVEIS_CONHECIDAS = Object.keys(ACAO);
+export const ACOES_DOS_GRUPOS = Object.keys(ACAO_DO_GRUPO);
 export const TABELAS_COM_FICHEIRO = Object.keys(TABELA_FICHEIRO);
 

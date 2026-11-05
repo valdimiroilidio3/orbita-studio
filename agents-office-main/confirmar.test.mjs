@@ -131,7 +131,9 @@ test('as cinco perguntas que apagam ou substituem trabalho usam o diálogo da ca
   }
   assert.deepEqual(comConfirm, [], 'nenhum ecrã volta a bloquear a página com o confirm do browser');
 
-  for (const [f, quantas] of [['briefing.js', 3], ['media.js', 1], ['mesa.js', 1]]) {
+  /* 1.64.0 · a mesa passou a ter 2: importar uma cópia por cima do que está aqui
+     e aplicar o esquema da base (a segunda cria tabelas — também pergunta) */
+  for (const [f, quantas] of [['briefing.js', 3], ['media.js', 1], ['mesa.js', 2]]) {
     const src = readFileSync(new URL(`./src/${f}`, import.meta.url), 'utf8');
     assert.match(src, /from '\.\/confirmar\.js'/, `${f} tem de importar o diálogo da casa`);
     assert.equal((src.match(/await confirmar\(\{/g) || []).length, quantas,
