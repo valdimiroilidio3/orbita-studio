@@ -1,3 +1,23 @@
+## 1.66.1 — 4 nov 2026 · O NOME QUASE CERTO
+
+Dois segredos criados na Vercel como `ORBITA_APITOKEN` — sem o segundo `_`. O
+valor estava lá, a app não o lia, e a lista continuava a dizer «Acesso por
+configurar» sem uma pista. Um nome mal escrito é **indistinguível de uma variável
+que não existe**, e essa confusão custa horas de procura por um problema que se
+resolve a renomear.
+
+- `/api/health` passa a trazer `acesso.nomesErrados: [{encontrado, devia}]` —
+  compara os nomes do ambiente com os que a app lê, sem ligar a maiúsculas nem a
+  `_`. **Só nomes, nunca valores.**
+- A página do arranque transforma cada um numa peça: «O nome «ORBITA_APITOKEN» não
+  é o que a app lê», com a acção *renomeia para `ORBITA_API_TOKEN`* e o Redeploy
+  do costume. A peça genérica da variável sai — o mesmo problema dito duas vezes é
+  ruído.
+- Uma variável **vazia** não conta como «quase» (é como não existir); um nome
+  completamente diferente não gera aviso nenhum.
+
+---
+
 ## 1.66.0 — 4 nov 2026 · O TOKEN FALAVA A SÉRIO
 
 Esta é a versão que fecha uma mentira antiga. A lista de prontidão pedia ao dono,

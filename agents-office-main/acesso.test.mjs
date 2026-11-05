@@ -24,7 +24,10 @@ import assert from 'node:assert/strict';
 import { createMemRepo } from './api/_repo.mjs';
 import { responder } from './api/_rotas.mjs';
 import { limitador } from './api/_porta.mjs';
-import { TOKENS, MINIMOS, tokenDoPedido, iguais, quemPeloToken, estadoDosTokens, EXPLICACAO } from './api/_acesso.mjs';
+import {
+  TOKENS, MINIMOS, tokenDoPedido, iguais, quemPeloToken, estadoDosTokens, EXPLICACAO,
+  nomesParecidos, fraseDoNomeErrado,
+} from './api/_acesso.mjs';
 
 const API = 'a'.repeat(32) + 'b'.repeat(32);
 const ADMIN = 'c'.repeat(32) + 'd'.repeat(32);
@@ -197,4 +200,47 @@ test('1.66.0 · a explicação de como se usa o token está escrita para gente',
   assert.match(EXPLICACAO.como, /Authorization: Bearer/);
   assert.match(EXPLICACAO.como, /nunca no endereço/);
   assert.match(EXPLICACAO.contas, /sessão/);
+});
+
+/* ---------- 1.66.1 · o nome quase certo ----------
+   Dois segredos criados na Vercel como `ORBITA_APITOKEN` (sem o segundo `_`)
+   ficaram invisíveis: a saúde dizia «Acesso em falta» e o valor estava lá. */
+
+const CONHECIDOS = ['ORBITA_API_TOKEN', 'ORBITA_ADMIN_TOKEN', 'SETUP_TOKEN', 'SUPABASE_URL'];
+
+test('1.66.1 · um nome sem o segundo `_` é apanhado e diz qual é o certo', () => {
+  const achados = nomesParecidos({ ORBITA_APITOKEN: 'x'.repeat(64), ORBITA_ADMINTOKEN: 'y'.repeat(64) }, CONHECIDOS);
+  assert.deepEqual(achados, [
+    { encontrado: 'ORBITA_ADMINTOKEN', devia: 'ORBITA_ADMIN_TOKEN' },
+    { encontrado: 'ORBITA_APITOKEN', devia: 'ORBITA_API_TOKEN' },
+  ]);
+  assert.match(fraseDoNomeErrado(achados[1]), /ORBITA_APITOKEN/);
+  assert.match(fraseDoNomeErrado(achados[1]), /ORBITA_API_TOKEN/);
+  assert.match(fraseDoNomeErrado(achados[1]), /Redeploy/);
+});
+
+test('1.66.1 · nomes certos não geram aviso, e maiúsculas/minúsculas não contam', () => {
+  assert.deepEqual(nomesParecidos({ ORBITA_API_TOKEN: 'a'.repeat(64) }, CONHECIDOS), []);
+  /* um nome diferente a sério não é «quase»: não se inventam avisos */
+  assert.deepEqual(nomesParecidos({ MEU_TOKEN: 'a', VERCEL_URL: 'x' }, CONHECIDOS), []);
+});
+
+test('1.66.1 · um nome em minúsculas também é um nome que a app não lê', () => {
+  /* o Node no servidor compara nomes com maiúsculas: `orbita_api_token` nunca é
+     lido, por isso é «quase» — e diz-se, em vez de ficar invisível */
+  assert.deepEqual(nomesParecidos({ orbita_api_token: 'a'.repeat(64) }, CONHECIDOS), [
+    { encontrado: 'orbita_api_token', devia: 'ORBITA_API_TOKEN' },
+  ]);
+});
+
+test('1.66.1 · uma variável vazia não conta como «quase» (é como não existir)', () => {
+  assert.deepEqual(nomesParecidos({ ORBITA_APITOKEN: '' }, CONHECIDOS), []);
+  assert.deepEqual(nomesParecidos({ ORBITA_APITOKEN: '   ' }, CONHECIDOS), []);
+});
+
+test('1.66.1 · o aviso é só de nomes: nenhum valor sai no que se devolve', () => {
+  const segredo = 'z'.repeat(64);
+  const achados = nomesParecidos({ ORBITA_APITOKEN: segredo }, CONHECIDOS);
+  const texto = JSON.stringify(achados) + fraseDoNomeErrado(achados[0]);
+  assert.equal(texto.includes(segredo), false);
 });

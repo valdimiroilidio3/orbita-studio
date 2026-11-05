@@ -77,6 +77,41 @@ export function iguais(a, b) {
 }
 
 /**
+ * O nome é *quase* o certo? (1.66.1)
+ *
+ * Aconteceu: dois segredos criados na Vercel como `ORBITA_APITOKEN` — sem o
+ * segundo `_`. A app não os lia, a saúde continuava a dizer «Acesso em falta» e
+ * ninguém sabia porquê: o valor estava lá, o nome não. Um nome errado é
+ * indistinguível de uma variável que não existe, e essa confusão custa horas.
+ *
+ * Aqui comparam-se os nomes que existem no ambiente com os que a app lê, sem
+ * ligar a maiúsculas nem a `_`/`-`. Só se devolvem nomes — nunca valores — e só
+ * quando o nome encontrado normaliza para o mesmo que um nome conhecido e não é
+ * o próprio nome certo.
+ */
+const semPontuacao = (nome) => String(nome || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+export function nomesParecidos(env = {}, conhecidos = []) {
+  const proprios = new Set(conhecidos.filter(Boolean));
+  const porNormalizado = new Map();
+  for (const nome of proprios) porNormalizado.set(semPontuacao(nome), nome);
+  const achados = [];
+  for (const chave of Object.keys(env || {})) {
+    if (proprios.has(chave)) continue;                 // o nome certo existe: nada a dizer
+    if (!limpo(env[chave])) continue;                  // vazia não conta como «quase»
+    const devia = porNormalizado.get(semPontuacao(chave));
+    if (devia && devia !== chave) achados.push({ encontrado: chave, devia });
+  }
+  achados.sort((a, b) => a.encontrado.localeCompare(b.encontrado));
+  return achados;
+}
+
+/** A frase para quem tem de corrigir: nome errado, nome certo, e o redeploy. */
+export function fraseDoNomeErrado({ encontrado, devia }) {
+  return `«${encontrado}» não é o nome que a app lê — o certo é «${devia}». Com outro nome é como se não existisse: renomeia na Vercel e faz Redeploy.`;
+}
+
+/**
  * Quem é este pedido pelo token? `null` quando nenhum serve.
  * Devolve também `variavel` — para se poder dizer QUAL dos dois entrou, sem
  * nunca escrever o valor.
