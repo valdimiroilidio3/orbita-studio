@@ -1,3 +1,55 @@
+## 1.70.0 — 6 nov 2026 · A FILA NÃO ESPERA POR AMANHÃ
+
+A 1.67.0 pôs o ciclo a correr a fila, a 1.68.0 pôs o ecrã a dizer quando cada
+tarefa corre. Faltava o buraco entre as duas: **o agendador da Vercel, neste
+plano, passa uma vez por dia.** Uma tarefa posta às 07:01 esperava ~24 h — e
+«os agentes trabalham sozinhos» era verdade uma vez por dia, à mesma hora.
+
+### A abertura da Órbita põe a fila a andar
+- `decidirAoAbrir()` (`src/fila.js`, pura): com fila e sem ciclo recente,
+  **abrir a Órbita corre a fila**. É a mesma `POST /ops/ciclo` que o botão usa —
+  não há um segundo caminho nem um segundo motor.
+- **Uma vez por sessão e uma vez a cada 2 h por máquina** (`HORAS_ENTRE_ABERTURAS`),
+  registado em `localStorage`. Sem isto, cada navegação seria uma chamada e cada
+  chamada uma factura.
+- **O que se gasta é o que a autonomia autoriza.** A abertura não decide gastar:
+  quem decide continua a ser o ciclo, com o nível `tarefa:<kind>`. Com os tipos
+  por omissão («pede-me sempre») a abertura **não gasta nada** — só arruma a
+  fila para ti. É a diferença entre «os agentes correm sozinhos» e «a conta
+  dispara sozinha».
+- O cartão diz de onde veio o resultado: **«ao abrir a Órbita — corri 1
+  concluída · 1 à tua espera.»** Distinguir o automático do clique é a única
+  forma de o ecrã não mentir sobre quem fez o quê.
+- Falhar também fica escrito («o ciclo ao abrir não correu: …») e **marca a
+  hora**: não se repete a falha a cada navegação.
+
+### No ecrã
+- O cartão «A fila» passa a dizer, quando há agendador: *«e também corre quando
+  abres a Órbita (uma vez a cada 2 h)»* — para a hora do próximo ciclo não ser
+  lida como a única oportunidade.
+- Sem resultado nesta sessão, mostra há quanto tempo a fila correu sozinha
+  **nesta máquina** (e diz que é nesta máquina: o `localStorage` não é a base).
+
+### Honestidade sobre o que isto é
+- É **um empurrão, não um agendador**: com o browser fechado, a fila continua a
+  andar só à hora do cron (ou por `GET|POST /api/ciclo` de fora). Com o plano
+  Hobby, um agendador sub-diário faz o deploy falhar — dito em 1.67.0, mantido.
+- Não há estado novo na base: o registo da última abertura é do browser. Limpar
+  o armazenamento faz a próxima abertura correr a fila; o cadeado `queued` →
+  `running` garante que isso **não** faz o trabalho duas vezes.
+
+### Testes
+- `fila.test.mjs` (15, +5): fila vazia, fila com ciclo antigo, a janela de 2 h,
+  o limite exacto da janela, sem agendador, e um relógio no futuro.
+- `ciclo-ui.test.mjs` (10, +3): a abertura dispara **um** POST com `limite: 2`,
+  o cartão diz «ao abrir a Órbita», um ciclo recente não gasta nada, e fila
+  vazia não inventa trabalho.
+
+**Suíte:** 1317/1317. **`check.mjs`:** 96/97 (o único falhanço é o smoke de
+browser, sem Chrome nesta máquina).
+
+---
+
 ## 1.69.0 — 6 nov 2026 · A ENTRADA DO DONO (GITHUB · GOOGLE · CÓDIGO)
 
 O dono pediu-o por palavras: «login por github ou por google ou por email e

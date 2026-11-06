@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 
 import {
   NIVEIS, escopoDaTarefa, promessaDaTarefa, proximoCiclo, faltaPara, analisarFila, fraseDaFila,
+  decidirAoAbrir, HORAS_ENTRE_ABERTURAS,
 } from './src/fila.js';
 import { createMemRepo } from './api/_repo.mjs';
 import { responder } from './api/_rotas.mjs';
@@ -169,4 +170,44 @@ test('1.68.0 · sem CRON_SECRET a leitura diz que não há agendador (e ninguém
   });
   assert.equal(r.corpo.agendador, false);
   assert.equal(r.corpo.proximo, null);
+});
+
+/* ===========================================================================
+   1.70.0 · a fila não espera por amanhã
+   =========================================================================== */
+
+test('1.70.0 · fila vazia: abrir a Órbita não corre nada', () => {
+  const d = decidirAoAbrir({ naFila: 0 });
+  assert.equal(d.correr, false);
+  assert.match(d.porque, /fila está vazia/);
+});
+
+test('1.70.0 · com fila e sem ciclo recente, abrir a Órbita põe a fila a andar', () => {
+  const agora = Date.parse('2026-11-06T10:00:00.000Z');
+  const d = decidirAoAbrir({ naFila: 3, agora, ultimoMs: agora - 5 * 3600000 });
+  assert.equal(d.correr, true);
+  assert.match(d.porque, /3 tarefas na fila/);
+  assert.match(d.porque, /uma vez por dia/, 'a razão é o relógio do plano, não um capricho');
+});
+
+test('1.70.0 · não se corre a fila duas vezes na mesma janela (nem a cada navegação)', () => {
+  const agora = Date.parse('2026-11-06T10:00:00.000Z');
+  const d = decidirAoAbrir({ naFila: 2, agora, ultimoMs: agora - 30 * 60000 });
+  assert.equal(d.correr, false);
+  assert.match(d.porque, /já correu há/);
+
+  /* no limite da janela, volta a poder correr */
+  const noLimite = decidirAoAbrir({ naFila: 2, agora, ultimoMs: agora - HORAS_ENTRE_ABERTURAS * 3600000 });
+  assert.equal(noLimite.correr, true);
+});
+
+test('1.70.0 · sem agendador, a abertura é a única coisa que mexe a fila — e di-lo', () => {
+  const d = decidirAoAbrir({ naFila: 1, agendador: false, ultimoMs: null });
+  assert.equal(d.correr, true);
+  assert.match(d.porque, /não há agendador nenhum/);
+});
+
+test('1.70.0 · um relógio estragado no browser não bloqueia a fila', () => {
+  const d = decidirAoAbrir({ naFila: 1, ultimoMs: Date.now() + 3600000 });
+  assert.equal(d.correr, true, 'data no futuro não conta como «correu agora»');
 });

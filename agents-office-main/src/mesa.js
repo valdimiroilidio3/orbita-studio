@@ -82,7 +82,7 @@ import {
    que `api/_prontidao.mjs` exige — e não ficam guardados em lado nenhum. */
 import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
 /* 1.68.0 · a fila com a razão de cada tarefa: quando corre, e há quanto espera */
-import { analisarFila, faltaPara } from './fila.js';
+import { analisarFila, faltaPara, decidirAoAbrir } from './fila.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -602,6 +602,62 @@ async function loadFila() {
   }
 }
 
+/* 1.70.0 · a fila anda quando abres a Órbita. O agendador da Vercel, neste
+   plano, passa uma vez por dia: uma tarefa posta às 07:01 esperava ~24 h. Esta
+   abertura puxa pela fila — no máximo uma vez por sessão e uma vez a cada
+   `HORAS_ENTRE_ABERTURAS` por máquina — e o resultado é o que o servidor
+   devolveu, com «ao abrir a Órbita» à frente para não se confundir com um
+   clique teu. Não gasta nada que a autonomia não tenha autorizado: quem gasta
+   é o ciclo, e o ciclo já sabe recusar. */
+const CHAVE_ULTIMO_CICLO = 'orbita.ciclo.ultimo';
+let cicloAutoFeito = false;
+
+function ultimoCicloAuto() {
+  try {
+    const v = Number(localStorage.getItem(CHAVE_ULTIMO_CICLO));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch { return null; }
+}
+
+function marcarCicloAuto(ms = Date.now()) {
+  try { localStorage.setItem(CHAVE_ULTIMO_CICLO, String(ms)); } catch { /* sem storage */ }
+}
+
+async function talvezCorrerCiclo() {
+  if (cicloAutoFeito || !may('write')) return null;
+  const naFila = S.filaServidor?.naFila
+    ?? (S.tarefas || []).filter((t) => t.state === 'queued').length;
+  const d = decidirAoAbrir({
+    naFila,
+    /* sem a leitura do servidor não se promete um agendador: assume-se o mesmo
+       que o cartão assume (há um), porque é o que `vercel.json` diz */
+    agendador: S.filaServidor ? !!S.filaServidor.agendador : true,
+    ultimoMs: ultimoCicloAuto(),
+  });
+  if (!d.correr) return null;
+  cicloAutoFeito = true;
+  S.cicloBusy = true;
+  paint();
+  try {
+    const r = await call('/ops/ciclo', 'POST', { limite: 2 });
+    S.ciclo = `ao abrir a Órbita — ${r?.frase || 'o ciclo respondeu sem frase'}`;
+    S.cicloAuto = true;
+    marcarCicloAuto();
+    await loadTarefas().catch(() => null);
+    await loadFila().catch(() => null);
+    return r;
+  } catch (e) {
+    /* falhou: diz-se. E marca-se a hora, para não repetir a falha a cada
+       navegação — a próxima tentativa é daqui a `HORAS_ENTRE_ABERTURAS`. */
+    S.ciclo = `o ciclo ao abrir não correu: ${e.message}`;
+    marcarCicloAuto();
+    return null;
+  } finally {
+    S.cicloBusy = false;
+    paint();
+  }
+}
+
 async function loadAgentes() {
   const [a, at] = await Promise.all([
     call('/ops/agentes').catch(() => null),
@@ -674,8 +730,11 @@ async function boot(full = true) {
        salas na mão. É a mesma leitura da página de tarefas — não uma nova. */
     if (S.route.name === 'hoje') {
       await Promise.all([loadTarefas().catch(() => null), loadAgentes().catch(() => null)]);
+      await loadFila().catch(() => null);
     }
     if (S.route.name === 'tarefas') { await loadTarefas(); await loadFila().catch(() => null); }
+    /* 1.70.0 · abrir a Órbita também põe a fila a andar (uma vez por sessão) */
+    if (S.route.name === 'tarefas' || S.route.name === 'hoje') await talvezCorrerCiclo().catch(() => null);
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
     if (S.route.name === 'ia') await carregarIA(apiMesa);
@@ -2300,12 +2359,14 @@ function cartaoCiclo(conta) {
       <span class="count">${naFila ? `${naFila} à espera` : 'vazia'}</span></div>
     <p class="hint" style="margin-top:0">${esc(fila.frase)}</p>
     ${quandoProximo ? `<div class="hint">próximo ciclo: ${esc(quandoProximo)}${fila.agendador ? '' : ' · sem agendador configurado'}</div>` : ''}
+    ${fila.agendador && naFila ? '<div class="hint">e também corre quando abres a Órbita (uma vez a cada 2 h)</div>' : ''}
     ${fila.itens.length ? `<ul class="arr-lista">${fila.itens.slice(0, 6).map((i) => `<li class="arr-item${i.perdida ? ' arr-critico' : ''}">
       <div class="arr-onda"><b>${esc(ROTULO_TAREFA[i.kind] || S.tiposTarefa.find((x) => x.id === i.kind)?.label || i.kind || 'tarefa')}</b>
         <span class="arr-quem">${esc(i.rotulo)}${i.espera ? ` · há ${esc(i.espera)}` : ''}</span>
         <div class="hint">${esc(i.porque)}</div></div></li>`).join('')}</ul>` : ''}
     ${naFila && may('write') ? `<div class="acts"><button class="btn primary small" data-act="ciclo-correr"${S.cicloBusy ? ' aria-disabled="true"' : ''}>Correr a fila agora</button></div>` : ''}
     ${r ? `<div class="hint" id="cicloUltimo">${esc(r)}</div>` : ''}
+    ${!r && ultimoCicloAuto() ? `<div class="hint">nesta máquina, a fila correu sozinha há ${esc(faltaPara(Date.now() - ultimoCicloAuto()))}</div>` : ''}
   </div>`;
 }
 

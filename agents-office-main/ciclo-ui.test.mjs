@@ -34,13 +34,20 @@ const FILA_GET = {
   ],
 };
 
-async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota = '#/tarefas', filaGet = FILA_GET } = {}) {
+async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota = '#/tarefas', filaGet = FILA_GET, autoCiclo = false } = {}) {
   const pedidos = [];
   const dom = new JSDOM(HTML, {
     url: `https://mesa.test/${rota}`, runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
       w.HTMLElement.prototype.scrollIntoView = () => {};
       w.matchMedia = (q) => ({ matches: /max-width: 820px/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
+      /* 1.70.0 · por omissão finge-se que a fila já correu há um minuto nesta
+         máquina, para os testes do botão não apanharem o ciclo automático.
+         Com `autoCiclo: true` o registo não existe e a abertura corre a fila. */
+      try {
+        if (autoCiclo) w.localStorage.removeItem('orbita.ciclo.ultimo');
+        else w.localStorage.setItem('orbita.ciclo.ultimo', String(Date.now()));
+      } catch { /* sem storage */ }
       w.fetch = async (url, opt = {}) => {
         const u = String(url);
         let caminho = u; let corpo = null; let metodo = 'GET';
@@ -150,4 +157,27 @@ test('1.68.0 · sem agendador configurado, o cartão não promete um ciclo', asy
   const t = texto();
   assert.match(t, /sem agendador configurado|só anda quando carregares/, 'diz a verdade sobre o relógio');
   assert.doesNotMatch(t, /próximo ciclo: /, 'não inventa uma hora que não vai acontecer');
+});
+
+/* ===========================================================================
+   1.70.0 · a fila anda quando abres a Órbita
+   =========================================================================== */
+
+test('1.70.0 · abrir as Tarefas com fila e sem ciclo recente põe a fila a andar — uma vez', async () => {
+  const { w, pedidos, texto } = await abrir({ autoCiclo: true });
+  const posts = pedidos.filter((p) => p.caminho === '/ops/ciclo' && p.metodo === 'POST');
+  assert.equal(posts.length, 1, 'um só ciclo por abertura — não um por navegação');
+  assert.equal(posts[0].corpo.limite, 2, 'o mesmo limite que o botão');
+  await esperar(400);
+  assert.match(texto(), /ao abrir a Órbita — corri 1 concluída/, 'o cartão diz que foi a abertura, não um clique teu');
+});
+
+test('1.70.0 · com um ciclo recente, abrir a página não gasta nada', async () => {
+  const { pedidos } = await abrir();
+  assert.equal(pedidos.filter((p) => p.caminho === '/ops/ciclo' && p.metodo === 'POST').length, 0);
+});
+
+test('1.70.0 · a fila vazia não dispara um ciclo ao abrir (não se inventa trabalho)', async () => {
+  const { pedidos } = await abrir({ autoCiclo: true, tarefas: [TAREFAS[2]], filaGet: { ok: true, naFila: 0, agendador: true, proximo: null, tarefas: [] } });
+  assert.equal(pedidos.filter((p) => p.caminho === '/ops/ciclo' && p.metodo === 'POST').length, 0);
 });
