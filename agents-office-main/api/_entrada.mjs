@@ -1,209 +1,254 @@
 /* ===========================================================================
-   As respostas dos clientes — 1.37.0 (27 out 2026).
+   1.69.0 · A ENTRADA: GitHub, Google, ou email com código de uso único.
 
-   Até aqui a mesa sabia mandar: aprovava, enviava pelo Resend ou pelo WhatsApp
-   Cloud API, guardava o `provider_id`. Não sabia OUVIR. Um cliente que
-   respondesse ficava para sempre «contactado», e o dono só descobria por acaso,
-   no telemóvel. Isto fecha o círculo: um webhook entra, encontra a pessoa certa,
-   escreve a resposta onde ela se lê e move o funil.
+   Porque este ficheiro existe: a porta da 1.54.0 sabia entrar com email e
+   palavra-passe — e mais nada. Faltavam as duas formas que as pessoas
+   realmente usam: a conta que já têm (GitHub, Google) e o código que chega ao
+   correio, que prova a caixa sem obrigar a inventar mais uma palavra-passe.
 
-   Regras (todas por provar, sem inventar nada):
-   · idempotente — o mesmo evento duas vezes (a Meta repete!) não duplica nada;
-   · casa primeiro pelo `provider_id` (é a resposta àquela mensagem), depois pelo
-     email/telefone do lead; sem correspondência grava a resposta com `lead: null`
-     em vez de a deitar fora;
-   · o funil só avança a partir de `novo`/`contactado`: um cliente que já é
-     `ganho` não volta a `respondeu` por ter respondido;
-   · sem segredo configurado, o webhook recusa (503). Nunca se aceita um POST
-     anónimo a fingir de cliente.
+   E falta uma coisa mais simples ainda: **esta instalação é de uma pessoa só.**
+   O dono disse-o por palavras («só deve aceitar a do chelton»), e um produto de
+   um homem só não pode ter um registo aberto — qualquer visita criava conta e
+   ficava com uma porta para os dados do dono. A lista de quem entra vive em
+   `ORBITA_DONO_EMAIL` (uma, ou várias separadas por vírgulas); sem a variável,
+   a lista é a do dono que criou isto.
+
+   O que aqui NÃO se faz: falar com a base de dados (é `_porta.mjs`), guardar
+   segredos em claro, ou inventar que um fornecedor está pronto quando lhe falta
+   a chave. Sem `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` não há GitHub, e a
+   resposta diz isso com o sítio exacto onde se cria a aplicação.
    =========================================================================== */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { normEmail, emailValido } from './_conta.mjs';
 
-const limpo = (v) => String(v ?? '').trim();
-const soDigitos = (v) => String(v ?? '').replace(/\D/g, '');
+/* ---------- quem entra ---------- */
 
-/* 3 51 912 345 678 e +351912345678 são o mesmo número para quem responde */
-export function telefoneCanonico(v) {
-  const d = soDigitos(v);
-  if (!d) return '';
-  if (d.length > 9) return d.slice(-9);   // sem indicativo: comparam-se os 9 últimos
-  return d;
+/** A conta do dono desta instalação. Muda-se com `ORBITA_DONO_EMAIL`. */
+export const DONO_PADRAO = 'cheltonmahoze7@gmail.com';
+
+/** A lista de emails que esta instalação aceita (normalizada, sem repetidos). */
+export function donosDe(env = {}) {
+  const bruto = env.ORBITA_DONO_EMAIL || env.ORBITA_DONOS || env.ORBITA_OWNER_EMAIL || '';
+  const lista = String(bruto)
+    .split(/[,;\s]+/)
+    .map((e) => normEmail(e))
+    .filter((e) => emailValido(e));
+  const unicos = [...new Set(lista)];
+  return unicos.length ? unicos : [DONO_PADRAO];
 }
 
-export function emailCanonico(v) {
-  const e = limpo(v).toLowerCase();
-  return /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(e) ? e : '';
+/** Este email pode entrar por uma porta pública (OAuth, código, primeira conta)? */
+export function eODono(email, env = {}) {
+  const e = normEmail(email);
+  return !!e && donosDe(env).includes(e);
 }
 
-/* ---------- assinaturas ---------- */
+/** «che***@gmail.com» — o ecrã de entrada diz que há um dono, sem publicar o
+ *  endereço inteiro para quem passa. Quem precisa do endereço já o sabe. */
+export function mascararEmail(email) {
+  const e = normEmail(email);
+  if (!e || !e.includes('@')) return '';
+  const [local, dominio] = e.split('@');
+  const visivel = local.slice(0, Math.min(3, Math.max(1, local.length - 1)));
+  return `${visivel}${'*'.repeat(Math.max(2, Math.min(6, local.length - visivel.length)))}@${dominio}`;
+}
 
-/** Resend usa Svix: HMAC-SHA256 de `${id}.${timestamp}.${corpo}`, em base64. */
-export function assinaturaSvix({ segredo, id, timestamp, corpoBase, assinatura }) {
-  const chave = limpo(segredo).replace(/^whsec_/, '');
-  if (!chave || !id || !timestamp || !assinatura) return false;
-  let esperado;
-  try { esperado = createHmac('sha256', Buffer.from(chave, 'base64')).update(`${id}.${timestamp}.${corpoBase}`).digest(); } catch { return false; }
-  const candidatas = String(assinatura).split(' ').map((x) => x.trim()).filter(Boolean).map((x) => x.replace(/^v\d+,/, ''));
-  for (const c of candidatas) {
-    let dada;
-    try { dada = Buffer.from(c, 'base64'); } catch { continue; }
-    if (dada.length === esperado.length && timingSafeEqual(dada, esperado)) return true;
+/* ---------- o código de uso único ---------- */
+
+export const MINUTOS_CODIGO = 10;
+export const TENTATIVAS_CODIGO = 5;
+export const CODIGO_DIGITOS = 6;
+
+/** Um código de 6 dígitos, de uma fonte criptográfica. */
+export function codigoNovo() {
+  return String(randomInt(0, 10 ** CODIGO_DIGITOS)).padStart(CODIGO_DIGITOS, '0');
+}
+
+/** O que fica na base: nunca o código, só o sha256 com o email e um prefixo
+ *  fixo — dois códigos iguais em contas diferentes não dão o mesmo hash. */
+export function hashCodigo(codigo, email) {
+  return createHash('sha256').update(`orbita-codigo:${normEmail(email)}:${String(codigo || '').replace(/\D/g, '')}`).digest('hex');
+}
+
+export function codigoConfere(conta, codigo, { agora = Date.now() } = {}) {
+  const guardado = String(conta?.codigo_hash || '');
+  if (!guardado) return { estado: 'sem-codigo', ok: false, motivo: 'não há código pedido para esta conta — pede um' };
+  if (Number(conta.codigo_tentativas || 0) >= TENTATIVAS_CODIGO) {
+    return { estado: 'bloqueado', ok: false, motivo: `demasiadas tentativas com este código — pede outro` };
   }
-  return false;
-}
-
-/** Meta: `x-hub-signature-256: sha256=<hex>` sobre o corpo bruto, com o app secret. */
-export function assinaturaMeta({ segredo, corpoBase, assinatura }) {
-  const s = limpo(segredo);
-  const a = limpo(assinatura).replace(/^sha256=/, '');
-  if (!s || !a) return false;
-  const esperado = createHmac('sha256', s).update(corpoBase).digest('hex');
-  const dada = a.toLowerCase();
-  if (dada.length !== esperado.length) return false;
-  try { return timingSafeEqual(Buffer.from(dada, 'hex'), Buffer.from(esperado, 'hex')); } catch { return false; }
-}
-
-/* ---------- normalizar o que os fornecedores mandam ---------- */
-
-/* Um email de entrada (Resend `email.received`). O texto pode vir em `text`,
-   `plain` ou só em html: nesse caso tira-se o que se pode, sem fingir formato. */
-export function normalizarEmail(evento) {
-  const d = evento?.data || evento || {};
-  const de = limpo(d.from?.email || d.from || d.sender || d.email);
-  const para = limpo(Array.isArray(d.to) ? d.to[0]?.email || d.to[0] : d.to || d.recipient);
-  const texto = limpo(d.text || d.plain || d.body || d.textBody)
-    || String(d.html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!de) return [];
-  return [{
-    canal: 'email',
-    idExterno: limpo(d.email_id || d.id || evento?.id) || `email:${de}:${limpo(d.subject)}:${texto.slice(0, 40)}`,
-    referencia: limpo(d.in_reply_to || d.headers?.['in-reply-to'] || d.reply_to) || null,
-    de, para, assunto: limpo(d.subject), texto,
-    quando: limpo(d.created_at || evento?.created_at) || new Date().toISOString(),
-  }];
-}
-
-/* O webhook do WhatsApp traz lotes: mensagens (o que o cliente escreveu) e
-   estados (entregue/lido). Tratam-se os dois — um «lido» também é informação. */
-export function normalizarWhatsapp(corpo) {
-  const saida = [];
-  const entradas = Array.isArray(corpo?.entry) ? corpo.entry : [];
-  for (const e of entradas) {
-    for (const c of (Array.isArray(e?.changes) ? e.changes : [])) {
-      const v = c?.value || {};
-      const nomes = new Map((Array.isArray(v.contacts) ? v.contacts : []).map((x) => [x.wa_id, x.profile?.name]));
-      for (const msg of (Array.isArray(v.messages) ? v.messages : [])) {
-        const texto = limpo(msg.text?.body)
-          || limpo(msg.button?.text)
-          || limpo(msg.interactive?.button_reply?.title)
-          || limpo(msg.interactive?.list_reply?.title)
-          || (msg.type === 'audio' ? '(mensagem de voz)' : `(${limpo(msg.type) || 'mensagem'} sem texto)`);
-        saida.push({
-          canal: 'whatsapp',
-          tipo: 'mensagem',
-          /* a Meta repete o webhook quando não recebe 200: o id da mensagem é a
-             única coisa que impede a mesma resposta de aparecer duas vezes */
-          idExterno: `wa:${limpo(msg.id) || `${limpo(msg.from)}:${limpo(msg.timestamp)}`}`,
-          referencia: limpo(msg.context?.id) || null,
-          de: limpo(msg.from), para: limpo(v.metadata?.display_phone_number),
-          nome: limpo(nomes.get(msg.from)) || null,
-          texto,
-          quando: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
-        });
-      }
-      for (const st of (Array.isArray(v.statuses) ? v.statuses : [])) {
-        saida.push({
-          canal: 'whatsapp', tipo: 'estado',
-          idExterno: `wa:st:${limpo(st.id)}:${limpo(st.status)}`,
-          referencia: limpo(st.id) || null,
-          de: limpo(v.metadata?.display_phone_number), para: limpo(st.recipient_id),
-          estado: limpo(st.status),   // sent | delivered | read | failed
-          quando: st.timestamp ? new Date(Number(st.timestamp) * 1000).toISOString() : new Date().toISOString(),
-        });
-      }
-    }
+  const expira = new Date(conta.codigo_expira || 0).getTime();
+  if (!expira || expira < agora) return { estado: 'expirado', ok: false, motivo: `o código passou dos ${MINUTOS_CODIGO} minutos — pede outro` };
+  const dado = hashCodigo(codigo, conta.email);
+  const a = Buffer.from(dado, 'hex');
+  const b = Buffer.from(guardado, 'hex');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    return { estado: 'errado', ok: false, restam: Math.max(0, TENTATIVAS_CODIGO - Number(conta.codigo_tentativas || 0) - 1) };
   }
-  return saida;
+  return { estado: 'ok', ok: true };
 }
 
-/* ---------- gravar ---------- */
+/* ---------- os fornecedores de identidade ---------- */
 
-const AVANCA = { novo: 'respondeu', contactado: 'respondeu' };   // e só estes
+export const REDIRECAO = '/api/oauth';
 
-async function acharLead(repo, evento) {
-  /* 1.º pela mensagem a que se responde: é a prova, não uma semelhança */
-  if (evento.referencia) {
-    const todas = await repo.mensagens.list(300);
-    const mae = todas.find((m) => m.provider_id === evento.referencia);
-    if (mae?.lead_id) {
-      const l = await repo.leads.byId(mae.lead_id);
-      if (l) return l;
-    }
-  }
-  const leads = await repo.leads.list(500);
-  if (evento.canal === 'email') {
-    const e = emailCanonico(evento.de);
-    if (e) { const l = leads.find((x) => emailCanonico(x.email) === e); if (l) return l; }
-  } else {
-    const t = telefoneCanonico(evento.de);
-    if (t) { const l = leads.find((x) => telefoneCanonico(x.phone) === t); if (l) return l; }
-  }
-  return null;
+/** O endereço público desta instalação (para onde o fornecedor devolve a pessoa). */
+export const basePublica = (env = {}) =>
+  String(env.ORBITA_URL || env.ORBITA_URLAR || 'https://orbita-agentes.vercel.app').replace(/\/+$/, '');
+
+export const uriDeRetorno = (fornecedor, env = {}) =>
+  `${basePublica(env)}${REDIRECAO}?fornecedor=${encodeURIComponent(fornecedor)}`;
+
+/** O que falta para cada um. `falta` são NOMES de variáveis, nunca valores. */
+export const FORNECEDORES = [
+  {
+    id: 'github',
+    nome: 'GitHub',
+    vars: ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'],
+    como: {
+      onde: 'GitHub → Settings → Developer settings → OAuth Apps → New OAuth App',
+      nota: 'Authorization callback URL tem de ser exactamente o endereço de retorno que aparece em baixo.',
+    },
+  },
+  {
+    id: 'google',
+    nome: 'Google',
+    vars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    como: {
+      onde: 'Google Cloud Console → APIs & Services → Credentials → Create credentials → OAuth client ID (Web application)',
+      nota: 'Em «Authorized redirect URIs» cola o endereço de retorno que aparece em baixo.',
+    },
+  },
+];
+
+export function fornecedorPorId(id) {
+  const k = String(id || '').toLowerCase();
+  return FORNECEDORES.find((f) => f.id === k) || null;
 }
 
-/**
- * Grava uma resposta (ou um estado de entrega) e devolve o que mudou.
- * Idempotente por `id_externo`. Nunca atira por falta de lead: uma resposta de
- * quem não está no funil é informação, não erro — fica com `lead: null`.
- */
-export async function registarResposta(repo, evento, { agora = () => new Date().toISOString() } = {}) {
-  const idExterno = limpo(evento.idExterno);
-  if (!idExterno) throw new Error('evento sem identificador: não se pode garantir que não duplica');
-  const antes = await repo.mensagens.porExterno?.(idExterno);
-  if (antes) return { ok: true, duplicado: true, mensagem: antes, lead: antes.lead_id ? await repo.leads.byId(antes.lead_id) : null };
-
-  const lead = await acharLead(repo, evento);
-
-  /* estados (entregue/lido) não criam mensagem: actualizam a que saiu */
-  if (evento.tipo === 'estado') {
-    const todas = await repo.mensagens.list(300);
-    const mae = evento.referencia ? todas.find((m) => m.provider_id === evento.referencia) : null;
-    if (!mae) return { ok: true, ignorado: 'sem mensagem para este estado', estado: evento.estado };
-    const campo = { delivered: 'entregue_at', read: 'lido_at' }[evento.estado];
-    if (!campo) return { ok: true, ignorado: `estado «${evento.estado}» não altera nada` };
-    const m = await repo.mensagens.patch(mae.id, { [campo]: agora() });
-    return { ok: true, estado: evento.estado, mensagem: m, lead };
-  }
-
-  const mensagem = await repo.mensagens.inserir({
-    lead_id: lead?.id || null,
-    channel: evento.canal,
-    body: String(evento.texto || '').slice(0, 8000) || '(sem texto)',
-    subject: evento.assunto || null,
-    status: 'recebida',
-    direction: 'in',
-    from: evento.de || null,
-    to: evento.para || null,
-    provider: evento.canal === 'email' ? 'resend' : 'whatsapp-cloud',
-    provider_id: null,
-    id_externo: idExterno,
-    recebida_at: agora(),
+/** O estado de cada fornecedor, para o ecrã e para o `/api/health`. */
+export function estadoDosFornecedores(env = {}) {
+  return FORNECEDORES.map((f) => {
+    const falta = f.vars.filter((v) => !String(env[v] || '').trim());
+    return {
+      id: f.id,
+      nome: f.nome,
+      pronto: falta.length === 0,
+      falta,
+      reusa: false,
+      retorno: uriDeRetorno(f.id, env),
+      como: { ...f.como, texto: `${f.vars.join(' e ')} na Vercel` },
+    };
   });
+}
 
-  let leadAtualizado = lead;
-  if (lead && AVANCA[lead.status]) {
-    leadAtualizado = await repo.leads.patch(lead.id, {
-      status: AVANCA[lead.status], responded_at: agora(), updated_at: agora(),
+/** O endereço do fornecedor, com o `state` (anti-CSRF) e o pedido de email. */
+export function urlDeAutorizacao(fornecedor, { env = {}, state, retorno = null } = {}) {
+  const f = fornecedorPorId(fornecedor);
+  if (!f) return null;
+  const volta = retorno || uriDeRetorno(f.id, env);
+  if (f.id === 'github') {
+    const q = new URLSearchParams({
+      client_id: String(env.GITHUB_CLIENT_ID || ''),
+      redirect_uri: volta,
+      /* `user:email` é o mínimo para ler o email verificado — nada de repos */
+      scope: 'read:user user:email',
+      state,
+      allow_signup: 'false',
     });
-  } else if (lead && !lead.responded_at) {
-    leadAtualizado = await repo.leads.patch(lead.id, { responded_at: agora(), updated_at: agora() });
+    return `https://github.com/login/oauth/authorize?${q.toString()}`;
   }
+  const q = new URLSearchParams({
+    client_id: String(env.GOOGLE_CLIENT_ID || ''),
+    redirect_uri: volta,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+    access_type: 'online',
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
+}
 
+/** Troca o `code` por um token e lê o email. Nunca devolve segredos. */
+export async function perfilDoFornecedor(fornecedor, { code, env = {}, fetchImpl = fetch, retorno = null } = {}) {
+  const f = fornecedorPorId(fornecedor);
+  if (!f) return { ok: false, motivo: 'fornecedor desconhecido' };
+  const volta = retorno || uriDeRetorno(f.id, env);
+  const json = async (r) => {
+    try { return await r.json(); } catch { return null; }
+  };
   try {
-    await repo.atividade.add('mensagem', lead
-      ? `${lead.name || 'um lead'} respondeu por ${evento.canal}`
-      : `resposta por ${evento.canal} de quem não está no funil (${evento.de || 'sem remetente'})`);
-  } catch { /* o rasto não pode partir a recepção */ }
+    if (f.id === 'github') {
+      const tr = await fetchImpl('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code, redirect_uri: volta,
+        }),
+      });
+      const t = await json(tr);
+      if (!tr.ok || !t || !t.access_token) {
+        return { ok: false, motivo: `o GitHub recusou a troca do código${t?.error ? `: ${t.error}` : ` (HTTP ${tr.status})`}` };
+      }
+      const h = { authorization: `Bearer ${t.access_token}`, accept: 'application/vnd.github+json', 'user-agent': 'orbita' };
+      const em = await json(await fetchImpl('https://api.github.com/user/emails', { headers: h }));
+      const lista = Array.isArray(em) ? em : [];
+      /* o email TEM de ser verificado pelo GitHub e primário: um email público
+         qualquer não prova que a caixa é de quem está a entrar */
+      const bom = lista.find((e) => e.primary && e.verified) || lista.find((e) => e.verified);
+      if (!bom) return { ok: false, motivo: 'o GitHub não devolveu nenhum email verificado nesta conta' };
+      const perfil = await json(await fetchImpl('https://api.github.com/user', { headers: h }));
+      return { ok: true, email: normEmail(bom.email), nome: String(perfil?.name || perfil?.login || '').slice(0, 120), id: String(perfil?.id || '') };
+    }
+    const tr = await fetchImpl('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: volta, grant_type: 'authorization_code',
+      }).toString(),
+    });
+    const t = await json(tr);
+    if (!tr.ok || !t || !t.access_token) {
+      return { ok: false, motivo: `o Google recusou a troca do código${t?.error ? `: ${t.error}` : ` (HTTP ${tr.status})`}` };
+    }
+    const p = await json(await fetchImpl('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { authorization: `Bearer ${t.access_token}` },
+    }));
+    if (!p || !p.email) return { ok: false, motivo: 'o Google não devolveu um email nesta conta' };
+    if (p.email_verified === false) return { ok: false, motivo: 'o Google diz que este email não está verificado' };
+    return { ok: true, email: normEmail(p.email), nome: String(p.name || '').slice(0, 120), id: String(p.sub || '') };
+  } catch (e) {
+    return { ok: false, motivo: `não consegui falar com o ${f.nome}: ${e.message}` };
+  }
+}
 
-  return { ok: true, duplicado: false, mensagem, lead: leadAtualizado, casou: !!lead };
+/* ---------- o que a página precisa de saber ---------- */
+
+/** As opções de entrada, sem um único segredo. É o que `/auth/opcoes` devolve. */
+export function opcoesDeEntrada(env = {}) {
+  const donos = donosDe(env);
+  const temCorreio = !!String(env.RESEND_API_KEY || '').trim();
+  return {
+    soDono: true,
+    donos: donos.map(mascararEmail),
+    /* para quem tem de configurar isto: o nome da variável, não o endereço */
+    variavelDoDono: 'ORBITA_DONO_EMAIL',
+    fornecedores: estadoDosFornecedores(env).map((f) => ({
+      id: f.id, nome: f.nome, pronto: f.pronto, falta: f.falta, retorno: f.retorno, como: f.como,
+    })),
+    codigo: {
+      pronto: temCorreio,
+      falta: temCorreio ? [] : ['RESEND_API_KEY'],
+      minutos: MINUTOS_CODIGO,
+      como: {
+        onde: 'resend.com → API Keys → Create API Key',
+        texto: 'RESEND_API_KEY (e ORBITA_EMAIL_FROM, com um domínio verificado) na Vercel',
+        nota: temCorreio
+          ? `o código segue para o email do dono e vale ${MINUTOS_CODIGO} minutos`
+          : 'sem chave de correio não há código: o email não sai daqui, e dizê-lo é melhor do que um ecrã à espera',
+      },
+    },
+    palavraPasse: { pronto: true, comCodigo: temCorreio },
+  };
 }

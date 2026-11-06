@@ -125,7 +125,9 @@ const esperar = (ms = 500) => new Promise((r) => setTimeout(r, ms));
 test('1 · sem contas, o ecrã da primeira conta diz o que falta na instalação', async () => {
   const { doc, texto } = await abrir({ saudes: [SAUDE_QUEBRADA] });
   const t = texto();
-  assert.match(t, /Criar a primeira conta/);
+  /* 1.69.0 · o título do ecrã mudou com a entrada nova: já não se «cria a
+     primeira conta» — entra-se como dono, por GitHub, Google ou código. */
+  assert.match(t, /Entrar como dono/);
   assert.match(t, /O que falta nesta instalação/);
   assert.match(t, /versão 1\.62\.0/);
   assert.match(t, /Falta a tabela orbita_faturas/);

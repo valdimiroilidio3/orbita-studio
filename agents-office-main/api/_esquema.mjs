@@ -53,6 +53,9 @@ export const FICHEIROS = [
   /* 1.61.0 · a execução transparente: autorizações, cancelamento, o que está
      pendente e a ligação da repetição. Idempotente. */
   'orbita_1_61_0.sql',
+  /* 1.69.0 · a entrada: o código de uso único por email e o fornecedor de OAuth
+     em que a conta entrou. Idempotente (`add column if not exists`). */
+  'orbita_1_69_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
@@ -72,7 +75,10 @@ export const COLUNAS_EXIGIDAS = {
      mostra — e o `/api/setup` passa a dizer que faltam. */
   orbita_tasks: ['resultado', 'modelo', 'custo_micro_usd'],
   /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
-  orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira', 'confirmado_em', 'confirmar_hash', 'confirmar_expira'],
+  /* 1.69.0 · as do código de entrada e do OAuth. Sem elas, o código não tem
+     onde ser guardado — e a auditoria do `/api/setup?ler=1` passa a dizê-lo. */
+  orbita_contas: ['email', 'papel', 'hash', 'activo', 'recuperar_hash', 'recuperar_expira', 'confirmado_em', 'confirmar_hash', 'confirmar_expira',
+    'codigo_hash', 'codigo_expira', 'codigo_tentativas', 'oauth_fornecedor', 'oauth_id'],
   orbita_sessoes: ['conta_id', 'token_hash', 'expira', 'revogada'],
   /* 1.54.3 · sem estas, uma geração perde o vínculo (projeto, lead, quem) ou o
      custo — e a auditoria da mídia fica a mentir. */

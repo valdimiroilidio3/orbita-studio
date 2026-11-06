@@ -32,7 +32,10 @@ import {
   podeGerar, podeSair,
 } from './src/briefing.js';
 
-const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste' };
+/* 1.69.0 · a entrada passou a ser de um dono só. Estes testes provam papéis
+   (leitor, operador…), por isso dizem qual é o dono e abrem o registo —
+   o comportamento por omissão prova-se em `entrada.test.mjs`. */
+const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste', ORBITA_DONO_EMAIL: 'dono@orbita.pt', ORBITA_REGISTO: 'aberto' };
 const SENHA = 'uma-frase-bem-comprida-2026';
 
 /* rede fechada: nenhuma rota destes testes pode ir falar com um fornecedor de IA */

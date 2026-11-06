@@ -1,3 +1,76 @@
+## 1.69.0 — 6 nov 2026 · A ENTRADA DO DONO (GITHUB · GOOGLE · CÓDIGO)
+
+O dono pediu-o por palavras: «login por github ou por google ou por email e
+senha, onde mandaram um otp no email para confirmar o usuario, mas só deve
+aceitar a do chelton — quem será único usuário do projeto».
+
+A porta da 1.54.0 sabia entrar com email e palavra-passe, e mais nada. Faltavam
+as duas formas que as pessoas realmente usam — e faltava, mais simples ainda, a
+regra que o produto tinha de ter desde o início: **esta instalação é de uma
+pessoa só**.
+
+### GitHub e Google (OAuth a sério, com regresso)
+- `GET /api/oauth?fornecedor=github&iniciar=1` sai para o fornecedor com um
+  `state` aleatório num cookie `HttpOnly`; a volta confere o `state` (um link
+  montado por outra pessoa não abre sessão nenhuma), troca o `code`, lê o email
+  e abre a sessão.
+- O email tem de vir **verificado pelo fornecedor**: o GitHub prefere o primário
+  verificado, o Google recusa `email_verified: false`. Uma conta com email
+  público não prova que a caixa é de quem está a entrar.
+- Sem `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` (ou as do Google), o botão
+  **não fica cinzento**: o clique diz o nome exacto da variável, o sítio onde se
+  cria a aplicação e o endereço de retorno à mão de copiar.
+
+### O código de 6 dígitos (email)
+- `POST /auth/codigo` gera o código, guarda na base **só o sha256**, manda-o pelo
+  Resend e nunca diz «enviado» quando o correio não saiu.
+- Vale **10 minutos, uma vez, 5 tentativas**. Usado, morre; esgotado, morre.
+- `POST /auth/codigo/verificar` abre a sessão e confirma a conta — provar a caixa
+  é a confirmação.
+- **Com correio configurado, a palavra-passe certa já não abre a sessão
+  sozinha**: manda o código e espera. Sem `RESEND_API_KEY` não há como mandar
+  nada — nesse caso entra-se com a palavra-passe **e o ecrã di-lo**, em vez de
+  um segundo passo que não pode acontecer.
+
+### Um dono só
+- A lista de quem entra é `ORBITA_DONO_EMAIL` (por omissão,
+  `cheltonmahoze7@gmail.com`). Outro email é recusado **antes** de qualquer
+  palavra-passe ser testada, com o email do dono mascarado no ecrã.
+- A primeira conta, o registo público e o código passam todos pela mesma lista.
+  `ORBITA_REGISTO=aberto` continua a existir para quem quiser uma instalação de
+  várias pessoas — é uma decisão explícita, não o que acontece a quem não fez
+  nada.
+- `GET /api/health` ganhou o bloco `entrada`: quem entra, que fornecedores estão
+  ligados e o que falta a cada um (só nomes de variáveis).
+
+### Base de dados, prontidão e ecrã
+- **`supabase/orbita_1_69_0.sql`** (idempotente): `codigo_hash`,
+  `codigo_expira`, `codigo_tentativas`, `oauth_fornecedor`, `oauth_id` em
+  `orbita_contas` — nenhuma delas guarda um segredo em claro.
+- A prontidão ganhou o grupo **Entrada** (GitHub ID e segredo como dois itens:
+  um item é «basta uma destas», e um cliente sem segredo não entra em lado
+  nenhum).
+- O ecrã de entrada foi refeito: os dois fornecedores, o email com palavra-passe
+  e o código por email, com o email do dono mascarado e a razão de cada caminho
+  que ainda falta ligar.
+
+### Testes
+- `entrada.test.mjs` (25) e `entrada-ui.test.mjs` (6): a lista de quem entra, o
+  código a expirar/servir uma vez/morrer às 5 tentativas, a palavra-passe que não
+  abre sessão com correio, o `state` que não volta, o GitHub de outra pessoa
+  recusado, e o ecrã a dizer o que falta em vez de um botão morto.
+- **Suíte: 1309/1309.** `check.mjs`: 96/97 (o único falhanço é o smoke de
+  browser, sem Chrome nesta máquina).
+
+### O que ainda falta para o dono usar isto (dito sem rodeios)
+1. **Aplicar a migração** `supabase/orbita_1_69_0.sql` — sem ela, o código
+   responde 503 com o ficheiro à frente.
+2. **`RESEND_API_KEY` + `ORBITA_EMAIL_FROM`** para o código poder sair.
+3. **Criar as aplicações OAuth** (GitHub e Google) e colar as quatro variáveis.
+   Até lá, os botões continuam lá e explicam-se ao serem carregados.
+
+---
+
 ## 1.68.0 — 6 nov 2026 · A FILA DIZ A VERDADE
 
 A 1.67.0 fez o ciclo correr a fila. Ficou uma pergunta sem resposta no ecrã:

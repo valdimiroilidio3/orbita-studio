@@ -33,7 +33,10 @@ import { limparMemoria, criarArmazem } from './api/_armazem.mjs';
 import handlerFicheiro from './api/ficheiro.mjs';
 import { estadoNovo, vistaMedia, accaoMedia, podeConfirmar, textoDaEstimativa } from './src/media.js';
 
-const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste' };
+/* 1.69.0 · a entrada passou a ser de um dono só. Estes testes provam papéis
+   (leitor, operador…), por isso dizem qual é o dono e abrem o registo —
+   o comportamento por omissão prova-se em `entrada.test.mjs`. */
+const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste', ORBITA_DONO_EMAIL: 'dono@orbita.pt', ORBITA_REGISTO: 'aberto' };
 const SENHA = 'uma-frase-bem-comprida-2026';
 const PROMPT = 'interior de clínica dentária ao amanhecer, luz de janela, sem texto na imagem';
 

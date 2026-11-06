@@ -32,7 +32,12 @@ export function envBase(env = process.env) {
    coluna `subject` em `orbita_messages` — e a mesa não precisava de ser tocada.
    A mensagem mandava para o ficheiro errado, e custou uma sessão inteira a
    descobrir. Agora o erro nomeia a coluna, a tabela e o ficheiro certo. */
-export const COLUNAS_DO_1_37 = new Set([
+/* 1.69.0 · as colunas da entrada (código por email e o fornecedor de OAuth).
+   Sem esta lista, o erro do PostgREST dizia «falta o esquema» sem nomear o
+   ficheiro — e a resposta já sabe qual é. */
+export const COLUNAS_DO_1_69 = new Set(['codigo_hash', 'codigo_expira', 'codigo_tentativas', 'oauth_fornecedor', 'oauth_id']);
+
+const COLUNAS_DO_1_37 = new Set([
   'subject', 'to', 'from', 'provider', 'provider_id', 'enviada_at', 'recebida_at',
   'entregue_at', 'lido_at', 'rejeitada_at', 'erro', 'canal_confirmado', 'direction', 'id_externo',
   'responded_at', 'rating', 'reviews', 'score_reasons', 'consent',
@@ -61,6 +66,7 @@ export function explificar(texto = '', dados = null) {
   if (!semColuna && !semTabela) return { mensagem: msg, semEsquema: false, tabela: null, coluna: null, ficheiro: null };
 
   let ficheiro = null;
+  if (semColuna && coluna && COLUNAS_DO_1_69.has(coluna)) ficheiro = 'orbita_1_69_0.sql';
   if (semColuna && coluna && COLUNAS_DO_1_37.has(coluna)) ficheiro = 'orbita_1_37_0.sql';
   if (semTabela && tabela && TABELAS_DA_IA.has(tabela)) ficheiro = 'orbita_ia.sql';
   if (semTabela && tabela && !ficheiro) ficheiro = 'orbita_mesa.sql';

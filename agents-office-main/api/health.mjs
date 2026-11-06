@@ -23,6 +23,7 @@ import { prontidaoCurta, GRUPOS } from './_prontidao.mjs';
 /* 1.66.0 · nomes e booleanos dos dois tokens: prova, sem mostrar nenhum valor,
    que a instalação os lê de facto */
 import { TOKENS, estadoDosTokens, nomesParecidos } from './_acesso.mjs';
+import { opcoesDeEntrada } from './_entrada.mjs';   // 1.69.0: quem entra e por onde
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -52,15 +53,32 @@ export default async function handler(req, res) {
       : 'sem CRON_SECRET o agendador não se autentica: a fila só corre quando carregares em «Correr a fila agora»',
   };
 
+  /* 1.69.0 · a entrada: quem entra, por onde, e o que falta a cada caminho.
+     Só nomes de variáveis e o email mascarado — o health é público. */
+  const entrada = (() => {
+    const o = opcoesDeEntrada(pedido);
+    return {
+      dono: o.donos[0] || null,
+      soDono: true,
+      github: o.fornecedores.find((f) => f.id === 'github')?.pronto || false,
+      google: o.fornecedores.find((f) => f.id === 'google')?.pronto || false,
+      codigo: o.codigo.pronto,
+      falta: o.fornecedores.filter((f) => !f.pronto).map((f) => ({ fornecedor: f.id, falta: f.falta })),
+      porque: o.codigo.pronto
+        ? 'email + código de 6 dígitos: a palavra-passe sozinha não abre a sessão'
+        : 'sem RESEND_API_KEY o código não sai; até lá entra-se com a palavra-passe (e o ecrã di-lo)',
+    };
+  })();
+
   if (!env.pronto) {
-    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso, ciclo });
+    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
     return;
   }
 
   try {
     const h = await createSupabaseRepo(env).health();
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso, ciclo });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
   } catch (e) {
-    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo });
+    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
   }
 }

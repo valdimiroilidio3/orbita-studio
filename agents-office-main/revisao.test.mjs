@@ -29,7 +29,9 @@ import { COOKIE } from './api/_conta.mjs';
 import { decidirResposta, rotaAusente, mensagemDe } from './src/respostas.js';
 import { vistaBriefing, estadoNovo as estadoBriefing } from './src/briefing.js';
 
-const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste' };
+/* 1.69.0 · a porta passou a ser de um dono só: o teste diz qual é (e abre o
+   registo, porque prova papéis e não a política de entrada). */
+const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste', ORBITA_DONO_EMAIL: 'dono@orbita.pt', ORBITA_REGISTO: 'aberto' };
 const SENHA = 'uma-frase-bem-comprida-2026';
 const semRede = () => { throw new Error('sem rede neste teste'); };
 

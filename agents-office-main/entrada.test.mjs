@@ -1,229 +1,434 @@
-// As respostas dos clientes — 1.37.0 (27 out 2026).
-//
-// A mesa sabia mandar e ficava à espera. Estes testes provam o lado que faltava:
-// um webhook entra assinado, encontra a pessoa certa, grava a resposta uma só vez
-// (a Meta repete) e move o funil sem estragar quem já é cliente.
-import { test } from 'node:test';
+/* ===========================================================================
+   1.69.0 · A ENTRADA DO DONO (6 nov 2026)
+
+   O dono pediu-o por palavras: «login por github ou por google ou por email e
+   senha, onde mandaram um otp no email para confirmar o usuario, mas só deve
+   aceitar a do chelton — quem será único usuário do projeto».
+
+   Este ficheiro prova as três coisas que essa frase exige, e a quarta que ela
+   implica (só uma pessoa entra):
+
+     · o código de 6 dígitos: nasce, vale 10 minutos, serve uma vez, morre ao
+       fim de 5 tentativas — e na base só fica o sha256;
+     · com correio configurado, a palavra-passe certa NÃO abre sessão sozinha;
+       sem correio, abre, e a resposta di-lo em voz alta;
+     · GitHub e Google: o `state` tem de ser deste browser, o email tem de vir
+       verificado pelo fornecedor, e a única conta aceite é a do dono;
+     · qualquer outro email é recusado ANTES de se testar palavra-passe.
+
+   Contra a porta fechada a sério (`seguranca: true`) e sem rede: o Resend, o
+   GitHub e o Google são falsos, e o que se lê é o que eles devolveram.
+   =========================================================================== */
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
-
-import { responder } from './api/_rotas.mjs';
+import { readFileSync } from 'node:fs';
 import { createMemRepo } from './api/_repo.mjs';
-import { telefoneCanonico, emailCanonico, normalizarWhatsapp, normalizarEmail, assinaturaSvix, assinaturaMeta } from './api/_entrada.mjs';
+import { responder } from './api/_rotas.mjs';
+import { limitadorCodigo, limitador } from './api/_porta.mjs';
+import { processarOAuth, COOKIE_ESTADO } from './api/oauth.mjs';
+import {
+  DONO_PADRAO, donosDe, eODono, mascararEmail, codigoNovo, hashCodigo, codigoConfere,
+  MINUTOS_CODIGO, TENTATIVAS_CODIGO, estadoDosFornecedores, urlDeAutorizacao,
+  perfilDoFornecedor, opcoesDeEntrada, uriDeRetorno,
+} from './api/_entrada.mjs';
 
-const CHAVE_META = 'segredo-da-app-da-meta';
-const CHAVE_SVIX = 'whsec_' + Buffer.from('segredo-do-resend-1234567890').toString('base64');
+const DONO = 'cheltonmahoze7@gmail.com';
+const SENHA = 'uma-frase-bem-comprida-2026';
+const ENV = { ORBITA_URL: 'https://orbita.exemplo.pt' };
+const ENV_CORREIO = { ...ENV, RESEND_API_KEY: 're_teste_abcdefghij', ORBITA_EMAIL_FROM: 'Orbita <ola@orbita.pt>' };
 
-const repoCom = async ({ leads = [], mensagens = [] } = {}) => {
-  const repo = createMemRepo({ leads, mensagens });
-  return repo;
-};
-
-const lead = (x) => ({
-  id: x.id, dedupe_key: `${x.id}`, name: x.name, email: x.email || null, phone: x.phone || null,
-  status: x.status || 'contactado', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  ...x,
+const chamar = (repo, caminho, metodo = 'GET', corpo = null, extra = {}) => responder(repo, {
+  caminho, metodo, corpo, env: ENV, seguranca: true, ...extra,
 });
 
-const envMeta = { WHATSAPP_APP_SECRET: CHAVE_META, WHATSAPP_VERIFY_TOKEN: 'a-minha-frase' };
-const envSvix = { RESEND_WEBHOOK_SECRET: CHAVE_SVIX };
+/** Um Resend falso que guarda o que lhe mandaram. */
+function correioFalso() {
+  const enviados = [];
+  const fetchImpl = async (url, opt = {}) => {
+    if (String(url).includes('api.resend.com')) {
+      enviados.push(JSON.parse(opt.body || '{}'));
+      return { ok: true, status: 200, json: async () => ({ id: `re_${enviados.length}` }) };
+    }
+    throw new Error(`pedido inesperado: ${url}`);
+  };
+  const ultimoCodigo = () => {
+    const t = enviados[enviados.length - 1]?.text || '';
+    const m = t.match(/(\d{6})/);
+    return m ? m[1] : null;
+  };
+  return { enviados, fetchImpl, ultimoCodigo };
+}
 
-const assinarMeta = (bruto) => `sha256=${createHmac('sha256', CHAVE_META).update(bruto).digest('hex')}`;
-const assinarSvix = (id, ts, bruto) => {
-  const chave = Buffer.from(CHAVE_SVIX.replace(/^whsec_/, ''), 'base64');
-  return `v1,${createHmac('sha256', chave).update(`${id}.${ts}.${bruto}`).digest('base64')}`;
-};
+/* ---------- 1 · quem entra ---------- */
 
-const zap = (texto, de = '351912345678', extra = {}) => ({
-  object: 'whatsapp_business_account',
-  entry: [{ id: 'waba', changes: [{ field: 'messages', value: {
-    messaging_product: 'whatsapp',
-    metadata: { display_phone_number: '351300000000', phone_number_id: '123' },
-    contacts: [{ wa_id: de, profile: { name: 'Ana' } }],
-    messages: [{ from: de, id: extra.id || 'wamid.ABC', timestamp: '1761600000', type: 'text', text: { body: texto }, ...extra.msg }],
-  } }] }],
+test('1.69.0 · sem nada configurado, a instalação aceita uma conta: a do dono', () => {
+  assert.deepEqual(donosDe({}), [DONO_PADRAO]);
+  assert.equal(DONO_PADRAO, 'cheltonmahoze7@gmail.com', 'o dono é o dono, e está escrito');
+  assert.equal(eODono('CheltonMahoze7@Gmail.com', {}), true, 'maiúsculas e espaços não são outra pessoa');
+  assert.equal(eODono('  cheltonmahoze7@gmail.com  ', {}), true);
+  assert.equal(eODono('outra.pessoa@gmail.com', {}), false);
+  assert.equal(eODono('', {}), false);
+  assert.equal(eODono('cheltonmahoze7@gmail.com.evil.pt', {}), false, 'um sufixo não é o mesmo email');
 });
 
-/* ---------------- normalização ---------------- */
-
-test('1 · telefone e email comparam-se como um humano os leria', () => {
-  assert.equal(telefoneCanonico('+351 912 345 678'), telefoneCanonico('912345678'));
-  assert.equal(telefoneCanonico('00351912345678'), '912345678');
-  assert.equal(telefoneCanonico(''), '');
-  assert.equal(emailCanonico('  Geral@Padaria.PT '), 'geral@padaria.pt');
-  assert.equal(emailCanonico('sem-arroba'), '');
+test('1.69.0 · a lista pode crescer, mas só por decisão de quem instala', () => {
+  const env = { ORBITA_DONO_EMAIL: 'a@b.pt, c@d.pt;a@b.pt' };
+  assert.deepEqual(donosDe(env), ['a@b.pt', 'c@d.pt'], 'sem repetidos, sem lixo');
+  assert.equal(eODono('c@d.pt', env), true);
+  assert.equal(eODono(DONO, env), false, 'mudar a lista muda quem entra — não soma');
 });
 
-test('2 · o webhook do WhatsApp vira eventos legíveis (mensagem e estado)', () => {
-  const ev = normalizarWhatsapp(zap('Boa tarde, quanto custa?'));
-  assert.equal(ev.length, 1);
-  assert.equal(ev[0].canal, 'whatsapp');
-  assert.equal(ev[0].texto, 'Boa tarde, quanto custa?');
-  assert.equal(ev[0].de, '351912345678');
-  assert.equal(ev[0].idExterno, 'wa:wamid.ABC');
-
-  const estados = normalizarWhatsapp({
-    entry: [{ changes: [{ value: { metadata: { display_phone_number: '351300000000' },
-      statuses: [{ id: 'wamid.SAIU', status: 'read', timestamp: '1761600100', recipient_id: '351912345678' }] } }] }],
-  });
-  assert.equal(estados.length, 1);
-  assert.equal(estados[0].tipo, 'estado');
-  assert.equal(estados[0].estado, 'read');
+test('1.69.0 · o ecrã mostra o email do dono mascarado, nunca inteiro', () => {
+  assert.match(mascararEmail(DONO), /^che\*+@gmail\.com$/, 'as primeiras letras e o domínio chegam para reconhecer a conta');
+  assert.ok(!mascararEmail(DONO).includes('mahoze'), 'o endereço não fica publicado na página');
+  assert.equal(mascararEmail(''), '');
 });
 
-test('3 · um email de resposta vira um evento com remetente e texto', () => {
-  const ev = normalizarEmail({ type: 'email.received', data: {
-    email_id: 'em_1', from: 'ana@padaria.pt', to: ['geral@orbita.pt'], subject: 'Re: proposta',
-    text: 'Podemos falar amanhã?', created_at: '2026-10-27T10:00:00.000Z',
-  } });
-  assert.equal(ev.length, 1);
-  assert.equal(ev[0].canal, 'email');
-  assert.equal(ev[0].de, 'ana@padaria.pt');
-  assert.equal(ev[0].texto, 'Podemos falar amanhã?');
+/* ---------- 2 · o código ---------- */
+
+test('1.69.0 · o código tem 6 dígitos e na base só entra o hash', () => {
+  const c = codigoNovo();
+  assert.match(c, /^\d{6}$/);
+  const h = hashCodigo(c, DONO);
+  assert.match(h, /^[0-9a-f]{64}$/);
+  assert.notEqual(h, c, 'nunca o código em claro');
+  assert.notEqual(hashCodigo(c, 'outro@exemplo.pt'), h, 'o mesmo código noutra conta não dá o mesmo hash');
+  assert.equal(hashCodigo('123456', DONO), hashCodigo('123-456', DONO), 'quem cola o código com espaços entra');
 });
 
-/* ---------------- recepção ponta a ponta ---------------- */
+test('1.69.0 · o código vale 10 minutos, uma vez, e morre às 5 tentativas', () => {
+  const agora = Date.now();
+  const base = { email: DONO, codigo_hash: hashCodigo('424242', DONO), codigo_expira: new Date(agora + 9 * 60000).toISOString(), codigo_tentativas: 0 };
+  assert.equal(codigoConfere(base, '424242', { agora }).ok, true);
+  assert.equal(codigoConfere(base, '000000', { agora }).estado, 'errado');
+  assert.equal(codigoConfere(base, '424242', { agora: agora + 11 * 60000 }).estado, 'expirado');
+  assert.equal(codigoConfere({ ...base, codigo_tentativas: TENTATIVAS_CODIGO }, '424242', { agora }).estado, 'bloqueado');
+  assert.equal(codigoConfere({ email: DONO }, '424242', { agora }).estado, 'sem-codigo');
+  assert.equal(MINUTOS_CODIGO, 10);
+});
 
-test('4 · a resposta por WhatsApp encontra o lead pelo telefone e move o funil', async () => {
-  const repo = await repoCom({ leads: [lead({ id: 'l1', name: 'Padaria Ana', phone: '+351 912 345 678' })] });
-  const corpo = zap('Quanto custa o site?');
-  const bruto = JSON.stringify(corpo);
-  const r = await responder(repo, {
-    caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto,
-    headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: envMeta,
-  });
+/* ---------- 3 · pedir o código, e a conta que nasce ---------- */
+
+test('1.69.0 · um email que não é o do dono é recusado antes de qualquer palavra-passe', async () => {
+  limitadorCodigo.limpar();
+  const r = await chamar(createMemRepo(), '/auth/codigo', 'POST', { email: 'intruso@exemplo.pt' }, { env: ENV_CORREIO });
+  assert.equal(r.status, 403);
+  assert.equal(r.corpo.soDono, true);
+  assert.match(r.corpo.error, /um dono só/);
+  assert.match(r.corpo.error, /che\*+@gmail\.com/, 'diz qual é a conta, mascarada');
+  assert.equal(r.corpo.variavel, 'ORBITA_DONO_EMAIL', 'e como se muda de dono');
+});
+
+test('1.69.0 · sem chave de correio o código não sai — e a resposta diz qual falta', async () => {
+  limitadorCodigo.limpar();
+  const r = await chamar(createMemRepo(), '/auth/codigo', 'POST', { email: DONO });
+  assert.equal(r.status, 503);
+  assert.deepEqual(r.corpo.falta, ['RESEND_API_KEY']);
+  assert.match(r.corpo.como, /resend\.com/);
+  assert.match(r.corpo.alternativa, /palavra-passe/, 'e qual é o caminho que existe hoje');
+});
+
+test('1.69.0 · o código vai para o email do dono e a conta nasce como dona', async () => {
+  limitadorCodigo.limpar();
+  const repo = createMemRepo();
+  const correio = correioFalso();
+  const r = await chamar(repo, '/auth/codigo', 'POST', { email: DONO }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
   assert.equal(r.status, 200);
-  assert.equal(r.corpo.recebidas, 1);
-  assert.equal(r.corpo.eventos[0].lead.id, 'l1');
-  assert.equal(r.corpo.eventos[0].lead.status, 'respondeu');
+  assert.equal(r.corpo.enviado, true);
+  assert.equal(r.corpo.contaNova, true);
+  assert.match(r.corpo.para, /^che\*+@gmail\.com$/, 'a resposta não devolve o endereço inteiro');
+  assert.equal(correio.enviados.length, 1);
+  assert.equal(correio.enviados[0].to[0], DONO, 'o email foi para o dono');
+  const codigo = correio.ultimoCodigo();
+  assert.match(codigo, /^\d{6}$/);
 
-  const msgs = await repo.mensagens.list(10);
-  assert.equal(msgs.length, 1);
-  assert.equal(msgs[0].status, 'recebida');
-  assert.equal(msgs[0].direction, 'in');
-  assert.equal(msgs[0].body, 'Quanto custa o site?');
-  assert.equal(msgs[0].lead_id, 'l1');
-
-  const l = await repo.leads.byId('l1');
-  assert.equal(l.status, 'respondeu');
-  assert.ok(l.responded_at, 'o lead tem de ficar com a data da resposta');
+  const conta = await repo.contas.porEmail(DONO);
+  assert.equal(conta.papel, 'dono');
+  assert.equal(conta.activo, true);
+  assert.equal(conta.confirmado_em, null, 'ainda não provou a caixa: sem código, não está confirmado');
+  assert.equal(conta.codigo_hash, hashCodigo(codigo, DONO), 'na base fica o hash do código que saiu');
+  assert.ok(!JSON.stringify(conta).includes(codigo), 'o código em claro não fica guardado em lado nenhum');
 });
 
-test('5 · o mesmo evento duas vezes não duplica nada (a Meta repete quando não recebe 200)', async () => {
-  const repo = await repoCom({ leads: [lead({ id: 'l1', name: 'Padaria Ana', phone: '912345678' })] });
-  const corpo = zap('Já vi, obrigado.', '351912345678', { id: 'wamid.REPETE' });
-  const bruto = JSON.stringify(corpo);
-  const pedido = { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: envMeta };
-  const a = await responder(repo, pedido);
-  const b = await responder(repo, pedido);
-  assert.equal(a.corpo.recebidas, 1);
-  assert.equal(b.corpo.recebidas, 0);
-  assert.equal(b.corpo.duplicadas, 1);
-  assert.equal((await repo.mensagens.list(10)).length, 1, 'a resposta não pode aparecer duas vezes na mesa');
+test('1.69.0 · verificar o código abre a sessão, confirma a conta e não serve duas vezes', async () => {
+  limitadorCodigo.limpar();
+  const repo = createMemRepo();
+  const correio = correioFalso();
+  await chamar(repo, '/auth/codigo', 'POST', { email: DONO }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  const codigo = correio.ultimoCodigo();
+
+  const errado = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo: '000000' }, { env: ENV_CORREIO });
+  assert.equal(errado.status, 401);
+  assert.equal(errado.corpo.estado, 'errado');
+  assert.equal(errado.corpo.restam, TENTATIVAS_CODIGO - 1, 'a tentativa fica contada, e o número é dito');
+
+  const certo = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo }, { env: ENV_CORREIO });
+  assert.equal(certo.status, 200);
+  assert.equal(certo.corpo.entrouPorCodigo, true);
+  assert.equal(certo.corpo.user.email, DONO);
+  assert.equal(certo.corpo.perms.admin, true, 'o dono entra com tudo');
+  assert.match(certo.cabecalhos['Set-Cookie'], /HttpOnly/);
+
+  const conta = await repo.contas.porEmail(DONO);
+  assert.ok(conta.confirmado_em, 'a conta ficou confirmada por ter provado a caixa');
+  assert.equal(conta.codigo_hash, null, 'o código morreu ao ser usado');
+
+  const outraVez = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo }, { env: ENV_CORREIO });
+  assert.equal(outraVez.status, 401);
+  assert.match(outraVez.corpo.error, /pede um/, 'um código que já serviu não serve outra vez');
 });
 
-test('6 · um email de resposta casa pelo email e não pela mensagem antiga', async () => {
-  const repo = await repoCom({
-    leads: [lead({ id: 'l2', name: 'Óptica Nova', email: 'geral@optica.pt' })],
-    mensagens: [{ id: 'm1', lead_id: 'l2', channel: 'email', body: 'Olá', status: 'enviada', provider_id: 're_1', created_at: new Date().toISOString() }],
-  });
-  const corpo = { type: 'email.received', data: { email_id: 'em_9', from: 'Geral@Optica.pt', to: ['eu@orbita.pt'], subject: 'Re: Olá', text: 'Sim, quero.' } };
-  const bruto = JSON.stringify(corpo);
-  const r = await responder(repo, {
-    caminho: '/webhooks/resend', metodo: 'POST', corpo, corpoBruto: bruto,
-    headers: { 'svix-id': 'msg_1', 'svix-timestamp': '1761600000', 'svix-signature': assinarSvix('msg_1', '1761600000', bruto) },
-    env: envSvix,
-  });
+test('1.69.0 · cinco códigos errados e o código deixa de servir', async () => {
+  limitadorCodigo.limpar();
+  const repo = createMemRepo();
+  const correio = correioFalso();
+  await chamar(repo, '/auth/codigo', 'POST', { email: DONO }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  const codigo = correio.ultimoCodigo();
+  for (let i = 0; i < TENTATIVAS_CODIGO; i += 1) {
+    const r = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo: '999999' }, { env: ENV_CORREIO });
+    assert.equal(r.status, 401);
+  }
+  const certo = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo }, { env: ENV_CORREIO });
+  assert.equal(certo.status, 401);
+  assert.equal(certo.corpo.estado, 'bloqueado');
+  assert.match(certo.corpo.error, /pede outro/);
+});
+
+test('1.69.0 · um código com menos de 6 dígitos não chega a ser testado', async () => {
+  const r = await chamar(createMemRepo(), '/auth/codigo/verificar', 'POST', { email: DONO, codigo: '12' });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.error, /6 dígitos/);
+});
+
+/* ---------- 4 · palavra-passe + código ---------- */
+
+test('1.69.0 · com correio, a palavra-passe certa NÃO abre a sessão: manda o código', async () => {
+  limitadorCodigo.limpar();
+  const repo = createMemRepo();
+  const correio = correioFalso();
+  /* a conta nasce pelo código, e depois ganha palavra-passe pelo caminho normal */
+  await chamar(repo, '/auth/codigo', 'POST', { email: DONO }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  const codigo = correio.ultimoCodigo();
+  await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo }, { env: ENV_CORREIO });
+  const conta = await repo.contas.porEmail(DONO);
+  const { hashPassword } = await import('./api/_conta.mjs');
+  await repo.contas.actualizar(conta.id, { hash: hashPassword(SENHA) });
+
+  const entrar = await chamar(repo, '/auth/entrar', 'POST', { email: DONO, password: SENHA }, { env: ENV_CORREIO, fetchImpl: correio.fetchImpl });
+  assert.equal(entrar.status, 200);
+  assert.equal(entrar.corpo.precisaCodigo, true);
+  assert.equal(entrar.corpo.naoEntrou, true, 'não se diz «entraste» a quem ainda não entrou');
+  assert.equal(entrar.cabecalhos, undefined, 'e nenhum cookie de sessão é posto');
+  assert.match(entrar.corpo.mensagem, /código/);
+  const novo = correio.ultimoCodigo();
+  assert.notEqual(novo, codigo, 'é outro código, não o que já foi usado');
+
+  const fim = await chamar(repo, '/auth/codigo/verificar', 'POST', { email: DONO, codigo: novo }, { env: ENV_CORREIO });
+  assert.equal(fim.status, 200);
+  assert.ok(fim.cabecalhos['Set-Cookie']);
+});
+
+test('1.69.0 · sem correio, a palavra-passe entra — e a resposta diz que entrou assim', async () => {
+  limitadorCodigo.limpar();
+  const repo = createMemRepo();
+  limitador.limpar();
+  const primeira = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: DONO, password: SENHA, token: '' });
+  assert.equal(primeira.status, 200, 'o dono pode criar a primeira conta com o email dele');
+  const r = await chamar(repo, '/auth/entrar', 'POST', { email: DONO, password: SENHA });
   assert.equal(r.status, 200);
-  assert.equal(r.corpo.eventos[0].lead.id, 'l2');
-  assert.equal((await repo.leads.byId('l2')).status, 'respondeu');
+  assert.equal(r.corpo.semCodigo, true);
+  assert.match(r.corpo.nota, /RESEND_API_KEY/, 'a nota nomeia o que falta, não uma desculpa');
+  assert.match(r.cabecalhos['Set-Cookie'], /HttpOnly/);
 });
 
-test('7 · quem já é cliente não volta a «respondeu» por ter respondido', async () => {
-  const repo = await repoCom({ leads: [lead({ id: 'l3', name: 'Cliente Antigo', phone: '913000000', status: 'ganho' })] });
-  const corpo = zap('Está tudo bem com o site.', '351913000000');
-  const bruto = JSON.stringify(corpo);
-  const r = await responder(repo, { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: envMeta });
-  assert.equal(r.status, 200);
-  const l = await repo.leads.byId('l3');
-  assert.equal(l.status, 'ganho', 'o funil não pode andar para trás');
-  assert.ok(l.responded_at, 'mas a resposta fica registada');
+/* ---------- 5 · quem pode criar a conta ---------- */
+
+test('1.69.0 · a primeira conta só nasce com o email do dono', async () => {
+  const repo = createMemRepo();
+  const outro = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: 'quem.chegou.primeiro@exemplo.pt', password: SENHA });
+  assert.equal(outro.status, 403);
+  assert.equal(outro.corpo.soDono, true);
+  assert.equal((await repo.contas.contar()), 0, 'nada foi criado');
+
+  const dele = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: DONO, password: SENHA });
+  assert.equal(dele.status, 200);
+  assert.equal(dele.corpo.user.role, 'dono');
 });
 
-test('8 · quem não está no funil também não se perde: a resposta fica sem lead', async () => {
-  const repo = await repoCom({ leads: [] });
-  const corpo = zap('Vi o vosso anúncio.', '351969999999');
-  const bruto = JSON.stringify(corpo);
-  const r = await responder(repo, { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: envMeta });
-  assert.equal(r.status, 200);
-  assert.equal(r.corpo.semLead, 1);
-  const msgs = await repo.mensagens.list(10);
-  assert.equal(msgs.length, 1);
-  assert.equal(msgs[0].lead_id, null);
-  assert.equal(msgs[0].from, '351969999999');
+test('1.69.0 · o registo público está fechado a quem não é o dono', async () => {
+  const repo = createMemRepo();
+  const r = await chamar(repo, '/auth/registo', 'POST', { email: 'alguem@exemplo.pt', password: SENHA });
+  assert.equal(r.status, 403);
+  assert.match(r.corpo.error, /um dono só/);
+  assert.equal((await repo.contas.contar()), 0);
+
+  const aberto = await chamar(repo, '/auth/registo', 'POST', { email: 'alguem@exemplo.pt', password: SENHA }, { env: { ...ENV, ORBITA_REGISTO: 'aberto' } });
+  assert.equal(aberto.status, 201, 'com ORBITA_REGISTO=aberto o registo volta — é uma decisão, não um acidente');
 });
 
-test('9 · «lido» e «entregue» actualizam a mensagem que saiu, sem criar outra', async () => {
-  const repo = await repoCom({
-    leads: [lead({ id: 'l4', name: 'Café Central', phone: '914000000' })],
-    mensagens: [{ id: 'm4', lead_id: 'l4', channel: 'whatsapp', body: 'Olá', status: 'enviada', provider_id: 'wamid.SAIU', created_at: new Date().toISOString() }],
-  });
-  const corpo = { entry: [{ changes: [{ value: {
-    metadata: { display_phone_number: '351300000000' },
-    statuses: [{ id: 'wamid.SAIU', status: 'read', timestamp: '1761600100', recipient_id: '351914000000' }],
-  } }] }] };
-  const bruto = JSON.stringify(corpo);
-  const r = await responder(repo, { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: envMeta });
-  assert.equal(r.status, 200);
-  const msgs = await repo.mensagens.list(10);
-  assert.equal(msgs.length, 1, 'um estado não é uma mensagem nova');
-  assert.ok(msgs[0].lido_at, 'a mensagem tem de ficar marcada como lida');
+/* ---------- 6 · GitHub e Google ---------- */
+
+test('1.69.0 · cada fornecedor diz o que lhe falta, sem um único segredo', () => {
+  const semNada = estadoDosFornecedores({});
+  assert.deepEqual(semNada.map((f) => f.id), ['github', 'google']);
+  assert.ok(semNada.every((f) => f.pronto === false));
+  assert.deepEqual(semNada[0].falta, ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET']);
+  assert.match(semNada[0].retorno, /\/api\/oauth\?fornecedor=github$/);
+  const opcoes = opcoesDeEntrada({ GITHUB_CLIENT_ID: 'abc123', GITHUB_CLIENT_SECRET: 'segredo-que-nao-sai' });
+  assert.equal(opcoes.fornecedores[0].pronto, true);
+  assert.ok(!JSON.stringify(opcoes).includes('segredo-que-nao-sai'), 'nenhum valor de chave sai na resposta');
+  const meia = opcoesDeEntrada({ GITHUB_CLIENT_ID: 'abc123' });
+  assert.equal(meia.fornecedores[0].pronto, false, 'meia chave não é um fornecedor pronto');
+  assert.deepEqual(meia.fornecedores[0].falta, ['GITHUB_CLIENT_SECRET']);
+  const completas = estadoDosFornecedores({ GITHUB_CLIENT_ID: 'abc123', GITHUB_CLIENT_SECRET: 's' });
+  assert.equal(completas[0].pronto, true);
+  assert.equal(completas[1].pronto, false, 'um pronto não torna o outro pronto');
 });
 
-/* ---------------- segurança ---------------- */
+test('1.69.0 · o endereço de autorização pede o mínimo e leva o state', () => {
+  const env = { GITHUB_CLIENT_ID: 'id-do-github', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const u = new URL(urlDeAutorizacao('github', { env, state: 'xyz' }));
+  assert.equal(u.origin, 'https://github.com');
+  assert.equal(u.searchParams.get('client_id'), 'id-do-github');
+  assert.equal(u.searchParams.get('state'), 'xyz');
+  assert.equal(u.searchParams.get('scope'), 'read:user user:email', 'ler o email — e nada dos repositórios');
+  assert.equal(u.searchParams.get('redirect_uri'), uriDeRetorno('github', env));
 
-test('10 · sem segredo configurado não se aceita nada (503, não 200)', async () => {
-  const repo = await repoCom();
-  const corpo = zap('olá');
-  const bruto = JSON.stringify(corpo);
-  const semSegredo = await responder(repo, { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': assinarMeta(bruto) }, env: { WHATSAPP_VERIFY_TOKEN: 'x' } });
-  assert.equal(semSegredo.status, 503);
-  assert.match(semSegredo.corpo.error, /WHATSAPP_APP_SECRET/);
-
-  const semSvix = await responder(repo, { caminho: '/webhooks/resend', metodo: 'POST', corpo: { data: {} }, corpoBruto: '{}', headers: {}, env: {} });
-  assert.equal(semSvix.status, 503);
-  assert.match(semSvix.corpo.error, /RESEND_WEBHOOK_SECRET/);
+  const g = new URL(urlDeAutorizacao('google', { env: { GOOGLE_CLIENT_ID: 'gid', ORBITA_URL: 'https://orbita.exemplo.pt' }, state: 'xyz' }));
+  assert.equal(g.origin, 'https://accounts.google.com');
+  assert.equal(g.searchParams.get('scope'), 'openid email profile');
+  assert.equal(urlDeAutorizacao('myspace', { env, state: 'x' }), null);
 });
 
-test('11 · assinatura errada é 401 e nada é gravado', async () => {
-  const repo = await repoCom({ leads: [lead({ id: 'l5', name: 'X', phone: '915000000' })] });
-  const corpo = zap('resposta');
-  const bruto = JSON.stringify(corpo);
-  const meta = await responder(repo, { caminho: '/webhooks/whatsapp', metodo: 'POST', corpo, corpoBruto: bruto, headers: { 'x-hub-signature-256': 'sha256=00' }, env: envMeta });
-  assert.equal(meta.status, 401);
-  assert.equal((await repo.mensagens.list(10)).length, 0);
+test('1.69.0 · o GitHub só vale com email verificado; o Google também', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 'segredo', ORBITA_URL: 'https://orbita.exemplo.pt' };
 
-  const svix = await responder(repo, { caminho: '/webhooks/resend', metodo: 'POST', corpo: { data: { from: 'a@b.pt' } }, corpoBruto: '{"data":{"from":"a@b.pt"}}', headers: { 'svix-id': 'x', 'svix-timestamp': '1', 'svix-signature': 'v1,AAAA' }, env: envSvix });
-  assert.equal(svix.status, 401);
+  const semVerificado = async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: DONO, primary: true, verified: false }]) };
+    return { ok: true, status: 200, json: async () => ({ id: 1, login: 'x' }) };
+  };
+  const recusado = await perfilDoFornecedor('github', { code: 'c', env, fetchImpl: semVerificado });
+  assert.equal(recusado.ok, false);
+  assert.match(recusado.motivo, /verificado/);
+
+  const bom = async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    /* um email secundário verificado serve (é o que o GitHub devolve a quem tem
+       o email do trabalho como primário) — o que não serve é um por verificar */
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: 'outro@x.pt', primary: true, verified: false }, { email: DONO, primary: false, verified: true }]) };
+    return { ok: true, status: 200, json: async () => ({ id: 7, name: 'Chelton' }) };
+  };
+  const aceite = await perfilDoFornecedor('github', { code: 'c', env, fetchImpl: bom });
+  assert.equal(aceite.ok, true);
+  assert.equal(aceite.email, DONO);
+  assert.equal(aceite.nome, 'Chelton');
+
+  const googleNaoVerificado = async (url) => {
+    if (String(url).includes('oauth2.googleapis.com/token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    return { ok: true, status: 200, json: async () => ({ email: DONO, email_verified: false }) };
+  };
+  const g = await perfilDoFornecedor('google', { code: 'c', env: { ...env, GOOGLE_CLIENT_ID: 'g', GOOGLE_CLIENT_SECRET: 's' }, fetchImpl: googleNaoVerificado });
+  assert.equal(g.ok, false);
+  assert.match(g.motivo, /não está verificado/);
+
+  const tokenRecusado = async () => ({ ok: false, status: 400, json: async () => ({ error: 'bad_verification_code' }) });
+  const t = await perfilDoFornecedor('github', { code: 'c', env, fetchImpl: tokenRecusado });
+  assert.equal(t.ok, false);
+  assert.match(t.motivo, /bad_verification_code/, 'o motivo do fornecedor atravessa, em vez de virar «erro»');
 });
 
-test('12 · a verificação da Meta devolve o desafio em texto puro', async () => {
-  const repo = await repoCom();
-  const bom = await responder(repo, { caminho: '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=a-minha-frase&hub.challenge=42', metodo: 'GET', env: envMeta });
-  assert.equal(bom.status, 200);
-  assert.equal(bom.corpo, '42', 'a Meta exige o número em texto puro');
+/* ---------- 7 · o /api/oauth de ponta a ponta (sem rede) ---------- */
 
-  const mau = await responder(repo, { caminho: '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=outro&hub.challenge=42', metodo: 'GET', env: envMeta });
-  assert.equal(mau.status, 403);
+const COOKIE = (state) => ({ [COOKIE_ESTADO]: state });
+/* o `Location` viaja com `+` no lugar dos espaços: lê-se como uma pessoa lê */
+const descodificar = (u) => decodeURIComponent(String(u || '').replace(/\+/g, ' '));
 
-  const semToken = await responder(repo, { caminho: '/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=x&hub.challenge=1', metodo: 'GET', env: {} });
-  assert.equal(semToken.status, 501);
+test('1.69.0 · sem chaves, o /api/oauth diz o que falta em vez de falhar em silêncio', async () => {
+  const r = await processarOAuth({ repo: createMemRepo(), env: {}, query: 'fornecedor=github&iniciar=1' });
+  assert.equal(r.status, 503);
+  assert.equal(r.tipo, 'html');
+  assert.match(r.corpo, /GITHUB_CLIENT_ID/, 'a página diz o nome da variável');
+  assert.match(r.corpo, /OAuth Apps/, 'e o sítio onde se cria');
+  assert.match(r.corpo, /\/api\/oauth\?fornecedor=github/, 'e o endereço de retorno, à mão de copiar');
 });
 
-test('13 · as assinaturas calculadas pelo módulo são as mesmas dos fornecedores', () => {
-  const bruto = '{"a":1}';
-  assert.equal(assinaturaMeta({ segredo: CHAVE_META, corpoBase: bruto, assinatura: assinarMeta(bruto) }), true);
-  assert.equal(assinaturaSvix({ segredo: CHAVE_SVIX, id: 'msg_1', timestamp: '1761600000', corpoBase: bruto, assinatura: assinarSvix('msg_1', '1761600000', bruto) }), true);
-  assert.equal(assinaturaMeta({ segredo: CHAVE_META, corpoBase: bruto, assinatura: assinarMeta('outro corpo') }), false);
-  assert.equal(assinaturaSvix({ segredo: CHAVE_SVIX, id: 'msg_1', timestamp: '1761600000', corpoBase: bruto, assinatura: 'v1,AAAA' }), false);
+test('1.69.0 · «iniciar» sai para o fornecedor com um state num cookie HttpOnly', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const r = await processarOAuth({ repo: createMemRepo(), env, query: 'fornecedor=github&iniciar=1' });
+  assert.equal(r.status, 302);
+  assert.match(r.location, /^https:\/\/github\.com\/login\/oauth\/authorize/);
+  const cookie = r.cabecalhos['Set-Cookie'][0];
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /SameSite=Lax/);
+  const state = decodeURIComponent(cookie.split(';')[0].split('=')[1]);
+  assert.ok(state.length >= 32, 'um state a sério, não uma palavra');
+  assert.ok(r.location.includes(`state=${state}`), 'e o mesmo state vai no endereço');
+});
+
+test('1.69.0 · a volta sem o cookie deste browser não abre sessão nenhuma', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const r = await processarOAuth({ repo: createMemRepo(), env, query: 'fornecedor=github&code=abc&state=xyz', cookies: {} });
+  assert.equal(r.status, 302);
+  assert.match(r.location, /^\/app\?erroEntrada=/);
+  assert.match(descodificar(r.location), /state inválido/);
+});
+
+test('1.69.0 · a volta com o state certo abre a sessão do dono e volta à app', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const repo = createMemRepo();
+  const github = async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: DONO, primary: true, verified: true }]) };
+    return { ok: true, status: 200, json: async () => ({ id: 7, name: 'Chelton' }) };
+  };
+  const r = await processarOAuth({ repo, env, fetchImpl: github, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  assert.equal(r.status, 302);
+  assert.equal(r.location, '/app?entrou=github');
+  const cookies = r.cabecalhos['Set-Cookie'];
+  assert.ok(cookies.some((c) => /orbita_sessao|sessao/.test(c)), 'a sessão nasce aqui');
+  assert.ok(cookies.some((c) => /Max-Age=0/.test(c)), 'e o state morre no mesmo gesto');
+  const conta = await repo.contas.porEmail(DONO);
+  assert.equal(conta.papel, 'dono');
+  assert.equal(conta.oauth_fornecedor, 'github');
+  assert.ok(conta.confirmado_em, 'o email já foi verificado pelo GitHub');
+});
+
+test('1.69.0 · o GitHub de outra pessoa não entra, mesmo com chaves boas', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const repo = createMemRepo();
+  const github = async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: 'amigo@exemplo.pt', primary: true, verified: true }]) };
+    return { ok: true, status: 200, json: async () => ({ id: 9 }) };
+  };
+  const r = await processarOAuth({ repo, env, fetchImpl: github, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  assert.equal(r.status, 302);
+  assert.match(descodificar(r.location), /não é a do dono/);
+  assert.equal(r.cabecalhos['Set-Cookie'], undefined, 'nem um cookie de sessão');
+  assert.equal(await repo.contas.contar(), 0, 'e nenhuma conta criada');
+});
+
+/* ---------- 8 · as costuras (o que liga isto à Vercel e à mesa) ---------- */
+
+test('1.69.0 · a Vercel serve /api/oauth e o ficheiro sabe redireccionar', () => {
+  const f = readFileSync(new URL('./api/oauth.mjs', import.meta.url), 'utf8');
+  assert.match(f, /res\.setHeader\('Location'/);
+  assert.match(f, /301|302/);
+  assert.match(f, /HttpOnly/);
+  const mesa = readFileSync(new URL('./src/mesa.js', import.meta.url), 'utf8');
+  assert.match(mesa, /data-act="oauth"/, 'a mesa tem os botões dos fornecedores');
+  assert.match(mesa, /data-act="pedir-codigo"/, 'e o caminho do código');
+  assert.match(mesa, /data-act="verificar-codigo"/);
+  assert.doesNotMatch(mesa, /data-act="oauth"[^>]*disabled/, 'o botão nunca aparece morto: o clique é que explica');
+  assert.match(mesa, /location\.href = `\/api\/oauth\?fornecedor=/, 'e manda o browser ao sítio certo');
+});
+
+test('1.69.0 · a migração existe, é idempotente e não guarda segredos', () => {
+  const sql = readFileSync(new URL('./supabase/orbita_1_69_0.sql', import.meta.url), 'utf8');
+  for (const c of ['codigo_hash', 'codigo_expira', 'codigo_tentativas', 'oauth_fornecedor', 'oauth_id']) {
+    assert.match(sql, new RegExp(`add column if not exists ${c}`));
+  }
+  assert.match(sql, /sha256 do código/, 'e explica que o que fica é o hash');
+  assert.doesNotMatch(sql, /drop table|delete from/i, 'uma migração não apaga dados de ninguém');
 });

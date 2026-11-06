@@ -71,6 +71,24 @@ export const GRUPOS = [
     ],
   },
   {
+    /* 1.69.0 · a entrada do dono. Não é «mais uma integração»: é por onde se
+       entra, e o código de 6 dígitos não sai sem a chave do Resend. */
+    id: 'entrada',
+    nome: 'Entrada',
+    critico: false,
+    porque: 'sem estas, entra-se só com a palavra-passe — e o GitHub/Google ficam por ligar',
+    itens: [
+      /* dois itens por fornecedor de propósito: um item é «basta UMA destas», e
+         um client id sem o segredo não entra em lado nenhum — dizer «pronto»
+         com metade das chaves seria a mentira mais fácil deste ficheiro */
+      item('GitHub — ID', 'entrar com a conta do GitHub (GitHub → Settings → Developer settings → OAuth Apps)', ['GITHUB_CLIENT_ID']),
+      item('GitHub — segredo', 'o segredo do mesmo OAuth App do GitHub', ['GITHUB_CLIENT_SECRET']),
+      item('Google — ID', 'entrar com a conta do Google (Google Cloud Console → Credentials → OAuth client ID)', ['GOOGLE_CLIENT_ID']),
+      item('Google — segredo', 'o segredo do mesmo cliente OAuth do Google', ['GOOGLE_CLIENT_SECRET']),
+      item('Email do dono', 'a única conta que esta instalação aceita (por omissão, a que está no código)', ['ORBITA_DONO_EMAIL'], { opcional: true }),
+    ],
+  },
+  {
     id: 'correio',
     nome: 'Correio',
     critico: false,
