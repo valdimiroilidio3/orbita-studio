@@ -1528,6 +1528,24 @@ export async function responder(repo, {
       tipos: TIPOS_TAREFA, departamentos: DEPARTAMENTOS,
     } };
   }
+  /* ---- 1.67.0 · O CICLO, À MÃO ---------------------------------------------
+     A fila deixa de ser uma promessa: `POST /ops/ciclo` corre agora as tarefas
+     que estão `queued`. É o mesmo motor que a Vercel chama em `/api/ciclo`
+     (agendamento diário no plano Hobby, ou um ping externo). Escrever exige
+     `write` — a porta já tratou disso antes de chegar aqui. */
+  if (caminhoLimpo === '/ops/ciclo' && (m === 'POST' || m === 'GET')) {
+    const { correrCiclo, resumoDoCiclo } = await import('./_ia/ciclo.mjs');
+    if (m === 'GET') {
+      const fila = await repo.tarefas.emFila(50).catch(() => []);
+      return { status: 200, corpo: { ok: true, naFila: fila.length, tarefas: fila.map((t) => ({ id: t.id, kind: t.kind, created_at: t.created_at })) } };
+    }
+    const r = await correrCiclo({
+      repo, env, fetchImpl,
+      limite: Math.min(5, Math.max(1, Number(corpo?.limite) || 2)),
+    });
+    return { status: 200, corpo: { ...resumoDoCiclo(r), resultado: r } };
+  }
+
   if (caminhoLimpo === '/ops/tarefas' && m === 'POST') {
     if (!TIPOS_TAREFA[limpo(corpo?.kind)]) throw falha(400, 'tipo de tarefa desconhecido');
     return criarECorrer({ repo, corpo, env, fetchImpl, TIPOS: TIPOS_TAREFA });
