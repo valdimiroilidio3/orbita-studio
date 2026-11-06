@@ -249,6 +249,18 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
       async list(limit = 100) { return (await pedir(`orbita_tasks?select=*&order=created_at.desc&limit=${Math.min(300, limit)}`)) || []; },
       async byId(id) { return um(await pedir(`orbita_tasks?select=*&id=eq.${q(id)}&limit=1`)); },
       async insert(t) { return um(await pedir('orbita_tasks', { method: 'POST', body: t, prefer: 'return=representation' })); },
+      /* 1.67.0 · a fila e o cadeado do ciclo. `reclamar` é condicional no
+         `state=eq.queued`: duas invocações ao mesmo tempo, só uma leva a linha
+         (zero linhas devolvidas = outro ciclo já a levou). */
+      async emFila(limit = 10) {
+        return (await pedir(`orbita_tasks?select=*&state=eq.queued&order=created_at.asc&limit=${Math.min(50, Math.max(1, limit))}`)) || [];
+      },
+      async reclamar(id) {
+        const r = await pedir(`orbita_tasks?id=eq.${q(id)}&state=eq.queued`, {
+          method: 'PATCH', body: { state: 'running', error: null, finished_at: null }, prefer: 'return=representation',
+        });
+        return um(r);
+      },
       async patch(id, campos) {
         const r = await pedir(`orbita_tasks?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' });
         return um(r);
@@ -586,6 +598,18 @@ export function createMemRepo(seed = {}) {
       async byId(i) { return d.tarefas.find((t) => t.id === i) || null; },
       async insert(t) { const novo = { id: id('t'), created_at: agora(), ...t }; d.tarefas.push(novo); return novo; },
       async patch(i, campos) { const t = d.tarefas.find((x) => x.id === i); if (!t) return null; Object.assign(t, campos); return t; },
+      /* 1.67.0 · a mesma fila e o mesmo cadeado do Supabase, em memória */
+      async emFila(limit = 10) {
+        return [...d.tarefas].filter((t) => t.state === 'queued')
+          .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+          .slice(0, Math.min(50, Math.max(1, limit)));
+      },
+      async reclamar(i) {
+        const t = d.tarefas.find((x) => x.id === i);
+        if (!t || t.state !== 'queued') return null;   // outro ciclo levou-a
+        t.state = 'running'; t.error = null; t.finished_at = null;
+        return t;
+      },
     },
     mensagens: {
       async list(limit = 100) { return [...d.mensagens].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },

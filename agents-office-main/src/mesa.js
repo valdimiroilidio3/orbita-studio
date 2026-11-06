@@ -182,6 +182,8 @@ const S = {
   /* 1.57.0 · a aba aberta na página do projeto (Briefing por omissão) */
   projetoTab: 'briefing',
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
+  /* 1.67.0 · o ciclo: a última frase do servidor e o cadeado do botão */
+  ciclo: '', cicloBusy: false,
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
   /* 1.18.0 · Control Center da IA */
@@ -2191,6 +2193,7 @@ function viewTarefas() {
       right: `${may('write') ? '<button class="btn small ghost" data-act="nova-tarefa">+ Tarefa</button>' : ''}${stopPill()}`,
     })}
     ${S.addingTask ? novaTarefaForm() : ''}
+    ${cartaoCiclo(conta)}
     <div class="filters" role="group" aria-label="filtrar por departamento" style="margin-bottom:var(--s3)">
       <button class="chip ${!f.dept ? 'on' : ''}" data-act="filtrar-tarefa" data-k="dept" data-v="">Todos</button>
       ${(S.deptos || []).map(d => `<button class="chip ${f.dept === d.key ? 'on' : ''}" data-act="filtrar-tarefa" data-k="dept" data-v="${esc(d.key)}">${esc(d.name)}</button>`).join('')}
@@ -2203,6 +2206,23 @@ function viewTarefas() {
       <p>${f.dept || f.state
         ? 'Não há tarefas com este departamento e estado. Limpa os filtros — o que existe está todo aqui.'
         : 'Uma tarefa é trabalho com dono, começo, fim e resultado. Cria uma para qualificar um lead, gerar o código de um projeto ou auditar a qualidade — o que corre fica escrito aqui, mesmo que o servidor reinicie.'}</p></div>`}
+  </div>`;
+}
+
+/* 1.67.0 · O CICLO À MÃO. A fila existia na mesa e ninguém a ia buscar: este
+   cartão diz quantas estão à espera e deixa correr agora. A frase que aparece
+   depois é a do servidor — não uma versão bonita do que ele disse. */
+function cartaoCiclo(conta) {
+  const naFila = conta('queued');
+  const r = S.ciclo;
+  return `<div class="card" id="cicloCard" style="margin-bottom:var(--s4)" aria-live="polite">
+    <div class="sec-h"><h3>A fila</h3>
+      <span class="count">${naFila ? `${naFila} à espera` : 'vazia'}</span></div>
+    <p class="hint" style="margin-top:0">A fila corre sozinha uma vez por dia pelo agendador da Vercel
+      (o plano actual só permite agendamentos diários) e sempre que carregas aqui.
+      Um tipo de trabalho em «pede-me sempre» não gasta chamadas: fica à tua espera.</p>
+    ${naFila && may('write') ? `<div class="acts"><button class="btn primary small" data-act="ciclo-correr"${S.cicloBusy ? ' aria-disabled="true"' : ''}>Correr a fila agora</button></div>` : ''}
+    ${r ? `<div class="hint" id="cicloUltimo">${esc(r)}</div>` : ''}
   </div>`;
 }
 
@@ -3183,6 +3203,24 @@ async function act(name, el, ev) {
       S.gerados = { ...(S.gerados || {}), [variavel]: r.valor };
       paint();
       toast(`${avisoDoGerado(variavel, r.tamanho)}`, false);
+      return;
+    }
+    if (name === 'ciclo-correr') {
+      if (S.cicloBusy) return;
+      S.cicloBusy = true;
+      /* sem repintar: o cartão diz «a correr» e os botões fecham-se */
+      paint();
+      try {
+        const r = await call('/ops/ciclo', 'POST', { limite: 2 });
+        S.ciclo = r?.frase || 'o ciclo respondeu sem frase';
+        await loadTarefas();
+        await loadAgentes().catch(() => null);
+      } catch (e) {
+        S.ciclo = `o ciclo não correu: ${e.message}`;
+      } finally {
+        S.cicloBusy = false;
+        paint();
+      }
       return;
     }
     if (name === 'arranque-copiar') {

@@ -53,5 +53,11 @@
       "includeFiles": "supabase/**"
     }
   },
-  "build": {}
+  "build": {},
+  "crons": [
+    {
+      "path": "/api/ciclo",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }

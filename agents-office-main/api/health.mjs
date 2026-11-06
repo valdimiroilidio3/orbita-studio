@@ -42,16 +42,25 @@ export default async function handler(req, res) {
     ...TOKENS.map((t) => t.variavel),
   ];
   const acesso = { ...estadoDosTokens(pedido), nomesErrados: nomesParecidos(pedido, conhecidos) };
+  /* 1.67.0 · o ciclo só corre sozinho se o agendador tiver com que se
+     autenticar. Dizer isto aqui evita a pergunta «porque é que a fila não
+     anda?» quando a resposta é uma variável que falta. */
+  const ciclo = {
+    agendador: !!pedido.CRON_SECRET,
+    porque: pedido.CRON_SECRET
+      ? 'o agendador da Vercel chama /api/ciclo uma vez por dia (o máximo deste plano)'
+      : 'sem CRON_SECRET o agendador não se autentica: a fila só corre quando carregares em «Correr a fila agora»',
+  };
 
   if (!env.pronto) {
-    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso });
+    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso, ciclo });
     return;
   }
 
   try {
     const h = await createSupabaseRepo(env).health();
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso, ciclo });
   } catch (e) {
-    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso });
+    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo });
   }
 }

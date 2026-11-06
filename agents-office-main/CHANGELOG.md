@@ -1,3 +1,44 @@
+## 1.67.0 — 5 nov 2026 · O CICLO (OS AGENTES TRABALHAM SOZINHOS)
+
+Esta versão existe por causa de uma frase que o produto dizia e o código não
+cumpria. Uma tarefa com `state: 'queued'` era **uma linha esquecida**: o resumo
+contava-a em «na fila», o escritório punha-a em «fila», e nada neste sistema
+alguma vez a ia buscar. Só corria trabalho enquanto o pedido HTTP que o criava
+ainda estava vivo — e a função morre aos 60 s.
+
+### O ciclo (`api/_ia/ciclo.mjs`)
+- Pega nas tarefas `queued`, pela ordem em que foram postas, e corre-as.
+- **Uma tarefa corre uma vez.** O cadeado é o próprio `state`: a passagem
+  `queued` → `running` é condicional na base (`state=eq.queued`). Duas
+  invocações ao mesmo tempo não fazem o mesmo trabalho duas vezes nem pagam duas
+  chamadas ao mesmo modelo — e a que chegou depois di-lo, em vez de fingir.
+- **A autonomia decide, não o acaso.** Sem registo para o tipo de trabalho, o
+  ciclo **não gasta nada**: a tarefa fica «à espera de aprovação» com a razão
+  escrita na Atividade, e aprovar na mesa fá-la correr. `proposto` corre e
+  mostra o resultado; `autonomo` corre e fecha, registando que foi a política
+  que autorizou.
+- **O tempo é finito.** A função tem 60 s: o ciclo para antes disso, deixa o
+  resto na fila e diz quantas ficaram. Nunca finge que acabou.
+- **Falhar é falhar.** Sem motor, a tarefa fica `failed` com o motivo real. Não
+  há resultados inventados para a fila parecer vazia.
+
+### Três gatilhos, e a página diz qual está vivo
+- `GET|POST /api/ciclo` — o endereço das máquinas. Recusa-se a correr **sem
+  chave nenhuma** (um endereço que gasta chamadas de IA e que qualquer pessoa
+  pode chamar não é um atalho: é uma factura à espera de acontecer). Aceita
+  `CRON_SECRET` (a Vercel envia-o sozinha) ou um dos nossos tokens.
+- `vercel.json` ganhou **um agendamento diário** (`0 7 * * *`). É diário porque
+  **o plano Hobby da Vercel recusa qualquer agendamento sub-diário no deploy** —
+  dizê-lo é melhor do que prometer cinco em cinco minutos e falhar a construir.
+- `POST /ops/ciclo` e o botão **«Correr a fila agora»** na página das Tarefas,
+  que mostra a frase que o servidor devolveu (não uma versão bonita dela).
+- `POST /ops/tarefas` aceita `fila: true`: põe na fila em vez de prender um
+  pedido 45 s à espera de um modelo.
+- O `/api/health` diz se o agendador tem com que se autenticar — a resposta a
+  «porque é que a fila não anda?» deixa de ser uma adivinha.
+
+---
+
 ## 1.66.1 — 4 nov 2026 · O NOME QUASE CERTO
 
 Dois segredos criados na Vercel como `ORBITA_APITOKEN` — sem o segundo `_`. O

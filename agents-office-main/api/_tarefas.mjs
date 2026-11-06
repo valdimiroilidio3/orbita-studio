@@ -325,11 +325,19 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
   const entityId = String(corpo?.entityId || '').trim() || null;
   const entidade = String(corpo?.entidade || '').trim() || null;
   const aprovacao = !!corpo?.aprovacao;
+  /* 1.67.0 · `fila: true` põe a tarefa na fila em vez de a correr já. É o que o
+     ciclo (`api/_ia/ciclo.mjs`) vai buscar — e o que faz sentido quando quem
+     pede não pode esperar 45 s por uma resposta de um modelo. */
+  const fila = corpo?.fila === true;
 
   const tarefa = await repo.tarefas.insert({
     kind: tipo, entity_id: entityId, entidade,
-    state: 'running', error: null, finished_at: null,
+    state: fila ? 'queued' : 'running', error: null, finished_at: null,
   });
+  if (fila) {
+    await repo.atividade.add('tarefa', `${TIPOS[tipo].label}: posta na fila (o ciclo leva-a quando puder)`).catch(() => null);
+    return { status: 201, corpo: { tarefa, naFila: true, execucao: null } };
+  }
   const r = await executarTarefa({ repo, tarefa, env, fetchImpl, motor });
   const final = await registarDesfecho(repo, tarefa, r, { aprovacao: aprovacao && r.ok });
   await repo.atividade.add('tarefa', r.ok
