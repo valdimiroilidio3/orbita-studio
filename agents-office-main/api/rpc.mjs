@@ -41,6 +41,14 @@ function lerCorpo(req) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
+  /* 1.69.0 · `/api/oauth` chega aqui por uma reescrita do `vercel.json`. É a
+     mesma função porque o plano Hobby limita as funções por deploy a 12 — e a
+     alternativa era não ter login por GitHub/Google. Ver `api/_oauth.mjs`. */
+  if (req.method === 'GET' && new URL(String(req.url || '/'), 'http://local').searchParams.has('fornecedor')) {
+    const { default: tratarOAuth } = await import('./_oauth.mjs');
+    return tratarOAuth(req, res);
+  }
+
   /* o pedido: por POST (envelope) ou por GET (só leitura, para diagnóstico) */
   let caminho, metodo, corpo = null;
   if (req.method === 'GET') {

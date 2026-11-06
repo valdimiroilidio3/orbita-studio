@@ -54,6 +54,14 @@ pessoa só**.
   e o código por email, com o email do dono mascarado e a razão de cada caminho
   que ainda falta ligar.
 
+### O limite do plano, encontrado a deployar
+O primeiro deploy desta versão **falhou** — `exceeded_serverless_functions_per_deployment`:
+o plano Hobby recusa mais de 12 funções por deploy, e `api/oauth.mjs` era a
+décima terceira. O login não foi cortado por isso: o código passou para
+`api/_oauth.mjs` (um ficheiro com `_` não conta como função) e `/api/oauth`
+chega lá por uma reescrita para `/api/rpc`, que já é a porta da API. O endereço
+público continua exactamente o mesmo.
+
 ### Testes
 - `entrada.test.mjs` (25) e `entrada-ui.test.mjs` (6): a lista de quem entra, o
   código a expirar/servir uma vez/morrer às 5 tentativas, a palavra-passe que não

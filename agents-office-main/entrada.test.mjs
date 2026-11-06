@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { createMemRepo } from './api/_repo.mjs';
 import { responder } from './api/_rotas.mjs';
 import { limitadorCodigo, limitador } from './api/_porta.mjs';
-import { processarOAuth, COOKIE_ESTADO } from './api/oauth.mjs';
+import { processarOAuth, COOKIE_ESTADO } from './api/_oauth.mjs';
 import {
   DONO_PADRAO, donosDe, eODono, mascararEmail, codigoNovo, hashCodigo, codigoConfere,
   MINUTOS_CODIGO, TENTATIVAS_CODIGO, estadoDosFornecedores, urlDeAutorizacao,
@@ -412,7 +412,7 @@ test('1.69.0 · o GitHub de outra pessoa não entra, mesmo com chaves boas', asy
 /* ---------- 8 · as costuras (o que liga isto à Vercel e à mesa) ---------- */
 
 test('1.69.0 · a Vercel serve /api/oauth e o ficheiro sabe redireccionar', () => {
-  const f = readFileSync(new URL('./api/oauth.mjs', import.meta.url), 'utf8');
+  const f = readFileSync(new URL('./api/_oauth.mjs', import.meta.url), 'utf8');
   assert.match(f, /res\.setHeader\('Location'/);
   assert.match(f, /301|302/);
   assert.match(f, /HttpOnly/);
@@ -422,6 +422,10 @@ test('1.69.0 · a Vercel serve /api/oauth e o ficheiro sabe redireccionar', () =
   assert.match(mesa, /data-act="verificar-codigo"/);
   assert.doesNotMatch(mesa, /data-act="oauth"[^>]*disabled/, 'o botão nunca aparece morto: o clique é que explica');
   assert.match(mesa, /location\.href = `\/api\/oauth\?fornecedor=/, 'e manda o browser ao sítio certo');
+  /* 1.69.0 · o plano Hobby recusa mais de 12 funções por deploy: o `/api/oauth`
+     é uma reescrita para o `/api/rpc`, não um ficheiro novo em `api/`. */
+  const conf = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(conf.rewrites.find((r) => r.source === '/api/oauth'), { source: '/api/oauth', destination: '/api/rpc' });
 });
 
 test('1.69.0 · a migração existe, é idempotente e não guarda segredos', () => {

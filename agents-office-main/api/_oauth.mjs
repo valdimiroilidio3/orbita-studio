@@ -1,6 +1,13 @@
 /* ===========================================================================
    1.69.0 · /api/oauth — o regresso do GitHub e do Google (6 nov 2026)
 
+   Porque é `_oauth.mjs` e não `oauth.mjs`: o plano Hobby da Vercel recusa mais
+   de 12 funções por deploy («exceeded_serverless_functions_per_deployment», e
+   o build falhou de verdade na primeira tentativa desta versão). O endereço
+   público continua a ser `/api/oauth` — chega lá por uma reescrita em
+   `vercel.json` para `/api/rpc`, que é a porta que já existe. Ficheiros com `_`
+   à frente não contam como função.
+
    `_porta.mjs` responde por JSON porque a mesa fala por `/api/rpc`. OAuth não
    cabe nisso: o browser tem de SAIR para o fornecedor e VOLTAR a um endereço
    que a Vercel serve. É esta função.
@@ -152,7 +159,8 @@ export async function processarOAuth({
   };
 }
 
-export default async function handler(req, res) {
+/** O `handler` de `/api/oauth`, chamado pelo `/api/rpc` (ver `vercel.json`). */
+export default async function tratarOAuth(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') {
     res.statusCode = 405;
