@@ -59,5 +59,11 @@
       "path": "/api/ciclo",
       "schedule": "0 7 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/oauth",
+      "destination": "/api/rpc"
+    }
   ]
 }
