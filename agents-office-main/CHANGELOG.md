@@ -1,3 +1,53 @@
+## 1.68.0 — 6 nov 2026 · A FILA DIZ A VERDADE
+
+A 1.67.0 fez o ciclo correr a fila. Ficou uma pergunta sem resposta no ecrã:
+**quando é que a minha tarefa corre?** O cartão das Tarefas dizia «2 à espera» e
+«corre uma vez por dia» — verdade genérica, inútil para quem tem três tarefas
+paradas com destinos diferentes. Esta versão responde tarefa a tarefa, com o
+que o servidor sabe, e diz o que fazer quando o relógio não chegou.
+
+### `src/fila.js` (novo, puro e testável)
+- Para cada tarefa na fila: o **nível de autonomia do seu tipo**, se corre
+  sozinha ou **espera por ti**, e **porquê** — a frase vem da política, não do
+  optimismo.
+- Converte o «espera» num número legível («5 min», «1 h 12 min», «há 1 dia») e
+  calcula o **próximo ciclo** a partir da hora UTC, com a diferença até lá.
+- **Passou do prazo sem ser apanhada?** Uma tarefa à espera há mais de 25 h
+  ganha o aviso certo: «o ciclo diário não a apanhou — corre a fila à mão ou
+  verifica o `CRON_SECRET`». É o sintoma de um agendador sem chave, e passa a
+  dizer-se em vez de se esperar.
+- Sem agendador configurado, não promete uma hora que não vai acontecer:
+  «a fila só anda quando carregares no botão».
+
+### `GET /ops/ciclo` (novo)
+- A leitura que faltava: `{naFila, agendador, proximo, tarefas[{id, kind,
+  created_at, nivel, correSozinha, aprovaSozinha, rotulo, porque}]}`.
+- Lê a autonomia por `tarefa:<kind>` no mesmo sítio que o ciclo usa, por isso o
+  que a página promete e o que o ciclo faz não podem divergir.
+- Continua a exigir chave: uma rota que expõe a fila e a política não é pública.
+
+### Na mesa e no escritório
+- O cartão **«A fila»** lista cada tarefa com o rótulo do tipo, a idade, o que
+  vai acontecer e porquê — e a hora do próximo ciclo (`proximo ciclo: sáb,
+  07:00 (há 11 h)`), em vez da frase genérica.
+- A sala do escritório, no estado **«na fila»**, deixou de dizer «ninguém lhe
+  pegou ainda» e passa a dizer **há quanto tempo** a mais antiga espera e se as
+  outras seguem sozinhas — ou que seguem no próximo ciclo, quando não se sabe.
+- Sem leitura do servidor, a página assume o mesmo que o servidor assume
+  («pede-me sempre»), em vez de inventar autonomia.
+
+### Testes
+- `fila.test.mjs` (10): promessas por nível, hora do ciclo, ordenação pela
+  espera, «há mais de um dia», fila vazia, sem agendador, `GET /ops/ciclo` com
+  e sem chave.
+- `ciclo-ui.test.mjs` (7, +3): a lista no ecrã, a tarefa perdida assinalada, e
+  o caso de não haver agendador — a página não inventa uma hora.
+
+**Suíte:** 1291/1291. **`check.mjs`:** 96/97 (o único falhanço é o smoke de
+browser, que precisa de Chrome instalado nesta máquina).
+
+---
+
 ## 1.67.0 — 5 nov 2026 · O CICLO (OS AGENTES TRABALHAM SOZINHOS)
 
 Esta versão existe por causa de uma frase que o produto dizia e o código não
