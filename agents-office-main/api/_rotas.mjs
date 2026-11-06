@@ -121,6 +121,13 @@ export function validarContacto({ email, phone, website } = {}) {
   return { ok: erros.length === 0, erros, limpos };
 }
 
+/* 1.68.0 · a próxima passagem do agendador (vercel.json: `0 7 * * *`, UTC). */
+export function quandoEOCiclo(agora = new Date(), horaUTC = 7) {
+  const alvo = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate(), horaUTC, 0, 0, 0));
+  if (alvo.getTime() <= agora.getTime()) alvo.setUTCDate(alvo.getUTCDate() + 1);
+  return alvo.toISOString();
+}
+
 function falha(status, mensagem, extra = {}) {
   return Object.assign(new Error(mensagem), { status, corpo: { error: mensagem, ...extra } });
 }
@@ -1536,8 +1543,32 @@ export async function responder(repo, {
   if (caminhoLimpo === '/ops/ciclo' && (m === 'POST' || m === 'GET')) {
     const { correrCiclo, resumoDoCiclo } = await import('./_ia/ciclo.mjs');
     if (m === 'GET') {
+      /* 1.68.0 · a leitura diz o que vai acontecer a cada uma: o nível de
+         autonomia do tipo decide se o ciclo a leva sozinho ou se espera por ti.
+         É a mesma `decidir()` que o ciclo usa — não uma segunda regra no ecrã. */
+      const { decidir } = await import('./_ia/ciclo.mjs');
       const fila = await repo.tarefas.emFila(50).catch(() => []);
-      return { status: 200, corpo: { ok: true, naFila: fila.length, tarefas: fila.map((t) => ({ id: t.id, kind: t.kind, created_at: t.created_at })) } };
+      const agendador = !!env.CRON_SECRET;
+      const tarefas = [];
+      for (const t of fila) {
+        const reg = await repo.autonomia.porEscopo(`tarefa:${t.kind}`).catch(() => null);
+        const nivel = reg && ['pedir_sempre', 'proposto', 'autonomo'].includes(reg.nivel) ? reg.nivel : 'pedir_sempre';
+        const d = decidir({ nivel });
+        tarefas.push({
+          id: t.id, kind: t.kind, created_at: t.created_at, nivel,
+          correSozinha: d.correr, aprovaSozinha: d.aprovar,
+          rotulo: !d.correr ? 'espera pela tua autorização'
+            : nivel === 'autonomo' ? (agendador ? 'corre no próximo ciclo' : 'corre quando correres o ciclo')
+              : (agendador ? 'corre no próximo ciclo, e espera por ti' : 'corre quando correres, e espera por ti'),
+          porque: d.porque,
+        });
+      }
+      /* o agendamento vive em `vercel.json` (`0 7 * * *`, UTC). Se um dia mudar
+         lá, muda aqui: é o mesmo número, dito uma vez em cada sítio que o usa. */
+      const proximo = agendador ? quandoEOCiclo(new Date()) : null;
+      return { status: 200, corpo: {
+        ok: true, naFila: tarefas.length, agendador, proximo, tarefas,
+      } };
     }
     const r = await correrCiclo({
       repo, env, fetchImpl,

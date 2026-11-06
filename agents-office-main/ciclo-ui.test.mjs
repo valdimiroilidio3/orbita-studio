@@ -25,7 +25,16 @@ const TAREFAS = [
   { id: 't3', kind: 'qa', state: 'succeeded', created_at: iso(60), resultado: 'tudo bem', modelo: 'x/y' },
 ];
 
-async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota = '#/tarefas' } = {}) {
+const FILA_GET = {
+  ok: true, naFila: 2, agendador: true,
+  proximo: new Date(Date.now() + 3 * 3600000).toISOString(),
+  tarefas: [
+    { id: 't1', kind: 'investigar', nivel: 'autonomo', correSozinha: true, rotulo: 'corre no próximo ciclo' },
+    { id: 't2', kind: 'mensagem', nivel: 'pedir_sempre', correSozinha: false, rotulo: 'espera pela tua autorização' },
+  ],
+};
+
+async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota = '#/tarefas', filaGet = FILA_GET } = {}) {
   const pedidos = [];
   const dom = new JSDOM(HTML, {
     url: `https://mesa.test/${rota}`, runScripts: 'dangerously', pretendToBeVisual: true,
@@ -34,10 +43,10 @@ async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota
       w.matchMedia = (q) => ({ matches: /max-width: 820px/.test(q), media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
       w.fetch = async (url, opt = {}) => {
         const u = String(url);
-        let caminho = u; let corpo = null;
+        let caminho = u; let corpo = null; let metodo = 'GET';
         if (u.includes('/api/rpc')) {
           const b = JSON.parse(opt.body || '{}');
-          caminho = b.caminho; corpo = b.corpo;
+          caminho = b.caminho; corpo = b.corpo; metodo = b.metodo || 'GET';
           pedidos.push({ caminho, metodo: b.metodo, corpo });
         } else caminho = new URL(u, 'https://mesa.test').pathname;
         const rotaLimpa = caminho.replace(/^\/api/, '').split('?')[0];
@@ -46,6 +55,9 @@ async function abrir({ tarefas = TAREFAS, ciclo = null, cicloFalha = false, rota
           /* o corpo é o que o servidor manda mesmo quando a rota atira: sem
              envelope, com `error` no topo (`api/rpc.mjs`, ramo do catch) */
           if (cicloFalha) return { ok: false, status: 500, json: async () => ({ error: 'a base não respondeu' }) };
+          /* 1.68.0 · a leitura (GET) traz o nível de cada tipo e o próximo
+             ciclo; o POST traz a frase do que correu */
+          if (metodo === 'GET') return ok(filaGet);
           return ok(ciclo || { ok: true, frase: 'corri 1 concluída · 1 à tua espera.', concluidas: 1, propostas: 1, restantes: 0 });
         }
         const fixo = {
@@ -75,8 +87,11 @@ test('1.67.0 · a fila diz quantas estão à espera e que o relógio é diário 
   const t = texto();
   assert.match(t, /A fila/);
   assert.match(t, /2 à espera/);
-  assert.match(t, /uma vez por dia/, 'o agendador da Vercel só permite diário neste plano — diz-se');
-  assert.match(t, /pede-me sempre.*não gasta chamadas/, 'e que sem autorização não se gasta nada');
+  /* 1.68.0: em vez de «uma vez por dia», o cartão passou a dizer a HORA do
+     próximo ciclo (e a idade de cada tarefa). A frase continua a vir de
+     `src/fila.js`, que é onde está a regra — o teste segue a frase nova. */
+  assert.match(t, /próximo ciclo: /, 'o agendador da Vercel só permite diário neste plano — diz-se, com a hora');
+  assert.match(t, /não gasta uma chamada de IA sem a tua autorização/, 'e que sem autorização não se gasta nada');
   assert.ok(doc.querySelector('[data-act="ciclo-correr"]'), 'há um botão para correr agora');
 });
 
@@ -84,7 +99,8 @@ test('1.67.0 · «correr a fila agora» chama /ops/ciclo e mostra a frase do ser
   const { doc, w, pedidos, texto } = await abrir();
   doc.querySelector('[data-act="ciclo-correr"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await esperar(700);
-  const pedido = pedidos.find((p) => p.caminho === '/ops/ciclo');
+  /* a página também LÊ `/ops/ciclo` (GET) ao abrir: o clique é o POST */
+  const pedido = pedidos.filter((p) => p.caminho === '/ops/ciclo').find((p) => p.metodo === 'POST');
   assert.ok(pedido, 'chamou o servidor');
   assert.equal(pedido.metodo, 'POST');
   assert.equal(pedido.corpo.limite, 2, 'o limite que o cartão promete');
@@ -106,4 +122,32 @@ test('1.67.0 · fila vazia: sem botão para carregar (não se inventa trabalho)'
   assert.match(texto(), /A fila/);
   assert.match(texto(), /vazia/);
   assert.equal(doc.querySelector('[data-act="ciclo-correr"]'), null);
+});
+
+test('1.68.0 · cada tarefa na fila diz quando corre e há quanto espera', async () => {
+  const { doc, texto } = await abrir();
+  const t = texto();
+  assert.match(t, /2 tarefas na fila/, 'a frase do cartão conta as duas');
+  assert.match(t, /corre no próximo ciclo/, 'a que está em «autónomo» diz quando corre');
+  assert.match(t, /espera pela tua autorização/, 'a que pede decisão diz que espera por ti');
+  assert.match(t, /próximo ciclo: /, 'e o cartão mostra a hora do próximo ciclo');
+  assert.ok(doc.querySelector('#cicloCard ul.arr-lista'), 'as tarefas aparecem em lista, uma por linha');
+  assert.match(t, /Investigar o lead/, 'o nome é o rótulo do tipo, não o `kind` cru');
+});
+
+test('1.68.0 · uma tarefa há mais de um dia à espera é assinalada como não apanhada', async () => {
+  const velha = { id: 't9', kind: 'qa', state: 'queued', created_at: iso(30 * 60) };
+  const { texto } = await abrir({ tarefas: [velha] });
+  const t = texto();
+  assert.match(t, /há mais de um dia/, 'o cartão avisa');
+  assert.match(t, /corre a fila à mão ou verifica o CRON_SECRET/, 'e diz o que fazer');
+});
+
+test('1.68.0 · sem agendador configurado, o cartão não promete um ciclo', async () => {
+  const { texto } = await abrir({
+    filaGet: { ok: true, naFila: 1, agendador: false, proximo: null, tarefas: [{ id: 't1', kind: 'investigar', nivel: 'autonomo', correSozinha: true, rotulo: 'corre quando correres o ciclo' }] },
+  });
+  const t = texto();
+  assert.match(t, /sem agendador configurado|só anda quando carregares/, 'diz a verdade sobre o relógio');
+  assert.doesNotMatch(t, /próximo ciclo: /, 'não inventa uma hora que não vai acontecer');
 });

@@ -145,6 +145,12 @@ export function estadoDaSala({ sala, tarefas = [], agentes = [], retrato = {}, l
   const l = linhas[0] || { estado: 'sem-trabalho', ultimaIdade: null };
   const chave = !ligado && c.total === 0 && !c.aCorrer && !c.porAprovar && !c.falhadas ? 'sem-ligacao' : l.estado;
   const e = ESTADOS[chave] || ESTADOS['sem-trabalho'];
+  /* 1.68.0 · a fila com idade: a tarefa mais antiga à espera nesta sala. Sem
+     data em nenhuma, `esperaMaisAntiga` fica null e a frase não inventa uma. */
+  const daFila = (Array.isArray(tarefas) ? tarefas : [])
+    .filter((t) => t && (t.sala || t.dept) === sala && (t.estado || MAPA_ESTADO[t.state]) === 'na-fila' && t.quando)
+    .sort((a, b) => String(a.quando).localeCompare(String(b.quando)));
+  const esperaMaisAntiga = daFila.length ? idade(daFila[0].quando, agora) : null;
   const quando = (Array.isArray(tarefas) ? tarefas : [])
     .filter((t) => t && (t.sala || t.dept) === sala && t.quando)
     .sort((a, b) => String(b.quando).localeCompare(String(a.quando)))[0];
@@ -158,7 +164,7 @@ export function estadoDaSala({ sala, tarefas = [], agentes = [], retrato = {}, l
     contagens: c,
     ultima,
     ultimaIdade: idade(ultima, agora),
-    detalhe: fraseDoEstado(chave, c),
+    detalhe: fraseDoEstado(chave, { ...c, esperaMaisAntiga }),
   };
 }
 
@@ -168,7 +174,19 @@ export function fraseDoEstado(chave, c = {}) {
   if (chave === 'a-trabalhar') return `${plural(c.aCorrer || 1, 'tarefa a correr', 'tarefas a correr')}${c.naFila ? `, ${plural(c.naFila, 'na fila', 'na fila')}` : ''}.`;
   if (chave === 'espera-ti') return `${plural(c.porAprovar || 1, 'decisão à tua espera', 'decisões à tua espera')}.`;
   if (chave === 'bloqueado') return `${plural(c.falhadas || 1, 'tarefa falhada', 'tarefas falhadas')} — alguém tem de olhar para isto.`;
-  if (chave === 'na-fila') return `${plural(c.naFila || 1, 'tarefa na fila', 'tarefas na fila')}; ninguém lhe pegou ainda.`;
+  /* 1.68.0 · «ninguém lhe pegou ainda» deixou de ser verdade desde que há ciclo.
+     A frase passa a dizer há quanto tempo espera e quem a vai levar. */
+  if (chave === 'na-fila') {
+    const n = c.naFila || 1;
+    const base = plural(n, 'tarefa na fila', 'tarefas na fila');
+    const espera = c.esperaMaisAntiga ? ` · a mais antiga há ${c.esperaMaisAntiga}` : '';
+    const quem = c.sozinhas == null
+      ? ` · ${plural(n, 'segue no próximo ciclo', 'seguem no próximo ciclo')}`
+      : c.sozinhas
+        ? ` · ${plural(c.sozinhas, 'corre sozinha no próximo ciclo', 'correm sozinhas no próximo ciclo')}`
+        : ' · todas esperam pela tua autorização';
+    return `${base}${espera}${quem}.`;
+  }
   if (chave === 'em-descanso') return `${plural(c.concluidas || 1, 'tarefa fechada', 'tarefas fechadas')}; a sala está livre.`;
   return 'Sem trabalho registado nesta sala.';
 }

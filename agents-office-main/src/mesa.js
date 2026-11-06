@@ -81,6 +81,8 @@ import {
 /* 1.65.0 · os segredos que o dono tem de inventar geram-se aqui, com o mínimo
    que `api/_prontidao.mjs` exige — e não ficam guardados em lado nenhum. */
 import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
+/* 1.68.0 · a fila com a razão de cada tarefa: quando corre, e há quanto espera */
+import { analisarFila, faltaPara } from './fila.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -183,7 +185,7 @@ const S = {
   projetoTab: 'briefing',
   tarefas: [], agentes: null, tiposTarefa: [], deptos: [], tarefaFiltro: { dept: null, state: null },
   /* 1.67.0 · o ciclo: a última frase do servidor e o cadeado do botão */
-  ciclo: '', cicloBusy: false,
+  ciclo: '', cicloBusy: false, filaServidor: null,
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
   /* 1.18.0 · Control Center da IA */
@@ -581,6 +583,18 @@ async function loadTarefas() {
   S.deptos = r.departamentos || S.deptos;
 }
 
+/* 1.68.0 · a leitura que diz o que vai acontecer a cada tarefa na fila. Vem do
+   servidor (o nível de autonomia de cada tipo é dele) e não é obrigatória: se
+   falhar, o cartão usa só o que a lista de tarefas já sabe. */
+async function loadFila() {
+  try {
+    const r = await call('/ops/ciclo', 'GET');
+    S.filaServidor = r && typeof r === 'object' ? r : null;
+  } catch {
+    S.filaServidor = null;
+  }
+}
+
 async function loadAgentes() {
   const [a, at] = await Promise.all([
     call('/ops/agentes').catch(() => null),
@@ -654,7 +668,7 @@ async function boot(full = true) {
     if (S.route.name === 'hoje') {
       await Promise.all([loadTarefas().catch(() => null), loadAgentes().catch(() => null)]);
     }
-    if (S.route.name === 'tarefas') await loadTarefas();
+    if (S.route.name === 'tarefas') { await loadTarefas(); await loadFila().catch(() => null); }
     if (S.route.name === 'agentes') await loadAgentes();
     if (S.route.name === 'contas') await loadContas();
     if (S.route.name === 'ia') await carregarIA(apiMesa);
@@ -2215,12 +2229,30 @@ function viewTarefas() {
 function cartaoCiclo(conta) {
   const naFila = conta('queued');
   const r = S.ciclo;
+  /* o servidor sabe os níveis; a lista local sabe as datas. A análise junta as
+     duas sem inventar: sem leitura do servidor, tudo conta como «pede-me sempre»,
+     que é o que o servidor também assume. */
+  const autonomia = {};
+  for (const t of (S.filaServidor?.tarefas || [])) if (t.kind) autonomia[`tarefa:${t.kind}`] = t.nivel;
+  const fila = analisarFila({
+    tarefas: S.tarefas || [],
+    autonomia,
+    agendador: S.filaServidor ? !!S.filaServidor.agendador : true,
+  });
+  const agora = Date.now();
+  const proximo = S.filaServidor?.proximo ? new Date(S.filaServidor.proximo) : null;
+  const quandoProximo = proximo && !Number.isNaN(proximo.getTime())
+    ? `${proximo.toLocaleString('pt-PT', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })} (${faltaPara(proximo.getTime() - agora)})`
+    : null;
   return `<div class="card" id="cicloCard" style="margin-bottom:var(--s4)" aria-live="polite">
     <div class="sec-h"><h3>A fila</h3>
       <span class="count">${naFila ? `${naFila} à espera` : 'vazia'}</span></div>
-    <p class="hint" style="margin-top:0">A fila corre sozinha uma vez por dia pelo agendador da Vercel
-      (o plano actual só permite agendamentos diários) e sempre que carregas aqui.
-      Um tipo de trabalho em «pede-me sempre» não gasta chamadas: fica à tua espera.</p>
+    <p class="hint" style="margin-top:0">${esc(fila.frase)}</p>
+    ${quandoProximo ? `<div class="hint">próximo ciclo: ${esc(quandoProximo)}${fila.agendador ? '' : ' · sem agendador configurado'}</div>` : ''}
+    ${fila.itens.length ? `<ul class="arr-lista">${fila.itens.slice(0, 6).map((i) => `<li class="arr-item${i.perdida ? ' arr-critico' : ''}">
+      <div class="arr-onda"><b>${esc(ROTULO_TAREFA[i.kind] || S.tiposTarefa.find((x) => x.id === i.kind)?.label || i.kind || 'tarefa')}</b>
+        <span class="arr-quem">${esc(i.rotulo)}${i.espera ? ` · há ${esc(i.espera)}` : ''}</span>
+        <div class="hint">${esc(i.porque)}</div></div></li>`).join('')}</ul>` : ''}
     ${naFila && may('write') ? `<div class="acts"><button class="btn primary small" data-act="ciclo-correr"${S.cicloBusy ? ' aria-disabled="true"' : ''}>Correr a fila agora</button></div>` : ''}
     ${r ? `<div class="hint" id="cicloUltimo">${esc(r)}</div>` : ''}
   </div>`;
@@ -3214,6 +3246,7 @@ async function act(name, el, ev) {
         const r = await call('/ops/ciclo', 'POST', { limite: 2 });
         S.ciclo = r?.frase || 'o ciclo respondeu sem frase';
         await loadTarefas();
+        await loadFila().catch(() => null);
         await loadAgentes().catch(() => null);
       } catch (e) {
         S.ciclo = `o ciclo não correu: ${e.message}`;
