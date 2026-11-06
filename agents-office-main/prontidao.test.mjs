@@ -38,6 +38,13 @@ const ENV_COMPLETO = {
   WHATSAPP_VERIFY_TOKEN: 'verifica-NAO-PODE-APARECER',
   OPENROUTER_API_KEY: 'sk-NAO-PODE-APARECER',
   ORBITA_OCR_URL: 'https://ocr.exemplo.pt/ler',
+  /* 1.69.0 · a entrada do dono: sem estas, o GitHub e o Google ficam por ligar
+     (e a prontidão di-lo — é esse o ponto da lista) */
+  GITHUB_CLIENT_ID: 'github-id-FAKE',
+  GITHUB_CLIENT_SECRET: 'github-secret-NAO-PODE-APARECER',
+  GOOGLE_CLIENT_ID: 'google-id-FAKE.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'google-secret-NAO-PODE-APARECER',
+  ORBITA_DONO_EMAIL: 'dono@orbita.pt',
 };
 
 /* ---------- 1 · a lista de prontidão ---------- */

@@ -21,7 +21,16 @@ import {
   cookieDeSessao, COOKIE,
 } from './api/_conta.mjs';
 
-const ENV = { SETUP_TOKEN: 'token-de-instalacao-para-teste' };
+/* 1.69.0 · a porta passou a ser de UM dono: o registo e a primeira conta só
+   aceitam o email de `ORBITA_DONO_EMAIL`. Estes testes provam a mecânica das
+   contas (papéis, sessões, confirmação), por isso dizem qual é o dono — e
+   abrem o registo para poderem testar contas que não são o dono. O
+   comportamento por omissão (só a conta do chelton) prova-se em `entrada.test.mjs`. */
+const ENV = {
+  SETUP_TOKEN: 'token-de-instalacao-para-teste',
+  ORBITA_DONO_EMAIL: 'dono@orbita.pt',
+  ORBITA_REGISTO: 'aberto',
+};
 const SENHA = 'uma-frase-bem-comprida-2026';
 
 /* a porta activa-se à mão nos testes: em memória ela fica dormente por desenho */
@@ -495,7 +504,12 @@ test('o link do email leva ao ecrã certo (a rota #/confirmar?t=… é lida)', (
   assert.match(mesa, /S\.aConfirmar = caminho === 'confirmar' \? t : null/);
   assert.match(mesa, /data-act="confirmar-conta"/);
   assert.match(mesa, /aRegistar \? 'registar'/, 'o botão do registo tem de existir no ecrã de entrada');
-  assert.match(mesa, /data-act="abrir-registo"/);
+  /* 1.69.0 · o botão «Criar conta» saiu do ecrã: a instalação é de um dono só e
+     o registo público está fechado por omissão. O ecrã ganhou os três caminhos
+     do dono (GitHub, Google, código); o registo continua no servidor para
+     `ORBITA_REGISTO=aberto`, e o botão volta com ele. */
+  assert.match(mesa, /data-act="oauth"/);
+  assert.match(mesa, /data-act="pedir-codigo"/);
   assert.match(mesa, /data-act="confirmar-conta-admin"/);
 });
 

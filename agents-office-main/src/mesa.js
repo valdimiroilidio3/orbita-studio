@@ -121,6 +121,10 @@ const hhmm = iso => (iso ? new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-
 const reasonLines = t => String(t || '').split(' · ').map(s => s.replace(/\s*\(\+?-?\d+\)\s*/g, '').trim()).filter(Boolean);
 
 const IC = {
+  /* 1.69.0 · as marcas da entrada. Desenhadas aqui (nada de imagens externas —
+     a mesa não pede nada a terceiros para mostrar um botão). */
+  github: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.2-3.4-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.2-.4-1.3.1-2.6 0 0 .9-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.3.2 2.4.1 2.6.6.7 1 1.6 1 2.7 0 3.9-2.4 4.8-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>',
+  globo: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18"/></svg>',
   hoje: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>',
   leads: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2"/><path d="M16.5 5.6a3 3 0 0 1 0 5.6M18 14.6c2 .6 3.4 2.3 3.4 4.6"/></svg>',
   campanhas: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6.4 2.3L21 3Z"/><path d="m9.4 12.8 2.3 6.4L21 3"/></svg>',
@@ -188,6 +192,9 @@ const S = {
   ciclo: '', cicloBusy: false, filaServidor: null,
   pipeline: null, atividade: null, addingTask: false, searching: false, results: null,
   eu: null, needLogin: false, authEstado: null, primeiraConta: false, aRecuperar: false, aRegistar: false, aConfirmar: null, contas: null, sessoes: [],
+  /* 1.69.0 · a entrada: em que passo está (palavra-passe ou código), para
+     onde foi o código e o que falta a um caminho que não está ligado */
+  entradaPasso: null, entradaPara: '', entradaEmail: '', entradaAviso: '',
   /* 1.18.0 · Control Center da IA */
   ia: null, iaUso: null, iaRuns: [], iaRun: null, iaObjetivo: '',
   /* 1.54.2 · briefing do projeto (briefing, Prompt Master, prompts de imagem) */
@@ -1870,31 +1877,75 @@ function viewLogin() {
       </div>
     </div>`;
   }
+  /* 1.69.0 · as opções vêm do servidor (`/auth/eu` → `estado.entrada`): o ecrã
+     não inventa um botão para um fornecedor sem chave. */
+  const entrada = estado.entrada || {};
+  const fornecedores = entrada.fornecedores || [];
+  const dono = (entrada.donos && entrada.donos[0]) || 'o email do dono';
+  const correioPronto = !!(entrada.codigo && entrada.codigo.pronto);
+  const aCodigo = S.entradaPasso === 'codigo' && !aRecuperar;
+  const erroDoLink = (() => {
+    try { return new URLSearchParams(location.search).get('erroEntrada') || ''; } catch { return ''; }
+  })();
+  const aviso = S.entradaAviso || erroDoLink;
+  const para = S.entradaPara || S.entradaEmail || dono;
+
+  const botaoDeFornecedor = (f) => `<button class="btn entrada-fornecedor" data-act="oauth" data-fornecedor="${esc(f.id)}"${f.pronto ? '' : ' data-falta="1"'}>
+      <span class="entrada-ic" aria-hidden="true">${f.id === 'github' ? IC.github || '' : IC.globo || ''}</span>
+      <span>Continuar com ${esc(f.nome)}</span>
+    </button>${f.pronto ? '' : `<div class="hint entrada-falta">falta ${esc((f.falta || []).join(' e '))} na Vercel — carrega para ver onde se cria</div>`}`;
+
+  if (aCodigo) {
+    return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
+    <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
+    <div class="card">
+      <h1 style="font-size:28px;margin-bottom:var(--s2)">Falta o código</h1>
+      <p class="hint" style="margin-top:0">Mandei um código de 6 dígitos para <b>${esc(para)}</b>. Vale ${esc(String((entrada.codigo && entrada.codigo.minutos) || 10))} minutos e serve uma vez.</p>
+      <div class="form" style="grid-template-columns:1fr">
+        <input class="in entrada-codigo" id="lgCodigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="código de 6 dígitos">
+        <button class="btn primary" data-act="verificar-codigo">Confirmar o código e entrar</button>
+        <div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap">
+          <button class="btn quiet small" data-act="pedir-codigo">Não chegou — mandar outro</button>
+          <button class="btn quiet small" data-act="voltar-do-codigo">Voltar</button>
+        </div>
+      </div>
+      ${aviso ? `<div class="hint entrada-aviso">${esc(aviso)}</div>` : ''}
+      ${correioPronto ? '' : '<div class="hint">Sem correio configurado este passo não existia — se chegaste aqui é porque a chave está no sítio.</div>'}
+    </div>
+  </div>`;
+  }
+
   return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
     <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
     <div class="card">
-      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Criar a primeira conta' : aRegistar ? 'Criar conta' : 'Entrar'}</h1>
+      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Entrar como dono' : aRegistar ? 'Criar conta' : 'Entrar'}</h1>
       <p class="hint" style="margin-top:0">${primeira
-        ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e só pode ser criada uma vez.'
+        ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e é a única que entra por aqui.'
         : aRegistar
           ? 'A tua conta entra como leitora: vês tudo, não alteras nada até um dono te subir o papel.'
-          : 'Entra com o email e a palavra-passe que um dono te deu.'}</p>
+          : 'Entra com GitHub, com Google, ou com o teu email.'}</p>
+      ${fornecedores.length ? `<div class="entrada-fornecedores">${fornecedores.map(botaoDeFornecedor).join('')}</div>
+      <div class="entrada-ou"><span>ou</span></div>` : ''}
       <div class="form" style="grid-template-columns:1fr">
         ${primeira || aRegistar ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
-        <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="">
+        <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="${esc(S.entradaEmail || '')}">
         ${aRecuperar ? `<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação" value="${esc(S.tokenDoLink || '')}"><input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password"><input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova">` : ''}
         ${!aRecuperar ? `<input class="in" id="lgPass" type="password" placeholder="${primeira || aRegistar ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira || aRegistar ? 'new-password' : 'current-password'}">` : ''}
         ${(primeira || aRegistar) && !aRecuperar ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
         ${exigeToken ? '<input class="in" id="lgToken" type="password" placeholder="SETUP_TOKEN da instalação" aria-label="token de instalação">' : ''}
-        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : aRegistar ? 'registar' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar conta e entrar' : aRegistar ? 'Criar conta e confirmar por email' : 'Entrar'}</button>
-        ${!primeira && !aRecuperar && !aRegistar ? '<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button><button class="btn quiet small" data-act="abrir-registo">Criar conta</button></div>' : ''}
+        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : aRegistar ? 'registar' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar a conta do dono e entrar' : aRegistar ? 'Criar conta e confirmar por email' : 'Entrar'}</button>
+        ${!primeira && !aRecuperar && !aRegistar ? '<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="pedir-codigo">Entrar com um código por email</button><button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button></div>' : ''}
+        ${primeira ? '<button class="btn quiet small" data-act="pedir-codigo">Prefiro receber um código por email</button>' : ''}
         ${aRegistar ? '<button class="btn quiet small" data-act="voltar-entrar">Já tenho conta</button>' : ''}
       </div>
+      ${aviso ? `<div class="hint entrada-aviso">${esc(aviso)}</div>` : ''}
       <div class="hint" id="leadNote">${aRecuperar
         ? 'O link vale 30 minutos e uma vez só. Ao guardar, todas as sessões antigas desta conta fecham.'
-        : primeira || aRegistar
-          ? 'A palavra-passe é guardada com scrypt e sal próprio — nunca em claro, nunca em log.' + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables) para criar a primeira conta.' : '') + (aRegistar ? ' A conta fica <b>por confirmar</b> até abrires o link que vai para o teu email.' : '')
-          : 'Sem conta, cria uma aqui, ou pede a um dono que te crie em Contas. A sessão dura ' + (S.horasSessao || 12) + ' h e renova-se enquanto a usares.'}</div>
+        : `Esta instalação é de <b>um dono só</b>: só <b>${esc(dono)}</b> entra. Outro email é recusado antes de qualquer palavra-passe ser testada.`
+          + (correioPronto
+            ? ' Com a palavra-passe certa, segue um código de 6 dígitos para o email — a palavra-passe sozinha não abre a sessão.'
+            : ' O código por email ainda não pode sair: falta <b>RESEND_API_KEY</b> (resend.com → API Keys) e <b>ORBITA_EMAIL_FROM</b> na Vercel. Até lá, a palavra-passe entra sozinha — e o ecrã diz que entrou assim.')
+          + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables).' : '')}</div>
       ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
       ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
     </div>
@@ -3561,6 +3612,64 @@ async function act(name, el, ev) {
     }
 
     if (name === 'novo-lead') { S.adding = !S.adding; paint(); return; }
+    /* 1.69.0 · a entrada por GitHub/Google e pelo código do email. O botão
+       nunca está morto: sem chave, diz o nome da variável e o sítio exacto onde
+       se cria — é a diferença entre «indisponível» e «falta isto». */
+    if (name === 'oauth') {
+      const id = el.dataset.fornecedor;
+      const f = (S.authEstado?.entrada?.fornecedores || []).find((x) => x.id === id) || { id, nome: id, pronto: false, falta: [] };
+      if (!f.pronto) {
+        S.entradaAviso = `${f.nome}: falta ${(f.falta || []).join(' e ')} na Vercel. Cria a aplicação em ${f.como?.onde || 'GitHub → Settings → Developer settings'}. O endereço de retorno é ${f.retorno || '/api/oauth?fornecedor=' + id}.`;
+        paint();
+        return;
+      }
+      location.href = `/api/oauth?fornecedor=${encodeURIComponent(id)}&iniciar=1`;
+      return;
+    }
+
+    if (name === 'pedir-codigo') {
+      const email = String($('#lgEmail')?.value || S.entradaEmail || '').trim();
+      if (!email) { toast('Escreve o teu email primeiro.', true); return; }
+      const visto = S.entradaAviso;
+      try {
+        const r = await call('/auth/codigo', 'POST', { email });
+        S.entradaPasso = 'codigo';
+        S.entradaEmail = email;
+        S.entradaPara = r?.para || email;
+        S.entradaAviso = r?.mensagem || `código enviado para ${r?.para || email}`;
+        toast(S.entradaAviso);
+        paint();
+      } catch (e) {
+        /* sem correio, a porta diz o que falta e o caminho que existe. O ecrã
+           mostra isso mesmo — não um toast de 4 segundos que ninguém leu. */
+        S.entradaAviso = [e.message, e.body?.como, e.body?.alternativa].filter(Boolean).join(' · ') || visto;
+        paint();
+      }
+      return;
+    }
+
+    if (name === 'voltar-do-codigo') {
+      S.entradaPasso = null; S.entradaAviso = ''; paint(); return;
+    }
+
+    if (name === 'verificar-codigo') {
+      const email = String(S.entradaEmail || $('#lgEmail')?.value || '').trim();
+      const codigo = String($('#lgCodigo')?.value || '').replace(/\D/g, '');
+      if (codigo.length !== 6) { toast('O código tem 6 dígitos.', true); return; }
+      try {
+        await call('/auth/codigo/verificar', 'POST', { email, codigo });
+        S.needLogin = false; S.primeiraConta = false; S.aRegistar = false; S.aConfirmar = null;
+        S.entradaPasso = null; S.entradaAviso = ''; S.entradaPara = '';
+        toast('Entraste. Bem-vindo de volta.');
+        await boot(true);
+      } catch (e) {
+        S.entradaAviso = e.message;
+        toast(e.message, true);
+        paint();
+      }
+      return;
+    }
+
     if (name === 'entrar' || name === 'criar-primeira-conta') {
       const email = String($('#lgEmail')?.value || '').trim();
       const pass = String($('#lgPass')?.value || '');
@@ -3574,7 +3683,19 @@ async function act(name, el, ev) {
         toast('Conta criada. Bem-vindo ao Órbita.');
       } else {
         try {
-          await call('/auth/entrar', 'POST', { email, password: pass });
+          const r = await call('/auth/entrar', 'POST', { email, password: pass });
+          /* 1.69.0 · a palavra-passe certa já não abre a sessão sozinha quando há
+             correio: o código que chegou ao email é que abre. */
+          if (r && r.precisaCodigo) {
+            S.entradaPasso = 'codigo';
+            S.entradaEmail = email;
+            S.entradaPara = r.para || email;
+            S.entradaAviso = r.mensagem || '';
+            toast(r.mensagem || 'Falta o código que foi para o teu email.');
+            paint();
+            return;
+          }
+          if (r && r.semCodigo) toast(r.nota || 'Entraste com a palavra-passe.', true);
         } catch (e) {
           /* 1.54.1 · palavra-passe certa, conta por confirmar: não é «credenciais
              erradas» — é um passo em falta, e a mesa leva-te ao sítio certo. */

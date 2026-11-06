@@ -21,9 +21,18 @@ import {
 /* 1.66.0 · o caminho das máquinas: um token no cabeçalho vale como sessão para a
    API — sem nunca abrir contas nem palavras-passe. Ver `api/_acesso.mjs`. */
 import { quemPeloToken, estadoDosTokens, EXPLICACAO, ADMINISTRACAO } from './_acesso.mjs';
+/* 1.69.0 · a entrada: GitHub, Google e o código de uso único. As regras são
+   puras e vivem em `_entrada.mjs`; aqui só se guarda e se abre a sessão. */
+import {
+  donosDe, eODono, mascararEmail, codigoNovo, hashCodigo, codigoConfere,
+  MINUTOS_CODIGO, TENTATIVAS_CODIGO, opcoesDeEntrada,
+} from './_entrada.mjs';
 
 const agoraIso = () => new Date().toISOString();
 export const limitador = criarLimitador({ janelaMs: 15 * 60 * 1000, max: 5 });
+/* pedir códigos é mais barato do que adivinhar palavras-passe, mas também não é
+   de graça: cada pedido manda um email e gasta a quota do Resend */
+export const limitadorCodigo = criarLimitador({ janelaMs: 15 * 60 * 1000, max: 6 });
 
 /* o número de contas é perguntado a cada pedido; 30 s de memória chegam e
    evitam uma ida à base por cada leitura da mesa */
@@ -110,7 +119,7 @@ export const linkDeRecuperacao = (token, env = {}) => `${basePublica(env)}/app/#
 
 /* ---------- criar sessão ---------- */
 
-async function abrirSessao(repo, conta, { headers = {}, secure = true } = {}) {
+export async function abrirSessao(repo, conta, { headers = {}, secure = true } = {}) {
   const token = novoToken();
   const horas = HORAS_SESSAO;
   const expira = new Date(Date.now() + horas * 3600 * 1000).toISOString();
@@ -142,6 +151,35 @@ function respostaDeEntrada(conta, sessao, extra = {}) {
   };
 }
 
+/** A resposta de quem tentou entrar com um email que não é o do dono. */
+function recusaDeDono(env = {}) {
+  const dono = mascararEmail(donosDe(env)[0]);
+  return {
+    status: 403,
+    corpo: {
+      error: `esta instalação é de um dono só — só a conta ${dono} entra`,
+      soDono: true,
+      dono,
+      variavel: 'ORBITA_DONO_EMAIL',
+      hint: 'para mudar de dono, muda ORBITA_DONO_EMAIL na Vercel (uma lista separada por vírgulas) e faz redeploy',
+    },
+  };
+}
+
+/** O código precisa de correio; sem chave, isto é o que falta — com o nome. */
+function semCorreioParaCodigo(env = {}) {
+  return {
+    status: 503,
+    corpo: {
+      error: 'não há correio configurado: o código não pode sair daqui',
+      falta: ['RESEND_API_KEY'],
+      como: 'resend.com → API Keys → Create API Key; depois RESEND_API_KEY e ORBITA_EMAIL_FROM na Vercel',
+      alternativa: 'entra com o email e a palavra-passe — sem correio, é o caminho que existe',
+      dono: mascararEmail(donosDe(env)[0]),
+    },
+  };
+}
+
 /**
  * Avalia a porta. Devolve:
  *   · `{ resposta }` — já há resposta (entrar/sair/401/…); `_rotas.mjs` devolve-a;
@@ -157,7 +195,13 @@ export async function avaliarPorta(repo, {
   const seguro = !!headers['x-forwarded-proto'] ? String(headers['x-forwarded-proto']) === 'https' : true;
   /* o retrato da porta inclui os tokens: a mesa e o erro dizem se há caminho de
      máquina, sem nunca mostrar o valor de nenhum */
-  const estadoDe = (temContas) => ({ ...estadoDaPorta({ temContas, env }), tokens: estadoDosTokens(env) });
+  const estadoDe = (temContas) => ({
+    ...estadoDaPorta({ temContas, env }),
+    tokens: estadoDosTokens(env),
+    /* 1.69.0 · o ecrã de entrada sabe o que oferecer sem uma segunda chamada —
+       e sabe o que falta a cada caminho, para o dizer em vez de falhar */
+    entrada: opcoesDeEntrada(env),
+  });
 
   /* a porta está dormente? (memória/testes, `seguranca:false`, ou decisão explícita) */
   let dormente = seguranca === false;
@@ -212,6 +256,132 @@ export async function avaliarPorta(repo, {
     return { resposta: { status: 401, corpo: corpoDoErro({ estado, env }) } };
   }
 
+  /* =========================================================================
+     1.69.0 · A ENTRADA DO DONO (6 nov 2026)
+
+     Três portas, uma pessoa. O dono pediu-o por palavras: GitHub, Google, ou
+     email com um código de uso único — e só a conta dele entra. Um produto de
+     um homem só não pode ter registo aberto: cada visita criava conta e ficava
+     com uma porta para os dados do dono.
+
+     O que aqui se garante, e não é retórica:
+       · a lista de quem entra é `ORBITA_DONO_EMAIL` (padrão: a conta do dono);
+       · o código tem 6 dígitos, vale 10 minutos, serve uma vez e morre ao fim
+         de 5 tentativas — e na base só fica o sha256, nunca o código;
+       · sem `RESEND_API_KEY` o código NÃO sai, e a resposta diz o nome da
+         variável em vez de ficar um ecrã à espera de um email que não existe;
+       · nenhuma destas rotas abre sessão sem o email certo.
+     ========================================================================= */
+
+  if (limpo === '/auth/opcoes' && (m === 'GET' || m === 'POST')) {
+    return { resposta: { status: 200, corpo: { ok: true, ...opcoesDeEntrada(env) } } };
+  }
+
+  if (limpo === '/auth/codigo' && m === 'POST') {
+    const email = normEmail(corpo?.email);
+    if (!emailValido(email)) return { resposta: { status: 400, corpo: { error: 'email inválido' } } };
+    const chave = `codigo|${email}|${ip || String(headers['x-forwarded-for'] || '').split(',')[0].trim()}`;
+    const ritmo = limitadorCodigo.ver(chave);
+    if (!ritmo.ok) {
+      return { resposta: { status: 429, corpo: {
+        error: `pediste demasiados códigos — espera ${Math.ceil(ritmo.esperaMs / 60000)} min`,
+        esperaMs: ritmo.esperaMs,
+      } } };
+    }
+    if (!eODono(email, env)) {
+      limitadorCodigo.falhou(chave);
+      return { resposta: recusaDeDono(env) };
+    }
+    if (!String(env.RESEND_API_KEY || '').trim()) {
+      return { resposta: semCorreioParaCodigo(env) };
+    }
+    /* a conta do dono nasce no primeiro código: não há registo separado, e
+       pedir uma palavra-passe antes de provar o email é trabalho a mais */
+    let conta = await repo.contas.porEmail(email).catch(() => null);
+    let contaNova = false;
+    if (!conta) {
+      try {
+        conta = await repo.contas.criar({
+          email, nome: String(corpo?.name || '').trim().slice(0, 120) || email.split('@')[0],
+          papel: 'dono', activo: true, criado: agoraIso(), confirmado_em: null, hash: null,
+        });
+        contaNova = true;
+      } catch (e) {
+        return { resposta: { status: 503, corpo: {
+          error: 'a base de dados não deixou criar a conta do dono',
+          instrucao: 'aplica supabase/orbita_1_54_0.sql (contas) e supabase/orbita_1_69_0.sql (códigos)',
+          detalhe: String(e.message || e).slice(0, 200),
+        } } };
+      }
+      CACHE_CONTAS.delete(repo);
+    }
+    const codigo = codigoNovo();
+    const expira = new Date(Date.now() + MINUTOS_CODIGO * 60000).toISOString();
+    try {
+      await repo.contas.actualizar(conta.id, {
+        codigo_hash: hashCodigo(codigo, email), codigo_expira: expira, codigo_tentativas: 0,
+      });
+    } catch (e) {
+      /* a tabela existe mas não tem as colunas novas: é uma migração por
+         aplicar, e a frase diz o ficheiro — não é uma avaria misteriosa */
+      return { resposta: { status: 503, corpo: {
+        error: 'a base de dados ainda não tem as colunas do código de entrada',
+        instrucao: 'aplica supabase/orbita_1_69_0.sql no Supabase (ou /api/setup?token=…&so=orbita_1_69_0.sql)',
+        detalhe: String(e.message || e).slice(0, 200),
+      } } };
+    }
+    const envio = await enviarEmail({
+      para: email,
+      assunto: `O teu código de entrada na Órbita: ${codigo}`,
+      texto: `O teu código é ${codigo}\n\nVale ${MINUTOS_CODIGO} minutos e serve uma vez. Se não foste tu a pedir, ignora este email: sem o código ninguém entra.`,
+      env, fetchImpl,
+    });
+    if (!envio.enviado) {
+      /* o código existe na base, mas ninguém o recebeu: dizer «enviado» seria
+         a mentira mais fácil deste ficheiro */
+      return { resposta: { status: 502, corpo: {
+        error: 'o código foi gerado mas o correio não saiu',
+        motivo: envio.motivo,
+        como: 'confirma RESEND_API_KEY e ORBITA_EMAIL_FROM (o domínio tem de estar verificado no Resend)',
+      } } };
+    }
+    limitadorCodigo.acertou(chave);
+    await repo.atividade.add('conta', `código de entrada pedido para ${email}${contaNova ? ' (conta do dono criada)' : ''}`).catch(() => null);
+    return { resposta: { status: 200, corpo: {
+      ok: true, enviado: true, para: mascararEmail(email), minutos: MINUTOS_CODIGO,
+      tentativas: TENTATIVAS_CODIGO, ...(contaNova ? { contaNova: true } : {}),
+      mensagem: `o código foi para ${mascararEmail(email)} — vale ${MINUTOS_CODIGO} minutos`,
+    } } };
+  }
+
+  if (limpo === '/auth/codigo/verificar' && m === 'POST') {
+    const email = normEmail(corpo?.email);
+    const codigo = String(corpo?.codigo || '').replace(/\D/g, '');
+    if (!emailValido(email)) return { resposta: { status: 400, corpo: { error: 'email inválido' } } };
+    if (codigo.length !== 6) return { resposta: { status: 400, corpo: { error: 'o código tem 6 dígitos' } } };
+    const conta = await repo.contas.porEmail(email).catch(() => null);
+    /* a mesma frase para «não há conta» e «não há código»: o email é o do dono,
+       mas não há razão para dizer a um estranho em que passo está */
+    if (!conta) return { resposta: { status: 400, corpo: { error: 'não há um código à espera deste email — pede um' } } };
+    const conf = codigoConfere(conta, codigo);
+    if (!conf.ok) {
+      const tentativas = Number(conta.codigo_tentativas || 0) + 1;
+      await repo.contas.actualizar(conta.id, { codigo_tentativas: tentativas }).catch(() => null);
+      return { resposta: { status: 401, corpo: {
+        error: conf.motivo,
+        estado: conf.estado,
+        ...(conf.restam !== undefined ? { restam: conf.restam } : {}),
+      } } };
+    }
+    const confirmada = await repo.contas.actualizar(conta.id, {
+      codigo_hash: null, codigo_expira: null, codigo_tentativas: 0,
+      confirmado_em: conta.confirmado_em || agoraIso(),
+    });
+    const s = await abrirSessao(repo, confirmada || conta, { headers, secure: seguro });
+    await repo.atividade.add('conta', `entrou com código de email ${email}`).catch(() => null);
+    return { resposta: respostaDeEntrada(confirmada || conta, s, { entrouPorCodigo: true }) };
+  }
+
   if (limpo === '/auth/primeiro-dono' && m === 'POST') {
     const n = await temContas(repo, { forcar: true });
     if (n > 0) return { resposta: { status: 409, corpo: { error: 'esta instalação já tem contas — entra, ou pede a um dono que crie a tua' } } };
@@ -225,6 +395,12 @@ export async function avaliarPorta(repo, {
     }
     const email = normEmail(corpo?.email);
     if (!emailValido(email)) return { resposta: { status: 400, corpo: { error: 'email inválido' } } };
+    /* 1.69.0 · a primeira conta é a do dono, e é a que está na lista. Sem isto,
+       quem chegasse primeiro ao URL ficava com a instalação — a 1.54.0 já o
+       impedia por ordem de chegada, não por identidade. */
+    if (String(env.ORBITA_REGISTO || '').toLowerCase() !== 'aberto' && !eODono(email, env)) {
+      return { resposta: recusaDeDono(env) };
+    }
     const nome = String(corpo?.name || '').trim().slice(0, 120);
     const mau = checkPassword(corpo?.password, { email, name: nome });
     if (mau) return { resposta: { status: 400, corpo: { error: mau } } };
@@ -265,6 +441,12 @@ export async function avaliarPorta(repo, {
     }
     const email = normEmail(corpo?.email);
     if (!emailValido(email)) return { resposta: { status: 400, corpo: { error: 'email inválido' } } };
+    /* 1.69.0 · por omissão o registo está fechado a todos menos ao dono. Abrir a
+       instalação a mais alguém é uma decisão explícita (`ORBITA_REGISTO=aberto`),
+       não o que acontece a quem não fez nada. */
+    if (String(env.ORBITA_REGISTO || '').toLowerCase() !== 'aberto' && !eODono(email, env)) {
+      return { resposta: recusaDeDono(env) };
+    }
     const nome = String(corpo?.name || '').trim().slice(0, 120) || email.split('@')[0];
     const mau = checkPassword(corpo?.password, { email, name: nome });
     if (mau) return { resposta: { status: 400, corpo: { error: mau } } };
@@ -387,9 +569,50 @@ export async function avaliarPorta(repo, {
         podeReenviar: true,
       } } };
     }
+    /* 1.69.0 · com correio configurado, a palavra-passe sozinha NÃO abre a
+       sessão: manda-se um código de 6 dígitos e é ele que abre. Sem correio
+       configurado não há como mandar o código — e nesse caso entra-se com a
+       palavra-passe, dizendo em voz alta que o segundo passo não aconteceu. */
+    if (String(env.RESEND_API_KEY || '').trim()) {
+      const codigo = codigoNovo();
+      const expira = new Date(Date.now() + MINUTOS_CODIGO * 60000).toISOString();
+      try {
+        await repo.contas.actualizar(conta.id, {
+          codigo_hash: hashCodigo(codigo, email), codigo_expira: expira, codigo_tentativas: 0,
+        });
+      } catch (e) {
+        return { resposta: { status: 503, corpo: {
+          error: 'a base de dados ainda não tem as colunas do código de entrada',
+          instrucao: 'aplica supabase/orbita_1_69_0.sql no Supabase',
+          detalhe: String(e.message || e).slice(0, 200),
+        } } };
+      }
+      const envio = await enviarEmail({
+        para: email,
+        assunto: `O teu código de entrada na Órbita: ${codigo}`,
+        texto: `O teu código é ${codigo}\n\nVale ${MINUTOS_CODIGO} minutos e serve uma vez. A palavra-passe já estava certa — falta este passo.`,
+        env, fetchImpl,
+      });
+      if (!envio.enviado) {
+        return { resposta: { status: 502, corpo: {
+          error: 'a palavra-passe está certa, mas o código não saiu',
+          motivo: envio.motivo,
+          como: 'confirma RESEND_API_KEY e ORBITA_EMAIL_FROM',
+        } } };
+      }
+      await repo.atividade.add('conta', `palavra-passe certa para ${email} — código enviado`).catch(() => null);
+      return { resposta: { status: 200, corpo: {
+        ok: true, precisaCodigo: true, naoEntrou: true,
+        para: mascararEmail(email), minutos: MINUTOS_CODIGO, tentativas: TENTATIVAS_CODIGO,
+        mensagem: `falta o código: foi para ${mascararEmail(email)} e vale ${MINUTOS_CODIGO} minutos`,
+      } } };
+    }
     const s = await abrirSessao(repo, conta, { headers, secure: seguro });
     await repo.atividade.add('conta', `entrou ${email}`).catch(() => null);
-    return { resposta: respostaDeEntrada(conta, s) };
+    return { resposta: respostaDeEntrada(conta, s, {
+      semCodigo: true,
+      nota: 'entrou com a palavra-passe: não há RESEND_API_KEY nesta instalação, por isso o código de email não pôde ser pedido',
+    }) };
   }
 
   if (limpo === '/auth/sair' && m === 'POST') {

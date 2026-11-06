@@ -299,6 +299,34 @@
      até ao fim do cartão — dois botões de 500 px não se lêem melhor */
   .acts > .btn { min-width: 148px; }
 
+  /* =========================================================================
+     1.69.0 · A ENTRADA (6 nov 2026)
+     Três caminhos na mesma coluna: GitHub, Google, ou email com um código. O
+     botão do fornecedor é largo e alinhado à esquerda (é o gesto mais provável
+     para quem chega), e quando lhe falta a chave fica com contorno tracejado —
+     clicável, porque o clique é que diz o que falta. Nunca `disabled`: um botão
+     cinzento não explica nada a ninguém.
+     ========================================================================= */
+  .entrada-fornecedores { display: grid; gap: 10px; margin-bottom: var(--s3); }
+  .entrada-fornecedor { width: 100%; justify-content: flex-start; padding: 0 18px; }
+  .entrada-fornecedor .entrada-ic { display: inline-flex; align-items: center; }
+  .entrada-fornecedor .entrada-ic .ic { width: 20px; height: 20px; }
+  .entrada-fornecedor[data-falta="1"] { border-style: dashed; border-color: var(--hair-strong); }
+  .entrada-falta { margin: -4px 0 2px 2px; font-size: 12.5px; }
+  .entrada-ou {
+    display: flex; align-items: center; gap: var(--s3);
+    color: var(--muted); font-size: 12.5px; margin: var(--s2) 0 var(--s4);
+  }
+  .entrada-ou::before, .entrada-ou::after { content: ''; height: 1px; flex: 1; background: var(--hair); }
+  .entrada-codigo {
+    font: 600 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .34em; text-align: center; padding: 14px 10px;
+  }
+  .entrada-aviso {
+    border-left: 3px solid var(--blue); padding: 10px 12px;
+    background: #F5F8FF; border-radius: 8px; margin-top: var(--s3);
+  }
+
   /* 30 out 2026 · o aviso do modo local (pedido do dono: «chega de demonstrações só»).
      Não é um erro e não se fecha: é a informação de onde os dados vivem. Discreto no
      desktop, duas linhas no telemóvel, e as acções da cópia sempre à mão. */
