@@ -154,3 +154,52 @@ export function fraseDaFila({ itens = [], contagem = { autonomo: 0, proposto: 0,
   if (!agendador) s += ' Sem agendador configurado, a fila só anda quando carregares no botão.';
   return s;
 }
+
+/* ===========================================================================
+   1.70.0 · A FILA NÃO ESPERA POR AMANHÃ (6 nov 2026)
+
+   O agendador da Vercel, neste plano, passa uma vez por dia. Uma tarefa posta
+   às 07:01 esperava ~24 h — e o produto dizia «os agentes trabalham sozinhos»
+   enquanto a pessoa olhava para uma fila parada.
+
+   A decisão de correr a fila **ao abrir a Órbita** vive aqui, pura, para poder
+   ser provada sem browser nem rede. Ela não gasta nada por si: quem gasta é o
+   ciclo, e o ciclo só gasta se a autonomia do tipo o autorizar.
+   =========================================================================== */
+
+/** De quanto em quanto tempo a abertura da Órbita pode puxar pela fila. */
+export const HORAS_ENTRE_ABERTURAS = 2;
+
+/**
+ * Correr a fila agora que a Órbita abriu?
+ *
+ * @param {object} p
+ * @param {number} p.naFila      quantas tarefas `queued` há
+ * @param {boolean} p.agendador  há agendador configurado? (muda a razão, não a decisão)
+ * @param {number|null} p.ultimoMs quando esta máquina correu a fila sozinha pela última vez
+ * @param {number} p.agora        relógio, por parâmetro (testável)
+ * @param {number} p.horasMinimas intervalo mínimo entre duas aberturas
+ * @returns {{correr:boolean, porque:string, desdeMs?:number}}
+ */
+export function decidirAoAbrir({
+  naFila = 0, agendador = true, ultimoMs = null, agora = Date.now(),
+  horasMinimas = HORAS_ENTRE_ABERTURAS,
+} = {}) {
+  const n = Math.max(0, Number(naFila) || 0);
+  if (!n) return { correr: false, porque: 'a fila está vazia: não há nada para correr ao abrir' };
+
+  if (ultimoMs != null) {
+    const desde = Number(agora) - Number(ultimoMs);
+    if (Number.isFinite(desde) && desde >= 0 && desde < horasMinimas * 3600000) {
+      return { correr: false, desdeMs: desde, porque: `a fila já correu há ${faltaPara(desde)} nesta máquina` };
+    }
+  }
+
+  const relogio = agendador
+    ? 'o agendador só passa uma vez por dia'
+    : 'não há agendador nenhum';
+  return {
+    correr: true,
+    porque: `há ${plural(n, 'tarefa na fila', 'tarefas na fila')} e ${relogio} — a fila anda agora que abriste a Órbita`,
+  };
+}
