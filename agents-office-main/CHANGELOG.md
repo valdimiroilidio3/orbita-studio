@@ -1,3 +1,67 @@
+## 1.71.0 — 6 nov 2026 · A ENTRADA A DOIS TEMPOS
+
+O dono pediu o ecrã de entrada de um componente React («modern-animated-sign-in»):
+metade esquerda com anéis e portas a girar, metade direita com o formulário, tudo
+a entrar em cascata. O pedido vinha em React + Tailwind + shadcn + TypeScript —
+e este produto não é isso. Seguir as instruções à letra (instalar o shadcn, o
+Tailwind, `motion`, `lucide-react`, criar `/components/ui`) seria **trocar o
+sistema por outro**, e o que foi pedido foi o desenho, não a stack. O desenho
+foi feito com o que já existe: JavaScript puro, CSS próprio, um só HTML.
+
+### `src/entrada-visual.js` (novo, puro)
+- `aneisHTML()` — os anéis concêntricos do `Ripple`, com atraso e opacidade
+  próprios por anel, máscara a desvanecer para baixo.
+- `orbitasHTML()` — o `OrbitingCircles`: cinco órbitas com raio, duração e
+  sentido configurados. **O ícone contra-gira** (`animation-direction: reverse`
+  contra o normal, e ao contrário nas órbitas reversas) — sem isso, a porta anda
+  de pernas para o ar a meio da volta.
+- `palcoHTML()` — as duas metades: arte à esquerda, formulário à direita. O
+  formulário entra como string: o módulo não lhe toca.
+- `revelar()` — a cascata do `BoxReveal`, feita com `animation-delay`, não com
+  JavaScript a mexer no DOM.
+- `escapar()` — os dois textos que o módulo escreve são escapados; um título
+  com `<` não injeta HTML.
+
+### As portas são as portas reais
+- A girar vão **GitHub, Google, email e código de 6 dígitos** — os mesmos ícones
+  que a mesa usa nos botões (SVG inline), e não logótipos de HTML/CSS/React
+  vindos de um CDN. Uma arte que decora o ecrã de entrada com tecnologias que o
+  produto não usa é a primeira mentira que a pessoa vê.
+
+### O ecrã
+- O halo do rato no campo (o `Input` com `useMotionTemplate`) passou a
+  `radial-gradient(150px circle at var(--mx) var(--my))`, alimentado por **um**
+  ouvinte `pointermove` no documento — o ecrã é repintado muitas vezes e um
+  ouvinte por campo ficaria pendurado em elementos que já não existem.
+- Botão principal com a linha de luz que aparece no hover (o `BottomGradient`).
+- **No telemóvel a arte sai da frente do formulário** (`max-width: 900px`): é a
+  regra de sempre — a decoração não se põe entre a pessoa e o trabalho.
+- `prefers-reduced-motion`: anéis, órbitas e cascata param.
+- Os três passos (entrar, código, confirmar) usam o mesmo palco e a mesma
+  cascata: `palcoEntrada()`. Nenhum `data-act` mudou, nenhum campo mudou de id —
+  a lógica que já existia é a mesma.
+
+### Testes
+- `entrada-visual.test.mjs` (7): duas metades, nove anéis com atrasos distintos,
+  as quatro portas reais, a contra-rotação, a cascata por atrasos, o escape de
+  HTML e um número de anéis inválido.
+- `entrada-ui.test.mjs` (9, +3): o palco em `dist/mesa.html`, as portas da arte,
+  e as `@keyframes` + o halo + o `prefers-reduced-motion` no ficheiro publicado.
+- **Suíte: 1327/1327.** `check.mjs`: 96/97 (o único falhanço é o smoke de
+  browser, sem Chrome nesta máquina).
+
+### O que continua a faltar (dito sem rodeios)
+- **Google:** a aplicação OAuth existe e as chaves estão na Vercel, mas o
+  `redirect_uri` registado no Google Cloud **não é o nosso** — o Google responde
+  `Error 400: redirect_uri_mismatch`. Falta colar lá, em «Authorized redirect
+  URIs», exactamente:
+  `https://orbita-agentes.vercel.app/api/oauth?fornecedor=google`
+- **GitHub:** já funciona de ponta a ponta (o ecrã do GitHub abre com o
+  `client_id`, o `state` e o `redirect_uri` certos).
+- **Código por email:** falta `RESEND_API_KEY` + `ORBITA_EMAIL_FROM`.
+
+---
+
 ## 1.70.0 — 6 nov 2026 · A FILA NÃO ESPERA POR AMANHÃ
 
 A 1.67.0 pôs o ciclo a correr a fila, a 1.68.0 pôs o ecrã a dizer quando cada

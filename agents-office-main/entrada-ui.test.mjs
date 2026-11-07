@@ -157,3 +157,43 @@ test('1.69.0 · «precisaCodigo» leva ao ecrã do código em vez de fingir que 
   assert.match(t, /Falta o código/, 'a palavra-passe certa não é a entrada completa');
   assert.ok(doc.querySelector('#lgCodigo'));
 });
+
+/* ===========================================================================
+   1.71.0 · o ecrã a dois tempos
+   =========================================================================== */
+
+test('1.71.0 · a entrada tem o palco: arte à esquerda, formulário à direita', async () => {
+  const { doc } = await abrir();
+  const palco = doc.querySelector('.palco');
+  assert.ok(palco, 'o palco existe');
+  const arte = palco.querySelector('.palco-arte');
+  const lado = palco.querySelector('.palco-lado');
+  assert.ok(arte && lado, 'as duas metades');
+  assert.ok(arte.querySelectorAll('.anel').length >= 9, 'os anéis do fundo');
+  assert.ok(lado.querySelector('#lgEmail'), 'o formulário é o de sempre, na metade direita');
+});
+
+test('1.71.0 · as portas a girar são GitHub, Google, email e código — e o ícone contra-gira', async () => {
+  const { doc } = await abrir();
+  const portas = [...doc.querySelectorAll('.palco-arte .porta')].map((p) => p.className);
+  for (const id of ['github', 'google', 'email', 'codigo']) {
+    assert.ok(portas.some((c) => c.includes(`porta-${id}`)), `a porta ${id} gira na arte`);
+  }
+  const orbitas = [...doc.querySelectorAll('.palco-arte .orbita')];
+  assert.equal(orbitas.length, 5, 'cinco órbitas, cinco portas');
+  assert.ok(orbitas.some((o) => o.classList.contains('reversa')), 'há um sentido contrário');
+  /* o ícone tem de contra-girar: sem isto fica de pernas para o ar a meio da volta */
+  const svg = doc.querySelector('.palco-arte .porta svg');
+  assert.ok(svg, 'a porta tem o ícone da marca');
+});
+
+test('1.71.0 · a cascata e o halo existem no ficheiro publicado (não são decoração de teste)', async () => {
+  const css = HTML;
+  assert.match(css, /@keyframes orbitaGiro/);
+  assert.match(css, /@keyframes anelPulso/);
+  assert.match(css, /@keyframes revEntra/);
+  assert.match(css, /\.palco-cartao \.in \{[\s\S]{0,200}--mx/, 'o halo usa as coordenadas do rato');
+  assert.match(css, /prefers-reduced-motion[\s\S]{0,120}animation: none/, 'e pára para quem pediu menos movimento');
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]{0,160}\.palco-arte \{ display: none;? \}/,
+    'no telemóvel a arte sai da frente do formulário');
+});
