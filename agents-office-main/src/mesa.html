@@ -327,6 +327,119 @@
     background: #F5F8FF; border-radius: 8px; margin-top: var(--s3);
   }
 
+  /* =========================================================================
+     1.71.0 · A ENTRADA A DOIS TEMPOS (6 nov 2026)
+     O desenho pedido (anéis, portas a girar, cascata) feito com o CSS que este
+     produto já tem. Nada de bibliotecas de animação: `@keyframes` e variáveis.
+     A regra que não se quebra: **a arte não come o trabalho** — é a metade
+     esquerda no ecrã grande e desaparece no telemóvel, onde o formulário manda.
+     ========================================================================= */
+  .palco {
+    display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+    min-height: 100dvh; background: #FBFBFD;
+  }
+  .palco-arte {
+    position: relative; overflow: hidden; border-right: 1px solid var(--hair);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--s4); padding: var(--s6) var(--s5);
+    background:
+      radial-gradient(58% 46% at 50% 42%, rgba(21,94,239,.10) 0%, rgba(21,94,239,0) 70%),
+      linear-gradient(180deg, #FAFBFF 0%, #FBFBFD 70%);
+  }
+  .palco-centro {
+    position: relative; width: min(560px, 92%); aspect-ratio: 1 / 1;
+    display: grid; place-items: center;
+  }
+  .aneis {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
+    mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
+  }
+  .anel {
+    position: absolute; width: var(--px); height: var(--px); border-radius: 50%;
+    border: 1px solid rgba(21,94,239,.42);
+    animation: anelPulso 3.6s ease-in-out infinite;
+  }
+  @keyframes anelPulso {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(.925); }
+  }
+  .orbitas { position: absolute; inset: 0; }
+  .orbita {
+    position: absolute; top: 50%; left: 50%; width: 0; height: 0;
+    animation: orbitaGiro calc(var(--dur) * 1s) linear infinite;
+    animation-delay: calc(var(--atraso) * -1s);
+  }
+  .orbita.reversa { animation-direction: reverse; }
+  .porta {
+    position: absolute; top: 0; left: 0;
+    width: calc(var(--tam) * 1px); height: calc(var(--tam) * 1px);
+    display: grid; place-items: center; border-radius: 50%;
+    background: #fff; box-shadow: 0 8px 22px rgba(17,19,24,.10), 0 0 0 1px var(--hair);
+    transform: translate(-50%, -50%) translateY(calc(var(--raio) * -1px));
+  }
+  /* o ícone contra-gira para não andar de pernas para o ar */
+  .porta > .ic {
+    width: 56%; height: 56%;
+    animation: orbitaGiro calc(var(--dur) * 1s) linear infinite;
+    animation-delay: inherit; animation-direction: reverse;
+  }
+  .orbita.reversa .porta > .ic { animation-direction: normal; }
+  @keyframes orbitaGiro { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .palco-marca {
+    position: relative; z-index: 2; display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; background: rgba(255,255,255,.86); border-radius: 999px;
+    box-shadow: 0 8px 26px rgba(17,19,24,.08), 0 0 0 1px var(--hair);
+    font-size: 17px; letter-spacing: .01em; backdrop-filter: blur(6px);
+  }
+  .palco-marca b { font-weight: 650; }
+  .palco-sub {
+    margin: 0; max-width: 40ch; text-align: center; color: var(--muted);
+    font-size: 13.5px; line-height: 1.55;
+  }
+  .palco-rodape { color: var(--muted); font-size: 12px; }
+  .palco-lado {
+    display: grid; place-items: center; padding: var(--s6) var(--s5);
+    background: #FBFBFD;
+  }
+  .palco-cartao { width: 100%; max-width: 430px; }
+  .palco-cartao h1 { font-size: 30px; letter-spacing: -.01em; margin: 0 0 var(--s2); }
+  .palco-cartao .marca-mini {
+    display: flex; align-items: center; gap: 9px; margin-bottom: var(--s5);
+    font-size: 15px; font-weight: 600; color: var(--muted);
+  }
+  /* a cascata (o `BoxReveal`): cada bloco entra 18 px abaixo e assenta */
+  .rev { animation: revEntra .58s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes revEntra {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* o halo do rato nos campos: `--mx`/`--my` são escritos em `mesa.js` */
+  .palco-cartao .in {
+    background-image: radial-gradient(150px circle at var(--mx, -300px) var(--my, -300px),
+      rgba(21,94,239,.13), rgba(21,94,239,0) 72%);
+    background-repeat: no-repeat;
+    transition: border-color .16s var(--ease), box-shadow .16s var(--ease), background-image .2s linear;
+  }
+  .palco-cartao .btn.primary { position: relative; overflow: hidden; }
+  .palco-cartao .btn.primary::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, #7FD4FF, transparent);
+    opacity: 0; transition: opacity .45s var(--ease);
+  }
+  .palco-cartao .btn.primary:hover::after { opacity: 1; }
+  .palco-cartao .entrada-fornecedor { position: relative; overflow: hidden; }
+  .palco-cartao .in::placeholder { color: #98A0AC; }
+  @media (max-width: 900px) {
+    .palco { grid-template-columns: 1fr; }
+    .palco-arte { display: none; }
+    .palco-lado { padding: var(--s5) var(--s4); align-items: start; padding-top: 8vh; }
+    .palco-cartao h1 { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anel, .orbita, .porta > .ic, .rev { animation: none !important; }
+  }
+
   /* 30 out 2026 · o aviso do modo local (pedido do dono: «chega de demonstrações só»).
      Não é um erro e não se fecha: é a informação de onde os dados vivem. Discreto no
      desktop, duas linhas no telemóvel, e as acções da cópia sempre à mão. */

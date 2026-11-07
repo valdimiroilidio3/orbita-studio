@@ -83,6 +83,7 @@ import {
 import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
 /* 1.68.0 · a fila com a razão de cada tarefa: quando corre, e há quanto espera */
 import { analisarFila, faltaPara, decidirAoAbrir } from './fila.js';
+import { palcoHTML, revelar } from './entrada-visual.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -238,6 +239,17 @@ async function pedirApi(path, method, body) {
 /* 1.18.0 · a vista da IA usa o MESMO `call` da mesa: assim continua a passar pelo
    modo base e pelo modo local, sem um segundo caminho para a rede. */
 const apiMesa = { call, S, paint, toast };
+
+/* 1.71.0 · o halo do rato nos campos da entrada (o `Input` do desenho pedido).
+   Um só ouvinte no documento: o ecrã é repintado muitas vezes e um ouvinte por
+   campo ficaria pendurado em elementos que já não existem. */
+document.addEventListener('pointermove', (e) => {
+  const alvo = e.target && e.target.closest ? e.target.closest('.palco-cartao .in') : null;
+  if (!alvo) return;
+  const r = alvo.getBoundingClientRect();
+  alvo.style.setProperty('--mx', `${Math.round(e.clientX - r.left)}px`);
+  alvo.style.setProperty('--my', `${Math.round(e.clientY - r.top)}px`);
+}, { passive: true });
 
 async function call(path, method = 'GET', body) {
   let r;
@@ -1911,6 +1923,27 @@ function viewProjeto() {
 }
 
 /* ---------------- entrar ---------------- */
+
+/* 1.71.0 · as portas que giram na arte da entrada: os mesmos ícones que a mesa
+   usa nos botões (nada de imagens externas — o ecrã de entrada não vai pedir
+   licença a um CDN para aparecer). */
+const portasDaArte = () => ({
+  github: IC.github, google: IC.globo, email: IC.conversas, codigo: IC.tarefa, orbita: IC.motor,
+});
+
+/* O palco: arte à esquerda, formulário à direita. Uma só função para os três
+   passos (entrar, código, confirmar), para não haver três desenhos diferentes
+   conforme o sítio onde a pessoa está. */
+function palcoEntrada(corpo, { sub = '', atraso = 0 } = {}) {
+  return palcoHTML({
+    titulo: 'Órbita',
+    sub,
+    portas: portasDaArte(),
+    rodape: 'uma instalação, um dono · o teu email entra e mais nenhum',
+    corpo: `${revelar('<div class="marca-mini"><span class="mark" aria-hidden="true"></span> Órbita</div>', atraso)}${corpo}`,
+  });
+}
+
 function viewLogin() {
   const primeira = S.primeiraConta;
   const estado = S.authEstado || {};
@@ -1922,20 +1955,19 @@ function viewLogin() {
   const aConfirmar = !!S.aConfirmar;
   /* registo aberto: a instalação diz se aceita contas novas (ORBITA_REGISTO) */
   const aRegistar = !!S.aRegistar && !primeira && !aRecuperar && !aConfirmar;
+
   if (aConfirmar) {
-    return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
-      <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
-      <div class="card">
-        <h1 style="font-size:28px;margin-bottom:var(--s2)">Confirmar a conta</h1>
-        <p class="hint" style="margin-top:0">Este é o passo que prova que o email é teu. O link vale 24 horas e serve uma vez.</p>
+    return palcoEntrada(`<div class="card">
+        ${revelar('<h1>Confirmar a conta</h1>', 0.06)}
+        ${revelar('<p class="hint" style="margin-top:0">Este é o passo que prova que o email é teu. O link vale 24 horas e serve uma vez.</p>', 0.12)}
         <div class="form" style="grid-template-columns:1fr">
-          <input class="in" id="cfToken" placeholder="cola aqui o token do email" aria-label="token de confirmação" value="${esc(S.aConfirmar || '')}">
-          <button class="btn primary" data-act="confirmar-conta">Confirmar e entrar</button>
-          <button class="btn quiet small" data-act="fechar-confirmar">Voltar</button>
+          ${revelar('<input class="in" id="cfToken" placeholder="cola aqui o token do email" aria-label="token de confirmação" autocomplete="one-time-code">', 0.18)}
+          ${revelar('<button class="btn primary" data-act="confirmar-conta">Confirmar e entrar</button>', 0.24)}
+          ${revelar('<button class="btn quiet small" data-act="fechar-confirmar">Voltar</button>', 0.3)}
         </div>
-      </div>
-    </div>`;
+      </div>`, { sub: 'um link, uma vez: é assim que se prova que a caixa é tua', atraso: 0.02 });
   }
+
   /* 1.69.0 · as opções vêm do servidor (`/auth/eu` → `estado.entrada`): o ecrã
      não inventa um botão para um fornecedor sem chave. */
   const entrada = estado.entrada || {};
@@ -1955,61 +1987,58 @@ function viewLogin() {
     </button>${f.pronto ? '' : `<div class="hint entrada-falta">falta ${esc((f.falta || []).join(' e '))} na Vercel — carrega para ver onde se cria</div>`}`;
 
   if (aCodigo) {
-    return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
-    <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
-    <div class="card">
-      <h1 style="font-size:28px;margin-bottom:var(--s2)">Falta o código</h1>
-      <p class="hint" style="margin-top:0">Mandei um código de 6 dígitos para <b>${esc(para)}</b>. Vale ${esc(String((entrada.codigo && entrada.codigo.minutos) || 10))} minutos e serve uma vez.</p>
+    return palcoEntrada(`<div class="card">
+      ${revelar('<h1>Falta o código</h1>', 0.06)}
+      ${revelar(`<p class="hint" style="margin-top:0">Mandei um código de 6 dígitos para <b>${esc(para)}</b>. Vale ${esc(String((entrada.codigo && entrada.codigo.minutos) || 10))} minutos e serve uma vez.</p>`, 0.12)}
       <div class="form" style="grid-template-columns:1fr">
-        <input class="in entrada-codigo" id="lgCodigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="código de 6 dígitos">
-        <button class="btn primary" data-act="verificar-codigo">Confirmar o código e entrar</button>
-        <div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap">
-          <button class="btn quiet small" data-act="pedir-codigo">Não chegou — mandar outro</button>
-          <button class="btn quiet small" data-act="voltar-do-codigo">Voltar</button>
-        </div>
+        ${revelar('<input class="in entrada-codigo" id="lgCodigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="código de 6 dígitos">', 0.18)}
+        ${revelar('<button class="btn primary" data-act="verificar-codigo">Confirmar o código e entrar</button>', 0.24)}
+        ${revelar('<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="pedir-codigo">Não chegou — mandar outro</button><button class="btn quiet small" data-act="voltar-do-codigo">Voltar</button></div>', 0.3)}
       </div>
-      ${aviso ? `<div class="hint entrada-aviso">${esc(aviso)}</div>` : ''}
-      ${correioPronto ? '' : '<div class="hint">Sem correio configurado este passo não existia — se chegaste aqui é porque a chave está no sítio.</div>'}
-    </div>
-  </div>`;
+      ${aviso ? revelar(`<div class="hint entrada-aviso">${esc(aviso)}</div>`, 0.34) : ''}
+      ${correioPronto ? '' : revelar('<div class="hint">Sem correio configurado este passo não existia — se chegaste aqui é porque a chave está no sítio.</div>', 0.36)}
+    </div>`, { sub: 'um código de seis dígitos, e a caixa fica provada', atraso: 0.02 });
   }
 
-  return `<div class="wrap" style="max-width:520px;margin:8vh auto 0">
-    <div class="brand" style="padding:0 0 var(--s5)"><span class="mark" aria-hidden="true"></span> Órbita</div>
-    <div class="card">
-      <h1 style="font-size:28px;margin-bottom:var(--s2)">${primeira ? 'Entrar como dono' : aRegistar ? 'Criar conta' : 'Entrar'}</h1>
-      <p class="hint" style="margin-top:0">${primeira
-        ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e é a única que entra por aqui.'
-        : aRegistar
-          ? 'A tua conta entra como leitora: vês tudo, não alteras nada até um dono te subir o papel.'
-          : 'Entra com GitHub, com Google, ou com o teu email.'}</p>
-      ${fornecedores.length ? `<div class="entrada-fornecedores">${fornecedores.map(botaoDeFornecedor).join('')}</div>
-      <div class="entrada-ou"><span>ou</span></div>` : ''}
+  const titulo = primeira ? 'Entrar como dono' : aRegistar ? 'Criar conta' : 'Entrar';
+  const sub = primeira
+    ? 'Esta instalação ainda não tem contas. A primeira é a do dono — e é a única que entra por aqui.'
+    : aRegistar
+      ? 'A tua conta entra como leitora: vês tudo, não alteras nada até um dono te subir o papel.'
+      : 'Entra com GitHub, com Google, ou com o teu email.';
+
+  let passo = 0.06;
+  const seg = (html) => { passo += 0.05; return revelar(html, passo); };
+
+  return palcoEntrada(`<div class="card">
+      ${revelar(`<h1>${esc(titulo)}</h1>`, 0.06)}
+      ${revelar(`<p class="hint" style="margin-top:0">${esc(sub)}</p>`, 0.11)}
+      ${fornecedores.length ? `${fornecedores.map((f) => seg(botaoDeFornecedor(f))).join('')}
+      ${revelar('<div class="entrada-ou"><span>ou</span></div>', passo + 0.04)}` : ''}
       <div class="form" style="grid-template-columns:1fr">
-        ${primeira || aRegistar ? '<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">' : ''}
-        <input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="${esc(S.entradaEmail || '')}">
-        ${aRecuperar ? `<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação" value="${esc(S.tokenDoLink || '')}"><input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password"><input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova">` : ''}
-        ${!aRecuperar ? `<input class="in" id="lgPass" type="password" placeholder="${primeira || aRegistar ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira || aRegistar ? 'new-password' : 'current-password'}">` : ''}
-        ${(primeira || aRegistar) && !aRecuperar ? '<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe">' : ''}
-        ${exigeToken ? '<input class="in" id="lgToken" type="password" placeholder="SETUP_TOKEN da instalação" aria-label="token de instalação">' : ''}
-        <button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : aRegistar ? 'registar' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar a conta do dono e entrar' : aRegistar ? 'Criar conta e confirmar por email' : 'Entrar'}</button>
-        ${!primeira && !aRecuperar && !aRegistar ? '<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="pedir-codigo">Entrar com um código por email</button><button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button></div>' : ''}
-        ${primeira ? '<button class="btn quiet small" data-act="pedir-codigo">Prefiro receber um código por email</button>' : ''}
-        ${aRegistar ? '<button class="btn quiet small" data-act="voltar-entrar">Já tenho conta</button>' : ''}
+        ${primeira || aRegistar ? seg('<input class="in" id="lgNome" placeholder="O teu nome" aria-label="nome" autocomplete="name">') : ''}
+        ${seg(`<input class="in" id="lgEmail" type="email" placeholder="Email" aria-label="email" autocomplete="username" value="${esc(S.entradaEmail || '')}">`)}
+        ${aRecuperar ? `${seg('<input class="in" id="rgToken" placeholder="cola aqui o token do email" aria-label="token de recuperação" autocomplete="one-time-code">')}${seg('<input class="in" id="lgPass" type="password" placeholder="Palavra-passe nova (12+)" aria-label="palavra-passe nova" autocomplete="new-password">')}${seg('<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe nova" aria-label="repetir palavra-passe nova" autocomplete="new-password">')}` : ''}
+        ${!aRecuperar ? seg(`<input class="in" id="lgPass" type="password" placeholder="${primeira || aRegistar ? 'Palavra-passe (12+ caracteres)' : 'Palavra-passe'}" aria-label="palavra-passe" autocomplete="${primeira || aRegistar ? 'new-password' : 'current-password'}">`) : ''}
+        ${(primeira || aRegistar) && !aRecuperar ? seg('<input class="in" id="lgPass2" type="password" placeholder="Repetir a palavra-passe" aria-label="repetir palavra-passe" autocomplete="new-password">') : ''}
+        ${exigeToken ? seg('<input class="in" id="lgToken" type="password" placeholder="SETUP_TOKEN da instalação" aria-label="token de instalação" autocomplete="off">') : ''}
+        ${seg(`<button class="btn primary" data-act="${aRecuperar ? 'redefinir-palavra' : primeira ? 'criar-primeira-conta' : aRegistar ? 'registar' : 'entrar'}">${aRecuperar ? 'Guardar a palavra-passe nova' : primeira ? 'Criar a conta do dono e entrar' : aRegistar ? 'Criar conta e confirmar por email' : 'Entrar'}</button>`)}
+        ${!primeira && !aRecuperar && !aRegistar ? seg('<div class="hint" style="display:flex;gap:var(--s2);flex-wrap:wrap"><button class="btn quiet small" data-act="pedir-codigo">Entrar com um código por email</button><button class="btn quiet small" data-act="abrir-recuperar">Esqueci-me da palavra-passe</button></div>') : ''}
+        ${primeira ? seg('<button class="btn quiet small" data-act="pedir-codigo">Prefiro receber um código por email</button>') : ''}
+        ${aRegistar ? seg('<button class="btn quiet small" data-act="voltar-entrar">Já tenho conta</button>') : ''}
       </div>
-      ${aviso ? `<div class="hint entrada-aviso">${esc(aviso)}</div>` : ''}
-      <div class="hint" id="leadNote">${aRecuperar
+      ${aviso ? seg(`<div class="hint entrada-aviso">${esc(aviso)}</div>`) : ''}
+      ${seg(`<div class="hint" id="leadNote">${aRecuperar
         ? 'O link vale 30 minutos e uma vez só. Ao guardar, todas as sessões antigas desta conta fecham.'
         : `Esta instalação é de <b>um dono só</b>: só <b>${esc(dono)}</b> entra. Outro email é recusado antes de qualquer palavra-passe ser testada.`
           + (correioPronto
             ? ' Com a palavra-passe certa, segue um código de 6 dígitos para o email — a palavra-passe sozinha não abre a sessão.'
             : ' O código por email ainda não pode sair: falta <b>RESEND_API_KEY</b> (resend.com → API Keys) e <b>ORBITA_EMAIL_FROM</b> na Vercel. Até lá, a palavra-passe entra sozinha — e o ecrã diz que entrou assim.')
-          + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables).' : '')}</div>
+          + (exigeToken ? ' Esta instalação pede também o <b>SETUP_TOKEN</b> (Vercel → Settings → Environment Variables).' : '')}</div>`)}
       ${estado.modo ? `<div class="hint">modo actual: ${esc(estado.descricao || estado.modo)}</div>` : ''}
       ${primeira ? '<div class="hint"><button class="btn quiet small" data-act="voltar-modo-local">Continuar sem contas (modo local)</button> — só para esta máquina, sem palavra-passe.</div>' : ''}
     </div>
-    ${primeira ? cartaoArranque() : ''}
-  </div>`;
+    ${primeira ? cartaoArranque() : ''}`, { sub: 'GitHub · Google · um código no email — e mais ninguém entra', atraso: 0.02 });
 }
 
 /* ---------------- arranque: a lista que diz o que falta ---------------- */
