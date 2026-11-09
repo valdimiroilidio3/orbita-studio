@@ -288,7 +288,20 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
         : 'nenhum fornecedor pronto — vê AI · Control Center na mesa';
       alvo.title = 'o mesmo motor que responde na conversa dos agentes';
     } catch {
-      alvo.textContent = 'a IA responde na conversa; o estado dos motores lê-se na mesa (/app#/ia)';
+      /* 1.79.1 · o `/ia/estado` pede sessão. Sem sessão aberta há uma prova
+         pública do mesmo servidor — o `/api/health` — que diz QUANTOS fornecedores
+         têm chave. É isso que se mostra; nunca se inventa um número. */
+      try {
+        const r = await fetch('/api/health', { headers: { accept: 'application/json' } });
+        const h = await r.json().catch(() => ({}));
+        const quantos = Array.isArray(h?.ia?.fornecedoresComChave) ? h.ia.fornecedoresComChave.length : 0;
+        alvo.textContent = quantos
+          ? `${quantos} fornecedor(es) com chave · o detalhe lê-se na mesa (/app#/ia)`
+          : 'a IA responde na conversa; o estado dos motores lê-se na mesa (/app#/ia)';
+        alvo.title = 'o mesmo motor que responde na conversa dos agentes';
+      } catch {
+        alvo.textContent = 'a IA responde na conversa; o estado dos motores lê-se na mesa (/app#/ia)';
+      }
     }
   }
 

@@ -289,5 +289,9 @@ test('1.79.0 · a barra do motor não mente na página publicada', () => {
   assert.match(mcp, /MOTOR · ÓRBITA/);
   assert.match(mcp, /perguntarMotores\(topmodels\)/, 'tem de perguntar o estado real');
   assert.match(mcp, /caminho: '\/ia\/estado'/);
+  /* 1.79.1 · sem sessão o `/ia/estado` responde 401: a prova pública do mesmo
+     servidor é o `/api/health`, e é dela que sai o número — nunca inventado */
+  assert.match(mcp, /fetch\('\/api\/health'/);
+  assert.match(mcp, /fornecedoresComChave/);
   assert.equal(/montra|demonstração/.test(mcp.slice(mcp.indexOf('function perguntarMotores'), mcp.indexOf('function perguntarMotores') + 900)), false);
 });
