@@ -440,6 +440,15 @@
     border: 1px solid #F6DCD8;
   }
   .enta-aviso .ic { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+  /* o atalho para a consola vive dentro do aviso: é parte da resposta, não um
+     botão à parte a competir com o «Entrar» */
+  .enta-consola {
+    display: inline-block; margin-top: 7px; padding: 5px 9px;
+    border-radius: 8px; background: #fff; color: #8A2B23;
+    border: 1px solid #F0CFC9; font-size: 12.5px; font-weight: 550;
+    text-decoration: none;
+  }
+  .enta-consola:hover { background: #FFF1EF; }
   /* o que é boa notícia não se veste de erro */
   .enta-aviso[data-tom="ok"] { background: #F1FAF5; color: #1B6B4C; border-color: #D5EDE0; }
   /* o detalhe preciso do clique (nome da variável, sítio, endereço de retorno):

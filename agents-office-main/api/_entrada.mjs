@@ -37,6 +37,37 @@ export function donosDe(env = {}) {
   return unicos.length ? unicos : [DONO_PADRAO];
 }
 
+/**
+ * 1.74.0 · A CONTA DO DONO, NÃO SÓ O EMAIL DELE.
+ *
+ * O GitHub devolve o email *primário* da conta — e o dono tem mais do que um
+ * endereço. Ancorar a entrada só no email fazia o GitHub recusar a própria
+ * conta do dono («a conta x não é a do dono») com uma frase que não tinha
+ * solução do lado de quem estava a entrar.
+ *
+ * A conta GitHub tem um número que não muda e que ninguém reescreve: o `id`.
+ * `ORBITA_DONO_GITHUB_ID` (e/ou `ORBITA_DONO_GITHUB`, o login) diz quais são as
+ * contas do dono. Isto NÃO abre a porta a mais ninguém: o número é de uma conta
+ * só, e o GitHub já provou que quem está a entrar é dela.
+ */
+export function donosGithubDe(env = {}) {
+  const ids = String(env.ORBITA_DONO_GITHUB_ID || '')
+    .split(/[,;\s]+/).map((n) => String(n).trim()).filter((n) => /^\d+$/.test(n));
+  const logins = String(env.ORBITA_DONO_GITHUB || '')
+    .split(/[,;\s]+/).map((l) => l.trim().toLowerCase()).filter(Boolean);
+  return { ids, logins };
+}
+
+/** O perfil de um fornecedor é a conta do dono? Email, ou (GitHub) id/login. */
+export function donoDoPerfil(perfil = {}, env = {}) {
+  if (eODono(perfil.email, env)) return true;
+  if (String(perfil.fornecedor || '') !== 'github') return false;
+  const { ids, logins } = donosGithubDe(env);
+  if (!ids.length && !logins.length) return false;
+  if (perfil.id && ids.includes(String(perfil.id))) return true;
+  return !!perfil.login && logins.includes(String(perfil.login).toLowerCase());
+}
+
 /** Este email pode entrar por uma porta pública (OAuth, código, primeira conta)? */
 export function eODono(email, env = {}) {
   const e = normEmail(email);
@@ -223,7 +254,14 @@ export async function perfilDoFornecedor(fornecedor, { code, env = {}, fetchImpl
       const bom = lista.find((e) => e.primary && e.verified) || lista.find((e) => e.verified);
       if (!bom) return { ok: false, motivo: 'o GitHub não devolveu nenhum email verificado nesta conta' };
       const perfil = await json(await fetchImpl('https://api.github.com/user', { headers: h }));
-      return { ok: true, email: normEmail(bom.email), nome: String(perfil?.name || perfil?.login || '').slice(0, 120), id: String(perfil?.id || '') };
+      /* 1.74.0 · o login e o número vêm também: são eles que dizem se esta é a
+         conta do dono quando o email primário dela é outro endereço */
+      return {
+        ok: true, fornecedor: 'github',
+        email: normEmail(bom.email),
+        nome: String(perfil?.name || perfil?.login || '').slice(0, 120),
+        id: String(perfil?.id || ''), login: String(perfil?.login || ''),
+      };
     }
     const tr = await fetchImpl('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -242,7 +280,7 @@ export async function perfilDoFornecedor(fornecedor, { code, env = {}, fetchImpl
     }));
     if (!p || !p.email) return { ok: false, motivo: 'o Google não devolveu um email nesta conta' };
     if (p.email_verified === false) return { ok: false, motivo: 'o Google diz que este email não está verificado' };
-    return { ok: true, email: normEmail(p.email), nome: String(p.name || '').slice(0, 120), id: String(p.sub || '') };
+    return { ok: true, fornecedor: 'google', email: normEmail(p.email), nome: String(p.name || '').slice(0, 120), id: String(p.sub || '') };
   } catch (e) {
     return { ok: false, motivo: `não consegui falar com o ${f.nome}: ${e.message}` };
   }
@@ -259,6 +297,8 @@ export function opcoesDeEntrada(env = {}) {
     donos: donos.map(mascararEmail),
     /* para quem tem de configurar isto: o nome da variável, não o endereço */
     variavelDoDono: 'ORBITA_DONO_EMAIL',
+    /* 1.74.0 · há contas GitHub do dono configuradas? (só o facto, não o número) */
+    donoGithub: (() => { const g = donosGithubDe(env); return g.ids.length + g.logins.length > 0; })(),
     fornecedores: estadoDosFornecedores(env).map((f) => ({
       id: f.id, nome: f.nome, pronto: f.pronto, falta: f.falta, retorno: f.retorno, como: f.como,
     })),

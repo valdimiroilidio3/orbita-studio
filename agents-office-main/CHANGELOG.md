@@ -1,3 +1,55 @@
+## 1.74.0 — 6 nov 2026 · a conta do dono é a conta do dono
+
+O dono continuou a bater na mesma porta:
+
+> Acesso ainda está bloqueado: só pode usar a app Orbita agente na respetiva
+> organização
+
+Não é o ecrã — é a **Google** a recusar antes de a app ver o pedido. O cliente
+OAuth está com o tipo de utilizador **«Interno»**, e uma conta `@gmail.com` nunca
+é da organização. **Isso muda-se na consola da Google e em mais lado nenhum** —
+nenhuma chave nem API nossa o faz. Esta versão faz duas coisas: leva-te ao sítio
+exacto com um toque, e tira a entrada do GitHub da sombra.
+
+### O atalho para o sítio onde se resolve
+O aviso do `org_internal` já dizia o que mudar; faltava o **onde**. Agora traz um
+botão **«Abrir a Google Auth Platform ↗»** (novo `acaoDaRecusa()` em
+`src/entrada-visual.js`, `https://console.cloud.google.com/auth/audience`), que
+abre a página onde se muda «Interno» → «Externo» e se acrescentam os utilizadores
+de teste. O mesmo para `redirect_uri_mismatch` e `invalid_client` (consola das
+credenciais). Um código que não conhecemos **não** ganha um botão inventado.
+
+### A entrada pelo GitHub deixa de depender do email primário
+Este era um defeito nosso, com a assinatura de um bloqueio: o GitHub devolve o
+email **primário** da conta, e se esse endereço não for o de
+`ORBITA_DONO_EMAIL`, a volta recusava a própria conta do dono com uma frase que
+não tinha solução do lado de quem estava a entrar.
+
+A conta GitHub tem um número que não muda e que ninguém reescreve. A entrada
+passa a aceitar o dono por **`ORBITA_DONO_GITHUB_ID`** (o `id` da conta GitHub),
+por **`ORBITA_DONO_GITHUB`** (o login), ou pelo email de sempre
+(`donoDoPerfil()` / `donosGithubDe()` em `api/_entrada.mjs`). Nesta instalação
+fica configurado `ORBITA_DONO_GITHUB_ID=239872116` — o número da conta
+`valdimiroilidio3`, que é quem manda neste repositório.
+
+O que isto **não** faz: abrir a porta a mais ninguém. O número é de uma conta só,
+o GitHub já provou que quem está a entrar é dela, e sem a variável a regra
+antiga (só o email) continua a mandar. A recusa também passou a dizer **qual**
+conta tentou entrar (com o login) e **com que conta** se entra.
+
+### Provas
+- suite: **1350/1350**, com testes novos que provam: a conta do dono entra com
+  outro email primário; o login serve de âncora e um `id` estranho continua de
+  fora; sem a variável, a regra antiga continua; o `org_internal` traz o atalho.
+- `/api/health` passa a dizer `entrada.donoGithub` (só o facto, nunca o número).
+
+### O que continua do teu lado
+Mudar o cliente OAuth de **«Interno» para «Externo»** e acrescentar
+`cheltonmahoze7@gmail.com` em «Utilizadores de teste»
+(`console.cloud.google.com/auth/audience`). E `RESEND_API_KEY` +
+`ORBITA_EMAIL_FROM` para o código por email sair. Nenhuma destas duas tem API
+nossa que a resolva.
+
 ## 1.73.0 — 6 nov 2026 · a página de entrada, sem o diagnóstico à vista
 
 O dono escreveu o que faltava dizer: «o design da página de login está ridículo

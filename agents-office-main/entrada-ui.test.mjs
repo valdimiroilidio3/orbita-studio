@@ -218,6 +218,15 @@ test('1.72.1 · org_internal aparece em português, com o sítio onde se resolve
   assert.doesNotMatch(t, /Apenas usuarios da organizacao/, 'não despeja o texto inglês da Google');
 });
 
+test('1.74.0 · a recusa do Google traz o botão que abre a consola onde se resolve', async () => {
+  const { doc } = await abrir({ url: 'https://mesa.test/app?erroEntrada=google%3Aorg_internal' });
+  const atalho = doc.querySelector('.enta-aviso .enta-consola');
+  assert.ok(atalho, 'há um atalho dentro do aviso');
+  assert.match(atalho.getAttribute('href'), /console\.cloud\.google\.com/);
+  assert.equal(atalho.getAttribute('target'), '_blank');
+  assert.match(atalho.getAttribute('rel'), /noopener/);
+});
+
 test('1.72.1 · uma recusa que não conhecemos aparece com o código à vista (não se inventa uma explicação)', async () => {
   const { texto } = await abrir({ url: 'https://mesa.test/app?erroEntrada=google%3Aalgum_codigo_novo' });
   const t = texto();

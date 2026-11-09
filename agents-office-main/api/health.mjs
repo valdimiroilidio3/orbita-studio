@@ -61,6 +61,8 @@ export default async function handler(req, res) {
       dono: o.donos[0] || null,
       soDono: true,
       github: o.fornecedores.find((f) => f.id === 'github')?.pronto || false,
+      /* 1.74.0 · a conta GitHub do dono é reconhecida pelo id/login? (só o facto) */
+      donoGithub: !!o.donoGithub,
       google: o.fornecedores.find((f) => f.id === 'google')?.pronto || false,
       codigo: o.codigo.pronto,
       falta: o.fornecedores.filter((f) => !f.pronto).map((f) => ({ fornecedor: f.id, falta: f.falta })),

@@ -34,7 +34,7 @@ import { createSupabaseRepo, envBase } from './_repo.mjs';
 import { abrirSessao } from './_porta.mjs';
 import {
   fornecedorPorId, estadoDosFornecedores, urlDeAutorizacao, perfilDoFornecedor,
-  uriDeRetorno, eODono, donosDe, mascararEmail,
+  uriDeRetorno, donoDoPerfil, donosDe, mascararEmail,
 } from './_entrada.mjs';
 import { randomBytes } from 'node:crypto';
 
@@ -123,9 +123,12 @@ export async function processarOAuth({
 
   const perfil = await perfilDoFornecedor(f.id, { code, env, fetchImpl, retorno: uriDeRetorno(f.id, env) });
   if (!perfil.ok) return voltar(perfil.motivo);
-  if (!eODono(perfil.email, env)) {
+  if (!donoDoPerfil(perfil, env)) {
     await repo.atividade.add('conta', `entrada recusada pelo ${f.nome}: ${perfil.email} não é o dono`).catch(() => null);
-    return voltar(`a conta ${mascararEmail(perfil.email)} não é a do dono desta instalação (${mascararEmail(donosDe(env)[0])})`);
+    /* 1.74.0 · diz-se QUAL conta tentou entrar (o login do GitHub incluído) e
+       com que conta se entra — uma recusa sem estes dois dados não se resolve */
+    const quem = perfil.login ? `«${perfil.login}» (${mascararEmail(perfil.email)})` : mascararEmail(perfil.email);
+    return voltar(`a conta ${quem} não é a do dono desta instalação. Entra com ${mascararEmail(donosDe(env)[0])}.`);
   }
 
   let conta = await repo.contas.porEmail(perfil.email).catch(() => null);

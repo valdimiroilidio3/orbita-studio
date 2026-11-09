@@ -126,6 +126,10 @@ export const RECUSAS = {
     curto: 'O Google recusou: esta app só aceita contas da organização. Muda o tipo de utilizador para «Externo» em Google Auth Platform.',
     oQue: 'O cliente OAuth está com o tipo de utilizador «Interno», por isso só contas da organização entram — e uma conta @gmail.com nunca é da organização.',
     como: 'Google Cloud Console → Google Auth Platform (ou «OAuth consent screen») → Público → muda o tipo de utilizador de «Interno» para «Externo»; depois, em «Utilizadores de teste», acrescenta cheltonmahoze7@gmail.com.',
+    /* 1.74.0 · o sítio onde se resolve, à distância de um toque: sem isto a frase
+       manda abrir uma consola que quem lê tem de procurar sozinho */
+    consola: 'https://console.cloud.google.com/auth/audience',
+    rotuloConsola: 'Abrir a Google Auth Platform',
   },
   access_denied: {
     titulo: 'a entrada foi cancelada no fornecedor',
@@ -138,6 +142,8 @@ export const RECUSAS = {
     curto: 'O endereço de retorno não está registado no fornecedor. Regista https://orbita-agentes.vercel.app/ e tenta outra vez.',
     oQue: 'O fornecedor recusa devolver a pessoa a um endereço que não esteja registado ao carácter.',
     como: 'Regista exactamente https://orbita-agentes.vercel.app/ (Google) ou https://orbita-agentes.vercel.app/api/oauth?fornecedor=github (GitHub) e tenta outra vez.',
+    consola: 'https://console.cloud.google.com/apis/credentials',
+    rotuloConsola: 'Abrir a consola das credenciais',
   },
   deleted_client: {
     titulo: 'o cliente OAuth já não existe',
@@ -150,6 +156,8 @@ export const RECUSAS = {
     curto: 'O ID e o segredo não são o mesmo par. Copia outra vez da consola para a Vercel.',
     oQue: 'O ID e o segredo guardados na Vercel não são o par que o fornecedor conhece — normalmente de uma chave rodada.',
     como: 'Copia outra vez o ID e o segredo da consola para a Vercel e faz Redeploy.',
+    consola: 'https://console.cloud.google.com/apis/credentials',
+    rotuloConsola: 'Abrir a consola das credenciais',
   },
   invalid_scope: {
     titulo: 'o fornecedor não aceita os âmbitos pedidos',
@@ -206,6 +214,24 @@ export function textoDaRecusa(valor) {
  * aconteceu e o gesto que resolve; o resto vive no «Estado da instalação»,
  * fechado, ou no `/api/health`.
  */
+/**
+ * 1.74.0 · o botão que resolve, quando a recusa tem um sítio exacto.
+ *
+ * A frase sozinha manda «muda o tipo de utilizador em Google Auth Platform» — e
+ * quem lê tem de encontrar essa página. Devolve-se o endereço, para o ecrã poder
+ * abri-lo. Só para recusas conhecidas: um código que não conheço não ganha um
+ * botão inventado.
+ *
+ * @returns {{href:string, rotulo:string}|null}
+ */
+export function acaoDaRecusa(valor) {
+  const t = String(valor == null ? '' : valor).trim();
+  if (!t || /\s/.test(t)) return null;
+  const r = explicarRecusa(t);
+  if (!r.conhecido || !r.consola) return null;
+  return { href: r.consola, rotulo: r.rotuloConsola || 'Abrir a consola' };
+}
+
 export function avisoDaRecusa(valor) {
   const t = String(valor == null ? '' : valor).trim();
   if (!t) return '';

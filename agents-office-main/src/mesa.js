@@ -83,7 +83,7 @@ import {
 import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
 /* 1.68.0 · a fila com a razão de cada tarefa: quando corre, e há quanto espera */
 import { analisarFila, faltaPara, decidirAoAbrir } from './fila.js';
-import { palcoHTML, revelar, avisoDaRecusa } from './entrada-visual.js';
+import { palcoHTML, revelar, avisoDaRecusa, acaoDaRecusa } from './entrada-visual.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -2015,8 +2015,11 @@ function viewLogin() {
   /* 1.73.0 · nem todo o aviso é um erro: «o código foi para …» é boa notícia e
      não pode aparecer num caixa vermelha (parecia que algo tinha falhado). */
   const tom = S.entradaAvisoTom === 'ok' ? 'ok' : 'erro';
+  /* 1.74.0 · quando a recusa tem consola, o aviso traz o botão que a abre — a
+     frase deixou de mandar procurar uma página que ninguém sabe onde está */
+  const atalho = tom === 'erro' ? acaoDaRecusa(erroDoLink) : null;
   const avisoHTML = aviso
-    ? `<div class="enta-aviso" role="${tom === 'ok' ? 'status' : 'alert'}" data-tom="${tom}">${tom === 'ok' ? IC.visto : IC.alerta}<span>${esc(aviso)}</span></div>`
+    ? `<div class="enta-aviso" role="${tom === 'ok' ? 'status' : 'alert'}" data-tom="${tom}">${tom === 'ok' ? IC.visto : IC.alerta}<span>${esc(aviso)}${atalho ? `<a class="enta-consola" href="${esc(atalho.href)}" target="_blank" rel="noopener noreferrer">${esc(atalho.rotulo)} ↗</a>` : ''}</span></div>`
     : '';
 
   const botaoDeFornecedor = (f) => `<button type="button" class="enta-prov-btn" data-act="oauth" data-fornecedor="${esc(f.id)}"${f.pronto ? '' : ' data-falta="1"'}>
