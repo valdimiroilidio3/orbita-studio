@@ -2963,7 +2963,7 @@ function avisoLocal() {
   const e = (local && local.estado()) || { leads: 0, projetos: 0 };
   return `<div class="localbar" role="status">
     <span><b>Modo local</b> — os teus dados ficam neste browser (${e.leads} leads · ${e.projetos} projetos).
-      A base de dados não está a responder${S.baseMotivo ? `: ${esc(S.baseMotivo)}` : ' (sem servidor publicado)'}.</span>
+      A base de dados não está a responder${S.baseMotivo ? `: ${esc(S.baseMotivo)}` : ' (o servidor não respondeu)'}.</span>
     <span class="lb-act">
       <button class="btn quiet small" data-act="exportar-local" title="descarregar uma cópia de tudo">Guardar cópia</button>
       <button class="btn quiet small" data-act="importar-local" title="ler uma cópia que guardaste">Ler cópia</button>

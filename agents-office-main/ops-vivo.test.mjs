@@ -9,7 +9,7 @@
      2 · quando os dados são os mesmos, não se repinta a gaveta (o foco e a
          selecção ficam onde estavam);
      3 · o ponto «ao vivo» diz a verdade: «ao vivo» quando acabou de ler,
-         «sem servidor» quando a leitura falha — nunca um número inventado;
+         «servidor não responde» quando a leitura falha — nunca um número inventado;
      4 · o botão «Atualizar» e as acções lêem sempre, mesmo com foco num campo.
    =========================================================================== */
 import test from 'node:test';
@@ -121,12 +121,12 @@ test('sem novidades, a gaveta não se repinta (o cursor fica onde estava)', asyn
   dom.window.close();
 });
 
-test('quando o servidor cala, o ponto diz «sem servidor» e não inventa números', async () => {
+test('quando o servidor cala, o ponto diz «servidor não responde» e não inventa números', async () => {
   const { dom, doc, gaveta } = await abrir({ falhar: true });
   gaveta.open();
   await espera();
   const vivo = doc.querySelector('.op-live-t').textContent;
-  assert.equal(vivo, 'sem servidor', `devia dizer «sem servidor», disse «${vivo}»`);
+  assert.equal(vivo, 'servidor não responde', `devia dizer «servidor não responde», disse «${vivo}»`);
   assert.equal(doc.querySelector('.op-live').classList.contains('bad'), true, 'o ponto devia ficar vermelho com o servidor em baixo');
   dom.window.close();
 });

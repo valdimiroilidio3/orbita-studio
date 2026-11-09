@@ -51,14 +51,16 @@ export function initOps({ api = '/api' } = {}) {
     if (!ponto || semMovimento() || typeof ponto.animate !== 'function') return;
     try { ponto.animate([{ transform: 'scale(1)' }, { transform: 'scale(2.4)' }, { transform: 'scale(1)' }], { duration: 460, easing: 'cubic-bezier(.2,.8,.2,1)' }); } catch { /* sem WAAPI */ }
   }
-  /* o rótulo ao lado do ponto: «ao vivo», «há 12 s», «sem servidor» — nunca um número inventado */
+  /* o rótulo ao lado do ponto: «ao vivo», «há 12 s», «servidor não responde» — nunca um
+     número inventado. 1.79.4 · dizia «sem servidor», e isso é outra coisa: este escritório
+     TEM servidor. O que falhou foi a ligação a ele — e é isso que a frase passa a dizer. */
   function tickVivo() {
     if (!P.liveT || !P.live) return;
     const parado = Date.now() - (S.lastOk || 0);
     P.live.classList.toggle('bad', !!S.error);
     P.live.classList.toggle('stale', !S.error && S.lastOk > 0 && parado > 30000);
     let t;
-    if (S.error) t = 'sem servidor';
+    if (S.error) t = 'servidor não responde';
     else if (!S.lastOk) t = 'a ligar…';
     else if (parado < 3000) t = 'ao vivo';
     else if (parado < 60000) t = `há ${Math.round(parado / 1000)} s`;
