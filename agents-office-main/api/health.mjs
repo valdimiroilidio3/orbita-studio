@@ -25,6 +25,28 @@ import { prontidaoCurta, GRUPOS } from './_prontidao.mjs';
 import { TOKENS, estadoDosTokens, nomesParecidos } from './_acesso.mjs';
 import { opcoesDeEntrada } from './_entrada.mjs';   // 1.69.0: quem entra e por onde
 
+/**
+ * 1.76.1 · «a porta tem as colunas que a entrada usa?»
+ *
+ * Separada do handler para poder ser provada sem rede. Devolve `null` quando o
+ * repositório não sabe responder (uma base em memória, um duplo antigo) — nesse
+ * caso o health não inventa um estado.
+ */
+export async function sondaDaPorta(repo) {
+  if (typeof repo?.contas?.sonda !== 'function') return null;
+  try {
+    await repo.contas.sonda();
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      erro: String(e.message || e).slice(0, 200),
+      ficheiro: e.ficheiro || null,
+      semEsquema: !!e.semEsquema,
+    };
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -78,8 +100,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const h = await createSupabaseRepo(env).health();
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
+    const repo = createSupabaseRepo(env);
+    const h = await repo.health();
+    /* 1.76.1 · a PORTA, à vista: a base tem as colunas que a entrada usa?
+       A lista `faltam` acima olha para as tabelas; esta sonda olha para as
+       colunas (código, OAuth, confirmação) — foi a falta delas que deu «a base
+       de dados recusou a conta do dono» com o health a dizer que estava tudo
+       bem. Sem segredos: só sim/não e a frase da base. */
+    const porta = await sondaDaPorta(repo);
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, porta, ia, prontidao, acesso, ciclo, entrada });
   } catch (e) {
     res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
   }
