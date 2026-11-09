@@ -1,7 +1,8 @@
-## 1.79.3 — 9 nov 2026 · o CI passa a dizer qual teste falhou (e a correr na versão certa)
+## 1.79.3 — 9 nov 2026 · o CI verde: Node 22, a oferta sempre na mensagem, e um erro que diz o que falhou
 
-A 1.79.2 pôs o `jsdom` a funcionar no Node 20, mas o CI continuou vermelho. Duas
-coisas, ambas visíveis só depois de se olhar para os trabalhos um a um:
+A 1.79.2 pôs o `jsdom` a funcionar no Node 20, mas o CI continuou vermelho. O CI
+passou a dizer o que falhava (ver 2) e a primeira leitura dessas anotações trouxe
+quatro coisas, uma delas um problema de produto a sério:
 
 ### 1 · o Node 20 não é uma versão que este projecto saiba correr
 
@@ -27,12 +28,50 @@ legíveis de todo o lado):
 - o resumo do passo leva a contagem (`tests/pass/fail`) e, em falha, as últimas
   80 linhas do registo.
 
+### 3 · o gate dependia de haver (ou não) um motor de IA à mão
+
+Foi a anotação nova que o mostrou, no primeiro CI depois da 1.79.2: três passos do
+`passo 3` vermelhos, com uma mensagem escrita por um modelo — bonita, em «você»,
+**sem preço nenhum**. Nesta VM não há chaves nem rede para os motores gratuitos, por
+isso o rascunho saía do modelo local (com «350 €») e o gate passava; no CI havia um
+motor disponível e o texto era outro. O gate não pode depender disso.
+
+- `AO_AI=nenhum` passa a ser uma ordem a sério: o `resolve()` devolve **nenhum**
+  motor e diz «motor desligado de propósito». Antes, pedir um motor indisponível
+  caía no *failover* e o escritório ia buscar outro sozinho;
+- o passo 3 do `check.mjs` corre com `AO_AI=nenhum` — prova o encadeamento
+  (site → factos → mensagem → oferta → resposta), não qual modelo escreveu. O motor
+  a sério prova-se com `CHECK_LIVE=1`.
+
+### 4 · a oferta do dono não é um detalhe do modelo
+
+O texto do CI revelou um problema de produto: **a mensagem saía sem o preço**. O
+prompt pedia-o; o modelo ignorava-o. Uma mensagem de prospecção sem preço é uma
+conversa a mais e um preço inventado é uma promessa que o dono não fez.
+
+- `garantirOferta()` (novo, `src/ops/personalize.mjs`): se a mensagem não traz
+  preço, acrescenta-se a frase da oferta — a mesma do modelo local, com preço, prazo
+  e garantia; se traz **outro** preço, o texto é recusado e volta o modelo local;
+- «450€» passa a «450 €» (espaço, à portuguesa);
+- o `why` do rascunho diz quando a frase foi acrescentada — não se esconde.
+
+### 5 · «Failed to load resource: net::ERR_FILE_NOT_FOUND» não é um diagnóstico
+
+O outro passo vermelho não dizia que ficheiro faltava. O smoke passa a ouvir
+`requestfailed` e a mostrar o **URL**:
+
+- um pedido para fora da pasta do projecto numa página `file://` (ícone, manifest,
+  `/app`) é a vista estática a pedir o que só o servidor serve: conta-se e diz-se no
+  resultado do passo, não pinta o gate de vermelho;
+- um ficheiro em falta **dentro** do projecto continua a ser erro, com nome e motivo.
+
 ### Provas
 
 - `node build.mjs` → `dist/command-centre-v2.html` (1717 KB) + `dist/mesa.html`;
-- `node --test` → **1440/1440**;
-- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser` — esta máquina não
-  tem Chrome; o CI tem e corre-o a sério).
+- `node --test` → **1441/1441** (entra o teste novo da oferta: acrescenta, recusa
+  preço inventado, corrige «450€»);
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser` — esta máquina não tem
+  Chrome; o CI tem e corre-o a sério).
 
 ## 1.79.2 — 9 nov 2026 · o gate volta a verde, os conectores deixam de ser da tua máquina
 

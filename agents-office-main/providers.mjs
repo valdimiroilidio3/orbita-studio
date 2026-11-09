@@ -204,6 +204,17 @@ export function resolve(cfg = {}, dataDir = null) {
   const ai = cfg.ai || {};
   const saved = dataDir ? readJSON(path.join(dataDir, 'ai.json'), {}) : {};
   const wanted = process.env.AO_AI || saved.provider || ai.provider || 'auto';
+  /* 1.79.3 · «AO_AI=nenhum» desliga a IA de propósito — e desliga mesmo.
+     Antes, pedir um motor indisponível caía no failover e o escritório ia buscar outro
+     sozinho: quem quisesse provar o modelo local (o gate, um teste, uma máquina sem
+     rede) não tinha como garantir qual dos dois escrevia. Agora há uma palavra para
+     isso, e o estado diz que foi o dono a desligar — não que não há motores. */
+  if (/^(nenhum|off|none|desligado)$/i.test(String(wanted))) {
+    return {
+      unproven: [], active: null, candidates: [], requested: wanted, saved: saved.provider || null,
+      unavailable: [`motor desligado de propósito (AO_AI=${wanted})`],
+    };
+  }
   /* 1.37.0 · o modelo fixado para o motor guardado (ex.: uma gratuita concreta)
      entra como se estivesse na configuração — a escolha da barra tem de sobreviver
      a um reinício, senão não é uma escolha. */

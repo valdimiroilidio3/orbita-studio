@@ -424,7 +424,23 @@ else {
   try {
     if (!browser) throw Object.assign(new Error('__saltado__'), { saltado: true });
     const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
-    const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 120)); });
+    /* 1.79.3 · os pedidos falhados passam a ser vistos pelo URL. Antes só se via «Failed to
+       load resource: net::ERR_FILE_NOT_FOUND» e não se sabia de que ficheiro se tratava — foi
+       assim que este passo ficou vermelho no CI sem dizer porquê. Um pedido para fora da
+       pasta do projecto, numa página `file://`, é a vista estática a pedir coisas que só o
+       servidor serve (ícone, manifest, /app): conta-se e mostra-se, mas não é avaria. Um
+       ficheiro em falta DENTRO do projecto continua a ser erro. */
+    const errors = [];
+    const foraDoProjecto = new Set();
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 120)); });
+    page.on('requestfailed', r => {
+      const u = r.url();
+      const local = u.startsWith('file://');
+      const dentro = local && decodeURIComponent(new URL(u).pathname).startsWith(ROOT);
+      if (local && !dentro) { foraDoProjecto.add(decodeURIComponent(new URL(u).pathname)); return; }
+      errors.push(`pedido falhou: ${u} (${r.failure()?.errorText || 'sem motivo'})`);
+    });
     await page.goto('file://' + path.join(ROOT, 'dist', 'command-centre-v2.html') + '?s=check'); await page.waitForTimeout(3000);
     /* 3 nov 2026 · esta secção abria o bundle num Chrome e assumia um «modo demo» que já não
        existe: as tarefas vivem no servidor, e sem ele a barra diz isso mesmo. Um smoke de
@@ -434,6 +450,9 @@ else {
        É a vista estática a dizer «sem servidor», não um erro da aplicação. */
     const ruidoEstatico = (t) => t.includes('file:///api/') || t.includes("origin 'null'")
       || /^Failed to load resource: net::ERR_FAILED$/.test(t) // o EventSource da vista ao vivo, bloqueado na origem file://
+      /* o par do `requestfailed` acima: o texto da consola não traz o URL, e o pedido já foi
+         contado (ou perdoado) com nome e caminho. Sem isto, o mesmo erro contava duas vezes. */
+      || /^Failed to load resource: net::ERR_FILE_NOT_FOUND$/.test(t)
       || t.includes('Fetch API cannot load file:///');
     await step('smoke: loads without page errors', async () => {
       const reais = errors.filter((t) => !ruidoEstatico(t));
@@ -466,6 +485,9 @@ else {
     await step('smoke: no errors after the run', async () => {
       const reais = errors.filter((t) => !ruidoEstatico(t));
       if (reais.length) throw new Error(reais[0]);
+      return foraDoProjecto.size
+        ? `sem erros · ${foraDoProjecto.size} recurso(s) só-do-servidor pedidos na vista estática (${[...foraDoProjecto].slice(0, 3).join(', ')})`
+        : 'sem erros';
     });
   } catch (e) {
     if (!e || !e.saltado) bad('smoke: browser', e.message);
@@ -817,8 +839,13 @@ else {
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'orbita-ops-'));
   const port = 4700 + Math.floor(Math.random() * 200);
-  // ORBITA_PESQUISA_PERMITIR_PRIVADO: só aqui, para o passo 3 poder ler um site falso local
-  const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db'), ORBITA_PESQUISA_PERMITIR_PRIVADO: '1' };
+  /* ORBITA_PESQUISA_PERMITIR_PRIVADO: só aqui, para o passo 3 poder ler um site falso local.
+     AO_AI=nenhum: o passo 3 prova o encadeamento (site → factos → mensagem → oferta →
+     resposta), não qual modelo escreveu. Sem isto, o gate ficava verde ou vermelho
+     conforme houvesse um motor de IA à mão naquela máquina — e foi assim que, no CI,
+     apareceu uma mensagem escrita por um modelo, sem preço, a fazer cair três passos. O
+     motor a sério prova-se em `CHECK_LIVE=1`, não no gate. */
+  const env = { ...process.env, PORT: String(port), ORBITA_DATA_DIR: tmp, ORBITA_DB: path.join(tmp, 'ops.db'), ORBITA_PESQUISA_PERMITIR_PRIVADO: '1', AO_AI: 'nenhum' };
   let donoCookie = '', leitorCookie = '';
   let srv = spawn('node', ['serve.mjs'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => { log += d; }); srv.stderr.on('data', d => { log += d; });
