@@ -1,3 +1,53 @@
+## 1.76.0 — 6 nov 2026 · a base que se cura sozinha (e o ficheiro certo no erro)
+
+O dono tentou entrar pelo GitHub e leu:
+
+> a base de dados recusou a conta do dono: falta a tabela «orbita_contas»:
+> o esquema não foi aplicado — a correcção está em supabase/orbita_mesa.sql
+
+Três coisas erradas de uma vez: **a base não tinha o esquema da porta**, a
+mensagem **apontava para o ficheiro errado** (`orbita_mesa.sql` não cria contas
+nenhumas; as contas nascem em `orbita_1_54_0.sql`) e — a que importa — **a
+entrada estava à espera de alguém correr SQL à mão**.
+
+### O que muda
+- **A porta cura o próprio esquema.** Antes de responder a qualquer rota da
+  entrada, o servidor pergunta à base pelas colunas que o código usa
+  (`contas.sonda()`). Se a tabela ou a coluna não existir, aplica os três
+  ficheiros versionados da porta — `orbita_1_54_0.sql` (contas + sessões),
+  `orbita_1_54_1.sql` (confirmação) e `orbita_1_69_0.sql` (código e OAuth) — e
+  **volta a perguntar** antes de dizer «ok». Um por transacção, pelo mesmo
+  aplicador do `/api/setup`.
+- **Só quando a base diz que falta.** O curador (`api/_autoesquema.mjs`) só corre
+  DDL quando o erro é `semEsquema` **e** a tabela é da porta: um erro de rede, uma
+  chave errada ou a falta de uma tabela da mesa **não** disparam SQL nenhum.
+- **Uma vez por processo, não por pedido.** O resultado bom fica em memória
+  5 minutos e dez pedidos simultâneos partilham a mesma promessa — uma aplicação,
+  não dez DDL em paralelo.
+- **A volta do OAuth também cura** (`api/_oauth.mjs`): era exactamente ali que o
+  dono viu o erro. Se a cura falhar, a frase passa a dizer **porquê** (sem
+  `POSTGRES_URL`, pooler recusou, SQL recusado) em vez de «tenta outra vez».
+- **O erro passou a nomear o ficheiro certo**: `orbita_contas`/`orbita_sessoes` →
+  `orbita_1_54_0.sql`; `codigo_hash`/`oauth_id` → `orbita_1_69_0.sql`;
+  `confirmado_em` → `orbita_1_54_1.sql`. A mesa continua a ser a mesa.
+- **O `/api/health` passa a olhar para a porta**: `orbita_contas` e
+  `orbita_sessoes` entram na lista de tabelas auditadas. Foi por não estarem lá
+  que o health dizia «falta `orbita_faturas`» com a entrada partida.
+
+### Provas
+- suite: **1365/1365**, incluindo `autoesquema.test.mjs` (8 testes): reconhece a
+  falta de esquema e **não** confunde com avaria de rede; aplica os três
+  ficheiros pela ordem certa; confirma depois de aplicar; dez pedidos → uma
+  aplicação; uma falha não fica em cache como sucesso; em memória não toca em
+  nada; e o erro manda para o ficheiro certo.
+- `check.mjs`: **96/97** (só o smoke de browser — sem Chromium neste ambiente).
+
+### Se a cura não puder correr
+Continua a haver o caminho explícito: `/api/setup?token=<SETUP_TOKEN>` (ou
+`POST /api/setup` com `{token}`), que aplica o esquema todo e diz o que ficou a
+faltar. Esta versão não o substitui — tira-lhe a obrigação de ser o primeiro
+passo.
+
 ## 1.75.0 — 6 nov 2026 · «Entrar como dono» funciona sem ir à Vercel copiar um segredo
 
 O dono apontou o ecrã: **«entrada sem colocação de token nesta página — Token de

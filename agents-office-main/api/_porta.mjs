@@ -21,6 +21,10 @@ import {
 /* 1.66.0 · o caminho das máquinas: um token no cabeçalho vale como sessão para a
    API — sem nunca abrir contas nem palavras-passe. Ver `api/_acesso.mjs`. */
 import { quemPeloToken, estadoDosTokens, EXPLICACAO, ADMINISTRACAO } from './_acesso.mjs';
+/* 1.76.0 · o esquema da porta que se aplica a si próprio: se a base não tiver
+   `orbita_contas`/`orbita_sessoes` (ou as colunas da entrada), ele é aplicado a
+   partir dos ficheiros versionados — a entrada não fica à espera de SQL à mão. */
+import { garantirEsquemaDaPorta } from './_autoesquema.mjs';
 /* 1.69.0 · a entrada: GitHub, Google e o código de uso único. As regras são
    puras e vivem em `_entrada.mjs`; aqui só se guarda e se abre a sessão. */
 import {
@@ -206,6 +210,13 @@ export async function avaliarPorta(repo, {
   /* a porta está dormente? (memória/testes, `seguranca:false`, ou decisão explícita) */
   let dormente = seguranca === false;
   if (seguranca === null || seguranca === undefined) dormente = repo.tipo === 'memoria';
+
+  /* 1.76.0 · antes de responder a qualquer rota da entrada: a base tem as
+     tabelas da porta? Se não tiver, aplicam-se os três ficheiros que as criam
+     (idempotentes) e volta-se a perguntar. O resultado é guardado em memória,
+     por isso isto não custa uma ida à base por pedido — e não impede nada: se
+     falhar, a rota segue e mostra o erro verdadeiro. */
+  const esquema = dormente ? { ok: true, memoria: true } : await garantirEsquemaDaPorta(repo, env).catch((e) => ({ ok: false, motivo: e.message }));
 
   /* ---------- /auth/* : público, sempre ---------- */
   if (limpo === '/auth/eu' && m === 'GET') {
@@ -420,6 +431,10 @@ export async function avaliarPorta(repo, {
          avaria — e a frase tem de dizer isso com o ficheiro certo */
       return { resposta: { status: 503, corpo: {
         error: 'a base de dados ainda não tem as tabelas da porta (orbita_contas, orbita_sessoes)',
+        /* 1.76.0 · o servidor tentou aplicá-las sozinho. Dizer «tenta outra vez»
+           sem dizer o que falhou era esconder a única informação útil. */
+        tentouAplicar: !esquema?.ok,
+        motivo: esquema?.erro || esquema?.motivo || null,
         instrucao: 'aplica supabase/orbita_1_54_0.sql no Supabase, ou corre /api/setup?token=…&so=orbita_1_54_0.sql',
         detalhe: String(e.message || e).slice(0, 200),
       } } };
