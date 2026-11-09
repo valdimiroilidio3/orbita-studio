@@ -1,3 +1,20 @@
+## 1.77.1 — 6 nov 2026 · o fluxo ao vivo provado com uma sessão a sério
+
+A 1.77.0 pôs o retrato e o fluxo ao vivo na Vercel. Faltava a prova que mais
+interessa: **com sessão válida, o `hello` sai.** O teste novo abre uma conta num
+repositório em memória, abre sessão pela porta, chama o fluxo e lê o que foi
+escrito — `retry`, `event: hello`, o trabalho que está a correr e nenhum segredo.
+
+Para isso o tratamento passou a ser `servirAoVivo(req, res, { repo, env })`
+(exportada): a base e o ambiente são injectáveis, por isso não é preciso rede nem
+uma base verdadeira para provar o fluxo. O `handler` por omissão continua a lê-los
+do ambiente, como antes.
+
+E o temporizador do fluxo passou a ser `unref()`: uma ligação esquecida não
+segura o processo (nem os testes) depois de morrer.
+
+Suite: **1381/1381**.
+
 ## 1.77.0 — 6 nov 2026 · a conta sem palavra-passe e o escritório ao vivo em produção
 
 Duas frases que o dono leu no ecrã, e as duas eram nossas:
