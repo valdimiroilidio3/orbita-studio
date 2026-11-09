@@ -1,5 +1,9 @@
 ## 1.77.1 — 6 nov 2026 · o fluxo ao vivo provado com uma sessão a sério
 
+Também: a recusa «esta conta entra pelo GitHub» **não conta como tentativa
+falhada** — não houve palavra-passe errada, houve um caminho errado, e o dono não
+pode ficar bloqueado por escolher o botão que não era o dele.
+
 A 1.77.0 pôs o retrato e o fluxo ao vivo na Vercel. Faltava a prova que mais
 interessa: **com sessão válida, o `hello` sai.** O teste novo abre uma conta num
 repositório em memória, abre sessão pela porta, chama o fluxo e lê o que foi

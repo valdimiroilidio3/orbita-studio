@@ -579,7 +579,8 @@ export async function avaliarPorta(repo, {
          se enumera contas). */
       if (conta && !conta.hash && eODono(email, env)) {
         const porOnde = conta.oauth_fornecedor === 'github' ? 'GitHub' : conta.oauth_fornecedor === 'google' ? 'Google' : 'fornecedor';
-        limitador.falhou(chave);
+        /* não conta como tentativa falhada: não houve palavra-passe errada, houve
+           um caminho errado — e o dono não pode ficar bloqueado por isso */
         return { resposta: { status: 409, corpo: {
           error: `esta conta entra pelo ${porOnde} — não tem palavra-passe`,
           entraPorFornecedor: conta.oauth_fornecedor || null,
