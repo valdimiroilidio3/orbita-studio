@@ -415,6 +415,70 @@ test('1.69.0 · o GitHub de outra pessoa não entra, mesmo com chaves boas', asy
   assert.equal(await repo.contas.contar(), 0, 'e nenhuma conta criada');
 });
 
+/* 1.74.0 · O DONO TEM MAIS DO QUE UM EMAIL.
+
+   O GitHub devolve o email *primário* da conta. Se esse email não for o que está
+   em `ORBITA_DONO_EMAIL`, a entrada recusava a própria conta do dono — e a frase
+   não tinha solução do lado de quem estava a entrar. A conta passa a ser
+   reconhecida pelo `id` do GitHub (e pelo login), que não muda. */
+test('1.74.0 · a conta GitHub do dono entra mesmo quando o email primário é outro', async () => {
+  const env = {
+    GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt',
+    ORBITA_DONO_GITHUB_ID: '239872116',
+  };
+  const repo = createMemRepo();
+  const github = async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: 'outro-endereco@exemplo.pt', primary: true, verified: true }]) };
+    return { ok: true, status: 200, json: async () => ({ id: 239872116, login: 'valdimiroilidio3', name: 'Chelton Mahoze' }) };
+  };
+  const r = await processarOAuth({ repo, env, fetchImpl: github, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  assert.equal(r.status, 302);
+  assert.equal(r.location, '/app?entrou=github', 'a conta do dono entra — o número é dela');
+  assert.ok(r.cabecalhos['Set-Cookie'].some((c) => /orbita_sessao|sessao/.test(c)), 'com sessão');
+  const conta = await repo.contas.porEmail('outro-endereco@exemplo.pt');
+  assert.equal(conta.papel, 'dono');
+});
+
+test('1.74.0 · o login do dono também serve de âncora, e um id estranho continua de fora', async () => {
+  const repo = createMemRepo();
+  const perfil = (id, login, email) => async (url) => {
+    if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+    if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email, primary: true, verified: true }]) };
+    return { ok: true, status: 200, json: async () => ({ id, login }) };
+  };
+  const base = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+
+  const peloLogin = await processarOAuth({
+    repo, env: { ...base, ORBITA_DONO_GITHUB: 'valdimiroilidio3' }, fetchImpl: perfil(999, 'ValdimiroIlidio3', 'x@exemplo.pt'),
+    query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz'),
+  });
+  assert.equal(peloLogin.location, '/app?entrou=github', 'o login compara-se sem distinguir maiúsculas');
+
+  const estranho = await processarOAuth({
+    repo, env: { ...base, ORBITA_DONO_GITHUB_ID: '239872116' }, fetchImpl: perfil(1234, 'intruso', 'y@exemplo.pt'),
+    query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz'),
+  });
+  assert.match(descodificar(estranho.location), /não é a do dono/);
+  const frase = descodificar(estranho.location);
+  assert.match(frase, /intruso/, 'diz QUAL conta tentou entrar (o login)');
+  assert.match(frase, /Entra com che/, 'e com que conta se entra');
+});
+
+test('1.74.0 · sem âncora GitHub configurada, a regra velha continua: só o email do dono', async () => {
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  const r = await processarOAuth({
+    repo: createMemRepo(), env,
+    fetchImpl: async (url) => {
+      if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+      if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: 'amigo@exemplo.pt', primary: true, verified: true }]) };
+      return { ok: true, status: 200, json: async () => ({ id: 239872116, login: 'valdimiroilidio3' }) };
+    },
+    query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz'),
+  });
+  assert.match(descodificar(r.location), /não é a do dono/, 'um id não configurado não abre nada');
+});
+
 /* ---------- 8 · as costuras (o que liga isto à Vercel e à mesa) ---------- */
 
 test('1.69.0 · a Vercel serve /api/oauth e o ficheiro sabe redireccionar', () => {

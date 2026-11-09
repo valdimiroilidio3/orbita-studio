@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 
 import {
   ORBITAS, ANEIS, aneisHTML, orbitasHTML, palcoHTML, revelar, escapar,
-  RECUSAS, explicarRecusa, textoDaRecusa, avisoDaRecusa,
+  RECUSAS, explicarRecusa, textoDaRecusa, avisoDaRecusa, acaoDaRecusa,
 } from './src/entrada-visual.js';
 
 test('1.71.0 · o palco tem a arte à esquerda e o formulário à direita', () => {
@@ -125,4 +125,17 @@ test('1.73.0 · «avisoDaRecusa» devolve uma frase para a página — e uma só
   const novo = avisoDaRecusa('github:coisa_nova');
   assert.match(novo, /coisa_nova/);
   assert.match(novo, /tenta outra vez/i);
+});
+
+/* 1.74.0 · a frase diz «muda o tipo de utilizador em Google Auth Platform» — e
+   agora leva lá. Um botão só aparece quando há um sítio exacto para abrir. */
+test('1.74.0 · «org_internal» traz o endereço da consola; um código desconhecido não inventa botão', () => {
+  const org = acaoDaRecusa('google:org_internal');
+  assert.ok(org, 'há um atalho');
+  assert.match(org.href, /^https:\/\/console\.cloud\.google\.com\//);
+  assert.match(org.rotulo, /Google Auth Platform/);
+
+  assert.equal(acaoDaRecusa('google:qualquer_coisa_nova'), null, 'sem sítio conhecido, sem botão');
+  assert.equal(acaoDaRecusa('a volta expirou — tenta entrar outra vez'), null, 'uma frase nossa não ganha botão');
+  assert.equal(acaoDaRecusa(''), null);
 });
