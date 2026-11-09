@@ -24,8 +24,12 @@ import fs from 'node:fs';
 const RAIZ = new URL('./', import.meta.url);
 const lerJson = (p) => JSON.parse(fs.readFileSync(new URL(p, RAIZ), 'utf8'));
 
-/** A versão de Node do CI — uma só, escrita aqui e no workflow. */
-const CI_NODE = '20.19.0';
+/** A versão de Node do CI — uma só, escrita aqui e no workflow.
+    1.79.3 · 22 e não 20: a base de operação (`src/ops/db.mjs`) usa `node:sqlite`,
+    que só existe a partir do 22.4. O `engines.node` dizia `>=20` e era falso. */
+const CI_NODE = '22.22.0';
+/** O mínimo por causa do `node:sqlite` (a base de operação do escritório). */
+const MINIMO_POR_SQLITE = '22.5.0';
 
 /* --- um leitor de intervalos semver, pequeno e suficiente -------------------
    Aceita o que as dependências usam de facto: `*`, `>=x`, `^x.y.z`, `~x.y.z`,
@@ -72,6 +76,21 @@ export function satisfaz(intervalo, versao = CI_NODE) {
 }
 
 const PACOTE = lerJson('./package.json');
+
+test('1.79.3 · o engines declara o que a base de operação exige (node:sqlite ≥ 22.5)', () => {
+  const faixa = PACOTE.engines?.node;
+  assert.ok(faixa, 'o package.json tem de declarar engines.node');
+  assert.equal(satisfaz(faixa, MINIMO_POR_SQLITE), true,
+    `engines.node diz «${faixa}», e o node:sqlite (a base de operação) só existe a partir do ${MINIMO_POR_SQLITE}`);
+  assert.equal(satisfaz(faixa, '22.4.0'), false,
+    'o engines tem de cortar antes do 22.5 — é aí que o node:sqlite aparece');
+  assert.equal(satisfaz(faixa, '20.19.0'), false,
+    'prometer Node 20 era falso: sem node:sqlite metade das suites não corre');
+  /* e a prova, no código: o abridor da base usa mesmo o node:sqlite */
+  const db = fs.readFileSync(new URL('./src/ops/db.mjs', RAIZ), 'utf8');
+  assert.match(db, /await import\('node:sqlite'\)/);
+  assert.match(db, /22\.5\+/);
+});
 
 test('1.79.2 · o engines do projecto aceita a versão de Node que o CI corre', () => {
   const faixa = PACOTE.engines?.node;
@@ -123,10 +142,12 @@ test('1.79.2 · cada dependência directa aceita a versão de Node do CI', () =>
 
 test('1.79.2 · o leitor de intervalos não passa tudo por favor', () => {
   /* sem isto, um erro no leitor fazia o teste acima dizer «está tudo bem» */
-  assert.equal(satisfaz('^22.22.2 || ^24.15.0 || >=26.0.0'), false, 'o jsdom 30 não serve no Node 20');
+  assert.equal(satisfaz('^22.22.2 || ^24.15.0 || >=26.0.0'), false, 'o jsdom 30 não serve no Node 22.13');
+  assert.equal(satisfaz('^22.22.2 || ^24.15.0 || >=26.0.0', '22.22.2'), true);
   assert.equal(satisfaz('^20.19.0 || ^22.13.0 || >=24.0.0'), true);
   assert.equal(satisfaz('>=20'), true);
-  assert.equal(satisfaz('>=22'), false);
+  assert.equal(satisfaz('>=22'), true, 'o CI corre 22.22 — «>=22» aceita-o');
+  assert.equal(satisfaz('>=23'), false);
   assert.equal(satisfaz('>=16.0.0'), true);
   assert.equal(satisfaz('12'), false);
   assert.equal(satisfaz('*'), true);

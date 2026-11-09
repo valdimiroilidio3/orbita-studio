@@ -28,10 +28,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 1.79.2 · duas versões, as duas prometidas: a 20 (o mínimo do
-        # `engines.node`) e a 22 (`current`). Foi uma delas que se partiu em
-        # silêncio — o `jsdom` 30 exigia 22 e o CI corria 20.
-        node: [20, 22]
+        # 1.79.3 · 22 e só 22 — e a razão é concreta: a base de operação do
+        # escritório (`src/ops/db.mjs`) usa `node:sqlite`, que só existe a partir
+        # do Node 22.4. Com o CI em 20, metade das suites falhava por uma coisa
+        # que não era código da aplicação. `engines.node` passou a dizer a verdade.
+        node: [22]
     defaults:
       run:
         working-directory: agents-office-main
@@ -50,7 +51,15 @@ jobs:
       # O smoke abre um Chrome a sério. O ubuntu-latest traz o Google Chrome; o `channel: 'chrome'`
       # do playwright-core usa esse, sem descarregar browsers. Noutra máquina: CHROME_PATH.
       - name: Build + testes + smoke
-        run: node check.mjs
+        run: |
+          set +e
+          node check.mjs > /tmp/gate.log 2>&1
+          code=$?
+          grep -E "^✗" /tmp/gate.log | head -20 | while IFS= read -r l; do
+            echo "::error title=falhou::${l}"
+          done
+          { echo '### gate'; echo '```'; tail -40 /tmp/gate.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
 
   suites:
     runs-on: ubuntu-latest
@@ -58,7 +67,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22]
+        # 1.79.3 · a mesma razão do `gate`: `node:sqlite` (a base de operação do
+        # escritório) só existe a partir do Node 22.4 — e o `engines.node` passou
+        # a dizer a verdade. Com o CI em 20, metade das suites falhava por Node,
+        # não por código.
+        node: [22]
     defaults:
       run:
         working-directory: agents-office-main
@@ -79,5 +92,17 @@ jobs:
       - name: Build
         run: node build.mjs
 
+      # 1.79.3 · quando fica vermelho, o pull request diz QUAL teste falhou. Antes só se
+      # via «Process completed with exit code 1» — e os logs da acção não são legíveis
+      # de todo o lado (nem de um agente). A anotação e o resumo ficam na página do PR.
       - name: Todas as suites
-        run: node --test
+        run: |
+          set +e
+          node --test > /tmp/suites.log 2>&1
+          code=$?
+          grep -E "^not ok" /tmp/suites.log | head -20 | while IFS= read -r l; do
+            echo "::error title=falhou::${l}"
+          done
+          { echo '### suites'; echo '```'; grep -E "^# (tests|pass|fail)|^not ok" /tmp/suites.log | head -30; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ $code -ne 0 ]; then { echo '### fim do registo'; echo '```'; tail -80 /tmp/suites.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"; fi
+          exit $code

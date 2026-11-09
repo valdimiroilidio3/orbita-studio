@@ -1,3 +1,39 @@
+## 1.79.3 — 9 nov 2026 · o CI passa a dizer qual teste falhou (e a correr na versão certa)
+
+A 1.79.2 pôs o `jsdom` a funcionar no Node 20, mas o CI continuou vermelho. Duas
+coisas, ambas visíveis só depois de se olhar para os trabalhos um a um:
+
+### 1 · o Node 20 não é uma versão que este projecto saiba correr
+
+A base de operação do escritório (`src/ops/db.mjs`) é SQLite a sério, via
+`node:sqlite` — que só existe a partir do Node 22.4. O `engines.node` dizia
+`>=20.19` e o CI tinha uma matriz `[20, 22]`: no Node 20 metade das suites
+falhava por falta de uma API do próprio Node, não por causa da aplicação.
+
+- o CI corre **22 e só 22** (`gate` e `suites`);
+- `engines.node` passa a `>=22.5` — o primeiro patch em que o `node:sqlite` está
+  lá sem depender de flag;
+- `versoes.test.mjs` prova as duas pontas: o `engines` aceita 22.5 e recusa 22.4,
+  e o abridor da base importa mesmo `node:sqlite`;
+- `src/ops/db.mjs` diz «Usa Node 22.5+» a quem abrir a base numa versão antiga.
+
+### 2 · «Process completed with exit code 1» não é um diagnóstico
+
+Quando o `gate` ou as `suites` ficam vermelhos, o pull request passa a mostrar
+**qual** teste falhou, sem precisar de abrir os logs da acção (que não são
+legíveis de todo o lado):
+
+- cada linha `not ok` (suites) e `✗` (gate) vira uma **anotação de erro** no PR;
+- o resumo do passo leva a contagem (`tests/pass/fail`) e, em falha, as últimas
+  80 linhas do registo.
+
+### Provas
+
+- `node build.mjs` → `dist/command-centre-v2.html` (1717 KB) + `dist/mesa.html`;
+- `node --test` → **1440/1440**;
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser` — esta máquina não
+  tem Chrome; o CI tem e corre-o a sério).
+
 ## 1.79.2 — 9 nov 2026 · o gate volta a verde, os conectores deixam de ser da tua máquina
 
 Quatro coisas que estavam listadas como «problemas», todas resolvidas — e a causa
