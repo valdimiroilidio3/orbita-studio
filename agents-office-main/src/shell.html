@@ -223,6 +223,158 @@
     opacity: 0; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease);
     z-index: 40;
   }
+  /* =========================================================================
+     1.78.0 · O CONTROLE REMOTO DO ESCRITÓRIO (7 nov 2026)
+
+     Pedido do dono: «melhorar o remote de controlo, mais qualidade e realismo,
+     ícones reais, mais elegante». O que aqui está é um comando à mão: uma
+     pastilha discreta no canto que abre num painel pequeno.
+
+     Porque assim e não um dock maior: a cena é o produto. O comando fica
+     fechado (44 px) até alguém precisar dele, e quando abre mede 316 px —
+     o bastante para seis salas com nome e número, sem tapar o escritório.
+     ========================================================================= */
+  #remoto {
+    position: fixed; left: 18px; bottom: 58px; z-index: 61;
+    display: flex; flex-direction: column-reverse; gap: 8px;
+    font-family: var(--ui); color: var(--ink);
+    transition: left .45s var(--ease);
+  }
+  body.railLeft #remoto { left: calc(min(400px, 92vw) + 18px); }
+  .rmt-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 44px; padding: 0 13px 0 12px; cursor: pointer;
+    background: color-mix(in srgb, var(--cream) 92%, transparent);
+    border: 1px solid var(--hairline); border-radius: 999px;
+    box-shadow: var(--sh2); color: var(--ink);
+    backdrop-filter: blur(16px) saturate(1.15); -webkit-backdrop-filter: blur(16px) saturate(1.15);
+    transition: background var(--d2) var(--ease), border-color var(--d2) var(--ease), box-shadow var(--d2) var(--ease), transform var(--d1) var(--ease);
+  }
+  .rmt-toggle:hover { border-color: color-mix(in srgb, var(--ink) 34%, transparent); box-shadow: var(--sh3); }
+  .rmt-toggle:active { transform: translateY(1px); }
+  .rmt-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .rmt .rmt-ic { color: color-mix(in srgb, var(--ink) 72%, transparent); flex: none; }
+  .rmt-t { font-size: 10.5px; font-weight: 700; letter-spacing: .18em; }
+  .rmt-dot { width: 7px; height: 7px; border-radius: 50%; background: #8A8A8A; flex: none; transition: background var(--d2), box-shadow var(--d2); }
+  .rmt-est { font-size: 11px; letter-spacing: .02em; color: var(--grey); white-space: nowrap; }
+  .rmt-seta { color: color-mix(in srgb, var(--ink) 55%, transparent); flex: none; transition: transform var(--d3) var(--ease); }
+  #remoto.aberto .rmt-seta { transform: rotate(180deg); }
+  /* o estado da ligação — a mesma verdade dos monitores, num ponto de 7 px */
+  #remoto[data-estado="live"] .rmt-dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); animation: rmtPulse 2.4s var(--ease) infinite; }
+  #remoto[data-estado="ler"] .rmt-dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 14%, transparent); }
+  #remoto[data-estado="ligar"] .rmt-dot { background: var(--warn); }
+  #remoto[data-estado="stale"] .rmt-dot { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 16%, transparent); }
+  #remoto[data-estado="off"] .rmt-dot { background: var(--risk); }
+  @keyframes rmtPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+  .rmt-painel {
+    width: min(316px, calc(100vw - 36px)); max-height: min(60vh, 470px); overflow: auto;
+    padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 12px;
+    background: color-mix(in srgb, var(--cream) 94%, transparent);
+    border: 1px solid var(--hairline); border-radius: var(--r3);
+    box-shadow: var(--sh3);
+    backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    animation: rmtIn .22s var(--ease-out) both;
+  }
+  .rmt-painel[hidden] { display: none; }
+  @keyframes rmtIn { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
+
+  .rmt-grp { display: flex; flex-direction: column; gap: 7px; }
+  .rmt-lab {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 9.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--grey) 88%, transparent);
+  }
+  .rmt-lab-ic { opacity: .8; }
+  .rmt-row { display: flex; gap: 6px; }
+  .rmt-b {
+    flex: 1 1 0; min-width: 0; height: 40px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: #fff; color: var(--ink);
+    border: 1px solid var(--hairline); border-radius: var(--r2);
+    font: inherit; font-size: 11.5px; font-weight: 600;
+    transition: background var(--d2), border-color var(--d2), box-shadow var(--d2), transform var(--d1);
+  }
+  .rmt-b:hover { border-color: color-mix(in srgb, var(--ink) 40%, transparent); box-shadow: var(--sh1); }
+  .rmt-b:active { transform: translateY(1px); }
+  .rmt-b:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .rmt-b.so-icone { flex: 0 0 40px; }
+  .rmt-b-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .rmt-salas { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .rmt-sala {
+    display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 9px; cursor: pointer;
+    background: #fff; border: 1px solid var(--hairline); border-radius: 10px;
+    font: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; color: var(--ink);
+    text-align: left; transition: border-color var(--d2), background var(--d2), box-shadow var(--d2);
+  }
+  .rmt-sala:hover { border-color: color-mix(in srgb, var(--ink) 34%, transparent); box-shadow: var(--sh1); }
+  .rmt-sala:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .rmt-sala-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rmt-cor { width: 8px; height: 8px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.10); }
+  .rmt-sala-num {
+    flex: none; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--num); font-size: 10px; font-weight: 600;
+    background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--grey);
+  }
+  .rmt-sala[data-estado="a-trabalhar"] .rmt-sala-num { background: var(--ok-soft); color: var(--ok); }
+  .rmt-sala[data-estado="espera"] .rmt-sala-num { background: var(--warn-soft); color: var(--warn); }
+  .rmt-sala[data-estado="sem-ligacao"] { opacity: .62; }
+
+  .rmt-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .rmt-n {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: 7px 8px; cursor: pointer; background: transparent;
+    border: 1px solid var(--hairline); border-radius: 10px; color: var(--ink); font: inherit;
+    transition: background var(--d2), border-color var(--d2);
+  }
+  .rmt-n:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  .rmt-n:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .rmt-n > svg { opacity: .65; }
+  .rmt-n-v { font-family: var(--num); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .rmt-n-t { font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); white-space: nowrap; }
+  #remoto.tem-decisao .rmt-n[data-num="decisoes"] { border-color: color-mix(in srgb, var(--warn) 55%, transparent); background: var(--warn-soft); }
+  #remoto.tem-decisao .rmt-n[data-num="decisoes"] .rmt-n-v { color: var(--warn); }
+
+  .rmt-foot {
+    display: flex; align-items: center; gap: 6px; padding-top: 9px;
+    border-top: 1px solid var(--hairline);
+  }
+  .rmt-mesa, .rmt-ghost {
+    display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 9px;
+    border-radius: 9px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+    color: var(--ink); text-decoration: none; background: transparent; border: 1px solid transparent;
+    transition: background var(--d2), border-color var(--d2);
+  }
+  .rmt-mesa { margin-right: auto; }
+  .rmt-ghost { width: 32px; justify-content: center; padding: 0; border-color: var(--hairline); }
+  .rmt-mesa:hover, .rmt-ghost:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .rmt-mesa:focus-visible, .rmt-ghost:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  body.dark #remoto { color: #EDEBE4; }
+  body.dark .rmt-toggle, body.dark .rmt-painel {
+    background: rgba(24,26,31,.92); border-color: rgba(255,255,255,.14); color: #EDEBE4;
+  }
+  body.dark .rmt-b, body.dark .rmt-sala { background: #1B1D22; border-color: rgba(255,255,255,.12); color: #EDEBE4; }
+  body.dark .rmt-sala-num { background: rgba(255,255,255,.10); color: #C9CCD3; }
+  body.dark .rmt-n-t, body.dark .rmt-est, body.dark .rmt-lab { color: #A9ADB6; }
+  body.dark .rmt-foot { border-top-color: rgba(255,255,255,.12); }
+  body.dark .rmt-ghost { border-color: rgba(255,255,255,.14); }
+  @media (max-width: 640px) {
+    /* no telemóvel o comando sobe acima do polegar e do dock da câmara */
+    #remoto { left: 12px; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+    body.railLeft #remoto { left: 12px; }
+    .rmt-toggle { height: 46px; }
+    .rmt-painel { width: calc(100vw - 24px); max-height: 56vh; }
+    .rmt-b { height: 44px; }
+    .rmt-sala { height: 42px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rmt-painel { animation: none; }
+    #remoto[data-estado="live"] .rmt-dot { animation: none; }
+  }
+
   .modo-oficina.on { opacity: 1; transform: translate(-50%, 0); }
   @media (max-width: 640px) {
     .modo-oficina { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); font-size: 12.5px; }

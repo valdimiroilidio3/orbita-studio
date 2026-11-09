@@ -11,6 +11,9 @@ import { DEPTS, DEPT_KEYS, AGENTS, LAYOUT, officeProblems, stationSpot, deskFron
 import { initA11y } from './a11y.js'; // 26 out 2026: o espelho acessível (teclado e leitor de ecrã)
 import { createForgeTerminal } from './forge.js'; // 27 out 2026: o terminal da oficina de ferramentas
 import { createLive } from './live.js'; // 26 out 2026: o trabalho real em cada monitor (SSE)
+/* 1.78.0 · o controlo remoto e os ícones a sério (Lucide) */
+import { criarRemoto } from './remoto.js';
+import { icone } from './icones.js';
 import { roleOf, doesOf } from './agentes.js'; // identidade (nome, função, descrição) — sem conteúdo de exemplo
 import { explicarFalha, lerCorpo } from './falhas.js'; // 1.50.0: dizer o que falhou, não culpar a IA
 // V7: só o que este ficheiro usa. Saíram sete nomes importados e nunca chamados (TOKENS,
@@ -2682,7 +2685,7 @@ function tickLuz(now, dt) {
   if (luzCerebro) luzCerebro.intensity = luzCerebroValor;
 }
 
-window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes,
+window.CC = { flyTo, zoomToDept, zoomOut, zoomToApproval, requestApproval, openAgent, view, applyCamera, R, emotes, remoto: () => remoto,
   a11y,
   /* 3 nov 2026 · os números de UM frame, para o medidor `perf.mjs` poder dizer o que a GPU
      recebe (chamadas de desenho, triângulos) sem o estimar de fora. É leitura: não mexe na cena.
@@ -2833,6 +2836,98 @@ window.ORBITA = Object.assign(window.ORBITA || {}, {
   luz: () => Object.fromEntries(Object.entries(luzRT).map(([k, r]) => [k, r.valor])),
 });
 
+/* ===========================================================================
+   1.78.0 · O CONTROLE REMOTO — e os glifos do dock, agora ícones a sério
+   (7 nov 2026)
+
+   O dono pediu «mais qualidade e mais realismo, ícones reais, mais elegante».
+   Duas peças, e nenhuma delas é decoração:
+
+     1 · `#remoto` — o comando à mão (ver `src/remoto.js`): estado da ligação,
+         seis salas com o trabalho de cada uma, os números do dia e as acções da
+         vista. Os números são os mesmos que acendem a luz das salas;
+     2 · o dock da câmara (`#zoomCtl`) deixa de ter glifos de texto (⌂ ◍ ‹ › + −)
+         e passa a usar os mesmos ícones, com o mesmo peso e o mesmo traço. Os
+         ids e os ouvintes não mudam — só o que está dentro de cada botão.
+
+   O comando não tira nada do ecrã: nasce fechado, e abre-se com um clique ou
+   com a tecla R.
+   =========================================================================== */
+function vestirDock() {
+  const trocas = [
+    ['zIn', 'mais', 18, 'ampliar'], ['zOut', 'menos', 18, 'reduzir'], ['zHome', 'geral', 17, 'visão geral'],
+    ['zAerea', 'aerea', 17, ''], ['zLeft', 'esquerda', 17, ''], ['zRight', 'direita', 17, ''],
+  ];
+  let n = 0;
+  for (const [id, nome, size, rotulo] of trocas) {
+    const b = document.getElementById(id);
+    if (!b) continue;
+    const svg = icone(nome, { size, stroke: 2 });
+    if (!svg) continue;
+    /* o glifo de texto era o nome do botão; o ícone é decorativo, por isso o
+       nome passa a estar no `aria-label` (as três pastilhas que já o tinham
+       ficam com o delas, que é mais preciso do que o meu) */
+    if (rotulo && !b.getAttribute('aria-label')) b.setAttribute('aria-label', rotulo);
+    while (b.firstChild) b.removeChild(b.firstChild);
+    b.appendChild(svg);
+    b.style.display = 'inline-flex';
+    b.style.alignItems = 'center';
+    b.style.justifyContent = 'center';
+    n += 1;
+  }
+  return n;
+}
+
+let remoto = null;
+function ligarRemoto() {
+  if (remoto || !document.getElementById('hud')) return remoto;
+  /* a preferência lê-se ANTES de construir: o construtor pinta o estado inicial
+     e grava-o, e ler depois disso dava sempre «fechado» */
+  const lembrar = (() => { try { return localStorage.getItem('orbita.remoto') === '1'; } catch { return false; } })();
+  remoto = criarRemoto({
+    liveUi,
+    acoes: {
+      geral: () => zoomOut(),
+      aerea: () => virarAerea(),
+      esquerda: () => virarAngulo(-1),
+      direita: () => virarAngulo(1),
+      planta: () => alternarVista(),
+      sala: (k) => { if (k === 'brain') brain.open(); else enterFocus(k); },
+      hoje: () => document.getElementById('topToday')?.click(),
+      config: () => { if (cfg) cfg.toggle(); },
+      tema: () => applyTheme(darkOn ? 'light' : 'dark'),
+      trabalho: () => { if (tasks) tasks.toggle(); },
+    },
+    dados: {
+      estado: () => ({
+        status: liveUi.status(),
+        modo: liveUi.modo ? liveUi.modo() : 'sse',
+        totais: liveUi.meta().totais || {},
+      }),
+      trabalho: (dept) => ({ live: deptCount(dept, 'live'), waiting: deptCount(dept, 'waiting') }),
+      decisoes: () => Number(String(document.querySelector('#topAppr span:not([aria-hidden])')?.textContent || '0').replace(/\D/g, '')) || 0,
+    },
+    aberto: lembrar,
+    guardar: (v) => { try { localStorage.setItem('orbita.remoto', v ? '1' : '0'); } catch { /* sem armazenamento */ } },
+  });
+  if (remoto) document.body.appendChild(remoto.raiz);
+  return remoto;
+}
+vestirDock();
+ligarRemoto();
+addEventListener('keydown', (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); if (remoto) remoto.alternar(); }
+  else if (e.key === 'Escape' && remoto && remoto.estaAberto() && document.activeElement && remoto.raiz.contains(document.activeElement)) {
+    /* Esc dentro do comando fecha-o e devolve o foco a quem o abriu — a cena
+       não precisa de recuar a câmara por causa disto */
+    e.stopPropagation();
+    remoto.fechar();
+    document.getElementById('remoto')?.querySelector('.rmt-toggle')?.focus();
+  }
+}, true);
+
 let last = performance.now();
 let framesSemSombra = 99; // o primeiro frame desenha-a
 /* 1.58.0: o estado das salas e a rede do Cérebro não mudam a 60 fps — quatro
@@ -2853,6 +2948,7 @@ function loop(now) {
   tasks.tick(now);
   mcp.tick(now, dt, view, camera, focused, focusDim);
   syncOverviewBtn();
+  if (remoto) remoto.tick(now);
   if (now - ultimoEstadoDasSalas > 4000) { ultimoEstadoDasSalas = now; syncEstadoDasSalas(); }
   if (now - ultimoTrabalhoNoCerebro > 6000) { ultimoTrabalhoNoCerebro = now; passarTrabalhoAoCerebro(); }
   if (oficina.estaAberto()) { if (now - ultimaPlanta > 1500) { ultimaPlanta = now; oficina.actualizar(); } }

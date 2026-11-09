@@ -13,9 +13,50 @@
    =========================================================================== */
 
 let relogio = null;
+let relogioCarga = null;
 
 export function pararSeguimento() {
   if (relogio) { clearInterval(relogio); relogio = null; }
+}
+
+/* ===========================================================================
+   1.78.0 · «A carregar o Control Center…» NUNCA FICA PARA SEMPRE (7 nov 2026)
+
+   O dono voltou a ver o cartão de carregamento. A causa não era a rota: era a
+   vista **esperar por seis pedidos em fila antes de desenhar a primeira coisa**.
+   Numa função fria da Vercel, seis pedidos são seis arranques — e um deles que
+   não respondesse prendia o ecrã sem prazo nenhum, porque o `fetch` do browser
+   não tem tecto.
+
+   O que muda, e é tudo verificável:
+
+     · cada leitura tem um PRAZO (12 s para o estado, 10 s para o resto). Passado
+       o prazo, a página diz qual pedido não respondeu e oferece voltar a tentar;
+     · o essencial vem primeiro: assim que `/ia/estado` chega, a página desenha
+       os fornecedores e só depois pede o catálogo, o uso e as execuções — o
+       cartão de carregamento deixa de tapar uma página que já podia estar lá;
+     · o cartão que resta diz o que está a pedir e há quantos segundos, e conta.
+       Um «a carregar» que não conta é indistinguível de um que morreu.
+   =========================================================================== */
+
+/** Uma promessa com prazo. Não aborta o pedido (o browser não deixa sempre) —
+ *  mas devolve o controlo, que é o que faltava para a página não ficar presa. */
+export function comPrazo(promessa, ms, oQue = 'o servidor') {
+  let t = null;
+  const prazo = new Promise((_, rejeitar) => {
+    t = setTimeout(() => {
+      rejeitar(Object.assign(new Error(`${oQue} não respondeu em ${Math.round(ms / 1000)} s`), { prazo: true }));
+    }, ms);
+    if (t.unref) t.unref();
+  });
+  return Promise.race([promessa, prazo]).finally(() => { if (t) clearTimeout(t); });
+}
+
+export const PRAZO_ESTADO_MS = 12000;
+export const PRAZO_RESTO_MS = 10000;
+
+function pararRelogioDeCarga() {
+  if (relogioCarga) { clearInterval(relogioCarga); relogioCarga = null; }
 }
 
 export async function carregarIA(api) {
@@ -23,9 +64,23 @@ export async function carregarIA(api) {
      Se o servidor não tiver a rota (foi o que a 1.29 publicada fazia), o erro
      fica escrito com a razão e a página oferece voltar a tentar; se já havia um
      estado lido, continua à vista com um aviso em cima, em vez de desaparecer. */
+  const desde = Date.now();
   let estado = null;
+  const pintar = () => { try { api.paint && api.paint(); } catch { /* um desenho que falha não para a leitura */ } };
+
+  /* o cartão passa a dizer o que está a pedir, e a contar os segundos */
+  api.S.iaCarregando = { desde, passo: 'o estado da IA' };
+  api.S.iaErro = null;
+  pintar();
+  pararRelogioDeCarga();
+  relogioCarga = setInterval(() => {
+    if (!api.S.iaCarregando) { pararRelogioDeCarga(); return; }
+    pintar();
+  }, 1000);
+  if (relogioCarga.unref) relogioCarga.unref();
+
   try {
-    const lido = await api.call('/ia/estado');
+    const lido = await comPrazo(api.call('/ia/estado'), PRAZO_ESTADO_MS, 'o estado da IA');
     if (!lido || !Array.isArray(lido.fornecedores)) throw new Error('o servidor respondeu sem a lista de fornecedores');
     estado = lido;
     api.S.iaErro = null;
@@ -33,19 +88,30 @@ export async function carregarIA(api) {
     api.S.iaErro = e?.message || 'o servidor não respondeu';
     estado = api.S.ia && Array.isArray(api.S.ia.fornecedores) ? api.S.ia : null;
   }
+
+  /* o essencial já está: desenha-se agora, e só depois se pede o resto */
+  api.S.ia = estado || api.S.ia || null;
+  api.S.iaCarregando = estado
+    ? { desde, passo: 'o catálogo, o uso e as execuções', parcial: true }
+    : null;
+  pintar();
+
   /* 1.50.0 · o catálogo com que a conversa escolhe: a lista real de fornecedores
      e modelos (não uma lista fixa de três nomes). Se a rota não existir, fica
      null e o selector diz «automático» — nunca inventa opções. */
-  const modelos = await api.call('/ia/modelos').catch(() => null);
-  const [uso, runs, fila, gratuitos] = await Promise.all([
-    api.call('/ia/uso').catch(() => ({ resumo: [], errosRecentes: [] })),
-    api.call('/ia/runs').catch(() => ({ runs: [] })),
-    api.call('/media/trabalhos').catch(() => ({ trabalhos: [] })),
+  const comPrazoCurto = (p, oQue) => comPrazo(p, PRAZO_RESTO_MS, oQue);
+  const [modelos, uso, runs, fila, gratuitos] = await Promise.all([
+    comPrazoCurto(api.call('/ia/modelos'), 'o catálogo de modelos').catch(() => null),
+    comPrazoCurto(api.call('/ia/uso'), 'o uso').catch(() => ({ resumo: [], errosRecentes: [] })),
+    comPrazoCurto(api.call('/ia/runs'), 'as execuções').catch(() => ({ runs: [] })),
+    comPrazoCurto(api.call('/media/trabalhos'), 'os trabalhos de mídia').catch(() => ({ trabalhos: [] })),
     /* 1.32.0: o que é gratuito e já respondeu — se a rota não existir, a faixa
        fica como estava; não se inventa estado nenhum. */
-    api.call('/ia/gratuitos').catch(() => null),
+    comPrazoCurto(api.call('/ia/gratuitos'), 'as gratuitas').catch(() => null),
   ]);
   api.S.ia = estado || api.S.ia || null;
+  api.S.iaCarregando = null;
+  pararRelogioDeCarga();
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
@@ -53,7 +119,7 @@ export async function carregarIA(api) {
   api.S.iaModelos = modelos;
   if (!api.S.iaRun && api.S.iaRuns.length) {
     const mais = api.S.iaRuns[0];
-    try { api.S.iaRun = await api.call(`/ia/runs/${mais.id}`); } catch { api.S.iaRun = null; }
+    try { api.S.iaRun = await comPrazoCurto(api.call(`/ia/runs/${mais.id}`), 'a execução'); } catch { api.S.iaRun = null; }
   }
 }
 
@@ -112,8 +178,20 @@ export function vistaIA(S, { esc, hhmm, when }) {
         <div class="ia-acts"><button class="btn primary small" data-act="ia-recarregar">Tentar outra vez</button></div>
       </div></div>`;
     }
+    /* 1.78.0 · o cartão diz o que está a ser pedido e há quantos segundos — e
+       oferece o mesmo botão que a vista de erro. Um «a carregar» mudo é
+       indistinguível de um que já morreu. */
+    const c = S.iaCarregando || null;
+    const seg = c?.desde ? Math.max(0, Math.round((Date.now() - c.desde) / 1000)) : null;
+    const oQue = c?.passo ? `a pedir ${esc(c.passo)} ao servidor` : 'a pedir o estado ao servidor';
+    const demora = seg != null && seg >= 6
+      ? `<div class="ia-faixa warn" role="status">Está a demorar mais do que o costume (${seg} s). O prazo é de ${Math.round(PRAZO_ESTADO_MS / 1000)} s — se passar, esta página diz qual pedido não respondeu, em vez de ficar à espera.</div>`
+      : '';
     return `<div class="wrap"><div class="card empty"><h3>A carregar o Control Center…</h3>
-      <p class="ia-sub">a pedir o estado ao servidor</p></div></div>`;
+      <p class="ia-sub">${oQue}${seg != null ? ` · <b>${seg} s</b>` : ''}</p>
+      ${demora}
+      <div class="ia-acts"><button class="btn quiet small" data-act="ia-recarregar">Pedir outra vez</button></div>
+    </div></div>`;
   }
 
   const listaFornecedores = Array.isArray(ia.fornecedores) ? ia.fornecedores : [];
