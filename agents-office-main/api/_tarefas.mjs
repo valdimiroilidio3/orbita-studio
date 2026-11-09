@@ -28,6 +28,25 @@ import { cambioDe, centimosDeMicro, custoDeUso, tectoDeCusto, eurosDeCentimos } 
 
 /** O que cada tipo de tarefa pede ao modelo. `alvo` diz que contexto é preciso. */
 export const ROTINAS = {
+  /* 1.79.0 · o trabalho escrito à mão no escritório (a barra de tarefas da cena).
+     Até aqui, criar trabalho só existia no `serve.mjs` da máquina: na publicação a
+     barra respondia «este escritório está aberto sem servidor» — com o servidor a
+     responder. Esta rotina é a peça que faltava: o pedido do dono entra como texto,
+     o agente que ele escolheu vai no payload, e a resposta é a de um agente a
+     trabalhar — não um plano nem um resumo do pedido. */
+  escritorio: {
+    alvo: 'pedido',
+    titulo: 'Trabalho do escritório',
+    pedido: (c) => `Trabalho pedido no escritório:
+
+${c}
+
+Faz o trabalho, não um plano sobre ele. Responde em português de Portugal, com o
+resultado pronto a usar: se for texto, o texto final; se for análise, as conclusões
+com o que as sustenta; se for código, o código completo. O que não souberes, dizes
+que não sabes — não inventes dados, números nem nomes.`,
+  },
+
   investigar: {
     alvo: 'lead',
     titulo: 'Investigar o lead',
@@ -168,6 +187,18 @@ export function motivoSemMotor(erro = null, env = {}) {
 
 /** Lê o alvo da tarefa na base. Devolve `{ ok, texto }` ou `{ ok:false, erro }`. */
 async function lerAlvo(repo, tarefa) {
+  /* 1.79.0 · uma tarefa do escritório não aponta para um lead nem para um
+     projeto: o alvo é o que foi escrito. O pedido vem em `payload.pedido`
+     (coluna nova) e, numa base que ainda não a tenha, vai em `entidade`
+     com o prefixo `pedido:` — assim a tarefa funciona hoje, sem SQL à mão. */
+  if (String(tarefa?.kind || '') === 'escritorio') {
+    const p = tarefa?.payload && typeof tarefa.payload === 'object' ? tarefa.payload : {};
+    const daEntidade = /^pedido:/i.test(String(tarefa?.entidade || '')) ? String(tarefa.entidade).slice(7) : '';
+    const texto = String(p.pedido || tarefa.pedido || daEntidade || '').trim();
+    if (!texto) return { ok: false, erro: 'esta tarefa não tem o pedido escrito — não há nada para fazer' };
+    const quem = String(p.agente || '').trim();
+    return { ok: true, texto: `${texto}${quem ? `\n\n(Quem fica com ela no escritório: ${quem}.)` : ''}` };
+  }
   const id = String(tarefa?.entity_id || tarefa?.entityId || '').trim();
   const entidade = String(tarefa?.entidade || '').trim();
   if (!id) return { ok: true, texto: '(sem alvo ligado — a tarefa trabalha só com o que foi escrito)' };
@@ -330,10 +361,31 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
      pede não pode esperar 45 s por uma resposta de um modelo. */
   const fila = corpo?.fila === true;
 
-  const tarefa = await repo.tarefas.insert({
-    kind: tipo, entity_id: entityId, entidade,
-    state: fila ? 'queued' : 'running', error: null, finished_at: null,
-  });
+  /* 1.79.0 · o pedido de uma tarefa do escritório. Guarda-se em `payload`
+     (supabase/orbita_1_79_0.sql). Se a base ainda não tiver a coluna, a tarefa
+     NÃO falha: o pedido vai em `entidade` com o prefixo `pedido:` e o `lerAlvo`
+     sabe lê-lo. O que não se faz é perder o que o dono escreveu. */
+  const pedido = String(corpo?.texto || corpo?.pedido || '').trim();
+  if (tipo === 'escritorio' && !pedido) {
+    return { status: 400, corpo: { error: 'falta o pedido — uma tarefa do escritório sem texto não tem o que fazer' } };
+  }
+  const base = { kind: tipo, state: fila ? 'queued' : 'running', error: null, finished_at: null };
+  let tarefa;
+  if (tipo === 'escritorio') {
+    const registo = {
+      ...base, entity_id: null, entidade: 'escritorio',
+      payload: { pedido, agente: String(corpo?.agente || ''), dept: String(corpo?.dept || ''), modelo: String(corpo?.modelo || ''), equipa: !!corpo?.equipa },
+      title: String(corpo?.titulo || pedido).slice(0, 160),
+    };
+    try {
+      tarefa = await repo.tarefas.insert(registo);
+    } catch (e) {
+      if (!semColunaNova(e)) throw e;
+      tarefa = await repo.tarefas.insert({ ...base, entity_id: null, entidade: `pedido:${pedido}`.slice(0, 4000) });
+    }
+  } else {
+    tarefa = await repo.tarefas.insert({ ...base, entity_id: entityId, entidade });
+  }
   if (fila) {
     await repo.atividade.add('tarefa', `${TIPOS[tipo].label}: posta na fila (o ciclo leva-a quando puder)`).catch(() => null);
     return { status: 201, corpo: { tarefa, naFila: true, execucao: null } };
@@ -344,6 +396,18 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
     ? `${TIPOS[tipo].label}: concluída com ${r.modelo}${aprovacao ? ' (à espera da tua aprovação)' : ''}`
     : `${TIPOS[tipo].label}: não passou — ${corta(r.erro, 200)}`).catch(() => null);
   return { status: 201, corpo: { tarefa: final, execucao: { ok: r.ok, modelo: r.modelo || null, ms: r.ms || 0, custo: r.custo || null, orcamento: r.orcamento || null } } };
+}
+
+/**
+ * A base recusou por causa de uma coluna que a migração `orbita_1_79_0.sql`
+ * acrescenta (`payload`, `title`)? Só nesse caso é que se repete a escrita com
+ * o pedido em `entidade` — um erro de rede ou de chave não se disfarça.
+ */
+export function semColunaNova(erro) {
+  if (!erro) return false;
+  const col = String(erro.coluna || '');
+  if (erro.semEsquema && /^(payload|title)$/i.test(col)) return true;
+  return /PGRST204|Could not find the '(payload|title)' column/i.test(String(erro.message || erro));
 }
 
 /** `POST /ops/tarefas/:id/correr` — repetir uma tarefa que já existe. */

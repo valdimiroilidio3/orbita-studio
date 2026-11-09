@@ -38,6 +38,9 @@ const TIPOS_TAREFA = {
   briefing: { label: 'Escrever o briefing' },
   codigo: { label: 'Gerar o código' },
   qa: { label: 'Auditoria de qualidade' },
+  /* 1.79.0 · o trabalho escrito à mão no escritório (a barra da cena). É o mesmo
+     motor e a mesma tabela das outras: muda o que se pede — o texto do dono. */
+  escritorio: { label: 'Trabalho do escritório' },
 };
 /** A que sala cada tipo de tarefa pertence — para o filtro da mesa não mentir. */
 const DEPARTAMENTOS_POR_TIPO = {
@@ -1520,7 +1523,13 @@ export async function responder(repo, {
     const festado = limpo(qs.get('estado'));
     const lista = todas
       .filter((t) => (!festado || t.state === festado) && (!fdept || (DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando') === fdept))
-      .map((t) => ({ ...t, custo: custoDaTarefa(t, env) }));
+      .map((t) => ({
+        ...t,
+        /* 1.79.0 · o título legível de uma tarefa do escritório vive no payload;
+           sem isto o cartão mostrava o `kind` («escritorio») em vez do pedido. */
+        titulo: String(t.title || (t.payload && (t.payload.titulo || t.payload.pedido)) || TIPOS_TAREFA[t.kind]?.label || t.kind || '').slice(0, 160),
+        custo: custoDaTarefa(t, env),
+      }));
     const comCusto = lista.filter((t) => !t.custo.desconhecido);
     const micro = comCusto.reduce((n, t) => n + (t.custo.microUsd || 0), 0);
     return { status: 200, corpo: {

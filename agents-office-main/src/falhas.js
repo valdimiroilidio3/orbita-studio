@@ -55,13 +55,18 @@ export function explicarFalha({ status = 0, texto = '', rota = '/api/tasks', err
   const lido = lerCorpo(texto);
   const dito = String(erro || (lido.json && (lido.json.error || lido.json.erro || lido.json.motivo)) || '').trim();
 
-  /* 1 · a rota não existe nesta publicação */
+  /* 1 · a rota não existe nesta publicação
+     1.79.0 · a frase deixou de mandar o dono arrancar o Órbita na máquina dele. O
+     trabalho vive na base de dados da Órbita, atrás de `/ops/tarefas`; quando a
+     rota própria de uma barra não existe, a barra tenta ESSA. Só quando nenhuma
+     das duas responde é que isto aparece — e aí a verdade é «o servidor não
+     respondeu», não «falta-te o npm start». */
   if (lido.html || (status === 404 && !lido.json)) {
     return {
       tipo: 'sem-servidor',
-      frase: 'Esta página está publicada sem o servidor das tarefas.',
-      detalhe: `a rota ${rota} não existe aqui — a Vercel respondeu com uma página de erro em vez de dados`,
-      ajuda: `Nada foi criado e nada foi perdido. A conversa não depende desta rota: a mesa (${ROTA_DA_MESA}) responde pelo motor a sério, e um «oi» com um modelo escolhido é respondido aqui mesmo. O quadro de tarefas só existe no Órbita do teu computador ("npm start").`,
+      frase: 'O servidor das tarefas não respondeu nesta publicação.',
+      detalhe: `a rota ${rota} não existe aqui — a resposta foi uma página de erro em vez de dados`,
+      ajuda: `Nada foi criado e nada foi perdido. A conversa não depende desta rota: a mesa (${ROTA_DA_MESA}) responde pelo motor a sério, e um «oi» com um modelo escolhido é respondido aqui mesmo. O trabalho é criado na base de dados do Órbita por /ops/tarefas — se nem essa rota responder, o servidor está em baixo: tenta outra vez daqui a pouco.`,
       html: false,
     };
   }
@@ -94,7 +99,7 @@ export function explicarFalha({ status = 0, texto = '', rota = '/api/tasks', err
       tipo: 'rede',
       frase: 'Não cheguei ao servidor.',
       detalhe: 'o pedido não saiu ou a resposta não voltou',
-      ajuda: `Verifica que o escritório está a correr («npm start»). A mesa (${ROTA_DA_MESA}) continua a funcionar na nuvem.`,
+      ajuda: `A rede falhou antes de chegar ao servidor do Órbita — não foi uma recusa, e nada foi dado como feito. Tenta outra vez; a mesa (${ROTA_DA_MESA}) continua a funcionar na nuvem.`,
       html: false,
     };
   }

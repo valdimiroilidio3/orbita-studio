@@ -1041,6 +1041,20 @@
   .mc-chip .x:hover { opacity: 1; background: var(--fill-press); }
   .mc-chip .x svg { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
+  /* a linha da espera (1.79.0): pequena, cinzenta, com o travão ao lado */
+  .mc-wait {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px 2px;
+    font-family: var(--sf); font-size: 11px; color: var(--grey);
+  }
+  .mc-wait[hidden] { display: none; }
+  .mc-wait .mc-wait-t b { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+  .mc-wait .mc-wait-stop {
+    margin-left: auto; flex: none; height: 24px; padding: 0 10px; border-radius: 99px;
+    border: 1px solid var(--hairline); background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .mc-wait .mc-wait-stop:hover { border-color: var(--ink); }
+  .mc-wait .mc-wait-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .mc-actions { display: flex; align-items: center; gap: 4px; padding: 1px 1px 0; }
   .mc-left { display: flex; align-items: center; gap: 1px; min-width: 0; }
   .mc-act {
@@ -3771,6 +3785,10 @@
           <textarea id="mIn" rows="1" placeholder="Escreve uma mensagem…" autocomplete="off" spellcheck="false"
             title="adicionar tarefa: … · todos os dias úteis às 8h, … · aprovar / rejeitar"></textarea>
           <div id="mcChips" class="mc-chips" hidden></div>
+          <!-- 1.79.0 · a linha da espera: enquanto a IA pensa, o cartão diz há quantos
+               segundos espera e deixa parar. Antes não havia nada: a seta desactivava-se
+               e o Enter deixava de responder — o dono chamou-lhe «buga e não aceita escrever». -->
+          <div id="mcWait" class="mc-wait" role="status" aria-live="polite" hidden></div>
           <div class="mc-actions">
             <div class="mc-left">
               <button id="mcAdd" class="mc-act" type="button" title="anexar ficheiros de texto a esta mensagem">

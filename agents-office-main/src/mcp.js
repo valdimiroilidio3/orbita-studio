@@ -168,7 +168,9 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
     if (SEM_SERVIDOR) {
       const none = document.createElement('span');
       none.className = 'tc-none';
-      none.textContent = 'sem servidor — os conectores vêm do `claude mcp list` desta máquina';
+      /* 1.79.0 · a publicação não lê a tua máquina — mas isso não é «sem servidor»:
+         os conectores MCP vivem no `claude mcp list` do posto, e é isso que se diz. */
+      none.textContent = 'os conectores vêm do `claude mcp list` desta máquina — a publicação não lê o teu posto';
       topconn.appendChild(none);
     } else if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
       const none = document.createElement('span');
@@ -266,6 +268,30 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
     shared[key] = { ink, drop, jdot, wires: wiresOf, offset: 0, jy: 92 + si * 10 };
   });
 
+  /* 1.79.0 · o estado real dos motores, lido no servidor da Órbita. Nunca inventa:
+     se o servidor não responder (ou pedir sessão), a barra diz isso e a conversa
+     continua a ser o sítio onde a IA responde. */
+  async function perguntarMotores(caixa) {
+    const alvo = caixa && caixa.querySelector('.tc-none');
+    if (!alvo || typeof fetch !== 'function') return;
+    try {
+      const r = await fetch('/api/rpc', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ caminho: '/ia/estado', metodo: 'GET', corpo: null }),
+      });
+      const lido = await r.json().catch(() => ({}));
+      const e = lido && Number(lido.status) === 200 ? lido.corpo : null;
+      if (!e || !Array.isArray(e.fornecedores)) throw new Error('sem estado dos motores');
+      const prontos = e.fornecedores.filter((f) => f && f.configurado && !f.desligado);
+      alvo.textContent = prontos.length
+        ? `${prontos.length} fornecedor(es) prontos · ${prontos.slice(0, 2).map((f) => f.nome || f.id).join(', ')}`
+        : 'nenhum fornecedor pronto — vê AI · Control Center na mesa';
+      alvo.title = 'o mesmo motor que responde na conversa dos agentes';
+    } catch {
+      alvo.textContent = 'a IA responde na conversa; o estado dos motores lê-se na mesa (/app#/ia)';
+    }
+  }
+
   // ── o motor que responde ──
   // 26 out 2026: sai o par Claude + ChatGPT com condutas a pulsar sozinhas. Fica o motor que o
   // servidor diz estar a responder (GET /api/ai) — se não houver nenhum, a barra di-lo.
@@ -273,9 +299,14 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
   const topmodels = document.getElementById('topmodels');
   const modelImgs = {};
   if (topmodels) {
+    /* 1.79.0 · «o motor vive na tua máquina» era falso na página publicada: a IA
+       da Órbita responde ali — é a MESMA que responde na conversa do ORBITA
+       DIRECTOR. A barra passa a perguntar-lhe quantos fornecedores estão prontos,
+       pelo mesmo envelope de sempre (`/api/rpc` → `/ia/estado`), e diz isso. */
     topmodels.innerHTML = SEM_SERVIDOR
-      ? `<span class="tc-lab" title="sem servidor — o motor vive na tua máquina"><span class="dot"></span>MOTOR</span><span class="tc-none">sem servidor — o motor vive na tua máquina</span>`
+      ? `<span class="tc-lab" title="a IA que responde vive no servidor da Órbita — a mesma da conversa"><span class="dot"></span>MOTOR · ÓRBITA</span><span class="tc-none">a perguntar aos motores da Órbita…</span>`
       : `<span class="tc-lab"><span class="dot"></span>CORRE SEM INTERFACE EM</span>`;
+    if (SEM_SERVIDOR) perguntarMotores(topmodels);
     if (!SEM_SERVIDOR) Object.keys(MODELS).forEach((k, i) => {
       const L = LOGOS[k];
       if (!L || !L.img) return; // sem azulejo para este motor: não se desenha um buraco

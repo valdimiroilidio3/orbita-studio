@@ -247,3 +247,47 @@ test('conversa: fixar a escolha grava-a para o agente via PATCH /ia/config', asy
   assert.equal(patch.metodo, 'PATCH');
   assert.deepEqual(patch.corpo, { agentes: { research: { fornecedor: 'llm7', modelo: 'gpt-oss:20b' } } });
 });
+
+/* ===========================================================================
+   1.79.0 · A IA NAS OUTRAS PARTES (9 nov 2026)
+
+   «A IA no ORBITA DIRECTOR já está 100% funcional, implementa em outras partes
+   do projeto também da mesma forma.» O que se prova aqui, no código:
+
+     · todas as salas conversam pela MESMA via da conversa do director
+       (`sendChatOrbita` → `/api/rpc` → `/ia/chat`), sem um caminho por agente;
+     · a barra do motor deixou de dizer «o motor vive na tua máquina» na página
+       publicada — pergunta o estado real aos motores da Órbita;
+     · a conversa cai para a Órbita em qualquer agente quando a rota local não
+       existe (é a mesma queda que o director usa).
+   =========================================================================== */
+import { readFileSync } from 'node:fs';
+
+const fonte = (f) => readFileSync(new URL(`./src/${f}`, import.meta.url), 'utf8');
+
+test('1.79.0 · a conversa é uma só: todos os agentes vão por /ia/chat', () => {
+  const main = fonte('main.js');
+  /* um só caminho de conversa: `sendChat` decide pela rota e todos os agentes
+     passam por `sendChatOrbita`, não há um ramo por sala/agente */
+  assert.equal((main.match(/async function sendChatOrbita/g) || []).length, 1);
+  /* o mapeamento sala→agente da Órbita é um só, partilhado (composer.js) e
+     usado pela conversa — não há nomes de agente escritos à mão no main.js */
+  assert.match(main, /agenteDaOrbita\(r\?\.a \|\| \{\}\)/);
+  assert.match(fonte('composer.js'), /export function agenteDaOrbita/);
+  /* o corpo do pedido vem do mesmo sítio (composer.js) e a rota é a da mesa */
+  assert.match(main, /corpoDaOrbita\(\{ agente, mensagem/);
+  assert.match(fonte('composer.js'), /ROTA_CHAT_ORBITA = '\/ia\/chat'/);
+  /* e em nenhuma ramificação se exige um agente em particular */
+  assert.equal(/if \(R\[id\]\.a\.dept === 'emails'\)[\s\S]{0,80}sendChatOrbita/.test(main), false,
+    'a conversa não pode estar presa ao director');
+});
+
+test('1.79.0 · a barra do motor não mente na página publicada', () => {
+  const mcp = fonte('mcp.js');
+  assert.equal(/sem servidor — o motor vive na tua máquina/.test(mcp), false,
+    'a IA responde no servidor; «vive na tua máquina» era falso');
+  assert.match(mcp, /MOTOR · ÓRBITA/);
+  assert.match(mcp, /perguntarMotores\(topmodels\)/, 'tem de perguntar o estado real');
+  assert.match(mcp, /caminho: '\/ia\/estado'/);
+  assert.equal(/montra|demonstração/.test(mcp.slice(mcp.indexOf('function perguntarMotores'), mcp.indexOf('function perguntarMotores') + 900)), false);
+});

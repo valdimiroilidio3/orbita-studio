@@ -1,3 +1,76 @@
+## 1.79.0 — 9 nov 2026 · o trabalho vive no servidor, e a barra nunca fecha a porta
+
+Três frases do dono, no mesmo dia:
+
+> **coloca servidor no projeto ja** — «Este escritório está aberto sem servidor…
+> arranca-o com `npm start`» não pode ser a experiência no projeto publicado
+
+> **ORBITA DIRECTOR depois da primeira pergunta ele buga e já não aceita escrever
+> mais, resolva isso**
+
+> **a IA no ORBITA DIRECTOR já está 100% funcional, implementa em outras partes do
+> projeto também da mesma forma, gostei**
+
+### 1 · o trabalho passou a viver na base de dados da Órbita
+
+A barra da cena só sabia falar com o `serve.mjs` da máquina do dono (`POST
+/api/tasks`). Na Vercel essa rota não existe, e a barra respondia «este escritório
+está aberto sem servidor». O mesmo trabalho já existia no servidor, atrás de
+`/ops/tarefas` — era por lá que a mesa criava tarefas desde a 1.17.0.
+
+- **`src/ponte.js`** (novo): `chamarRpc`, `corpoDeTarefaDoEscritorio`,
+  `lerTarefasDoServidor`. Uma ponte, sem rotas inventadas.
+- **`src/tasks.js`**: `criarPelaPublicacao()` cria a tarefa na base
+  (`POST /api/rpc → /ops/tarefas` com `kind:'escritorio'`), encaminha o agente,
+  mostra o resultado na conversa dele e deixa o cartão aparecer no quadro no ciclo
+  seguinte. O selo do painel passa a dizer **SERVIDOR · ÓRBITA** quando o trabalho
+  vem por aí.
+- **`api/_tarefas.mjs`**: rotina `escritorio` (alvo = o pedido do dono, com «faz o
+  trabalho, não um plano»), gravação de `payload`/`title`, e queda para
+  `entidade:'pedido:…'` numa base que ainda não tenha essas colunas.
+- **`supabase/orbita_1_79_0.sql`** (novo): `payload jsonb`, `title text` em
+  `orbita_tasks`. Idempotente, como todos os outros.
+- A frase «sem servidor» deixou de mandar arrancar o `npm start`: quando nenhuma
+  das duas rotas responde, o painel diz **«o servidor do Órbita não respondeu — o
+  pedido não chegou lá. Nada foi dado como feito»**. `src/falhas.js` foi reescrito
+  nesse sentido.
+
+### 2 · o compositor não morre depois da primeira resposta
+
+`src/composer.js` ganhou prazos a sério: o cartão liberta-se ao fim de 120 s
+(dizendo o nome do que faltou), a resposta tem 90 s (`PRAZO_RESPOSTA_MS`), o aviso
+de lentidão aparece aos 20 s e há um contador de 1 s. O `AbortSignal` do botão
+**Parar** chega ao `fetch` — um envio abandonado não continua a correr por baixo de
+quem desistiu. `src/shell.html` tem o `#mcWait` com o botão `[data-parar]`.
+Regressão provada em `composer-envio.test.mjs` (jsdom sobre o `shell.html` a
+sério): escrever → enviar → resposta → **escrever outra vez e enviar** funciona.
+
+### 3 · a mesma IA em todas as salas
+
+- A conversa é uma só: todos os agentes vão por `sendChatOrbita` →
+  `/api/rpc → /ia/chat`, com a mesma queda para o automático quando a escolha
+  falha. Nenhuma sala tem um caminho próprio.
+- **`src/mcp.js`**: a barra do motor dizia «o motor vive na tua máquina» na página
+  publicada — falso, a IA responde ali. Passa a **MOTOR · ÓRBITA** e pergunta o
+  estado real (`/ia/estado`): «N fornecedor(es) prontos · …», ou diz que o estado
+  se lê na mesa. Os conectores continuam a dizer a verdade: vêm do `claude mcp list`
+  do posto, e a publicação não lê o teu posto.
+
+### 4 · a base cura-se sozinha (adeus `ok:false` em produção)
+
+O `/api/health` respondia `ok:false · faltam:["orbita_faturas"]` e o curador da
+1.76.0 não fazia nada: só olhava para contas e sessões. **`api/_autoesquema.mjs`**
+tem agora `criarCuradorDaMesa`: quando o health diz que falta uma tabela, aplica os
+ficheiros versionados do esquema (todos idempotentes, um por transacção), volta a
+perguntar à base e só diz que curou depois de a base confirmar. Uma base que não
+responde nunca dispara DDL; em memória não toca em nada; uma aplicação por janela
+de 10 minutos. O health passou a mostrar `esquema` com o que aconteceu.
+
+### Provas
+
+`node --test` — **1429/1429** (eram 1400 na 1.78.0). Novos: `composer-envio` (6,
+jsdom), `ponte` (8), `api` (+5), `autoesquema` (+7) e `ia-vista` (+3).
+
 ## 1.78.0 — 7 nov 2026 · o comando à mão e o «a carregar» que acaba
 
 Dois pedidos do dono, no mesmo dia:

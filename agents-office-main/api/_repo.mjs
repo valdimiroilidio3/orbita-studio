@@ -68,7 +68,13 @@ export const TABELAS_DA_IA = new Set(['orbita_ai_config', 'orbita_ai_runs', 'orb
 export function explificar(texto = '', dados = null) {
   const msg = String(texto || '');
   const codigo = String((dados && dados.code) || '');
-  const coluna = (msg.match(/column\s+(?:"?[\w]+"?\.)?"?(\w+)"?\s+does not exist/i) || [])[1] || null;
+  /* 1.79.0 · o PostgREST não diz «column … does not exist»: diz
+     `PGRST204 — Could not find the 'payload' column of 'orbita_tasks' in the
+     schema cache` quando se escreve numa coluna que ele não conhece. Sem esta
+     linha, uma coluna em falta aparecia como um erro qualquer do servidor —
+     e quem lê não sabia que era o esquema. */
+  const coluna = (msg.match(/column\s+(?:"?[\w]+"?\.)?"?(\w+)"?\s+does not exist/i) || [])[1]
+    || (codigo === 'PGRST204' ? ((msg.match(/Could not find the '([\w]+)' column/i) || [])[1] || null) : null);
   let tabela = (msg.match(/relation\s+"?(?:public\.)?(\w+)"?\s+does not exist/i) || [])[1]
     || (msg.match(/Could not find the table\s+'?(?:public\.)?(\w+)'?/i) || [])[1]
     || null;
@@ -85,7 +91,7 @@ export function explificar(texto = '', dados = null) {
   const colunaNula = nulo ? ((msg.match(/column\s+"?(\w+)"?\s+of relation/i) || [])[1] || null) : null;
   const tabelaNula = nulo ? ((msg.match(/of relation\s+"?(?:public\.)?(\w+)"?/i) || [])[1] || null) : null;
 
-  const semColuna = codigo === '42703' || !!coluna;
+  const semColuna = codigo === '42703' || codigo === 'PGRST204' || !!coluna;
   const semTabela = codigo === '42P01' || codigo === 'PGRST205' || (!!tabela && /does not exist|Could not find/i.test(msg));
   const semRegra = nulo && (colunaNula === 'hash' || colunaNula === null);
   if (!semColuna && !semTabela && !semRegra) return { mensagem: msg, semEsquema: false, tabela: null, coluna: null, ficheiro: null };
