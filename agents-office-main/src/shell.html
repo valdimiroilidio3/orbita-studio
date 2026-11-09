@@ -2219,6 +2219,9 @@
   .cv-day.today::after { content: ''; position: absolute; inset: 0; border: 1.5px solid var(--ink); border-radius: 10px; pointer-events: none; }
   .cv-day.sel::after { content: ''; position: absolute; inset: 0; border: 1.5px dashed var(--ink); border-radius: 10px; pointer-events: none; }
   .cv-num { position: absolute; right: 9px; bottom: 6px; display: flex; align-items: baseline; gap: 5px; font-size: 9.5px; letter-spacing: .12em; color: var(--grey); text-transform: uppercase; }
+  /* 1.81.0 · a inicial do dia. Na grelha de sete colunas é a coluna que diz o dia,
+     por isso a etiqueta não se mostra; na lista do telemóvel cada dia tem de o dizer. */
+  .cv-wd { display: none; }
   .cv-num b { font-family: var(--serif); font-weight: 400; font-size: 17px; letter-spacing: 0; color: var(--ink); }
   .cv-day.today .cv-num b { background: var(--ink); color: var(--cream); border-radius: 99px; padding: 1px 7px; font-size: 14px; }
   .cv-add { position: absolute; left: 7px; bottom: 5px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--hairline); background: var(--cv-card); color: var(--grey); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; transition: all .25s var(--ease); z-index: 2; }
@@ -3617,8 +3620,127 @@
   /* a barra de cima em ecrãs muito estreitos (360 px): a marca diminui outra vez */
   @media (max-width: 400px) {
     #topbar .brand { font-size: 11.5px; }
-    #topbar .m-group > button, #topbar .m-group > a { min-width: 30px; padding: 5px 5px; }
+    #topbar .m-group > button, #topbar .m-group > a { min-width: 34px; min-height: 40px; padding: 5px 5px; }
     #tpanel .tp-lab { font-size: 13.5px; }
+  }
+
+  /* =========================================================================
+     1.81.0 · O CALENDÁRIO NO TELEMÓVEL, E O QUE SÓ O RATO REVELAVA (9 nov 2026)
+
+     O que estava mal, sem adjectivos: o `#calOv` é `position:fixed; inset:0` — ocupa
+     o ecrã todo — mas o interior nunca foi pensado para 390 px:
+
+       · a barra `.cv-band` é uma fila sem quebra (marca + SEMANA/MÊS + ‹ título ›
+         HOJE + atalhos de teclado + ✕): a 390 px não cabe e empurra a página;
+       · `.cv-rail` (as rotinas) tem 272 px fixos; o `.cv-body` é `display:flex`,
+         por isso a grelha ficava com o que sobrava — **~118 px para sete colunas**,
+         ou seja 17 px por dia: nada legível;
+       · `.cv-dow` e `.cv-grid` são grelhas de 7 colunas, e a 17 px por dia nem o
+         número do dia cabe;
+       · os popovers (`#cvPop`, `#aiPop`) têm 372 px fixos: a 360 px saem do ecrã;
+       · o «+» de agendar (`.cv-add`) só aparece com `:hover` — num telemóvel não
+         existe hover, logo o caminho de agendar estava escondido;
+       · campos a 12–13 px: o iOS amplia a página ao tocar-lhes.
+
+     A cura é estrutural, não cosmética: a barra passa a três filas declaradas, o
+     corpo passa a coluna (rotinas por cima, dias por baixo), e a grelha de sete
+     colunas — que num telefone não tem como ser legível — passa a **lista de dias
+     empilhados**, com o dia e a inicial da semana à esquerda e os eventos à
+     direita. O mesmo calendário, lido de cima para baixo.
+
+     Esta camada é a ÚLTIMA das larguras (a ordem é o que a faz ganhar — ver o
+     `mobile.test.mjs`). A 1440 px nada disto se aplica.
+     ========================================================================= */
+  @media (max-width: 640px) {
+    /* ---------- a barra: três filas, com o ✕ à mão do polegar ---------- */
+    #calOv .cv-band {
+      display: grid; grid-template-columns: 1fr 44px;
+      grid-template-areas: "brand close" "seg seg" "nav nav";
+      height: auto; padding: 10px 12px; gap: 8px 10px; align-items: center;
+    }
+    #calOv .cv-brand { grid-area: brand; font-size: 16px; letter-spacing: .06em; }
+    #calOv .cv-brand small { display: none; }
+    #calOv .cv-seg { grid-area: seg; margin-left: 0; justify-self: start; }
+    #calOv .cv-seg button { padding: 7px 12px; font-size: 9px; }
+    #calOv .cv-nav { grid-area: nav; margin-left: 0; gap: 6px; }
+    #calOv .cv-nav #cvPrev, #calOv .cv-nav #cvNext { width: 40px; height: 40px; min-width: 40px; font-size: 20px; }
+    #calOv .cv-nav #cvToday { min-height: 40px; padding: 8px 14px; margin-left: 2px; }
+    #calOv #cvTitle { flex: 1; min-width: 0; font-size: 17px; text-align: center; }
+    #calOv #cvTitle small { font-size: 12px; }
+    #calOv #cvClose { grid-area: close; width: 44px; height: 44px; min-width: 44px; font-size: 15px; }
+    #calOv .cv-sp, #calOv .cv-keys { display: none; }  /* atalhos de teclado não existem num telemóvel */
+
+    /* ---------- a barra de ferramentas: pesquisa inteira, filtros a rolar ---------- */
+    #calOv .cv-tools { padding: 8px 12px; gap: 6px 8px; }
+    #calOv #cvSearch { flex: 1 1 100%; width: 100%; box-sizing: border-box; font-size: 16px; }
+    #calOv #cvChips { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; width: 100%; padding-bottom: 3px; }
+    #calOv .cv-chip { flex: 0 0 auto; }
+    #calOv .cv-stats { display: none; }               /* a lista já diz o que há; aqui só roubava a linha */
+
+    /* ---------- o corpo: dias por baixo, rotinas por cima ---------- */
+    #calOv .cv-body { flex-direction: column; }
+    #calOv .cv-rail {
+      width: auto; max-height: 30dvh; flex: none; border-right: 0;
+      border-bottom: 1px solid var(--cv-line); padding: 10px 12px 12px;
+      overflow-y: auto; overscroll-behavior: contain;
+    }
+    /* `min-height:0` é o que faz a coluna ROLAR em vez de crescer para fora do ecrã;
+       os 52 px de fundo são a linha da licença, que continua a viver no canto */
+    #calOv .cv-wrap, body.calOpen #calOv .cv-wrap {
+      flex: 1; min-height: 0; padding: 0 12px 52px;
+      overflow-y: auto; overscroll-behavior: contain;
+    }
+    #calOv .cv-dow { display: none; }                 /* em lista, a semana vai escrita em cada dia */
+
+    /* ---------- a grelha de sete colunas passa a lista ---------- */
+    #calOv .cv-grid, #calOv .cv-grid.month, #calOv .cv-grid.week {
+      grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto;
+      flex: none; border-radius: 14px;
+    }
+    #calOv .cv-day, #calOv .cv-grid.week .cv-day {
+      min-height: 56px; padding: 9px 10px 10px 58px;
+      border-right: 0; border-bottom: 1px solid var(--cv-line);
+    }
+    #calOv .cv-day:last-child { border-bottom: 0; }
+    #calOv .cv-num { left: 10px; right: auto; top: 9px; bottom: auto; flex-direction: column; gap: 0; align-items: flex-start; }
+    #calOv .cv-num b { font-size: 19px; }
+    #calOv .cv-wd { display: block; font-size: 8.5px; letter-spacing: .12em; color: var(--grey); }
+    #calOv .cv-evs { gap: 4px; }
+    #calOv .cv-ev { padding: 6px 8px; }
+    #calOv .cv-ev-t { font-size: 12px; white-space: normal; }  /* em lista há largura: o título lê-se todo */
+    #calOv .cv-more, #calOv .cv-day:not(:hover) .cv-more { position: static; align-self: flex-start; margin-top: 2px; }
+    #calOv .cv-add {
+      left: auto; right: 10px; top: 10px; bottom: auto;
+      width: 34px; height: 34px; font-size: 16px; opacity: 1;   /* sem hover: o «+» tem de estar à vista */
+    }
+    #calOv .cv-day.sel::after, #calOv .cv-day.today::after { border-radius: 12px; }
+  }
+
+  /* ---------- o que só o rato revelava: em ecrãs de toque fica à vista ---------- */
+  @media (hover: none) {
+    .cv-day .cv-add, .mc-chip .x { opacity: 1; }
+    /* o `:hover` fica preso depois de um toque; nada de elevações que fingem estado */
+    .cv-ev:hover, .cv-r:hover, .cv-day:hover { transform: none; box-shadow: none; }
+    .row:hover, .cv-ev:hover { background: inherit; }
+  }
+
+  /* ---------- popovers: em vez de 372 px fixos, uma folha que cabe ---------- */
+  @media (max-width: 640px) {
+    /* o `place()` do calendário escreve `left`/`top` à mão; só `!important` ganha
+       a um estilo em linha — e aqui é mesmo o que se quer: no telefone é folha fixa */
+    #cvPop {
+      position: fixed; left: 8px !important; right: 8px !important;
+      top: auto !important; bottom: 8px !important; width: auto !important;
+      max-height: 74dvh; overflow-y: auto; overscroll-behavior: contain;
+      padding-bottom: max(13px, env(safe-area-inset-bottom, 0px));
+    }
+    #cvPop .cv-x { width: 44px; height: 44px; min-width: 44px; font-size: 15px; }
+    #cvPop input, #cvPop select, #cvPop textarea,
+    #aiPop input, #aiPop select { font-size: 16px; }   /* 16 px: o iOS não amplia */
+    #cvPop .cv-row { flex-wrap: wrap; }
+    #cvPop .cv-time { width: 92px; }
+    #aiPop { left: 8px; right: 8px; width: auto; bottom: 8px; max-height: 74dvh; overflow-y: auto; }
+    #aiPop .ai-close { width: 44px; height: 44px; min-width: 44px; }
   }
 
   /* ---------- quem pediu menos movimento perde a animação, não a informação ---------- */

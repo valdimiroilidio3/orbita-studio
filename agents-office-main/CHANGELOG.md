@@ -1,3 +1,74 @@
+## 1.81.0 — 9 nov 2026 · o calendário no telemóvel, e o que só o rato revelava
+
+A 1.80.0 fechou o painel das tarefas e a gaveta do posto. Faltava a superfície que
+nunca teve tratamento nenhum — e é a maior: **o calendário** (`P`). O `#calOv` é
+`position:fixed; inset:0` (ecrã inteiro), mas o interior continuava desenhado para
+uma janela de secretária:
+
+- a barra `.cv-band` era uma fila que não quebra — marca + SEMANA/MÊS + ‹ título ›
+  HOJE + atalhos de teclado + ✕ — e a 390 px empurrava a página para o lado;
+- `.cv-rail` (as rotinas) tinha **272 px fixos** e o `.cv-body` é `display:flex`:
+  a grelha ficava com o resto, **~118 px para sete colunas** — 17 px por dia, onde
+  não cabe nem o número da data;
+- `.cv-dow` e `.cv-grid` são grelhas de sete colunas, e a 17 px por dia não há
+  número, nem título, nem nada;
+- `#cvPop` (agendar) e `#aiPop` (motores) tinham **372 px fixos**: a 360 px saíam
+  do ecrã — e o `place()` do calendário escreve `left`/`top` em linha, por isso
+  nenhuma regra de CSS os conseguia trazer de volta sem `!important`;
+- o «+» de agendar (`.cv-add`) só aparecia com `:hover` — num telemóvel não existe
+  hover, portanto o caminho mais curto para marcar uma tarefa estava invisível;
+- campos a 12–13 px: o iOS amplia a página ao tocar-lhes.
+
+### O que passa a acontecer (≤ 640 px, e é a última camada do ficheiro)
+
+- **a barra passa a três filas declaradas** (`grid-template-areas`): marca + ✕ de
+  44 px na primeira, SEMANA/MÊS na segunda, ‹ título › HOJE na terceira, com o
+  título a encolher em vez de empurrar; os atalhos de teclado desaparecem (num
+  telemóvel não existem);
+- **o corpo passa a coluna**: as rotinas ficam por cima (a rolar, no máximo 30 % do
+  ecrã) e os dias por baixo, com a coluna dos dias a rolar — `min-height:0` é o que
+  faz rolar em vez de crescer para fora;
+- **a grelha de sete colunas passa a lista de dias empilhados**: o dia e a inicial
+  da semana à esquerda (numa goteira de 58 px), os eventos à direita, o título do
+  evento a quebrar em vez de ser cortado a meio. O mês continua a ser o mês — só se
+  lê de cima para baixo;
+- **os popovers passam a folha**: `left/right/top/bottom` com `!important` (é a
+  única forma de ganhar a um estilo em linha), largura automática, no máximo 74 %
+  da altura, ✕ de 44 px e campos a **16 px**;
+- **`@media (hover: none)`**: em ecrã de toque o «+» e o ✕ dos chips ficam à vista,
+  e as elevações de `:hover` desaparecem (depois de um toque o `:hover` fica preso
+  e finge um estado que já não existe);
+- barra de cima a 360 px: os botões ganham 40 px de altura (largura mantém-se,
+  senão a marca e seis botões não cabem).
+
+### O cálculo, não a captura
+
+`mobile.test.mjs` passou de 7 para **16 provas**, e o calculador de cascata ganhou
+duas peças: `@media (hover: none)` (com um parâmetro de «ecrã de toque») e a regra
+de que **`:hover` é um instante, não o estado em repouso** — antes uma regra de
+hover fingia ganhar sempre, e foi isso que escondeu que o «+» do calendário não
+existia no telemóvel.
+
+Prova-se, a 390 e a 1440 px, quem ganha em cada caixa do calendário, dos popovers,
+dos campos e da barra; e há duas provas de âmbito: **nenhuma gaveta flutuante**
+(`#tpanel`, `#rail`, `#leadsPanel`, `#opsPanel`, `#cfgPanel`, `#aiPop`, `#cvPop`,
+`.bv-pane`) tem largura fixa acima de 344 px a 360 px, e **a mesa (`/app`)** colapsa
+a lista de leads (`1fr auto`), os números (`repeat(2, 1fr)`) e o cabeçalho (coluna)
+a 390 px, sem mexer a 1440.
+
+### Provas
+
+- `node --test` → **1480/1480** (1471 antes; +9 provas móveis: 7 → 16);
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser`, esta máquina não tem
+  Chrome);
+- `node build.mjs` → publicado.
+
+### O que continua por provar
+
+Não há captura de ecrã nesta VM (falta Chrome): o que está provado é **a cascata**,
+não o pixel. A confirmação é o dono abrir `P` no telemóvel: os dias passam a ser uma
+lista, e é isso que se pede para confirmar.
+
 ## 1.80.0 — 9 nov 2026 · telemóvel arranjado, a aba de entrega (ver, correr, .zip) e os agentes a mexer-se
 
 Três pedidos do dono numa mensagem, com uma captura de um iPhone ao lado:
