@@ -1,3 +1,35 @@
+## 1.79.5 — 9 nov 2026 · «sem servidor» deixa de ser uma frase deste escritório
+
+O dono foi claro: **o projecto tem de ter servidor**, e a frase «aberto sem servidor
+· `npm start`» não é aceitável. A 1.79.2 tirou-a dos painéis principais, mas ela
+sobrevivia noutros sítios, sempre com a mesma implicação errada — que o escritório é
+um ficheiro solto. Não é: há a publicação, há a base, há a porta. Quando algo não
+funciona, o que falta é **a ligação**.
+
+- `src/ops.js`: o rótulo do ponto ao vivo passa de «sem servidor» a
+  **«servidor não responde»** (e o comentário diz porquê);
+- `src/config.js`: «sem servidor · só o browser» → **«sem ligação · só este browser»**;
+  o aviso das notificações diz «sem ligação ao servidor não há trabalho a acontecer»;
+- `src/tasks.js`: «Sem servidor ligado, …» → «Sem ligação ao servidor, …»; o registo
+  da rotina e o distintivo do modo local («SEM MOTORES LOCAIS») deixam de falar de
+  um servidor que não existe;
+- `src/mesa.js`: a base em baixo diz «o servidor não respondeu», não «sem servidor
+  publicado»;
+- `src/localapi.js`: a nota do correio em modo local diz «sem ligação ao servidor».
+
+Ficam três usos, e só estes, porque dizem de que servidor falam: **«sem servidor
+local»** (o `serve.mjs` não está a correr), **«sem servidor de correio»** (serviço de
+email) e **«sem servidor publicado»**. Um teste (`conectores.test.mjs`) percorre nove
+painéis, tira os comentários e falha se aparecer qualquer outro — foi ele que
+encontrou as frases que faltavam.
+
+### Provas
+
+- `node --test` → **1443/1443**;
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser`, sem Chrome nesta máquina);
+- produção: `versao: 1.79.4` → depois desta entrada, `essenciaisEmFalta` fica
+  `["Correio — respostas", "WhatsApp"]` (o envio de email já não aparece em falta).
+
 ## 1.79.4 — 9 nov 2026 · o painel deixa de chamar «desligado» ao que já funciona
 
 A 1.79.3 foi para produção e o `/api/health` mostrou o resultado: os conectores

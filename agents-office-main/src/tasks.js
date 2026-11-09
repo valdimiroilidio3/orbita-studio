@@ -855,9 +855,9 @@ export function initTasks(ctx) {
   function fireDemo(r, manual) {
     // Sem servidor não há tarefa para criar: a rotina só existe na sessão, e o trabalho tem de vir
     // da base de dados. Diz-se isso em vez de fabricar um cartão que ninguém pediu.
-    say(`Sem servidor ligado, <b>${esc(r.title)}</b> não cria trabalho — liga o Órbita para a rotina correr.`, 'err');
+    say(`Sem ligação ao servidor, <b>${esc(r.title)}</b> não cria trabalho — abre o Órbita com sessão e a rotina corre.`, 'err');
     spawnEmote(R[r.agent], '⏱');
-    feedPush(R[r.agent], '⏱', `Rotina ${manual ? '(executar agora)' : ''}sem servidor: ${r.title}`);
+    feedPush(R[r.agent], '⏱', `Rotina ${manual ? '(executar agora)' : ''}sem ligação ao servidor: ${r.title}`);
     if (manual) { r.lastAt = Date.now(); r.runs++; r.nextAt = nextRun(r.when); }
     syncPills(); dirty = true; if (railAgent === r.agent) railFor(r.agent);
     return null;
@@ -1042,7 +1042,7 @@ export function initTasks(ctx) {
         /* não há rota das tarefas nesta publicação: o selo diz isso, e onde é que
            a IA e o trabalho existem de verdade. «SEM MOTOR DE IA» era falso. */
         mode.hidden = false;
-        mode.textContent = aiDaMesa?.disponivel ? `MESA · ${aiDaMesa.quantos} FORNECEDOR(ES)` : 'SEM SERVIDOR LOCAL';
+        mode.textContent = aiDaMesa?.disponivel ? `MESA · ${aiDaMesa.quantos} FORNECEDOR(ES)` : 'SEM MOTORES LOCAIS';
         mode.classList.remove('live'); mode.classList.add('off');
         /* 1.79.0 · o trabalho não precisa da máquina do dono: é criado na base de
            dados do Órbita por /ops/tarefas (a ponte). O selo diz por onde vai. */

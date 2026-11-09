@@ -134,7 +134,7 @@ export function createConfig({
     const s = notify ? notify.state() : { has: false, granted: false, permission: 'unsupported', enabled: false };
     const why = !s.has ? 'este browser não tem notificações'
       : s.permission === 'denied' ? 'o browser bloqueou as notificações neste sítio — permite nas definições do sítio'
-      : semServidor ? 'sem servidor não há trabalho a acontecer — nada para avisar'
+      : semServidor ? 'sem ligação ao servidor não há trabalho a acontecer — nada para avisar'
       : 'avisos do browser quando um posto fica à espera do teu OK, ou falha';
     return `<div class="cfg-sec">
       <div class="cfg-h"><b>Avisos</b><span class="cfg-note">${esc(why)}</span></div>
@@ -345,7 +345,9 @@ export function createConfig({
   function render() {
     if (!body) return;
     body.innerHTML = themeRow() + centroSection() + apisSection() + notifyRow() + prefsRow();
-    if (title) title.textContent = semServidor ? 'sem servidor · só o browser' : 'ligações e preferências';
+    /* 1.79.5 · «sem servidor · só o browser» dava a ideia de que este escritório não tem
+       servidor. Tem: o que falta, quando isto aparece, é a ligação a ele. */
+    if (title) title.textContent = semServidor ? 'sem ligação · só este browser' : 'ligações e preferências';
     wire();
     pintarTrabalho();
   }

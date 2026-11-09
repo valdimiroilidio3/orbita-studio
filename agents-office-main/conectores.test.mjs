@@ -92,6 +92,28 @@ test('1.79.2 · nenhum painel manda o dono arrancar um terminal', () => {
   }
 });
 
+test('1.79.5 · nenhum painel diz que este escritório não tem servidor', () => {
+  /* o problema que isto fecha: a frase «aberto sem servidor · `npm start`» fazia o
+     escritório parecer um ficheiro solto. Ele TEM servidor (a publicação e a base); o
+     que pode faltar é a LIGAÇÃO. Sobram três usos honestos — «sem servidor local»
+     (o serve.mjs não está a correr), «sem servidor de correio» (serviço de email) e
+     «sem servidor publicado» (a base a falar) — e todos dizem de que servidor falam. */
+  const semComentarios = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+  const permitidos = /sem servidor (local|de correio|publicado)/i;
+  for (const f of ['forge.js', 'apps.js', 'config.js', 'mesa.js', 'tasks.js', 'falhas.js', 'ops.js', 'localapi.js', 'mcp.js']) {
+    const texto = semComentarios(fonte(f));
+    for (const m of texto.matchAll(/[^\n]{0,40}sem servidor[^\n]{0,20}/gi)) {
+      assert.match(m[0], permitidos, `${f}: «${m[0].trim()}» dá a ideia de que não há servidor nenhum`);
+    }
+  }
+  /* e as duas frases que diziam isso mesmo, agora dizem o que se passa */
+  assert.match(fonte('ops.js'), /'servidor não responde'/);
+  assert.match(fonte('config.js'), /sem ligação · só este browser/);
+  assert.match(fonte('config.js'), /sem ligação ao servidor não há trabalho a acontecer/);
+});
+
 test('1.79.2 · a oficina diz o que é, e aponta o que a publicação faz', () => {
   const s = fonte('forge.js');
   assert.match(s, /oficina local: forja ferramentas em ficheiros desta máquina/);
