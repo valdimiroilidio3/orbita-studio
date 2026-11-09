@@ -17,7 +17,13 @@ do ambiente, como antes.
 E o temporizador do fluxo passou a ser `unref()`: uma ligação esquecida não
 segura o processo (nem os testes) depois de morrer.
 
-Suite: **1381/1381**.
+E a prova que fecha o circuito: o corpo **exacto** que o PostgREST devolve
+(`code: "23502"`, `null value in column "hash" …`) passa pelo repositório
+verdadeiro (`createSupabaseRepo` com um `fetch` falso) e sai classificado como
+`semEsquema: true` com `ficheiro: "orbita_1_77_0.sql"` — que é precisamente o que
+faz o `_oauth.mjs` saber que pode curar e repetir a escrita.
+
+Suite: **1382/1382**.
 
 ## 1.77.0 — 6 nov 2026 · a conta sem palavra-passe e o escritório ao vivo em produção
 

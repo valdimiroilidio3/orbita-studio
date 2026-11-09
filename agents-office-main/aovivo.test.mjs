@@ -191,3 +191,28 @@ test('1.77.0 · o fluxo diz `hello` com o retrato e fecha-se sozinho (não prome
   assert.match(texto, /"state":"live"/, 'com o trabalho que está a correr');
   assert.doesNotMatch(texto, /hash|password|segredo/i, 'e sem segredos');
 });
+
+test('1.77.0 · o erro real do Supabase (código 23502) chega à cura com o ficheiro certo', async () => {
+  const { createSupabaseRepo } = await import('./api/_repo.mjs');
+  /* o corpo exacto que o PostgREST devolve quando a coluna é `not null` */
+  const corpo = {
+    code: '23502',
+    message: 'null value in column "hash" of relation "orbita_contas" violates not-null constraint',
+    details: 'Failing row contains (…).',
+  };
+  const repo = createSupabaseRepo({
+    url: 'https://exemplo.supabase.co',
+    key: 'chave',
+    fetchImpl: async () => ({ ok: false, status: 400, text: async () => JSON.stringify(corpo) }),
+  });
+
+  let erro = null;
+  try {
+    await repo.contas.criar({ email: 'dono@exemplo.pt', nome: 'Dono', papel: 'dono', hash: null, oauth_fornecedor: 'github' });
+  } catch (e) { erro = e; }
+
+  assert.ok(erro, 'a escrita falha — é o que acontece hoje em produção');
+  assert.equal(erro.semEsquema, true, 'e é classificada como esquema em falta, não como dado inválido');
+  assert.equal(erro.ficheiro, 'orbita_1_77_0.sql');
+  assert.equal(faltaEsquemaDaPorta(erro), true, 'por isso o `_oauth.mjs` sabe que pode curar e repetir');
+});
