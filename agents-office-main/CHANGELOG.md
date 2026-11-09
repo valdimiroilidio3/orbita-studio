@@ -1,3 +1,59 @@
+## 1.72.0 — 6 nov 2026 · O GOOGLE ENTRA COM O ENDEREÇO QUE JÁ ESTÁ REGISTADO
+
+As chaves do Google estavam na Vercel e o botão não entrava. O Google respondia
+`Error 400: redirect_uri_mismatch`, e a razão estava no ficheiro que o dono
+anexou: no cliente OAuth dele só estão registados
+
+    https://orbita-agentes.vercel.app/          ← a raiz
+    https://vercel.com/…/ARj9XZ9d1Bm…           ← o inspector de um deploy
+
+e o nosso pedido levava `…/api/oauth?fornecedor=google`. O Google compara ao
+carácter: recusa. E como recusa **antes** de nos chamar, o produto não podia
+nem explicar-se.
+
+Havia dois caminhos: pedir ao dono para ir à Cloud Console registar outro
+endereço (mais um passo manual, num sítio onde ele já esteve), ou **usar o que
+já lá está**. Ficou o segundo.
+
+### O que mudou
+- `uriDeRetorno('google')` devolve **a raiz** (`https://orbita-agentes.vercel.app/`)
+  — o endereço que o Google aceita hoje. O GitHub não muda: continua no endereço
+  canónico `…/api/oauth?fornecedor=github`.
+- `ORBITA_OAUTH_RETORNO_GOOGLE` manda sobre isto: no dia em que o endereço certo
+  for registado, muda-se a variável e não o código.
+- **A raiz encaminha a volta** (`src/shell.html`): com `code` + `state`, manda a
+  pessoa para `/api/oauth?fornecedor=google&…` antes de a página desenhar. Sem
+  eles, não faz nada — um visitante normal do site não é redireccionado.
+- Se o Google recusar (`error=access_denied`), a razão segue para `/app` escrita
+  em português, em vez de ficar numa página em branco.
+- O `code` e o `state` vão codificados: um `&` dentro do `state` não inventa
+  parâmetros novos.
+
+### Porque não se fingiu que estava resolvido
+O endereço de retorno não é um detalhe: é o que impede alguém de montar um link
+que devolve um `code` a um sítio que não é o nosso. Continua a haver `state` em
+cookie `HttpOnly` e comparação exacta na volta; o que mudou foi só **onde** a
+volta aterra.
+
+### Testes
+- `volta-google.test.mjs` (5): **executa** o script publicado (não o lê) com um
+  `location` falso — o `code` sai para `/api/oauth`, um visitante normal não é
+  redireccionado, caracteres perigosos ficam codificados, a recusa do Google vai
+  para `/app`, e um pedido que já traz `fornecedor` passa ao lado.
+- `entrada.test.mjs` (+3): o Google volta à raiz, `ORBITA_OAUTH_RETORNO_GOOGLE`
+  manda, e **pedir e trocar levam o mesmo `redirect_uri`** (é a condição do
+  Google para aceitar a troca do código).
+- **Suíte: 1335/1335.** `check.mjs`: 96/97 (o único falhanço é o smoke de
+  browser, sem Chrome nesta máquina).
+
+### O que continua a faltar
+- **`RESEND_API_KEY` + `ORBITA_EMAIL_FROM`** para o código de 6 dígitos sair.
+- **A primeira conta**: criar a do dono pede o `SETUP_TOKEN` (Vercel → Settings
+  → Environment Variables) — ou entra-se por GitHub/Google, que criam a conta do
+  dono na primeira vez.
+
+---
+
 ## 1.71.0 — 6 nov 2026 · A ENTRADA A DOIS TEMPOS
 
 O dono pediu o ecrã de entrada de um componente React («modern-animated-sign-in»):

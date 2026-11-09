@@ -3367,6 +3367,38 @@
     }
   }
 </style>
+<script>
+/* =========================================================================
+   1.72.0 · A VOLTA DO GOOGLE CAI AQUI (6 nov 2026)
+
+   O Google só devolve a pessoa a um endereço registado ao carácter na Cloud
+   Console. O que lá está é `https://orbita-agentes.vercel.app/` — a raiz. Por
+   isso o `redirect_uri` do Google aponta para aqui, e é aqui que o `code` tem
+   de seguir caminho para quem o sabe trocar (`/api/oauth`), antes de a página
+   sequer desenhar.
+
+   Regras: só age quando há `code` **e** `state` e não há `fornecedor` (um
+   pedido normal à raiz não tem nada disto); e não engole erros do fornecedor —
+   se o Google devolver `error=…`, segue para `/app` com a razão escrita, para
+   a pessoa não ficar numa página que não explica nada.
+   ========================================================================= */
+(function () {
+  try {
+    var q = new URLSearchParams(location.search || '');
+    var code = q.get('code');
+    var state = q.get('state');
+    if (q.get('fornecedor')) return;
+    /* a recusa vem SEM código: é por isso que se olha para ela primeiro */
+    var erro = q.get('error_description') || q.get('error');
+    if (erro && state) {
+      location.replace('/app?erroEntrada=' + encodeURIComponent('o Google recusou: ' + erro));
+      return;
+    }
+    if (!code || !state) return;
+    location.replace('/api/oauth?fornecedor=google&code=' + encodeURIComponent(code) + '&state=' + encodeURIComponent(state));
+  } catch (e) { /* sem URLSearchParams: a página é a de sempre */ }
+})();
+</script>
 </head>
 <body>
 <!-- A primeira paragem do Tab: atravessa a cena e vai direita à lista. Fora do ecrã até ter foco. -->
