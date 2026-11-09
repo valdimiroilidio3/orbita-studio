@@ -1,4 +1,4 @@
-// 1.80.0 · O TELEMÓVEL, PROVADO PELA ORDEM DAS REGRAS.
+// 1.80.0 / 1.81.0 · O TELEMÓVEL, PROVADO PELA ORDEM DAS REGRAS.
 //
 // Esta máquina não tem Chrome (o `smoke: browser` do gate é saltado aqui), por isso
 // não há captura de ecrã possível. O que se pode provar — e é exactamente o que
@@ -14,6 +14,10 @@
 // Este ficheiro lê o CSS a sério, ordena as regras, calcula especificidade e
 // responde «quem ganha». Se alguém voltar a pôr uma largura fixa depois do bloco
 // móvel, o teste fica vermelho.
+//
+// 1.81.0 acrescenta ao calculador duas coisas que faltavam: `@media (hover: none)`
+// (o ecrã de toque, onde vivem as regras que revelam o que só o rato mostrava) e a
+// regra de que `:hover` é um instante — não conta como estado em repouso.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -79,14 +83,20 @@ export function declaracoes(corpo) {
   return out;
 }
 
-/** `min-width`/`max-width` em px — o que interessa para decidir se um bloco se aplica. */
-export function mediaAplica(media, largura) {
+/** `min-width`/`max-width` em px — o que interessa para decidir se um bloco se aplica.
+ *  1.81.0: também `hover: none` (ecrã de toque) e `pointer: coarse`, que é onde
+ *  vivem as regras que revelam o que só o rato mostrava. */
+export function mediaAplica(media, largura, toque = false) {
   if (!media || !media.length) return true;
   for (const m of media) {
     const max = /max-width:\s*(\d+)px/.exec(m);
     const min = /min-width:\s*(\d+)px/.exec(m);
     if (max && largura > Number(max[1])) return false;
     if (min && largura < Number(min[1])) return false;
+    if (/hover:\s*none/.test(m) && !toque) return false;
+    if (/hover:\s*hover/.test(m) && toque) return false;
+    if (/pointer:\s*coarse/.test(m) && !toque) return false;
+    if (/pointer:\s*fine/.test(m) && toque) return false;
   }
   return true;
 }
@@ -110,12 +120,15 @@ const compara = (x, y) => (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]);
  * Qual o valor de `prop` que ganha para o elemento `el` a uma dada largura.
  * `el` = { tag, id, classes, pais: [{tag, classes}] } — só o que os seletores usados precisam.
  */
-export function valorEfectivo(css, el, prop, largura = 390) {
+export function valorEfectivo(css, el, prop, largura = 390, toque = false) {
   let vencedor = null;
   for (const r of regras(css)) {
-    if (!mediaAplica(r.media, largura)) continue;
+    if (!mediaAplica(r.media, largura, toque)) continue;
     for (const seletor of r.seletor.split(',').map((s) => s.trim())) {
-      if (!seletor || !combina(seletor, el)) continue;
+      /* `:hover` é um instante, não o estado em repouso: o que se mede aqui é o que
+         se vê ao chegar à página. Sem isto, uma regra de hover fingia ganhar sempre
+         — e escondia que o «+» do calendário não existia no telemóvel. */
+      if (!seletor || /:hover/.test(seletor) || !combina(seletor, el)) continue;
       const decl = declaracoes(r.corpo);
       if (!(prop in decl)) continue;
       const cand = { valor: decl[prop], esp: especificidade(seletor), ordem: r.ordem };
@@ -229,4 +242,152 @@ test('1.80.0 · o bloco móvel é o último: é a ordem que o faz ganhar', () =>
   assert.ok(movel.length, 'tem de haver um bloco móvel');
   assert.ok(Math.max(...movel.map((r) => r.ordem)) > fixaLarga.ordem,
     'o bloco móvel tem de vir DEPOIS da largura fixa — senão o telemóvel perde, como perdia');
+});
+
+/* ===========================================================================
+   1.81.0 · O CALENDÁRIO NO TELEMÓVEL (9 nov 2026)
+
+   O `#calOv` é `position:fixed; inset:0` — o ecrã todo — e o interior nunca foi
+   pensado para 390 px: uma barra que não quebra, uma gaveta de 272 px fixos ao lado
+   de uma grelha de sete colunas, e popovers de 372 px. O que se prova aqui é o
+   mesmo que na 1.80.0: quem ganha, a que largura, para cada caixa.
+   =========================================================================== */
+const cal = { tag: 'div', id: 'calOv', classes: ['on'], pais: [{ tag: 'body', classes: [] }] };
+/* a lista de pais é a cadeia toda (o combinador aproxima-se do elemento): sem isto um
+   seletor como `#calOv .cv-band` não chega ao avô */
+const dentro = (tag, classes, pai, extra = {}) => ({ tag, classes, pais: [pai, ...(pai.pais || [])], ...extra });
+const band = dentro('div', ['cv-band'], cal);
+const cx = (css, el, prop, largura, toque = false) => valorEfectivo(css, el, prop, largura, toque);
+
+test('1.81.0 · a barra do calendário quebra em três filas (a 390 px não cabia numa)', () => {
+  const css = cssDaShell();
+  assert.equal(cx(css, band, 'display', 390), 'grid');
+  assert.equal(cx(css, band, 'height', 390), 'auto', 'altura fixa de 64 px + fila que não quebra = conteúdo fora do ecrã');
+  assert.match(String(cx(css, band, 'grid-template-areas', 390)), /brand close/);
+  assert.equal(cx(css, dentro('div', ['cv-keys'], band), 'display', 390), 'none',
+    'atalhos de teclado num telemóvel não existem — e roubavam a linha toda');
+  assert.equal(cx(css, cal, 'display', 390), 'flex', 'o overlay continua a ser a coluna de sempre');
+  const fechar = dentro('button', [], cal, { id: 'cvClose' });
+  assert.equal(cx(css, fechar, 'width', 390), '44px');
+  assert.equal(cx(css, fechar, 'height', 390), '44px');
+  const titulo = dentro('div', [], band, { id: 'cvTitle' });
+  assert.equal(cx(css, titulo, 'min-width', 390), '0', '200 px mínimos no título empurravam a barra');
+  const brand = dentro('div', ['cv-brand'], band);
+  assert.equal(cx(css, dentro('small', [], brand), 'display', 390), 'none');
+});
+
+test('1.81.0 · a barra de secretária fica exactamente como estava', () => {
+  const css = cssDaShell();
+  assert.equal(cx(css, band, 'display', 1440), 'flex');
+  assert.equal(cx(css, band, 'height', 1440), '64px');
+  assert.equal(cx(css, dentro('div', ['cv-keys'], band), 'display', 1440), null, 'na secretária os atalhos não têm regra nenhuma: ficam como sempre estiveram');
+  assert.equal(cx(css, dentro('div', [], band, { id: 'cvTitle' }), 'min-width', 1440), '200px');
+});
+
+test('1.81.0 · as rotinas passam por cima e os dias por baixo: a grelha deixa de ser esmagada', () => {
+  const css = cssDaShell();
+  const corpo = dentro('div', ['cv-body'], cal);
+  assert.equal(cx(css, corpo, 'flex-direction', 390), 'column');
+  assert.equal(cx(css, corpo, 'flex-direction', 1440), null);
+  const rail = dentro('aside', ['cv-rail'], corpo);
+  assert.equal(cx(css, rail, 'width', 390), 'auto', '272 px fixos ao lado de sete colunas davam ~118 px à grelha');
+  assert.equal(cx(css, rail, 'width', 1440), '272px');
+  assert.match(String(cx(css, rail, 'max-height', 390)), /30dvh/);
+  const wrap = dentro('div', ['cv-wrap'], corpo);
+  assert.equal(cx(css, wrap, 'overflow-y', 390), 'auto', 'em lista, quem rola é a coluna dos dias');
+});
+
+test('1.81.0 · a grelha de sete colunas passa a lista de dias empilhados', () => {
+  const css = cssDaShell();
+  const grelha = dentro('div', ['cv-grid', 'month'], cal);
+  assert.equal(cx(css, grelha, 'grid-template-columns', 390), '1fr');
+  assert.equal(cx(css, grelha, 'grid-template-columns', 1440), 'repeat(7, 1fr)');
+  assert.equal(cx(css, grelha, 'grid-auto-rows', 390), 'auto');
+  assert.equal(cx(css, dentro('div', ['cv-dow'], cal), 'display', 390), 'none',
+    'sem colunas não há cabeçalho de dias — a semana vai escrita em cada dia');
+  const dia = dentro('div', ['cv-day'], grelha);
+  assert.match(String(cx(css, dia, 'padding', 390)), /58px/, 'gutter à esquerda para o número e a inicial');
+  assert.equal(cx(css, dia, 'border-right', 390), '0');
+  const num = dentro('div', ['cv-num'], dia);
+  assert.equal(cx(css, num, 'left', 390), '10px');
+  assert.equal(cx(css, num, 'position', 390), 'absolute');
+  // e a inicial do dia, que na grelha era a coluna
+  const wd = dentro('span', ['cv-wd'], num);
+  assert.equal(cx(css, wd, 'display', 390), 'block');
+  assert.equal(cx(css, wd, 'display', 1440), 'none');
+  // o título de um evento em lista lê-se todo, não se corta a meio
+  assert.equal(cx(css, dentro('div', ['cv-ev-t'], dia), 'white-space', 390), 'normal');
+});
+
+test('1.81.0 · em ecrã de toque não há hover: o «+» de agendar fica à vista', () => {
+  const css = cssDaShell();
+  const dia = dentro('div', ['cv-day'], dentro('div', ['cv-grid', 'month'], cal));
+  const add = dentro('button', ['cv-add'], dia);
+  /* num telemóvel o bloco de largura já o mostra; o que esta regra acrescenta é o
+     tablet e o portátil com ecrã de toque, onde a largura sozinha não decidia nada */
+  assert.equal(cx(css, add, 'opacity', 390, false), '1');
+  assert.equal(cx(css, add, 'opacity', 1024, false), '0', 'na secretária continua a aparecer com o rato');
+  assert.equal(cx(css, add, 'opacity', 1024, true), '1', 'num ecrã de toque tem de estar à vista');
+  const chip = dentro('button', ['mc-chip'], dentro('div', ['mc-chips'], dentro('div', ['mc'], { tag: 'div', id: 'mChat', classes: [], pais: [{ tag: 'body', classes: [] }] })));
+  assert.equal(cx(css, dentro('button', ['x'], chip), 'opacity', 390, true), '1');
+});
+
+test('1.81.0 · os popovers deixam de ter 372 px fixos: cabem nos 360', () => {
+  const css = cssDaShell();
+  const pop = { tag: 'div', id: 'cvPop', classes: [], pais: [{ tag: 'body', classes: [] }] };
+  assert.equal(cx(css, pop, 'width', 390), 'auto !important');
+  assert.equal(cx(css, pop, 'width', 1440), '372px');
+  assert.equal(cx(css, pop, 'left', 390), '8px !important', 'ganha ao `left` em linha que o place() escreve');
+  assert.equal(cx(css, pop, 'right', 390), '8px !important');
+  assert.equal(cx(css, pop, 'top', 390), 'auto !important');
+  assert.match(String(cx(css, pop, 'max-height', 390)), /74dvh/);
+  const ai = { tag: 'div', id: 'aiPop', classes: [], pais: [{ tag: 'body', classes: [] }] };
+  assert.equal(cx(css, ai, 'width', 390), 'auto');
+  assert.equal(cx(css, ai, 'width', 1440), '372px');
+});
+
+test('1.81.0 · os campos novos também a 16 px (o iOS não amplia ao tocar)', () => {
+  const css = cssDaShell();
+  const pop = { tag: 'div', id: 'cvPop', classes: [], pais: [{ tag: 'body', classes: [] }] };
+  for (const tag of ['input', 'select', 'textarea']) {
+    assert.equal(cx(css, dentro(tag, [], pop), 'font-size', 390), '16px', `${tag} do popover do calendário`);
+  }
+  assert.equal(cx(css, dentro('input', [], cal, { id: 'cvSearch' }), 'font-size', 390), '16px', 'a pesquisa do calendário');
+  const barra = dentro('div', [], cal, { id: 'topbar' });
+  const grupo = dentro('div', ['m-group'], barra);
+  assert.equal(cx(css, dentro('button', [], grupo), 'min-height', 390), '40px', 'a barra de cima é de dedo, não de rato');
+});
+
+test('1.81.0 · nenhuma gaveta flutuante fica mais larga do que um telemóvel de 360 px', () => {
+  const css = cssDaShell();
+  /* os painéis que se abrem por cima da cena. A regra é simples e vale para todos:
+     a 360 px, uma largura fixa em px só é aceitável se caber em 344 (360 − 16). */
+  const paineis = [
+    ['div', 'tpanel'], ['div', 'rail'], ['div', 'leadsPanel'], ['div', 'opsPanel'],
+    ['div', 'cfgPanel'], ['div', 'aiPop'], ['div', 'cvPop'], ['div', null, ['bv-pane']],
+  ];
+  for (const [tag, id, classes] of paineis) {
+    const el = { tag, id, classes: classes || [], pais: [{ tag: 'body', classes: [] }] };
+    const largura = String(valorEfectivo(css, el, 'width', 360) || '');
+    const fixa = /^(\d+)px$/.exec(largura);
+    const nome = id ? `#${id}` : `.${classes[0]}`;
+    if (fixa) assert.ok(Number(fixa[1]) <= 344, `${nome} tem ${largura} a 360 px: não cabe`);
+    else assert.match(largura, /auto|100%|min\(|calc\(/, `${nome} devia ser fluido a 360 px (é "${largura}")`);
+  }
+});
+
+test('1.81.0 · a mesa (/app) também cabe: a lista de leads e os números colapsam', () => {
+  const html = fs.readFileSync(path.join(AQUI, 'src', 'mesa.html'), 'utf8');
+  const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+  const el = (tag, classes) => ({ tag, classes, pais: [{ tag: 'body', classes: [] }] });
+  const row = el('div', ['row']);
+  const stats = el('div', ['stats']);
+  const head = el('div', ['head']);
+  // 390 px: uma linha de lead é nome + etiqueta (as colunas escondem-se), dois números por fila
+  assert.equal(valorEfectivo(css, row, 'grid-template-columns', 390), '1fr auto');
+  assert.equal(valorEfectivo(css, stats, 'grid-template-columns', 390), 'repeat(2, 1fr)');
+  assert.equal(valorEfectivo(css, head, 'flex-direction', 390), 'column', 'o título e os botões empilham');
+  // e a 1440 px nada disto acontece
+  assert.equal(valorEfectivo(css, row, 'grid-template-columns', 1440), '1fr 150px 120px 92px');
+  assert.equal(valorEfectivo(css, stats, 'grid-template-columns', 1440), 'repeat(4, 1fr)');
 });

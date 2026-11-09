@@ -147,7 +147,11 @@ body.dark #entrega .eg-stage { background: #0D0E11; }
   #entrega .eg-item { min-width: 168px; }
   #entrega .eg-x { width: 44px; height: 44px; min-width: 44px; }
   #entrega .eg-form { grid-template-columns: 1fr; }
-  #entrega .eg-btn { min-height: 40px; }
+  #entrega .eg-btn { min-height: 44px; }
+  /* 1.81.0 · 16 px: abaixo disto o iOS amplia a página ao tocar no campo, e o
+     utilizador fica com um formulário meio fora do ecrã. Vale para todos. */
+  #entrega .eg-form input { font-size: 16px; }
+  #entrega .eg-item b { white-space: normal; }   /* em lista horizontal, o título não se corta a meio */
 }
 `;
 

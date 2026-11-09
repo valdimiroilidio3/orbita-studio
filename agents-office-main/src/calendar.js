@@ -87,7 +87,7 @@ export function initCalendar(ctx) {
       html += `<div class="cv-day${k === today ? ' today' : ''}${out ? ' out' : ''}${past ? ' past' : ''}${dow >= 5 ? ' wknd' : ''}" data-day="${k}">
         <button class="cv-add" title="schedule something on ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}">+</button>
         <div class="cv-evs">${list.slice(0, max).map(cardHTML).join('')}${list.length > max ? `<button class="cv-more" data-day="${k}">${list.length - max} more</button>` : ''}</div>
-        <div class="cv-num">${view === 'week' ? `<span>${DOW[dow]}</span>` : ''}${d.getDate() === 1 && view === 'month' ? `<span>${MONTHS[d.getMonth()].slice(0, 3)}</span>` : ''}<b>${pad(d.getDate())}</b></div></div>`;
+        <div class="cv-num">${view === 'week' ? `<span>${DOW[dow]}</span>` : `<span class="cv-wd">${DOW[dow]}</span>`}${d.getDate() === 1 && view === 'month' ? `<span>${MONTHS[d.getMonth()].slice(0, 3)}</span>` : ''}<b>${pad(d.getDate())}</b></div></div>`;
     }
     E.grid.innerHTML = html;
     E.stats.innerHTML = `<span><b>${nRt}</b> rotina${nRt === 1 ? '' : 's'}</span><span><b>${nSched}</b> agendadas</span><span><b>${nDone}</b> CONCLUÍDO</span>`;
@@ -109,6 +109,9 @@ export function initCalendar(ctx) {
   }
 
   /* ---------- the popovers: a day (create), an event (details), "mais" (the whole day) ---------- */
+  /* 1.81.0 · num telemóvel o popover é uma folha fixa (ver o bloco ≤640 px na
+     `shell.html`): o CSS ganha ao `left`/`top` em linha com `!important`, por isso
+     aqui não há nada a decidir. Na secretária continua a abrir ao lado do dia. */
   function place(el, anchorEl) { // beside the cell, kept on screen
     const r = anchorEl.getBoundingClientRect(), W = el.offsetWidth || 360, H = el.offsetHeight || 300;
     let x = r.right + 10, y = r.top; if (x + W > innerWidth - 12) x = r.left - W - 10; if (x < 12) x = Math.max(12, Math.min(innerWidth - W - 12, r.left));
