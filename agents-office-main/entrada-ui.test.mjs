@@ -33,7 +33,7 @@ const ENTRADA = {
 
 const EU = { user: { id: 'u1', name: 'Chelton', role: 'dono' }, perms: { admin: true, read: true, write: true, approve: true }, horasSessao: 12, modo: 'base' };
 
-async function abrir({ entrada = ENTRADA, entraComCodigo = false, semCodigo = false, primeiraConta = true, url = 'https://mesa.test/app' } = {}) {
+async function abrir({ entrada = ENTRADA, entraComCodigo = false, semCodigo = false, primeiraConta = true, url = 'https://mesa.test/app', recusaConta = null } = {}) {
   const pedidos = [];
   let sessao = false;
   const dom = new JSDOM(HTML, {
@@ -62,6 +62,10 @@ async function abrir({ entrada = ENTRADA, entraComCodigo = false, semCodigo = fa
             return ok({ error: 'não há correio configurado: o código não pode sair daqui', falta: ['RESEND_API_KEY'], como: 'resend.com → API Keys; depois RESEND_API_KEY na Vercel', alternativa: 'entra com o email e a palavra-passe — sem correio, é o caminho que existe' }, 503);
           }
           return ok({ ok: true, enviado: true, para: 'che******@gmail.com', minutos: 10, mensagem: 'o código foi para che******@gmail.com — vale 10 minutos' });
+        }
+        if (caminho === '/auth/primeiro-dono' && b.metodo === 'POST') {
+          if (recusaConta) return ok(recusaConta, 400);
+          sessao = true; return ok({ ...EU, primeiraConta: true });
         }
         if (caminho === '/auth/codigo/verificar') { sessao = true; return ok({ ...EU, entrouPorCodigo: true }); }
         if (caminho === '/auth/entrar' && b.metodo === 'POST') {
@@ -272,4 +276,50 @@ test('1.73.0 · a palavra-passe pode ser vista e escondida outra vez (sem a copi
   olho.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   assert.equal(campo.type, 'password');
   assert.equal(olho.getAttribute('aria-pressed'), 'false');
+});
+
+/* 1.75.0 · o dono não entrava em casa porque a página lhe pedia o «Token de
+   instalação» — um segredo da Vercel — para criar a conta dele próprio. O campo
+   saiu, e o clique funciona sem token. */
+test('1.75.0 · a página NÃO pede o token de instalação — nem mostra o campo', async () => {
+  const { doc, texto } = await abrir();
+  assert.equal(doc.querySelector('#lgToken'), null, 'o campo do token não existe');
+  assert.doesNotMatch(texto(), /Token de instalação/i, 'nem a palavra aparece à vista');
+});
+
+test('1.75.0 · «Criar a conta e entrar» vai sem token e entra', async () => {
+  const { doc, w, pedidos, texto } = await abrir();
+  doc.querySelector('#lgNome').value = 'Chelton';
+  doc.querySelector('#lgEmail').value = 'cheltonmahoze7@gmail.com';
+  doc.querySelector('#lgPass').value = 'uma-frase-bem-comprida-2026';
+  doc.querySelector('#lgPass2').value = 'uma-frase-bem-comprida-2026';
+  doc.querySelector('[data-act="criar-primeira-conta"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(900);
+  const pedido = pedidos.find((p) => p.caminho === '/auth/primeiro-dono');
+  assert.ok(pedido, 'falou com o servidor');
+  assert.equal(pedido.corpo.token, undefined, 'e não mandou token nenhum');
+  assert.equal(pedido.corpo.email, 'cheltonmahoze7@gmail.com');
+  assert.doesNotMatch(texto(), /Token de instalação/i);
+});
+
+test('1.75.0 · se o servidor recusar, a frase fica na página (não num toast que se perde)', async () => {
+  const { doc, w, texto } = await abrir({ recusaConta: { error: 'a palavra-passe precisa de 12 caracteres' } });
+  doc.querySelector('#lgEmail').value = 'cheltonmahoze7@gmail.com';
+  doc.querySelector('#lgPass').value = 'curta';
+  doc.querySelector('#lgPass2').value = 'curta';
+  doc.querySelector('[data-act="criar-primeira-conta"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(700);
+  assert.match(texto(), /12 caracteres/, 'a recusa vê-se onde se corrige');
+  assert.ok(doc.querySelector('.enta-aviso[data-tom="erro"]'));
+});
+
+test('1.75.0 · palavras-passe diferentes: a página diz isso sem ir ao servidor', async () => {
+  const { doc, w, pedidos, texto } = await abrir();
+  doc.querySelector('#lgEmail').value = 'cheltonmahoze7@gmail.com';
+  doc.querySelector('#lgPass').value = 'uma-frase-bem-comprida-2026';
+  doc.querySelector('#lgPass2').value = 'outra-frase-bem-comprida-2026';
+  doc.querySelector('[data-act="criar-primeira-conta"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await esperar(400);
+  assert.match(texto(), /não são iguais/);
+  assert.equal(pedidos.some((p) => p.caminho === '/auth/primeiro-dono'), false, 'nem chegou a pedir');
 });

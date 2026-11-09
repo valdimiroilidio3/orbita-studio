@@ -387,6 +387,9 @@ export async function avaliarPorta(repo, {
     if (n > 0) return { resposta: { status: 409, corpo: { error: 'esta instalação já tem contas — entra, ou pede a um dono que crie a tua' } } };
     const estado = estadoDaPorta({ temContas: false, env });
     const token = String(corpo?.token || qs.get('token') || '').trim();
+    /* 1.75.0 · o token só se pede quando o registo está aberto (ver
+       `estadoDaPorta`): numa instalação de um dono só quem fecha a porta é o
+       email, e pedir um segredo da Vercel além disso só travava o dono. */
     if (estado.exigeToken && token !== String(env.SETUP_TOKEN || env.PROVA_TOKEN || '')) {
       return { resposta: { status: 403, corpo: {
         error: 'falta o token de instalação', precisaToken: true,
@@ -408,7 +411,8 @@ export async function avaliarPorta(repo, {
     try {
       conta = await repo.contas.criar({
         email, nome, papel: 'dono', hash: hashPassword(corpo.password), activo: true, criado: agoraIso(),
-        /* a primeira conta nasce confirmada: quem a cria tem o SETUP_TOKEN na mão */
+        /* a primeira conta nasce confirmada: o email é o do dono (ou o token
+           foi apresentado), não é uma caixa por provar */
         confirmado_em: agoraIso(),
       });
     } catch (e) {

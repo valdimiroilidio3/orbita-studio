@@ -255,6 +255,53 @@ test('1.69.0 · a primeira conta só nasce com o email do dono', async () => {
   assert.equal(dele.corpo.user.role, 'dono');
 });
 
+/* 1.75.0 · O TOKEN NÃO É A FECHADURA; O EMAIL É.
+
+   Em produção o `SETUP_TOKEN` está definido, e a página pedia-o para criar a
+   primeira conta: o dono via um campo «Token de instalação» e não entrava em
+   casa sem ir à Vercel copiar um segredo. Numa instalação de um dono só, a
+   primeira conta já só pode ser a do `ORBITA_DONO_EMAIL` — o token não protegia
+   mais nada. */
+test('1.75.0 · com SETUP_TOKEN definido, o dono cria a primeira conta SEM token', async () => {
+  const env = { ...ENV, SETUP_TOKEN: 'um-token-que-esta-na-vercel', ORBITA_DONO_EMAIL: DONO };
+  const repo = createMemRepo();
+  limitador.limpar();
+
+  const eu = await chamar(repo, '/auth/eu', 'GET', null, { env });
+  assert.equal(eu.status, 401);
+  assert.equal(eu.corpo.primeiraContaPossivel, true);
+  assert.equal(eu.corpo.estado.exigeToken, false, 'a página não pede token a quem é o dono');
+
+  const r = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: DONO, password: SENHA }, { env });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.user.role, 'dono');
+  assert.match(r.cabecalhos['Set-Cookie'], /HttpOnly/, 'e sai de lá com sessão');
+  assert.equal(await repo.contas.contar(), 1);
+
+  const entra = await chamar(repo, '/auth/entrar', 'POST', { email: DONO, password: SENHA }, { env });
+  assert.equal(entra.status, 200, 'e volta a entrar com a mesma palavra-passe');
+});
+
+test('1.75.0 · sem token, quem não é o dono continua de fora (o email é a fechadura)', async () => {
+  const env = { ...ENV, SETUP_TOKEN: 'um-token-que-esta-na-vercel', ORBITA_DONO_EMAIL: DONO };
+  const repo = createMemRepo();
+  const r = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: 'estranho@exemplo.pt', password: SENHA }, { env });
+  assert.equal(r.status, 403);
+  assert.equal(await repo.contas.contar(), 0);
+});
+
+test('1.75.0 · com o registo ABERTO, o token continua a ser exigido (aí não há identidade a valer)', async () => {
+  const env = { ...ENV, SETUP_TOKEN: 'um-token-que-esta-na-vercel', ORBITA_REGISTO: 'aberto' };
+  const repo = createMemRepo();
+  const eu = await chamar(repo, '/auth/eu', 'GET', null, { env });
+  assert.equal(eu.corpo.estado.exigeToken, true);
+  const sem = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: 'quem.quer.seja@exemplo.pt', password: SENHA }, { env });
+  assert.equal(sem.status, 403);
+  assert.equal(sem.corpo.precisaToken, true);
+  const com = await chamar(repo, '/auth/primeiro-dono', 'POST', { email: 'quem.quer.seja@exemplo.pt', password: SENHA, token: env.SETUP_TOKEN }, { env });
+  assert.equal(com.status, 200);
+});
+
 test('1.69.0 · o registo público está fechado a quem não é o dono', async () => {
   const repo = createMemRepo();
   const r = await chamar(repo, '/auth/registo', 'POST', { email: 'alguem@exemplo.pt', password: SENHA });
