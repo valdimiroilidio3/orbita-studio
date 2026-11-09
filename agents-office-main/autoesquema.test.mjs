@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
   FICHEIROS_DA_PORTA, faltaEsquemaDaPorta, aplicarEsquemaDaPorta, criarCurador,
+  criarCuradorDaMesa, mesasEmFalta, FICHEIROS_DA_MESA,
 } from './api/_autoesquema.mjs';
 import { explificar } from './api/_repo.mjs';
 
@@ -169,4 +170,120 @@ test('1.76.1 · a sonda do health diz sim/não sobre a porta — e não inventa'
 
   assert.equal(await sondaDaPorta({ contas: {} }), null, 'sem sonda, sem opinião');
   assert.equal(await sondaDaPorta(null), null);
+});
+
+/* ===========================================================================
+   1.79.0 · O CURADOR DA MESA INTEIRA (9 nov 2026)
+
+   Em produção o `/api/health` dizia `ok:false · faltam:['orbita_faturas']` e o
+   curador da 1.76.0 não fazia nada: só olhava para contas e sessões. O que se
+   prova aqui, sem base verdadeira:
+
+     · uma tabela em falta dispara a aplicação do esquema TODO (idempotente);
+     · só depois de a base dizer que já tem as tabelas é que se diz «ok»;
+     · uma base que não responde não dispara DDL nenhum;
+     · em memória não se toca em nada;
+     · o resultado bom fica em cache (uma ida à base por janela, não por pedido).
+   =========================================================================== */
+
+const ENV_MESA = { POSTGRES_URL: 'postgres://u:p@localhost:5432/db' };
+
+function repoQue(faltamIniciais) {
+  let faltam = [...faltamIniciais];
+  return {
+    tipo: 'supabase',
+    async health() { return { ok: faltam.length === 0, base: 'x', faltam: [...faltam] }; },
+    curou() { faltam = []; },
+  };
+}
+
+test('1.79.0 · uma tabela em falta aplica o esquema todo e volta a perguntar', async () => {
+  const repo = repoQue(['orbita_faturas']);
+  const aplicados = [];
+  const garantir = criarCuradorDaMesa({
+    ligar: async () => ({ end: async () => {} }),
+    aplicar: async (_c, { ficheiros }) => { aplicados.push(...ficheiros); repo.curou(); return { ok: true, aplicados: ficheiros.map((f) => ({ ficheiro: f })) }; },
+  });
+  const r = await garantir(repo, ENV_MESA);
+  assert.equal(r.ok, true);
+  assert.equal(r.aplicadoAgora, true);
+  assert.deepEqual(r.faltam, [], 'depois de curar, não falta nada');
+  assert.deepEqual(aplicados, FICHEIROS_DA_MESA, 'aplica a lista versionada inteira, pela ordem do contrato');
+  assert.ok(aplicados.includes('orbita_1_56_0.sql'), 'a fatura vive no 1.56.0');
+  assert.ok(aplicados.includes('orbita_1_79_0.sql'), 'e o payload da tarefa no 1.79.0');
+});
+
+test('1.79.0 · sem nada em falta não se aplica SQL nenhum', async () => {
+  let aplicou = false;
+  const garantir = criarCuradorDaMesa({
+    ligar: async () => { aplicou = true; return { end: async () => {} }; },
+    aplicar: async () => { aplicou = true; return { ok: true }; },
+  });
+  const r = await garantir(repoQue([]), ENV_MESA);
+  assert.deepEqual(r, { ok: true, jaEstava: true, faltam: [] });
+  assert.equal(aplicou, false);
+});
+
+test('1.79.0 · se a base continuar sem a tabela, o curador NÃO diz que curou', async () => {
+  const repo = { tipo: 'supabase', async health() { return { ok: false, faltam: ['orbita_faturas'] }; } };
+  const garantir = criarCuradorDaMesa({
+    ligar: async () => ({ end: async () => {} }),
+    aplicar: async () => ({ ok: true }),
+  });
+  const r = await garantir(repo, ENV_MESA);
+  assert.equal(r.ok, false, 'aplicar sem confirmar era outra promessa vazia');
+  assert.equal(r.fase, 'verificação');
+  assert.deepEqual(r.faltam, ['orbita_faturas']);
+  assert.match(r.erro, /orbita_faturas/);
+});
+
+test('1.79.0 · uma base que não responde não dispara DDL às cegas', async () => {
+  let aplicou = false;
+  const garantir = criarCuradorDaMesa({
+    ligar: async () => ({ end: async () => {} }),
+    aplicar: async () => { aplicou = true; return { ok: true }; },
+  });
+  const r = await garantir({ tipo: 'supabase', async health() { throw new Error('ETIMEDOUT'); } }, ENV_MESA);
+  assert.equal(r.ok, false);
+  assert.equal(r.semEsquema, false);
+  assert.match(r.motivo, /ETIMEDOUT/);
+  assert.equal(aplicou, false);
+});
+
+test('1.79.0 · em memória, e sem sonda, o curador não toca em nada', async () => {
+  let mexeu = false;
+  const garantir = criarCuradorDaMesa({ ligar: async () => { mexeu = true; return {}; } });
+  assert.deepEqual(await garantir({ tipo: 'memoria' }, ENV_MESA), { ok: true, memoria: true });
+  assert.deepEqual(await garantir({ tipo: 'supabase' }, ENV_MESA), { ok: true, semSonda: true });
+  assert.equal(mexeu, false);
+});
+
+test('1.79.0 · dez pedidos ao mesmo tempo fazem UMA aplicação (e fica em cache)', async () => {
+  const repo = repoQue(['orbita_faturas']);
+  let aplicacoes = 0;
+  const garantir = criarCuradorDaMesa({
+    ligar: async () => ({ end: async () => {} }),
+    aplicar: async () => { aplicacoes++; await new Promise((r) => setTimeout(r, 10)); repo.curou(); return { ok: true }; },
+  });
+  const res = await Promise.all(Array.from({ length: 10 }, () => garantir(repo, ENV_MESA)));
+  assert.ok(res.every((r) => r.ok));
+  assert.equal(aplicacoes, 1, 'dez pedidos não podem correr o DDL dez vezes');
+  const outra = await garantir(repo, ENV_MESA);
+  assert.equal(outra.emCache, true, 'o resultado bom fica em memória');
+  assert.equal(aplicacoes, 1);
+});
+
+test('1.79.0 · o health usa o curador e passa a dizer ok:true depois de curar', async () => {
+  const { default: handler } = await import('./api/health.mjs');
+  /* sem SUPABASE_URL não há base: o health diz isso e não inventa um «ok» */
+  const dito = {};
+  await handler({ headers: {}, query: {} }, { status(c) { dito.status = c; return this; }, json(b) { dito.corpo = b; }, setHeader() {} });
+  assert.equal(dito.status, 503);
+  assert.equal(dito.corpo.ok, false);
+});
+
+test('1.79.0 · mesasEmFalta lê o que o health diz, e nada mais', () => {
+  assert.deepEqual(mesasEmFalta({ faltam: ['orbita_faturas'] }), ['orbita_faturas']);
+  assert.deepEqual(mesasEmFalta({ ok: true }), []);
+  assert.deepEqual(mesasEmFalta(null), []);
 });

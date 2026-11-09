@@ -28,6 +28,8 @@ import { fmtTime, fmtDate, fmtDateTime, normaliseHour } from './time.js';
 import { MODEL_KEYS, MODELS, DEFAULT_MODEL, modelName, normModel, FROM_TEXT , EFFORT_KEYS, EFFORT_NAME, normEffort, effortName, effortFor } from './models.js';
 /* 1.50.0 · um erro de rede nunca mais é explicado como falta de IA (ver src/falhas.js) */
 import { explicarFalha, lerCorpo, motorNaMesa, ROTA_DA_MESA } from './falhas.js';
+/* 1.79.0 · a ponte para o servidor da publicação (ver src/ponte.js) */
+import { respostaNossa, lerTarefasDoServidor, chamarRpc, corpoDeTarefaDoEscritorio } from './ponte.js';
 /* 1.52.0 · a lista do painel: os três da casa e todas as IAs da Órbita que
    aceitaram responder (o dono: «essa lista deve aumentar»). */
 import { opcoesDoCatalogo, notaDaLista, parDeModelo, provasDeGratuitos, provasDeUso, juntarProvas, DA_CASA } from './lista-modelos.js';
@@ -93,6 +95,10 @@ export function initTasks(ctx) {
   /* 1.50.0 · `/api/health` existe na Vercel e `/api/tasks` não. Sem esta bandeira
      a barra dizia «sem motor de IA» quando o problema era a rota não existir. */
   let tarefasOk = false;
+  /* 1.79.0 · há um segundo caminho para o MESMO trabalho: `/api/rpc` → `/ops/tarefas`.
+     `opsVia` diz por onde veio a última leitura ('local' | 'rpc' | null) para o
+     selo do painel poder dizer a verdade. */
+  let opsVia = null;
   let aiDaMesa = null; // o retrato da IA da Órbita (via /api/rpc), quando não há servidor local
   const API = '/api';
   const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
@@ -169,7 +175,21 @@ export function initTasks(ctx) {
   async function loadOps() {
     if (!live || polling) return;
     try {
-      const d = await fetch(API + '/ops/tarefas?limit=120').then(r => r.json());
+      /* a ponte tenta a máquina e, se não houver, a publicação */
+      const d = await lerTarefasDoServidor({ limite: 120 });
+      if (d.via !== opsVia) {
+        opsVia = d.via;
+        /* 1.79.0 · o selo do painel passa a dizer por ONDE o trabalho acontece:
+           antes, com a rota local ausente, escrevia «SEM SERVIDOR LOCAL» mesmo
+           com a publicação a responder. A verdade é «SERVIDOR · ÓRBITA». */
+        const badge = panel.querySelector('.tp-mode');
+        if (badge && opsVia === 'rpc' && !tarefasOk) {
+          badge.hidden = false;
+          badge.textContent = 'SERVIDOR · ÓRBITA';
+          badge.classList.remove('off'); badge.classList.add('live');
+          badge.title = 'o trabalho é criado e corrido no servidor da Órbita (/ops/tarefas), na base de dados — não nesta máquina';
+        }
+      }
       const list = Array.isArray(d.tarefas) ? d.tarefas : [];
       const sig = list.map(t => `${t.id}:${t.state}:${t.attempts || 0}`).join('|');
       if (sig === opsSig) return;
@@ -184,7 +204,7 @@ export function initTasks(ctx) {
           : st.state === 'queued' ? 'next' : 'done';
         let t = tasks.find(x => x.ops && x.sid === st.id);
         if (!t) {
-          t = mk({ agent, title: st.title || st.kind, ops: true, sid: st.id, state: 'next', changedAt: new Date(st.created_at).getTime() || Date.now(), addedAt: new Date(st.created_at).getTime() || Date.now() });
+          t = mk({ agent, title: st.titulo || st.title || st.kind, ops: true, sid: st.id, state: 'next', changedAt: new Date(st.created_at).getTime() || Date.now(), addedAt: new Date(st.created_at).getTime() || Date.now() });
           t.state = state;
           if (state === 'doing') { t.state = 'doing'; t.startedAt = new Date(st.started_at || st.created_at).getTime(); spawnEmote(R[agent], '▸'); feedPush(R[agent], '▸', `Tarefa real em curso: ${t.title}`); }
           if (state === 'done') { t.state = 'done'; t.doneAt = new Date(st.finished_at || Date.now()).getTime(); t.error = st.state === 'failed'; if (t.error) t.result = st.error || 'falhou sem motivo escrito'; t.changedAt = t.doneAt; if (t.error) feedPush(R[agent], '✕', `Falhou: ${t.error}`); else feedPush(R[agent], '✓', `Concluída: ${t.title}`); }
@@ -377,6 +397,62 @@ export function initTasks(ctx) {
 
   /* 1.50.0 · quando esta publicação não tem a rota das tarefas, a barra não pode
      ficar muda nem mentir: diz o que falta e onde o trabalho existe mesmo. */
+  /* ---------- 1.79.0 · criar trabalho na publicação ----------
+     A barra só sabia falar com o `serve.mjs` da tua máquina. Na Vercel o mesmo
+     trabalho vive em `/ops/tarefas` (a tabela `orbita_tasks`), atrás do
+     `/api/rpc` — é por lá que a mesa cria tarefas desde a 1.17.0. Aqui a barra
+     faz o mesmo: encaminha o agente, cria a tarefa na base, corre-a com a IA da
+     Órbita e o cartão aparece sozinho no quadro (o `loadOps` lê-a no ciclo
+     seguinte). Se o servidor recusar, o painel diz a frase DELE — sem inventar
+     um resultado e sem prometer o que não aconteceu. */
+  async function criarPelaPublicacao(texto, k, rt = null) {
+    const { agent: a } = route(k, texto);
+    P_.input.disabled = true; P_.add.disabled = true;
+    say(`A criar a tarefa no servidor — <b>${a.name}</b> fica com ela…`, 'busy');
+    try {
+      const j = await chamarRpc('/ops/tarefas', {
+        metodo: 'POST',
+        corpo: corpoDeTarefaDoEscritorio({ dept: k, texto, agente: a.id, modelo: chosenModel(), equipa: !!rt?.team }),
+      });
+      const st = (j && j.tarefa) || null;
+      if (!st || !st.id) throw new Error('o servidor criou a tarefa mas não devolveu o id');
+      const estado = String(st.state || '');
+      const falhou = estado === 'failed';
+      const resultado = st.resultado || (st.result && st.result && st.result.texto) || '';
+      const t = mk({
+        agent: a.id, title: st.titulo || st.title || texto, text: texto, by: 'you', live: true, ops: true, sid: st.id,
+        state: falhou ? 'done' : estado === 'running' ? 'doing' : estado === 'awaiting_approval' ? 'waiting' : estado === 'succeeded' ? 'done' : 'next',
+        m: st.modelo || null, model: st.modelo || officeModel,
+      });
+      if (falhou) { t.error = true; t.result = st.error || 'falhou sem motivo escrito'; t.doneAt = Date.now(); }
+      else if (estado === 'succeeded') { t.doneAt = Date.now(); t.result = resultado; }
+      P_.input.value = ''; resetModel(); resetTeam();
+      spawnEmote(R[a.id], '📋');
+      feedPush(R[a.id], falhou ? '✕' : '📋', `${falhou ? 'Falhou' : 'Tarefa no servidor'}: ${t.title}`);
+      if (resultado) chatPush(a.id, { who: 'file', icon: '📄', name: slug(t.title) + '.md', meta: `servidor da Órbita · ${timeStr(Date.now())} · clica para ver`, content: resultado });
+      if (falhou) say(`A tarefa foi criada mas <b>não passou</b>: ${esc(t.result)}`, 'err');
+      else if (estado === 'succeeded') say(`Feito — <b>${a.name}</b> entregou «${esc(t.title)}». O resultado está na conversa dele e a tarefa no quadro.`);
+      else say(`Tarefa criada no servidor — <b>${a.name}</b> está com ela (${esc(estado || 'na fila')}). O cartão aparece no quadro.`);
+      dirty = true; render(true);
+      await loadOps();
+    } catch (e) {
+      /* aqui a frase é a do servidor. Sem 404 não se fala de «sem servidor». */
+      const semRota = Number(e.status) === 404;
+      /* sem `status` não houve resposta nenhuma: é rede, e diz-se assim — em
+         português, sem inventar um resultado nem culpar a IA. */
+      const semResposta = e.status == null || Number(e.status) === 0;
+      if (semRota) { explicarSemServidor(); }
+      else if (semResposta) {
+        say('Não foi criada. <b>O servidor do Órbita não respondeu</b> — o pedido não chegou lá. Nada foi dado como feito; tenta outra vez.'
+          + `<div class="tp-ajuda">A conversa continua a funcionar: a mesa <a href="${ROTA_DA_MESA}">abre aqui →</a></div>`, 'err');
+      }
+      else {
+        say(`Não foi criada. <b>${esc(e.message || 'o servidor não respondeu')}</b>`
+          + `<div class="tp-ajuda">A tarefa não ficou na base de dados — nada foi dado como feito.</div>`, 'err');
+      }
+    }
+    P_.input.disabled = false; P_.add.disabled = false; P_.input.blur();
+  }
   function explicarSemServidor() {
     const f = explicarFalha({ status: 404, texto: '<html>', rota: '/api/tasks' });
     const mesa = aiDaMesa?.disponivel ? ` Na mesa há ${esc(aiDaMesa.frase)}.` : '';
@@ -694,7 +770,7 @@ export function initTasks(ctx) {
     title = title.charAt(0).toUpperCase() + title.slice(1);
     const rt = routineIntent(title);
     if (rt) { await submitRoutine(rt, title); return; }
-    if (live && !tarefasOk) { explicarSemServidor(); return; }
+    if (live && !tarefasOk) { await criarPelaPublicacao(title, dept, rt); return; }
     if (live) {
       const text = title, k = dept;
       P_.input.value = ''; P_.input.disabled = true; P_.add.disabled = true;
@@ -733,8 +809,11 @@ export function initTasks(ctx) {
       P_.input.disabled = false; P_.add.disabled = false; P_.input.blur(); // hand the keys back to the office
       return;
     }
-    // sem servidor não há tarefa: uma tarefa local seria ficção (e mudava o estado sem trabalho)
-    say('Este escritório está aberto sem servidor. As tarefas vivem na base de dados do Órbita — arranca-o com <b>npm start</b> e esta barra cria trabalho a sério.', 'err');
+    /* 1.79.0 · o último ramo também tenta a publicação. Antes, com o `/api/health`
+       a falhar uma vez, a barra fechava a porta e mandava arrancar o `npm start` —
+       mesmo com o servidor da Órbita a responder a `/ops/tarefas`. Agora o trabalho
+       vai pela base de dados e, se nem isso responder, a frase é a do servidor. */
+    await criarPelaPublicacao(title, dept, rt);
   }
   /* ---------- V3.5 routines: set one from the bar ---------- */
   async function submitRoutine(rt, raw) {
@@ -941,7 +1020,12 @@ export function initTasks(ctx) {
     if (!location.protocol.startsWith('http')) return;
     try {
       const h = await (await fetch(API + '/health')).json();
-      if (!h.ok) return;
+      /* 1.79.0 · o dono leu «Este escritório está aberto sem servidor» com a
+         produção a responder. A causa: em produção o `/api/health` devolve
+         `ok:false` só porque falta UMA tabela opcional (`orbita_faturas`) — e
+         esta linha desistia à primeira. Um servidor que responde e diz o que lhe
+         falta é um servidor; quem não respondeu não chegou aqui. */
+      if (!respostaNossa(h)) return;
       live = true; setOfficeModel(h.model); setOfficeEffort(h.effort);
       /* 1.50.0 · o `/api/health` responde na Vercel e a `/api/tasks` não existe
          lá: confirmar a rota que a barra usa antes de prometer seja o que for. */
@@ -960,7 +1044,9 @@ export function initTasks(ctx) {
         mode.hidden = false;
         mode.textContent = aiDaMesa?.disponivel ? `MESA · ${aiDaMesa.quantos} FORNECEDOR(ES)` : 'SEM SERVIDOR LOCAL';
         mode.classList.remove('live'); mode.classList.add('off');
-        mode.title = `esta página não tem a rota das tarefas (/api/tasks) — ${aiDaMesa?.disponivel ? aiDaMesa.frase : 'a IA da Órbita lê-se na mesa'}. O trabalho cria-se em ${ROTA_DA_MESA} ou com «npm start».`;
+        /* 1.79.0 · o trabalho não precisa da máquina do dono: é criado na base de
+           dados do Órbita por /ops/tarefas (a ponte). O selo diz por onde vai. */
+        mode.title = `esta página não tem a rota local das tarefas (/api/tasks) — o trabalho é criado e corrido no servidor do Órbita (/ops/tarefas)${aiDaMesa?.disponivel ? ` · ${aiDaMesa.frase}` : ''}. A IA e o estado da mesa: ${ROTA_DA_MESA}.`;
       }
       // o selo diz o motor que está mesmo a responder — e se não houver nenhum, diz isso
       if (mode && tarefasOk) {
@@ -999,7 +1085,7 @@ export function initTasks(ctx) {
         mode.textContent = 'SÓ VISUALIZAÇÃO';
         mode.classList.remove('live');
         mode.classList.add('off');
-        mode.title = 'Esta é a vista publicada do escritório: a cena, as salas e os agentes. Sem servidor não há tarefas — corre o Órbita na tua máquina (npm start).';
+        mode.title = 'Não cheguei ao servidor do Órbita nesta leitura: a cena, as salas e os agentes continuam aqui, e o quadro volta assim que o servidor responder. Nada foi inventado.';
       }
       if (onLive) onLive(null);
     }

@@ -84,7 +84,10 @@ test('main.js: o quadro que falha com 404 também cai para a conversa', () => {
   const fn = /async function buildFromChat[\s\S]*?\n\}/.exec(MAIN);
   assert.ok(fn, 'não encontrei buildFromChat');
   assert.match(fn[0], /deveCairParaConversa\(\{ falha: f, temOrbita: temOrbitaAgora\(\) \}\)/);
-  assert.match(fn[0], /conversaEmVezDeQuadro\(id, text, m, par, f\)/);
+  /* 1.79.0 · o sinal do Parar viaja com a queda para a conversa */
+  assert.match(fn[0], /conversaEmVezDeQuadro\(id, text, m, par, f, sinal\)/);
+  /* e antes de cair para a conversa, tenta o trabalho a sério na publicação */
+  assert.match(fn[0], /criarTarefaNaPublicacao\(id, text, m, sinal\)/, 'na Vercel o trabalho existe em /ops/tarefas');
   // e sem quadro nenhum, sai logo para a conversa (antes de escrever no chat)
   assert.match(fn[0], /if \(!tasks \|\| !tasks\.isLive\(\)\) return conversaEmVezDeQuadro/);
 });
@@ -93,7 +96,7 @@ test('main.js: um 404 em /api/chat também é respondido pela Órbita', () => {
   const trecho = /rota: '\/api\/chat'[\s\S]{0,900}?throw e;/.exec(MAIN);
   assert.ok(trecho, 'não encontrei o tratamento da falha do motor local');
   assert.match(trecho[0], /deveCairParaConversa/);
-  assert.match(trecho[0], /sendChatOrbita\(id, clean, m, par\)/);
+  assert.match(trecho[0], /sendChatOrbita\(id, clean, m, par, null, sinal\)/);
 });
 
 test('main.js: a resposta nunca duplica a mensagem do dono ao cair para a conversa', () => {
@@ -116,7 +119,8 @@ test('a falha «sem servidor» deixa de ser um beco sem saída', () => {
   const f = explicarFalha({ status: 404, texto: '<!doctype html><html>The page could not be found</html>', rota: '/api/tasks' });
   assert.equal(f.tipo, 'sem-servidor');
   assert.match(f.ajuda, /conversa não depende desta rota/i);
-  assert.match(f.ajuda, /npm start/);
+  assert.match(f.ajuda, /\/ops\/tarefas/);
+  assert.equal(/npm start/i.test(f.ajuda), false, 'o trabalho vive no servidor, não na máquina do dono');
 });
 
 test('main.js: se a escolha falhar, tenta o automático uma vez (e só uma)', () => {

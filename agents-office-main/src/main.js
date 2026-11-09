@@ -108,7 +108,11 @@ function driveDesk(r, con, t, phase, dt) {
   }
 }
 import { initMcp } from './mcp.js';
-import { initComposer, chatBody, metaLine, dividirModelo, agenteDaOrbita, corpoDaOrbita, lerRespostaOrbita, juntarAnexos } from './composer.js'; // 27 out 2026: o conversador (modos, modelo, esforço, anexos, contexto)
+import { initComposer, chatBody, metaLine, dividirModelo, agenteDaOrbita, corpoDaOrbita, lerRespostaOrbita, juntarAnexos } from './composer.js';
+/* 1.79.0 · o prazo de uma resposta: o mesmo `comPrazo` que a vista da IA usa */
+import { comPrazo } from './ia.js';
+/* 1.79.0 · a ponte para o servidor da publicação (o mesmo caminho da mesa) */
+import { chamarRpc, corpoDeTarefaDoEscritorio } from './ponte.js';
 /* 1.53.1 · «as IAs devem responder a tudo»: um pedido de conversa nunca morre por falta do
    quadro de tarefas. A decisão é pura e vive em `src/rota.js` (ver o teste `rota.test.mjs`). */
 import { CAMINHOS, rotaDoEnvio, deveCairParaConversa, avisoDaQueda, metaDaQueda } from './rota.js';
@@ -1684,6 +1688,11 @@ function setTab(tab) {
 }
 document.querySelectorAll('#rail .mtabs button').forEach(b =>
   b.addEventListener('click', () => setTab(b.dataset.tab)));
+/* 1.79.0 · quanto tempo uma resposta pode demorar antes de se dizer que não veio.
+   O cartão tem o seu próprio prazo (120 s, em `composer.js`); este é mais curto
+   de propósito: primeiro explica-se o que se passa, e só depois é que o cartão
+   se liberta sozinho. */
+const PRAZO_RESPOSTA_MS = 90000;
 /* ---------- enviar (27 out 2026) ----------
    O compositor escolhe modo, modelo, esforço, anexos e contexto; esta função entrega-os ao
    servidor e mostra o que ele respondeu. Nada acontece a fingir: «Construir» cria mesmo uma
@@ -1701,18 +1710,48 @@ function dropWork(id, text) {
    e dito em voz alta. Antes daqui saía um erro e a IA nunca era chamada (o caso do «oi» com
    a Groq escolhida, a 29 out 2026). A tarefa continua a não ser inventada: simplesmente não
    há tarefa nenhuma, há uma resposta. */
-async function conversaEmVezDeQuadro(id, text, m, par, falha = null) {
+async function conversaEmVezDeQuadro(id, text, m, par, falha = null, sinal = null) {
   chatPush(id, { who: 'agent', text: avisoDaQueda({ modo: m.mode }), meta: metaDaQueda({ modo: m.mode }) });
-  await sendChatOrbita(id, text, { ...m, mode: 'ask' }, par, { falha });
+  await sendChatOrbita(id, text, { ...m, mode: 'ask' }, par, { falha }, sinal);
 }
-async function buildFromChat(id, text, m, par = null) {
+/* 1.79.0 · «Construir» na publicação. O `/api/tasks` só existe no Órbita da
+   máquina; a publicação tem o MESMO trabalho em `/ops/tarefas` (tabela
+   `orbita_tasks`), atrás do `/api/rpc` — o caminho que a mesa usa. Antes, um
+   «Construir» na Vercel caía sempre em conversa («o quadro não respondeu nesta
+   publicação»); agora o trabalho é criado a sério, com o agente deste posto. */
+async function criarTarefaNaPublicacao(id, text, m, sinal) {
   const r = R[id];
-  if (!tasks || !tasks.isLive()) return conversaEmVezDeQuadro(id, text, m, par, { tipo: 'sem-servidor' });
+  const j = await chamarRpc('/ops/tarefas', {
+    metodo: 'POST', sinal,
+    corpo: corpoDeTarefaDoEscritorio({ dept: r.a.dept, texto: text, agente: id, modelo: m.auto ? '' : m.model }),
+  });
+  const st = j && j.tarefa;
+  if (!st || !st.id) throw new Error('o servidor criou a tarefa mas não devolveu o id');
+  const estado = String(st.state || '');
+  const falhou = estado === 'failed';
+  const resultado = st.resultado || '';
+  const quem = R[id]?.a?.name || id;
+  if (falhou) {
+    chatPush(id, { who: 'agent', text: `A tarefa foi criada mas não passou: ${st.error || 'sem motivo escrito'}. Não há resultado para te dar.` });
+  } else if (estado === 'succeeded') {
+    chatPush(id, { who: 'agent', text: `Tarefa criada — «${st.titulo || st.title || text}» está feita por ${quem}.`, meta: `Construir · ${st.modelo || 'o motor da Órbita'}` });
+    if (resultado) chatPush(id, { who: 'file', icon: '📄', name: `${String(st.titulo || text).slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase()}.md`, meta: 'entregue pelo servidor da Órbita · clica para ver', content: resultado });
+  } else {
+    chatPush(id, { who: 'agent', text: `Tarefa criada — «${st.titulo || st.title || text}» ficou com ${quem} e está ${estado === 'queued' ? 'na fila' : 'a correr'}. O resultado cai aqui quando terminar.`, meta: 'Construir · servidor da Órbita' });
+  }
+  if (tasks && tasks.refresh) tasks.refresh();
+  if (spawnEmote && R[id]) spawnEmote(R[id], '📋');
+  composer?.toast(falhou ? 'A tarefa ficou registada com falha.' : 'Tarefa criada no servidor.', falhou ? 'err' : 'ok');
+}
+
+async function buildFromChat(id, text, m, par = null, sinal = null) {
+  const r = R[id];
+  if (!tasks || !tasks.isLive()) return conversaEmVezDeQuadro(id, text, m, par, { tipo: 'sem-servidor' }, sinal);
   const line = 'A criar a tarefa no quadro…';
   chatPush(id, { who: 'work', i: '…', text: line });
   try {
-    const res = await fetch('/api/tasks', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ dept: r.a.dept, text, run: true, model: m.auto ? undefined : (m.model || undefined), effort: m.auto ? undefined : (m.effort || undefined) }) });
+    const res = await comPrazo(fetch('/api/tasks', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: sinal || undefined,
+      body: JSON.stringify({ dept: r.a.dept, text, run: true, model: m.auto ? undefined : (m.model || undefined), effort: m.auto ? undefined : (m.effort || undefined) }) }), PRAZO_RESPOSTA_MS, 'a criação da tarefa');
     const lido = lerCorpo(await res.text());
     dropWork(id, line);
     if (!res.ok) {
@@ -1735,9 +1774,15 @@ async function buildFromChat(id, text, m, par = null) {
   } catch (e) {
     dropWork(id, line);
     const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/tasks', erro: e.message });
+    /* 1.79.0 · a rota local não existe nesta publicação, mas o trabalho existe:
+       cria-se por `/ops/tarefas`. Só se ISSO falhar é que se responde em conversa. */
+    if (f.tipo === 'sem-servidor') {
+      try { return await criarTarefaNaPublicacao(id, text, m, sinal); }
+      catch (e2) { if (e2 && (e2.name === 'AbortError')) throw Object.assign(e2, { abortado: true }); }
+    }
     /* a rota não existe nesta publicação: o quadro não pode responder, a conversa pode */
     if (deveCairParaConversa({ falha: f, temOrbita: temOrbitaAgora() })) {
-      return conversaEmVezDeQuadro(id, text, m, par, f);
+      return conversaEmVezDeQuadro(id, text, m, par, f, sinal);
     }
     throw Object.assign(new Error('Não foi criada. ' + f.frase + (f.detalhe ? ' — ' + f.detalhe : '') + ' ' + f.ajuda), { falha: f });
   }
@@ -1748,7 +1793,7 @@ async function buildFromChat(id, text, m, par = null) {
    CLI desta máquina e não existe na página publicada. Vai por `/api/rpc` →
    `POST /ia/chat`, que é o mesmo sítio onde a mesa conversa. O esforço escolhido
    vira o tecto de tokens (o servidor diz quanto); quem respondeu volta escrito. */
-async function sendChatOrbita(id, texto, m, par, _queda = null) {
+async function sendChatOrbita(id, texto, m, par, _queda = null, sinal = null) {
   const r = R[id];
   /* o histórico já leva esta mensagem (foi escrita antes de chegar aqui): tira-se a última,
      senão a IA lia a pergunta duas vezes */
@@ -1768,10 +1813,13 @@ async function sendChatOrbita(id, texto, m, par, _queda = null) {
   const line = `${R[id]?.a?.name || 'O agente'} está a pensar`;
   chatPush(id, { who: 'work', i: '…', text: line });
   try {
-    const res = await fetch('/api/rpc', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+    /* 1.79.0 · um pedido sem prazo é um pedido que pode não voltar. O `comPrazo`
+       devolve o controlo ao cartão com o nome do que faltou, e o `signal` corta
+       a ligação a sério quando o dono carrega em Parar. */
+    const res = await comPrazo(fetch('/api/rpc', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: sinal || undefined,
       body: JSON.stringify(corpoDaOrbita({ agente, mensagem, historico: hist, par, esforco: m.effort })),
-    });
+    }), PRAZO_RESPOSTA_MS, 'a resposta da IA da Órbita');
     const lido = lerCorpo(await res.text());
     dropWork(id, line);
     if (!res.ok) {
@@ -1785,10 +1833,10 @@ async function sendChatOrbita(id, texto, m, par, _queda = null) {
          automático também não responder, aí sim, não há resposta honesta a dar. */
       if (par && !(m && m.__tentouAuto)) {
         chatPush(id, { who: 'agent', text: `A escolha (${par.fornecedor} · ${par.modelo}) não respondeu: ${out.erro}. Vou tentar outro motor.`, meta: 'escolha falhou · a tentar o automático' });
-        return sendChatOrbita(id, texto, { ...m, __tentouAuto: true }, null, _queda);
+        return sendChatOrbita(id, texto, { ...m, __tentouAuto: true }, null, _queda, sinal);
       }
       chatPush(id, { who: 'agent', text: out.precisaEntrar
-        ? 'Não consigo responder porque a Órbita está fechada sem sessão. Abre <a href="/app/">/app</a>, entra com a tua conta e volta aqui — a conversa fica à tua espera.'
+        ? 'Não consigo responder porque a Órbita está fechada sem sessão. Abre /app, entra com a tua conta e volta aqui — a conversa fica à tua espera.'
         : `Não consigo responder. O servidor respondeu: ${out.erro}.${par ? ` A escolha foi ${par.fornecedor} · ${par.modelo}.` : ''}` });
       composer?.toast(out.erro, 'err');
       return;
@@ -1798,6 +1846,11 @@ async function sendChatOrbita(id, texto, m, par, _queda = null) {
     if (par) saveEscolha(agente, par);
   } catch (e) {
     dropWork(id, line);
+    /* 1.79.0 · parado pelo dono não é uma avaria: uma linha honesta e siga */
+    if (e && (e.name === 'AbortError' || e.code === 20)) {
+      chatPush(id, { who: 'work', i: '⏹', text: 'parado por ti — a resposta que viesse já não conta' });
+      throw Object.assign(new Error('parado'), { abortado: true });
+    }
     const f = e.falha || explicarFalha({ status: 0, texto: '', rota: '/api/rpc', erro: e.message });
     chatPush(id, { who: 'agent', text: `Não consigo responder. ${f.frase}${f.detalhe ? ` — ${f.detalhe}` : ''} ${f.ajuda}` });
     throw e;
@@ -1815,7 +1868,8 @@ async function saveEscolha(agente, par) {
   } catch { /* a conversa não depende disto */ }
   setTimeout(() => { escolhaAVisar = false; }, 30000);
 }
-async function sendChat(text, meta = {}) {
+async function sendChat(text, meta = {}, opts = {}) {
+  const sinal = opts && opts.signal ? opts.signal : null;
   const id = modalOpen;
   const clean = String(text || '').trim();
   if (!id || !clean) return;
@@ -1836,9 +1890,9 @@ async function sendChat(text, meta = {}) {
        saía um aviso e um «Não foi criada»: a IA nunca era chamada (29 out 2026). */
     const quadro = !!(tasks && tasks.isLive && tasks.isLive());
     if (rotaDoEnvio({ modo: 'build', par, quadro, temCli: temCliAgora(), temOrbita: temOrbitaAgora() }) === CAMINHOS.QUADRO) {
-      return buildFromChat(id, clean, m, par);
+      return buildFromChat(id, clean, m, par, sinal);
     }
-    return conversaEmVezDeQuadro(id, clean, m, par, { tipo: 'sem-servidor' });
+    return conversaEmVezDeQuadro(id, clean, m, par, { tipo: 'sem-servidor' }, sinal);
   }
 
   const hist = (chatHist[id] || []).filter(x => x.who === 'user' || x.who === 'agent').slice(-8).map(x => ({ who: x.who, text: x.text }));
@@ -1859,14 +1913,14 @@ async function sendChat(text, meta = {}) {
   const temCli = temCliAgora();
   const temOrbita = temOrbitaAgora();
   if (rotaDoEnvio({ modo: m.mode, par, quadro: !!(tasks && tasks.isLive && tasks.isLive()), temCli, temOrbita }) === CAMINHOS.CONVERSA) {
-    return sendChatOrbita(id, clean, m, par);
+    return sendChatOrbita(id, clean, m, par, null, sinal);
   }
 
   const line = m.mode === 'plan' ? `${r.a.name} está a preparar o plano` : `${r.a.name} está a pensar`;
   chatPush(id, { who: 'work', i: '…', text: line });
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent: id, ...chatBody({ text: clean, mode: m.mode, model: m.model, effort: m.effort, auto: m.auto, files: m.files, context: m.context, history: hist }) }) });
+    const res = await comPrazo(fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: sinal || undefined,
+      body: JSON.stringify({ agent: id, ...chatBody({ text: clean, mode: m.mode, model: m.model, effort: m.effort, auto: m.auto, files: m.files, context: m.context, history: hist }) }) }), PRAZO_RESPOSTA_MS, 'o motor desta máquina');
     /* 1.50.0 · a mesma leitura honesta da barra: um 404 em HTML não é «sem motor» */
     const lido = lerCorpo(await res.text());
     dropWork(id, line);
@@ -1893,7 +1947,7 @@ async function sendChat(text, meta = {}) {
     /* 1.53.1 · a publicação não tem `/api/chat`? A Órbita responde na mesma por /api/rpc.
        É o pedido do dono por palavras: «as IAs devem responder a tudo». */
     if (deveCairParaConversa({ falha: f, temOrbita: temOrbitaAgora() })) {
-      return sendChatOrbita(id, clean, m, par);
+      return sendChatOrbita(id, clean, m, par, null, sinal);
     }
     chatPush(id, { who: 'agent', text: `Não consigo responder. ${f.frase}${f.detalhe ? ` — ${f.detalhe}` : ''} ${f.ajuda}` });
     throw e;
@@ -1902,7 +1956,9 @@ async function sendChat(text, meta = {}) {
 /* ---------- o compositor (27 out 2026) ----------
    O cartão substitui o campo de uma linha. Toda a lógica de desenho e de teclado vive em
    src/composer.js; aqui só se liga o envio. */
-const composer = initComposer({ onSubmit: (text, meta) => sendChat(text, meta) });
+/* 1.79.0 · o compositor passa o `AbortSignal` do botão Parar: um envio
+   abandonado não pode continuar a correr por baixo de quem já desistiu. */
+const composer = initComposer({ onSubmit: (text, meta, opts = {}) => sendChat(text, meta, opts) });
 /* 1.53.1 · o que existe AGORA para responder: os modelos do CLI da casa e os da Órbita.
    É daqui que sai a decisão de `src/rota.js` — e é o que impede um «oi» de bater numa rota
    que a publicação não tem. */

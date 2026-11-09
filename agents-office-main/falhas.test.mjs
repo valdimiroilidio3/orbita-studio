@@ -21,9 +21,13 @@ const HTML_DA_VERCEL = '<!DOCTYPE html><html><head><title>The page could not be 
 test('falhas: uma página HTML no lugar de JSON é «sem servidor», não «sem motor»', () => {
   const f = explicarFalha({ status: 404, texto: HTML_DA_VERCEL, rota: '/api/tasks' });
   assert.equal(f.tipo, 'sem-servidor');
-  assert.match(f.frase, /publicada sem o servidor/i);
+  assert.match(f.frase, /não respondeu/i);
   assert.match(f.detalhe, /\/api\/tasks/);
-  assert.match(f.ajuda, /npm start|mesa/i);
+  /* 1.79.0 · a ajuda já não manda arrancar o Órbita na máquina do dono: aponta a
+     base de dados (/ops/tarefas) e a mesa. Nem uma palavra sobre `npm start`. */
+  assert.match(f.ajuda, /\/ops\/tarefas/);
+  assert.match(f.ajuda, /mesa/i);
+  assert.equal(/npm start/i.test(f.ajuda), false, 'o dono não tem de arrancar nada na máquina dele');
   assert.equal(/<a\s|href=/i.test(f.ajuda), false, 'a ajuda é texto puro: quem desenha é que põe o link');
 });
 
@@ -52,10 +56,11 @@ test('falhas: uma recusa do servidor mantém a razão dele, sem a reescrever', (
   assert.equal(f.detalhe.includes('motor'), false);
 });
 
-test('falhas: sem resposta nenhuma é «rede», e aponta o npm start', () => {
+test('falhas: sem resposta nenhuma é «rede», e não manda arrancar nada', () => {
   const f = explicarFalha({ status: 0, texto: '', rota: '/api/tasks' });
   assert.equal(f.tipo, 'rede');
-  assert.match(f.ajuda, /npm start/);
+  assert.match(f.ajuda, /nada foi dado como feito/i);
+  assert.equal(/npm start/i.test(f.ajuda), false);
 });
 
 test('falhas: lerCorpo nunca atira — JSON, HTML e lixo', () => {
@@ -113,7 +118,11 @@ test('código: a barra confirma a rota das tarefas antes de prometer o escritór
   const s = fonte('tasks.js');
   assert.match(s, /let tarefasOk = false/);
   assert.match(s, /fetch\(API \+ '\/tasks'\)/, 'tem de perguntar pela rota que usa');
-  assert.match(s, /if \(live && !tarefasOk\) \{ explicarSemServidor\(\); return; \}/, 'sem servidor, não tenta criar');
+  /* 1.79.0 · mudou de propósito: quando a rota local não existe, a barra tenta o
+     MESMO trabalho na publicação (`/ops/tarefas`, por `/api/rpc`) antes de dizer
+     que não há servidor. O que não pode voltar é o beco sem saída. */
+  assert.match(s, /if \(live && !tarefasOk\) \{ await criarPelaPublicacao\(title, dept, rt\); return; \}/, 'sem a rota local, tenta a publicação');
+  assert.match(s, /if \(semRota\) \{ explicarSemServidor\(\); \}/, 'só diz «sem servidor» quando nem a publicação responde');
   assert.match(s, /ligarIaDaMesa\(\)/, 'sem servidor local, a IA lê-se na mesa');
 });
 

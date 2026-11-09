@@ -24,6 +24,9 @@ import { prontidaoCurta, GRUPOS } from './_prontidao.mjs';
    que a instalação os lê de facto */
 import { TOKENS, estadoDosTokens, nomesParecidos } from './_acesso.mjs';
 import { opcoesDeEntrada } from './_entrada.mjs';   // 1.69.0: quem entra e por onde
+/* 1.79.0 · o curador da mesa inteira: se faltar uma tabela, aplica o esquema
+   versionado (idempotente) em vez de responder «corre o SQL à mão». */
+import { garantirEsquemaDaMesa } from './_autoesquema.mjs';
 
 /**
  * 1.76.1 · «a porta tem as colunas que a entrada usa?»
@@ -101,14 +104,24 @@ export default async function handler(req, res) {
 
   try {
     const repo = createSupabaseRepo(env);
-    const h = await repo.health();
+    let h = await repo.health();
+    /* 1.79.0 · a base cura-se sozinha. Em produção o health respondia
+       `ok:false · faltam:['orbita_faturas']` e ninguém ia correr SQL à mão: o
+       curador da porta só olhava para contas e sessões. Agora, quando falta uma
+       tabela da mesa, o esquema versionado é aplicado (é idempotente) e a base é
+       perguntada outra vez. `esquema` diz o que aconteceu — sem inventar nada. */
+    let esquema = null;
+    if (!h.ok && Array.isArray(h.faltam) && h.faltam.length) {
+      esquema = await garantirEsquemaDaMesa(repo, pedido).catch((e) => ({ ok: false, motivo: e.message }));
+      if (esquema && esquema.ok) h = await repo.health();
+    }
     /* 1.76.1 · a PORTA, à vista: a base tem as colunas que a entrada usa?
        A lista `faltam` acima olha para as tabelas; esta sonda olha para as
        colunas (código, OAuth, confirmação) — foi a falta delas que deu «a base
        de dados recusou a conta do dono» com o health a dizer que estava tudo
        bem. Sem segredos: só sim/não e a frase da base. */
     const porta = await sondaDaPorta(repo);
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, porta, ia, prontidao, acesso, ciclo, entrada });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, porta, esquema, ia, prontidao, acesso, ciclo, entrada });
   } catch (e) {
     res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
   }

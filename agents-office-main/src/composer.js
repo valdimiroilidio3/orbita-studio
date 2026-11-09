@@ -33,6 +33,11 @@ export const EFFORT_LABEL = { '': 'Auto', low: 'Baixo', medium: 'Médio', high: 
 export const FILES_MAX = 5, FILE_MAX_CHARS = 40000, FILES_BUDGET = 60000;
 export const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|log|yml|yaml|js|mjs|cjs|jsx|ts|tsx|css|scss|html?|xml|sql|py|rb|go|rs|sh|toml|ini|env|diff|patch)$/i;
 export const PREFS_KEY = 'orbita_composer_v1';
+/* 1.79.0 · quanto tempo o cartão espera por uma resposta antes de se libertar
+   sozinho. Não é o prazo do modelo (esse vive no servidor): é o prazo do
+   CARTÃO, para o campo nunca ficar preso. */
+export const PRAZO_ENVIO_MS = 120000;
+export const AVISO_LENTO_MS = 20000;
 
 export const modeInfo = k => MODES.find(m => m.key === k) || MODES[1];
 export const effortLabel = k => EFFORT_LABEL[String(k ?? '')] || 'Auto';
@@ -278,13 +283,15 @@ const SVG = {
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-export function initComposer({ onSubmit, onHealth = null, storage = (typeof localStorage !== 'undefined' ? localStorage : null), doc = document } = {}) {
+export function initComposer({ onSubmit, onHealth = null, storage = (typeof localStorage !== 'undefined' ? localStorage : null), doc = document,
+  /* o prazo do cartão entra por parâmetro para o teste o poder encurtar */
+  prazoMs = PRAZO_ENVIO_MS } = {}) {
   const $ = id => doc.getElementById(id);
   const el = {
     card: $('mc'), modes: $('mcModes'), model: $('mcModel'), badge: $('mcBadge'), name: $('mcMName'), eff: $('mcEff'),
     menu: $('mcMenu'), auto: $('mcAuto'), autoNote: $('mcAutoNote'), tabs: $('mcTabs'), list: $('mcList'),
     effortBox: $('mcEffort'), engineNote: $('mcEngineNote'), input: $('mIn'), chips: $('mcChips'), add: $('mcAdd'), file: $('mcFile'),
-    ctx: $('mcCtx'), ctxMenu: $('mcCtxMenu'), mic: $('mcMic'), send: $('mSend'),
+    ctx: $('mcCtx'), ctxMenu: $('mcCtxMenu'), mic: $('mcMic'), send: $('mSend'), wait: $('mcWait'),
     pro: $('mcPro'), proBtn: $('mcProBtn'), tour: $('mcTour'), tourPanel: $('mcTourPanel'),
     modal: $('mcModal'), sheet: $('mcSheet'), toast: $('mcToast'),
   };
@@ -299,6 +306,54 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
        chegou — seja ela qual for — sem voltar a mostrar a frase antes de haver resposta. */
     sondado: false, catalogoSondado: false };
   const save = () => savePrefs(storage, state);
+  /* 1.79.0 · O ENVIO QUE NÃO VOLTA (7 nov 2026)
+     O dono escreveu no ORBITA DIRECTOR: «depois da primeira pergunta ele buga e
+     já não aceita escrever mais». O que acontecia: enquanto o `onSubmit` estava
+     à espera, `state.busy` ficava a `true` — a seta desactivava-se e o Enter
+     deixava de fazer nada, com o campo a parecer morto. Se a resposta nunca
+     chegasse (uma rede que engole o pedido, um servidor que não fecha a ligação),
+     ficava assim para sempre: só recarregar a página.
+
+     Agora há três coisas que faltavam:
+       · a escrita NUNCA é bloqueada — o campo aceita texto enquanto se espera;
+       · a espera é visível: «à espera · 12 s», com um botão Parar ao lado;
+       · há um prazo de cartão (`PRAZO_ENVIO_MS`): passado ele, o cartão
+         liberta-se e diz isso, em vez de ficar a parecer avariado.
+     O pedido em si é abortado (`AbortController`) para não deixar trabalho a
+     correr num sítio onde já ninguém o lê. */
+  let envio = null; // { desde, controlador, prazo, relogio, aviso, lento }
+  let envioN = 0;   // quantos envios começaram — serve para ignorar o antigo
+
+  function pararEspera() {
+    if (!envio) return;
+    clearTimeout(envio.prazo); clearTimeout(envio.aviso); clearInterval(envio.lento);
+    envio = null;
+    state.busy = false;
+    el.send.classList.remove('busy');
+    if (el.wait) { el.wait.hidden = true; el.wait.innerHTML = ''; }
+    syncSend();
+  }
+  function pintarEspera() {
+    if (!el.wait) return;
+    if (!envio) { el.wait.hidden = true; el.wait.innerHTML = ''; return; }
+    const seg = Math.max(0, Math.round((Date.now() - envio.desde) / 1000));
+    el.wait.hidden = false;
+    el.wait.innerHTML = `<span class="mc-wait-t">${seg >= AVISO_LENTO_MS / 1000
+      ? 'a resposta está a demorar'
+      : 'à espera da resposta'} · <b>${seg} s</b></span>`
+      + `<button type="button" class="mc-wait-stop" data-parar>Parar</button>`;
+  }
+  const MOTIVO = {
+    prazo: 'A resposta não chegou em dois minutos — já podes escrever outra vez. O que escreveste ficou aqui.',
+    parar: 'Parado. A resposta anterior, se chegar, já não entra aqui.',
+  };
+  function soltar(motivo = 'parar') {
+    const era = envio;
+    pararEspera();
+    if (!era) return;
+    try { era.controlador?.abort?.(); } catch { /* já não havia pedido */ }
+    toast(MOTIVO[motivo] || 'Envio cancelado.');
+  }
 
   /* ---------------------------------------------------------------- avisos (toasts) */
   let toastTimer = 0;
@@ -741,12 +796,21 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   /* ---------------------------------------------------------------- enviar */
   function value() { return el.input.value.trim(); }
   function syncSend() {
-    const on = !!value() && !state.busy;
-    el.send.disabled = !on;
-    el.send.setAttribute('aria-disabled', String(!on));
-    el.card.classList.toggle('hasText', !!value());
-    el.input.style.height = 'auto';
-    el.input.style.height = Math.min(el.input.scrollHeight || 21, 148) + 'px';
+    /* 1.79.0 · durante a espera a seta passa a ser um travão (Parar), nunca um
+       botão morto: o cartão tem de dizer o que está a acontecer. */
+    const tem = !!value();
+    el.send.disabled = !tem && !state.busy;
+    el.send.setAttribute('aria-disabled', String(el.send.disabled));
+    el.send.classList.toggle('busy', state.busy);
+    el.send.setAttribute('aria-label', state.busy ? 'parar a espera pela resposta' : 'enviar mensagem');
+    el.send.title = state.busy ? 'parar a espera (a resposta anterior deixa de contar)' : 'enviar (Enter)';
+    el.card.classList.toggle('hasText', tem);
+    /* o campo não pode colapsar quando está escondido (o separador «Ao vivo», o
+       painel recolhido): aí o `scrollHeight` é 0 e a altura antiga ficava a 0 px —
+       o campo desaparecia e parecia que já não aceitava escrita */
+    if (!el.input.offsetParent) return;
+    const h = Math.min(el.input.scrollHeight || 24, 148);
+    el.input.style.height = Math.max(24, h) + 'px';
   }
   function clear() {
     el.input.value = '';
@@ -755,7 +819,13 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   }
   async function submit() {
     const text = value();
-    if (!text || state.busy) return;
+    if (!text) return;
+    if (state.busy) {
+      /* antes, o Enter aqui não fazia NADA e o cartão parecia partido. Agora diz
+         o que se passa e o que fazer — e não deita fora o que está escrito. */
+      toast('Ainda estou à espera da resposta anterior. Podes carregar em Parar, ou escrever e enviar quando ela chegar.', '');
+      return;
+    }
     const meta = {
       mode: state.mode,
       auto: state.auto,
@@ -764,17 +834,33 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       files: state.files.map(f => ({ name: f.name, text: f.text })),
       context: [...state.ctx],
     };
-    state.busy = true; syncSend(); el.send.classList.add('busy');
+    const n = ++envioN;
+    const controlador = typeof AbortController === 'function' ? new AbortController() : null;
+    envio = {
+      desde: Date.now(), controlador, prazo: 0, aviso: 0, lento: 0,
+    };
+    state.busy = true; syncSend(); pintarEspera();
+    envio.lento = setInterval(pintarEspera, 1000);
+    if (envio.lento.unref) envio.lento.unref();
+    envio.prazo = setTimeout(() => { if (n === envioN) soltar('prazo'); }, prazoMs);
     try {
-      await onSubmit?.(text, meta);
-      clear();
+      await onSubmit?.(text, meta, { signal: controlador ? controlador.signal : undefined });
+      if (n === envioN) clear();
     } catch (e) {
-      toast(e?.message || 'Não foi possível enviar.', 'err');
+      /* um pedido abortado por nós não é uma avaria: já se disse «Parado» */
+      if (!(e && (e.name === 'AbortError' || e.abortado)) && n === envioN) toast(e?.message || 'Não foi possível enviar.', 'err');
     } finally {
-      state.busy = false; el.send.classList.remove('busy'); syncSend(); el.input.focus();
+      if (n === envioN) {
+        pararEspera();
+        if (el.input.offsetParent) el.input.focus({ preventScroll: true });
+      }
     }
   }
-  el.send.addEventListener('click', submit);
+  el.send.addEventListener('click', () => { if (state.busy) soltar('parar'); else submit(); });
+  /* o botão Parar que vive na linha da espera — um só ouvinte, no cartão */
+  el.card?.addEventListener('click', (e) => {
+    if (e.target && e.target.closest && e.target.closest('[data-parar]')) { e.preventDefault(); soltar('parar'); }
+  });
   el.input.addEventListener('input', syncSend);
   el.input.addEventListener('keydown', e => {
     e.stopPropagation(); // a escrever, «g», «b», «l» e «1–6» são letras e não atalhos
@@ -800,8 +886,10 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   renderModes(); renderModelButton(); renderEfforts(); renderList(); renderContextMenu(); renderChips(); syncSend();
   refreshHealth();
   return {
-    state: () => ({ ...state, files: state.files.map(f => f.name) }),
-    setHealth, refreshHealth, refreshCatalogo, toast, focus: () => el.input.focus(),
+    state: () => ({ ...state, files: state.files.map(f => f.name), espera: envio ? { desde: envio.desde, segundos: Math.round((Date.now() - envio.desde) / 1000) } : null }),
+    setHealth, refreshHealth, refreshCatalogo, toast,
+    parar: () => soltar('parar'),
+    focus: () => { if (el.input.offsetParent) el.input.focus({ preventScroll: true }); },
     openModelMenu: () => el.model?.click(), openContextMenu: () => el.ctx?.click(),
     openEngineSheet: openModal, startTour: () => tourShow(0), clear,
   };

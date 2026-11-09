@@ -541,3 +541,90 @@ test('36 · a lista de execuções traz o estado dito por palavras e o que se po
   assert.equal(feito.accoes.repetir.sim, true);
   assert.equal(feito.accoes.cancelar.sim, false);
 });
+
+/* 1.79.0 · O TRABALHO ESCRITO À MÃO NO ESCRITÓRIO (9 nov 2026)
+   O dono escreveu na barra e o painel respondeu «este escritório está aberto sem
+   servidor». O servidor estava lá; faltava o caminho. Estes testes provam que o
+   pedido entra, corre no motor e volta com o texto — e que uma base sem a coluna
+   nova (payload) não perde o que o dono escreveu. */
+import { criarECorrer, ROTINAS, semColunaNova } from './api/_tarefas.mjs';
+
+const motorFalso = (texto = 'Resultado do trabalho.') => ({
+  async pedir(_tipo, mensagens) {
+    return { texto, fornec: 'teste', modelo: 'modelo-de-teste', ms: 12, mensagens };
+  },
+});
+
+test('1.79.0 · a tarefa do escritório entra, corre e devolve o texto do modelo', async () => {
+  const api = createMemRepo();
+  let pedidoAoModelo = null;
+  const motor = { async pedir(_t, mensagens) { pedidoAoModelo = mensagens; return { texto: 'Feito: o formulário está corrigido.', fornec: 'teste', modelo: 'm1', ms: 8 }; } };
+  const r = await criarECorrer({
+    repo: api, motor, env: {}, fetchImpl: async () => { throw new Error('sem rede'); },
+    TIPOS: { escritorio: { label: 'Trabalho do escritório' } },
+    corpo: { kind: 'escritorio', texto: 'Corrige o formulário de contacto', dept: 'engineering', agente: 'qa', titulo: 'Corrige o formulário' },
+  });
+  assert.equal(r.status, 201);
+  assert.equal(r.corpo.tarefa.state, 'succeeded');
+  assert.equal(r.corpo.tarefa.resultado, 'Feito: o formulário está corrigido.');
+  /* o pedido do dono chegou ao modelo, e o agente também */
+  const texto = pedidoAoModelo.map((m) => m.content).join('\n');
+  assert.match(texto, /Corrige o formulário de contacto/);
+  assert.match(texto, /qa/);
+  assert.match(ROTINAS.escritorio.pedido('x'), /Faz o trabalho, não um plano/);
+});
+
+test('1.79.0 · uma tarefa do escritório sem texto é recusada (400) e diz porquê', async () => {
+  const api = createMemRepo();
+  const r = await criarECorrer({
+    repo: api, motor: motorFalso(), env: {}, TIPOS: { escritorio: { label: 'x' } },
+    corpo: { kind: 'escritorio', texto: '   ' },
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.error, /falta o pedido/);
+  assert.equal(api._dados.tarefas.length, 0, 'nada é gravado quando não há nada para fazer');
+});
+
+test('1.79.0 · numa base sem a coluna nova, o pedido vai em `entidade` e a tarefa corre', async () => {
+  const api = createMemRepo();
+  const original = api.tarefas.insert;
+  let tentativas = 0;
+  api.tarefas.insert = async (t) => {
+    tentativas += 1;
+    if (t.payload || t.title) {
+      /* o que o PostgREST responde quando a coluna não existe (PGRST204) */
+      throw Object.assign(new Error("Could not find the 'payload' column of 'orbita_tasks' in the schema cache"), { semEsquema: true, coluna: 'payload', codigo: 'PGRST204' });
+    }
+    return original(t);
+  };
+  const r = await criarECorrer({
+    repo: api, motor: motorFalso('Resposta.'), env: {}, TIPOS: { escritorio: { label: 'x' } },
+    corpo: { kind: 'escritorio', texto: 'Escreve o plano do dia' },
+  });
+  assert.equal(r.status, 201, 'a tarefa não falha por causa do esquema');
+  assert.equal(tentativas, 2, 'escreveu-se outra vez, sem as colunas novas');
+  assert.match(String(r.corpo.tarefa.entidade), /^pedido:Escreve o plano do dia/);
+  assert.equal(r.corpo.tarefa.state, 'succeeded');
+  assert.equal(semColunaNova(Object.assign(new Error('x'), { semEsquema: true, coluna: 'payload' })), true);
+  assert.equal(semColunaNova(new Error('a chave foi recusada')), false, 'um erro que não é de esquema não se disfarça');
+});
+
+test('1.79.0 · a lista mostra o pedido como título (não o `kind`)', async () => {
+  const api = createMemRepo();
+  await criarECorrer({
+    repo: api, motor: motorFalso(), env: {}, TIPOS: { escritorio: { label: 'Trabalho do escritório' } },
+    corpo: { kind: 'escritorio', texto: 'Prepara a reunião de amanhã', titulo: 'Prepara a reunião' },
+  });
+  const lista = (await responder(api, { caminho: '/ops/tarefas', metodo: 'GET', env: {} })).corpo;
+  assert.equal(lista.tarefas.length, 1);
+  assert.equal(lista.tarefas[0].titulo, 'Prepara a reunião');
+  assert.ok(lista.tipos.escritorio, 'o tipo novo aparece na lista de tipos');
+});
+
+test('1.79.0 · o erro de coluna do PostgREST fica traduzido com o ficheiro certo', async () => {
+  const { explificar } = await import('./api/_repo.mjs');
+  const t = explificar("Could not find the 'payload' column of 'orbita_tasks' in the schema cache", { code: 'PGRST204' });
+  assert.equal(t.semEsquema, true);
+  assert.equal(t.coluna, 'payload');
+  assert.match(t.mensagem, /falta a coluna «payload»/);
+});

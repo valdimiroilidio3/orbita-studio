@@ -60,6 +60,11 @@ export const FICHEIROS = [
      deixa de ser obrigatório, e passa a haver uma regra (palavra-passe OU
      fornecedor). Idempotente. */
   'orbita_1_77_0.sql',
+  /* 1.79.0 · o trabalho escrito à mão no escritório: `payload` e `title` em
+     orbita_tasks. Idempotente (`add column if not exists`). O código funciona
+     sem elas — o pedido vai em `entidade` — mas o cartão só fica legível com
+     elas. Ver `api/_tarefas.mjs`. */
+  'orbita_1_79_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */
