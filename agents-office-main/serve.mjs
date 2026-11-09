@@ -1152,9 +1152,15 @@ const server = http.createServer(async (req, res) => {
       const r = await artefactos.criarSite(b || {}, { repo: null });
       return json(res, r.ok ? 201 : 400, r);
     }
-    const artefactoRota = /^\/api\/artefactos\/([^/]+)(\/(preview|publicar))?$/.exec(url.pathname);
+    const artefactoRota = /^\/api\/artefactos\/([^/]+)(\/(preview|publicar|zip))?$/.exec(url.pathname);
     if (artefactoRota) {
       const [, id, , acao] = artefactoRota;
+      /* 1.80.0 · o pacote .zip, com a mesma forma do `/api/rpc` (base64) para a
+         aba de entrega servir os dois caminhos sem saber a diferença. */
+      if (acao === 'zip' && req.method === 'GET') {
+        const z = await artefactos.pacoteZip(id, { repo: null });
+        return json(res, z.ok ? 200 : (z.codigo === 'nao-existe' ? 404 : 409), z);
+      }
       if (!acao && req.method === 'GET') {
         const art = await artefactos.obter(id, { repo: null });
         return art ? json(res, 200, { ok: true, artefacto: art, url: `/artefactos/${id}/preview` }) : json(res, 404, { ok: false, erro: 'não há artefacto com esse id' });

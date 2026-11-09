@@ -3523,6 +3523,104 @@
     #overviewBtn.right { left: 20px; right: auto; }
   }
 
+  /* ===========================================================================
+     1.80.0 · TELEMÓVEL A SÉRIO (9 nov 2026)
+
+     O dono mandou uma captura de um iPhone: «na versão mobile só tem erros graves
+     na responsividade». Lia-se, e a causa era de ORDEM, não de desenho:
+
+       · o `#tpanel` tinha, no bloco móvel, `left/right: 10px; width: auto` — e
+         600 linhas abaixo, no bloco de polimento, `width: 380px` (sem media
+         query). Uma regra posterior ganha a uma media query: num ecrã de 390 px
+         o painel ficava com 380 px de largura **e** 10 px de margem de cada
+         lado, ou seja 400 px numa caixa de 390. Era isto o corte à direita.
+       · o `#rail` nunca teve regra móvel: ficava com `top: 52px` por baixo de
+         uma barra que, no telemóvel, ocupa duas filas — e com 92vw de largura a
+         gaveta não é uma folha, é uma faixa com o escritório a espreitar.
+       · o conteúdo dos painéis não tinha um sítio para rolar: o compositor, a
+         lista de tarefas e o registo da conversa cresciam para fora da caixa.
+
+     Esta camada é a ÚLTIMA do ficheiro de propósito (a ordem é o que a faz
+     ganhar) e é só para ≤ 640 px — o ecrã grande não muda.
+     =========================================================================== */
+  @media (max-width: 640px) {
+    /* nada nesta página pode ser mais largo do que o ecrã */
+    html, body { max-width: 100%; overflow-x: hidden; }
+
+    /* ---------- a barra de cima: uma fila que cabe, sem cortar a marca ---------- */
+    #topbar { padding: 8px 10px; gap: 6px; }
+    #topbar .brand { font-size: 13px; letter-spacing: .12em; }
+    #topbar .brand .ver { display: none; }
+    #topbar #topconn, #topbar #topmodels { display: none; }   /* vivem nos painéis, não aqui */
+    #topbar .m-group { gap: 2px; flex: 1; min-width: 0; justify-content: flex-end; }
+    #topbar .m-group > button, #topbar .m-group > a { padding: 6px 7px; min-width: 34px; min-height: 34px; justify-content: center; }
+    #topbar .m-group > button .mb-t, #topbar .m-group > a .mb-t { display: none; }  /* fica o ícone */
+    #topbar #topCfg span { display: none; }
+    #clock { font-size: 11px; letter-spacing: 0; }
+
+    /* ---------- o painel das tarefas: uma folha de baixo, com rolagem própria ---------- */
+    #tpanel, #tpanel:not(.tp-folded) {
+      left: 8px; right: 8px; width: auto; top: auto; bottom: 8px;
+      max-height: min(78dvh, 78vh); padding: 40px 12px 12px;
+      border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; gap: 8px;
+    }
+    #tpanel > * { min-width: 0; }                       /* nenhum filho empurra a caixa */
+    #tpanel .tp-cmd { width: 100%; box-sizing: border-box; }
+    #tpanel .tp-r1 { flex-wrap: wrap; }                 /* o ⤢ desce em vez de espremer o campo */
+    #tpanel .tp-in { flex: 1 1 120px; min-width: 0; font-size: 16px; }  /* 16 px: o iOS não amplia */
+    /* os dois campos com rótulo passam a duas colunas iguais; o ADICIONAR ocupa a linha toda */
+    #tpanel .tp-r2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+    #tpanel .tp-r2 .tp-sep { display: none; }
+    #tpanel .tp-fld { min-width: 0; }
+    #tpanel .tp-sel { width: 100%; }
+    #tpanel .tp-sel select { max-width: 100%; width: 100%; font-size: 13px; }
+    #tpanel .tp-r2 .tp-add { grid-column: 1 / -1; width: 100%; justify-content: center; min-height: 40px; }
+    #tpanel .tp-r3 { flex-wrap: wrap; gap: 6px; }
+    #tpanel .tp-tools { flex-wrap: wrap; }
+    #tpanel .tp-r3-note { display: none; }               /* a nota do padrão não cabe e não decide nada */
+    #tpanel .tp-model-fora { font-size: 10px; line-height: 1.45; max-height: 4.4em; overflow: auto; }
+    #tpanel .tp-head { flex-wrap: wrap; align-items: baseline; gap: 6px; }
+    #tpanel .tp-lab { font-size: 15px; }
+    #tpanel .tp-scope { font-size: 7.5px; }
+    #tpanel .tp-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    #tpanel .tp-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    #tpanel.tp-folded { padding: 8px; }
+    /* o «afastar» fica no cimo da folha, não a flutuar sobre o compositor */
+    #tpanel .tp-fold { top: 8px; right: 8px; min-height: 32px; }
+    #tpanel .tp-fold .tpf-t { display: none; }           /* no telemóvel o botão é o ícone */
+
+    /* ---------- a gaveta do posto: ecrã inteiro, com o ✕ sempre alcançável ---------- */
+    #rail { top: 0; bottom: 0; width: 100%; max-width: 100%; z-index: 88; }
+    #rail.left { box-shadow: none; } #rail.right { box-shadow: none; }
+    #railDept { padding: 56px 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
+    #railHeader { padding-right: 44px; }
+    #railClose { top: 8px; right: 10px; }
+    #railAgent { border-radius: 18px; }
+    #rail .mh { padding: 12px 12px 0; flex-wrap: wrap; }
+    #rail .mh-name { font-size: 19px; }
+    #rail .mh-tag { padding: 4px 12px 0; }
+    #rail .m-log { overflow-y: auto; overscroll-behavior: contain; }
+    #rail .m-foot { padding: 8px 10px; }
+    #rail .mc textarea, #rail #mIn { font-size: 16px; }  /* o iOS não amplia ao tocar */
+
+    /* ---------- as outras gavetas: nunca mais largas do que o ecrã ---------- */
+    #leadsPanel, #opsPanel, #cfgPanel { max-width: 100vw; }
+    #leadsPanel .ld-form, #opsPanel .op-tabs { flex-wrap: wrap; }
+    #leadsPanel input, #opsPanel input, #cfgPanel input { font-size: 16px; }
+
+    /* ---------- os avisos flutuantes deixam de tapar o compositor ---------- */
+    #toasts, .toast-wrap { left: 8px; right: 8px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+    /* iOS: o rodapé do sistema não come o último botão */
+    #tpanel, #railDept, #entrega .eg-nota { padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+  }
+
+  /* a barra de cima em ecrãs muito estreitos (360 px): a marca diminui outra vez */
+  @media (max-width: 400px) {
+    #topbar .brand { font-size: 11.5px; }
+    #topbar .m-group > button, #topbar .m-group > a { min-width: 30px; padding: 5px 5px; }
+    #tpanel .tp-lab { font-size: 13.5px; }
+  }
+
   /* ---------- quem pediu menos movimento perde a animação, não a informação ---------- */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -3955,6 +4053,8 @@
   <button id="zApps" title="apps e integrações (A)" aria-label="apps e integrações"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z"/></svg></button>
   <!-- 27 out 2026: o terminal da oficina também tem de ser encontrável sem saber atalhos -->
   <button id="zTerm" title="terminal da oficina (F)" aria-label="terminal da oficina"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 3.4h10.8v9.2H2.6z"/><path d="M4.6 6.4 6.8 8l-2.2 1.6M8.2 9.9h3.2"/></svg></button>
+  <!-- 1.80.0 · a aba de entrega: o site que a sala produziu, visto aqui dentro, e o .zip (E) -->
+  <button id="zEntrega" title="entrega: ver o site, correr e descarregar o .zip (E)" aria-label="entrega: ver o site e descarregar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 2.6h10.8v8.2H2.6z"/><path d="M8 10.8v2.8M5.6 12.6h4.8"/><path d="M6.2 6.6l1.8 1.8 1.8-1.8"/></svg></button>
   <!-- 1.58.0 · a planta 2D: as mesmas seis salas, sem animação, para trabalho intensivo (M) -->
   <button id="z2d" title="planta 2D — trabalho intensivo (M)" aria-label="planta 2D do escritório"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 2.4h11.2v11.2H2.4z"/><path d="M8 2.4v11.2M2.4 8h11.2"/></svg></button>
 </div>

@@ -215,6 +215,38 @@ test('rotas: criar, listar, ver, aprovar — com os códigos certos', async () =
   assert.equal((await chamar(repo, '/artefactos/site', 'POST', {})).status, 400);
 });
 
+test('1.80.0 · o pacote .zip sai com os três ficheiros e assinatura sha256', async () => {
+  limpar();
+  const repo = createMemRepo();
+  const criado = await chamar(repo, '/artefactos/site', 'POST', BRIEF);
+  const id = criado.corpo.artefacto.id;
+  const r = await chamar(repo, `/artefactos/${id}/zip`);
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.ok, true);
+  assert.equal(r.corpo.nome, `${id}.zip`);
+  assert.deepEqual(r.corpo.ficheiros.map((f) => f.nome).sort(), ['LEIA-ME.md', 'estilo.css', 'index.html']);
+  const bytes = Buffer.from(r.corpo.base64, 'base64');
+  assert.equal(bytes.subarray(0, 4).toString('hex'), '504b0304', 'não é um zip (assinatura PK\x03\x04)');
+  assert.equal(bytes.length, r.corpo.bytes);
+  assert.match(r.corpo.sha256, /^[a-f0-9]{64}$/);
+  assert.match(r.corpo.nota, /rascunho/, 'sem aprovação, o pacote di-lo');
+  // o HTML lá dentro é o do site — não é um zip vazio
+  assert.ok(bytes.includes(Buffer.from('Mondego')), 'o index.html tem de ir dentro do pacote');
+
+  // aprovado, o mesmo pacote muda a nota
+  await chamar(repo, `/artefactos/${id}/publicar`, 'POST', { aprovado: true, por: 'Dono' });
+  const aprovado = await chamar(repo, `/artefactos/${id}/zip`);
+  assert.match(aprovado.corpo.nota, /aprovado/);
+  // id desconhecido → 404 (e não um zip com um erro dentro)
+  assert.equal((await chamar(repo, '/artefactos/nao-existe/zip')).status, 404);
+});
+
+test('1.80.0 · o pacote não existe sem artefacto e a rota não aceita escrita', async () => {
+  limpar();
+  const repo = createMemRepo();
+  assert.equal((await chamar(repo, '/artefactos/x/zip', 'POST', {})).status, 405);
+});
+
 /* ---------- 5 · digitalizar ---------- */
 
 test('digitalizar: sem OCR configurado diz o que falta (nunca inventa texto)', async () => {

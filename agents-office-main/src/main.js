@@ -29,6 +29,11 @@ import { corValida, tomDaParte } from './salas.js';
 // 27 out 2026: o avatar saiu dos builders para `src/avatar.js` (35 looks, mãos com IK). O teclado e
 // o rato têm mapa próprio (`src/deskmap.js`) para as mãos lhes chegarem a sério.
 import { makePerson, posePerson, poseWork } from './avatar.js';
+import { createEntrega } from './entrega.js'; // 1.80.0: ver o site, correr e levar o .zip
+import {
+  RITMO, andamentoDoPosto, linhasDoPosto, perguntaDoChefe, proximaFala,
+  desenharBalao, desenharAnel,
+} from './andamento.js'; // 1.80.0: o andamento dos agentes (anel, balões, perguntas)
 import { createCrew } from './crew.js'; // 28 out 2026: a circulação (chefes ao Cérebro)
 /* 28 out 2026 (pedido 36) — ONDE FICA A PORTA. A conta saiu do `main.js` para `src/circulation.js`:
    uma regra só, para as seis salas, provada sem three por `circulation.test.mjs`. */
@@ -1156,6 +1161,7 @@ addEventListener('keydown', (e) => {
     }
   }
   else if (e.key === 'f' || e.key === 'F') { forgeTerm.toggle(); } // 27 out 2026: o terminal da oficina
+  else if (e.key === 'e' || e.key === 'E') { entrega.toggle(); } // 1.80.0: a aba de entrega (ver, correr, .zip)
   else if (e.key === 'v' || e.key === 'V') setCam(!document.body.classList.contains('cam'));
   else if (e.key === 'd' || e.key === 'D') applyTheme(darkOn ? 'light' : 'dark');
   else if (e.key === ',') { if (cfg) cfg.toggle(); }
@@ -2142,6 +2148,138 @@ function actualizarSinal(id) {
   }
 }
 
+/* ---------- 1.80.0 · O ANDAMENTO: anel + balões ----------
+   Pedido do dono: «demora um pouco fazendo uma animação nos agentes, escrevendo, fazendo
+   pergunta entre eles… adiciona animação de andamento nos agentes».
+
+   As contas vivem em `src/andamento.js` (puras, com testes). Aqui só se desenha:
+     · um ANEL por cima de quem trabalha — um arco que percorre uma volta em 96 s
+       (actividade, não progresso) e o tempo real decorrido ao centro;
+     · um BALÃO com a frase que o retrato permite: o título real da tarefa, o estado,
+       a tentativa — e, de vez em quando, a pergunta do chefe ao posto, que é a
+       encenação de um facto que a base já tem (há trabalho a correr).
+   Nada disto aparece sem trabalho: quem não tem tarefa fica sentado e quieto. */
+
+const anelTex = new Map();     // uma textura por (cor+minuto) — desenhar 60/s seria desperdício
+function texturaDoAnel(cor, rotulo) {
+  const chave = `${cor}|${rotulo}`;
+  if (anelTex.has(chave)) return anelTex.get(chave);
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  if (x) desenharAnel(x, { fraccao: 0.72, rotulo, cor, tamanho: 128 });
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  anelTex.set(chave, t);
+  if (anelTex.size > 60) anelTex.delete(anelTex.keys().next().value);
+  return t;
+}
+
+function texturaDoBalao(texto) {
+  const c = document.createElement('canvas');
+  const largura = 340, altura = 220;
+  c.width = largura; c.height = altura;
+  const x = c.getContext('2d');
+  const medidas = (t) => (String(t).length * 11.4);   // fonte de 22 px neste canvas
+  const m = x ? desenharBalao(x, texto, {
+    largura: largura - 20, fonte: '600 22px -apple-system, "Helvetica Neue", Arial, sans-serif',
+    medir: medidas, linhaAltura: 28, padding: 18,
+  }) : { altura: 60 };
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.userData = { altura: m.altura };
+  return t;
+}
+
+/** Mostra um balão por cima do posto. Um de cada vez: dois balões são uma algazarra. */
+function falar(id, texto, { ms = RITMO.vidaMs } = {}) {
+  const r = R[id];
+  if (!r || !texto) return;
+  if (!r.balao) {
+    r.balao = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+    r.balao.center.set(0.5, 0);
+    r.balao.visible = false;
+    scene.add(r.balao);
+  }
+  if (r.balao.material.map) r.balao.material.map.dispose();
+  const tex = texturaDoBalao(texto);
+  r.balao.material.map = tex;
+  r.balao.material.needsUpdate = true;
+  const alt = tex.userData?.altura || 60;
+  r.balao.scale.set(3.4, 3.4 * (alt / 220), 1);
+  r.balao.visible = true;
+  r.balaoNascido = performance.now();
+  r.balaoVida = ms;
+}
+
+function tickBaloes(now) {
+  for (const r of Object.values(R)) {
+    if (r.balao && r.balao.visible) {
+      const idade = now - r.balaoNascido;
+      if (idade > (r.balaoVida || RITMO.vidaMs)) { r.balao.visible = false; continue; }
+      const p = r.person.position;
+      const subir = Math.min(1, idade / 600) * 0.25;
+      r.balao.position.set(p.x, p.y + 7.1 + subir, p.z);
+      const op = idade < 350 ? idade / 350 : idade > (r.balaoVida || RITMO.vidaMs) - 600
+        ? Math.max(0, ((r.balaoVida || RITMO.vidaMs) - idade) / 600) : 1;
+      r.balao.material.opacity = op;
+    }
+    /* o anel: só para quem tem trabalho, e a mudar uma vez por segundo (o rótulo é o
+       tempo). O retrato é lido no máximo 4×/s por posto — 35 postos a cada fotograma
+       eram 2100 objectos por segundo no lixo do browser. */
+    if (now - (r._andaAt || 0) > 250) {
+      r._andaAt = now;
+      r._anda = andamentoDoPosto(liveUi.forAgent(r.a.id), { agora: Date.now() });
+    }
+    const anda = r._anda;
+    if (!anda) { if (r.anel && r.anel.visible) r.anel.visible = false; continue; }
+    if (!r.anel) {
+      r.anel = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false, depthWrite: false }));
+      r.anel.center.set(0.5, 0.5);
+      scene.add(r.anel);
+    }
+    if (r.anelRotulo !== anda.rotulo || r.anelCor !== anda.color) {
+      const tex = texturaDoAnel(anda.color, anda.rotulo);
+      r.anel.material.map = tex; r.anel.material.needsUpdate = true;
+      r.anelRotulo = anda.rotulo; r.anelCor = anda.color;
+    }
+    const p = r.person.position;
+    r.anel.visible = true;
+    r.anel.position.set(p.x - 1.35, p.y + 6.4, p.z);
+    const respira = 0.94 + Math.sin(now / 700 + r.bob) * 0.06;
+    r.anel.scale.set(2.1 * respira, 2.1 * respira, 1);
+    r.anel.material.opacity = CALMO ? 0.72 : 0.86;
+  }
+}
+
+/** De vez em quando, o posto diz o que está a fazer — e o chefe pergunta. */
+let ultimaFalaCheck = 0;
+function tickFalas(now) {
+  if (now - ultimaFalaCheck < 1500) return;
+  ultimaFalaCheck = now;
+  for (const r of Object.values(R)) {
+    const d = liveUi.forAgent(r.a.id);
+    if (!d) continue;
+    const anda = andamentoDoPosto(d, { agora: Date.now() });
+    if (!anda) continue;
+    if (!r.proximaFala) r.proximaFala = proximaFala(r.a.id, now);
+    if (now < r.proximaFala) continue;
+    /* a pergunta do chefe é dele, não do posto: só um líder de sala a faz, e só
+       quando há mesmo trabalho a correr (o `andamentoDoPosto` já o garante) */
+    const lider = R[Object.keys(R).find((k) => R[k].a.dept === r.a.dept && R[k].a.lead) || ''];
+    const pergunta = lider && !lider.__perguntou && perguntaDoChefe(d, lider.a.name, { agora: Date.now() });
+    if (pergunta && Math.random() < 0.45) {
+      falar(lider.a.id, pergunta);
+      lider.__perguntou = true;
+      setTimeout(() => { const l = R[lider.a.id]; if (l) l.__perguntou = false; }, 20000);
+      setTimeout(() => falar(r.a.id, respostaDoPosto(d, { agora: Date.now() })), 2600);
+    } else {
+      falar(r.a.id, linhasDoPosto(d, { agora: Date.now() }).join(' · '));
+    }
+    r.proximaFala = proximaFala(r.a.id, now + (d.state === 'waiting' ? 8000 : 0));
+  }
+}
+
 /* ---------- emotes ----------
    Um sprite de emoji sobe por cima do posto quando acontece algo real (tarefa atribuída, aprovação,
    erro). 26 out 2026: o bloco foi apagado por engano na limpeza da demonstração, mas continuava a
@@ -2281,6 +2419,9 @@ function tickSim(now, dt) {
     if (r.state !== 'working' && r.touched.size) driveDesk(r, null, now, 0, dt);
   }
   tickEmotes(now, dt);
+  /* 1.80.0 · o andamento: balões, anel e perguntas entre eles (só com trabalho real) */
+  tickBaloes(now);
+  if (!CALMO) tickFalas(now);
   brain.tick(now);
   // monitores: o que mudou no servidor é redesenhado; o resto fica quieto (sem tremor, sem sorteio)
   liveUi.tick(now, view.zoom < 1.4);
@@ -2596,6 +2737,14 @@ document.getElementById('zIndex').addEventListener('click', (e) => a11y.open(e.c
 /* ---------- 1.53.0 · A LOJA DE APPS (botão, tecla A, ou o endereço #apps) ---------- */
 const apps = createApps({ doc: document });
 document.getElementById('zApps')?.addEventListener('click', () => apps.toggle());
+
+/* ---------- 1.80.0 · A ENTREGA (botão, tecla E) ----------
+   Pedido do dono: «uma aba de visualização e execução de app ali mesmo… logo que
+   acabar a tarefa, possibilidade de execução e baixar o arquivo em zip, os sites».
+   A aba vive em `src/entrega.js` (puro + DOM injectável, com testes próprios). */
+const entrega = createEntrega({ doc: document });
+document.getElementById('zEntrega')?.addEventListener('click', () => entrega.toggle());
+addEventListener('orbita:entrega', () => entrega.abrir());
 /* ---------- 1.62.0 · A VISTA DO ESCRITÓRIO: 2D NO TELEMÓVEL, 3D A UM TOQUE ----------
    O escritório é a marca, não pode ser o obstáculo: no telefone abre-se na planta
    (leve, sem WebGL) e o 3D fica no mesmo botão. A escolha fica guardada — quem

@@ -1,3 +1,91 @@
+## 1.80.0 — 9 nov 2026 · telemóvel arranjado, a aba de entrega (ver, correr, .zip) e os agentes a mexer-se
+
+Três pedidos do dono numa mensagem, com uma captura de um iPhone ao lado:
+
+> «na versão mobile só tem erros graves na responsividade … no próprio sistema deve
+> ser possível ali mesmo uma aba de visualização e execução de app … logo que acabar
+> a tarefa, possibilidade de execução e baixar o arquivo em zip … adiciona animação
+> de andamento nos agentes.»
+
+### 1 · o telemóvel: a causa era a ORDEM das regras, não o desenho
+
+O painel das tarefas tinha, no bloco móvel, `left/right: 10px; width: auto` — e 600
+linhas abaixo, num bloco de polimento **sem media query**, `#tpanel { width: 380px }`.
+Uma media query não dá especificidade: a regra posterior ganha. Num ecrã de 390 px o
+painel ficava com 380 px de largura **e** 10 px de margem de cada lado — 400 px numa
+caixa de 390. Era isso o corte à direita da captura.
+
+Uma camada nova, **a última do ficheiro** (a ordem é o que a faz ganhar) e só para
+≤ 640 px:
+
+- `#tpanel`: largura automática, `max-height: 78dvh`, `overflow: hidden`, lista de
+  tarefas a rolar por dentro, campos Modelo/Esforço em duas colunas iguais e o
+  ADICIONAR na linha toda; o campo de texto passa a **16 px** (o iOS deixa de ampliar
+  ao tocar, que era o «salto» do ecrã);
+- `#rail` (a gaveta do posto): **ecrã inteiro**, `top: 0`, com o departamento a rolar
+  e o ✕ a 44 px — antes começava 52 px abaixo de uma barra que, no telemóvel, ocupa
+  duas filas;
+- barra de cima: fica o ícone, sai a etiqueta, e a marca perde a segunda palavra;
+- `html, body { overflow-x: hidden }` e as outras gavetas (Leads, Operação,
+  Configurações) limitadas a `100vw`;
+- `env(safe-area-inset-bottom)` no fundo das folhas, para o rodapé do iPhone não
+  comer o último botão.
+
+O `mobile.test.mjs` (novo, 7 provas) lê o CSS a sério — ordena as regras, calcula
+especificidade e responde «quem ganha aos 390 px» e «quem ganha aos 1440 px». Foi
+ele que confirmou a causa: se a largura fixa voltar para depois do bloco móvel, o
+teste fica vermelho.
+
+### 2 · a aba de ENTREGA: ver o site aqui dentro, e levá-lo em .zip
+
+`src/entrega.js` (novo) — botão próprio na câmara e tecla **E**; e cada tarefa
+concluída na lista ganha um botão **ENTREGA**:
+
+- lista os sites produzidos pelo servidor (`/artefactos`, pelo `/api/rpc`);
+- abre o site **no próprio sistema**, num `<iframe sandbox="">` alimentado por
+  `srcdoc` com o CSS embutido — sem scripts, sem mesma-origem, sem rede;
+- **descarrega o .zip** com os três ficheiros: os bytes vêm do servidor
+  (`/artefactos/:id/zip`), com sha256 e o nome certo; o download é uma cópia do que
+  está à vista;
+- **aprova** (`aprovado: true` + `por`), porque uma aprovação anónima o servidor
+  recusa;
+- cria um site novo a partir de um brief curto, para o ciclo ser testável na hora;
+- se a porta responder **401**, diz «entra com a tua conta» — não «sem ligação».
+
+`api/_artefactos.mjs` ganhou `pacoteZip()` (ZIP escrito em `src/ops/zip.mjs`, sem
+dependências) e `api/_rotas.mjs` a rota `/artefactos/:id/zip` (GET; 405 no resto).
+
+### 3 · o andamento dos agentes: anel, balões e a pergunta do chefe
+
+`src/andamento.js` (novo) + a cena:
+
+- **anel** por cima de quem trabalha: um arco que percorre uma volta em 96 s
+  (actividade, **nunca** uma percentagem inventada) com três pontos a orbitar e o
+  **tempo real decorrido** ao centro (`02:13`);
+- **balões** com as frases que o retrato permite: título real da tarefa, estado,
+  tentativa e há quanto tempo começou; e, de vez em quando, o **chefe da sala
+  pergunta** ««tarefa»?» e o posto responde «a correr · há 2 min» — encenação de um
+  facto que a base já tem, não diálogo fabricado;
+- as falas são escalonadas por uma semente (o id do agente): dois postos não falam
+  ao mesmo tempo;
+- o retrato é lido no máximo 4×/s por posto (35 postos a cada fotograma eram 2100
+  objectos por segundo de lixo);
+- sem trabalho não há animação nem balão: quem não tem tarefa fica sentado e quieto.
+
+### Provas
+
+- `node --test` → **1471/1471** (1462 antes; entram `entrega` 9, `mobile` 7,
+  `andamento` 10, o pacote .zip em `artefactos` +2);
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser`: esta máquina não tem
+  Chrome — a captura do telemóvel fica para o dono confirmar no aparelho);
+- `node build.mjs` → `dist/command-centre-v2.html` + `dist/mesa.html`.
+
+### O que fica por provar, dito com precisão
+
+Esta VM não tem Chrome nem acesso à CDN da Playwright (só npm/pypi): o layout móvel
+foi provado **pela cascata** (quem ganha a 390 px) e não por captura de ecrã. A
+confirmação final é abrir `https://orbita-agentes.vercel.app/` no telefone.
+
 ## 1.79.6 — 9 nov 2026 · as chaves vivem no servidor — e o painel já o diz
 
 A 1.79.2 mudou onde as chaves vivem (o ambiente do servidor, na Vercel), mas o texto
