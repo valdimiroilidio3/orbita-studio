@@ -92,11 +92,28 @@ export const GRUPOS = [
     id: 'correio',
     nome: 'Correio',
     critico: false,
-    porque: 'sem isto as mensagens ficam à espera na mesa e nunca saem',
+    porque: 'sem chave e remetente, as mensagens ficam à espera na mesa e nunca saem',
     itens: [
       item('Chave Resend', 'envio e recepção de email (resend.com)', ['RESEND_API_KEY']),
-      item('Remetente verificado', 'o `from` dos teus emails — o domínio tem de estar verificado no Resend', ['ORBITA_FROM_EMAIL', 'ORBITA_EMAIL_FROM']),
-      item('Segredo do webhook', 'prova que uma resposta veio mesmo do Resend', ['RESEND_WEBHOOK_SECRET']),
+      /* 1.79.3 · o `from` tinha uma armadilha que o painel escondia: com o remetente de
+         teste do Resend (`onboarding@resend.dev`) os emails só chegam à conta que os
+         manda. Diz-se aqui, em vez de se descobrir com um cliente a não receber nada. */
+      item('Remetente verificado', 'o `from` dos teus emails — o domínio tem de estar verificado no Resend; o endereço de teste `onboarding@resend.dev` só entrega ao dono da conta', ['ORBITA_FROM_EMAIL', 'ORBITA_EMAIL_FROM']),
+    ],
+  },
+  {
+    /* 1.79.3 · separado do envio de propósito. A chave e o remetente fazem o email SAIR;
+       o segredo do webhook faz as RESPOSTAS ENTRAR sozinhas. Faltando só ele, o painel
+       dizia «Correio desligado» — e era falso: o correio saía. O que estava desligado era
+       a entrada automática, e agora é isso que a linha diz. Sem este segredo o webhook
+       recusa tudo com 503 (api/webhooks/resend.mjs), e as respostas ficam à espera de
+       alguém as colar à mão. */
+    id: 'correio-respostas',
+    nome: 'Correio — respostas',
+    critico: false,
+    porque: 'sem o segredo do webhook, as respostas dos clientes por email não entram sozinhas no escritório (o webhook recusa tudo com 503)',
+    itens: [
+      item('Segredo do webhook', 'prova que uma resposta veio mesmo do Resend (Resend → Webhooks → signing secret)', ['RESEND_WEBHOOK_SECRET']),
     ],
   },
   {
@@ -182,7 +199,9 @@ export function avaliarProntidao(env = {}) {
         pronto: !!presente,
         /* o nome que está lá (ou o recomendado, quando não está nenhum) */
         variavel: presente || i.aliases[0],
-        alternativas: i.aliases.slice(1),
+        /* 1.79.3 · os outros nomes que também servem — sem repetir o que está lá. Antes,
+           com o segundo nome preenchido, o painel listava-o como «alternativa» de si mesmo. */
+        alternativas: i.aliases.filter((a) => a !== (presente || i.aliases[0])),
         porque: i.porque,
         minimo: i.minimo || 0,
       };

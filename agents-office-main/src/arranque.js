@@ -230,8 +230,22 @@ const ACAO_DO_GRUPO = {
   },
   'correio': {
     onde: 'resend.com',
-    texto: 'RESEND_API_KEY, ORBITA_FROM_EMAIL e RESEND_WEBHOOK_SECRET na Vercel',
+    texto: 'RESEND_API_KEY e ORBITA_EMAIL_FROM na Vercel',
     nota: 'sem elas as mensagens ficam à espera e nunca saem',
+  },
+  /* 1.79.3 · o segredo do webhook é outra função: o envio já funciona sem ele, o que
+     não funciona é a resposta do cliente entrar sozinha. Duas linhas, dois trabalhos. */
+  'correio — respostas': {
+    onde: 'resend.com → Webhooks',
+    texto: 'RESEND_WEBHOOK_SECRET (o signing secret do webhook que aponta para /api/webhooks/resend)',
+    nota: 'sem ele o webhook recusa tudo com 503: as respostas entram só se alguém as colar à mão',
+  },
+  /* 1.79.3 · faltava: o grupo «Entrada» aparecia no resumo desde a 1.69.0 sem dizer
+     onde se resolve. Um aviso sem caminho é meia resposta. */
+  'entrada': {
+    onde: 'GitHub → Settings → Developer settings → OAuth Apps; Google Cloud Console → Credentials',
+    texto: 'GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET e GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET na Vercel (ORBITA_DONO_EMAIL é opcional)',
+    nota: 'sem elas entra-se só com a palavra-passe e o código por email; sem as duas metades de um cliente, esse botão não entra',
   },
   'whatsapp': {
     onde: 'Meta for Developers → WhatsApp',

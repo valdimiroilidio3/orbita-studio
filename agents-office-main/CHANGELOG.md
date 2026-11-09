@@ -1,3 +1,34 @@
+## 1.79.4 — 9 nov 2026 · o painel deixa de chamar «desligado» ao que já funciona
+
+A 1.79.3 foi para produção e o `/api/health` mostrou o resultado: os conectores
+aparecem lidos no servidor (`supabase`, `resend`, `geoapify`, `tavily`,
+`vercel-connect` ligados, 22 no total) e o `entrada.codigo` passou a `true`. Mas
+`essenciaisEmFalta` ainda dizia **«Correio»** — e era falso: o email já saía.
+
+A causa: o grupo «Correio» exigia três variáveis, e a terceira
+(`RESEND_WEBHOOK_SECRET`) não tem nada a ver com enviar. Sem ela o webhook de
+respostas recusa tudo com 503 — o que fica desligado é a **entrada automática** das
+respostas, não o correio.
+
+- o grupo «Correio» fica com o que faz o email sair (chave + remetente) e passa a
+  estar **ligado** em produção;
+- nasce o grupo «Correio — respostas» com o segredo do webhook, com o porquê certo
+  («o webhook recusa tudo com 503; as respostas entram só se alguém as colar à mão»);
+- o remetente avisa onde dói: `onboarding@resend.dev` **só entrega ao dono da
+  conta** — para escrever a clientes é preciso um domínio verificado no Resend;
+- `ACAO_DO_GRUPO` (o «onde se resolve») ganhou as duas entradas que faltavam:
+  «Correio — respostas» e **«Entrada»**, que aparecia no resumo desde a 1.69.0 sem
+  dizer onde se resolve — um aviso sem caminho é meia resposta. O teste passou a
+  exigir a correspondência nos **dois** sentidos, e foi ele que encontrou «Entrada»;
+- um nome alternativo já não aparece como alternativa de si mesmo no painel.
+
+### Provas
+
+- `node --test` → **1442/1442** (entram os testes do grupo partido e da tabela de acções);
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser`, sem Chrome nesta máquina);
+- produção antes desta entrada: `versao: 1.79.3`, `faltam: []`, `conectores.total: 22`,
+  `essenciaisEmFalta: ["Correio", "WhatsApp"]` → depois: `["Correio — respostas", "WhatsApp"]`.
+
 ## 1.79.3 — 9 nov 2026 · o CI verde: Node 22, a oferta sempre na mensagem, e um erro que diz o que falhou
 
 A 1.79.2 pôs o `jsdom` a funcionar no Node 20, mas o CI continuou vermelho. O CI

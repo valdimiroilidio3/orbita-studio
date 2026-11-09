@@ -95,6 +95,22 @@ test('um token curto não conta como configurado', () => {
   assert.ok(variaveisEmFalta({ ...ENV_COMPLETO, ORBITA_API_TOKEN: 'curto' }).includes('ORBITA_API_TOKEN'));
 });
 
+test('1.79.3 · envio e respostas são duas funções: falta o segredo não desliga o envio', () => {
+  const semWebhook = { ...ENV_COMPLETO, RESEND_WEBHOOK_SECRET: '' };
+  const r = avaliarProntidao(semWebhook);
+  const correio = r.grupos.find((g) => g.id === 'correio');
+  const respostas = r.grupos.find((g) => g.id === 'correio-respostas');
+  assert.equal(correio.pronto, true, 'com chave e remetente, o email SAI: o grupo tem de estar ligado');
+  assert.equal(respostas.pronto, false, 'sem segredo do webhook, as respostas não entram sozinhas');
+  assert.ok(r.essenciaisEmFalta.includes('Correio — respostas'), 'e o resumo tem de dizer isso: ' + r.essenciaisEmFalta.join(', '));
+  assert.ok(!r.essenciaisEmFalta.includes('Correio'), 'dizer «Correio desligado» com o email a sair era falso');
+  assert.match(respostas.porque, /503/, 'o porquê diz o que se perde — e é concreto');
+  /* o remetente de teste do Resend entrega só ao dono: o painel diz isso, não o esconde */
+  const rem = correio.itens.find((i) => i.nome === 'Remetente verificado');
+  assert.match(rem.porque, /onboarding@resend\.dev|só entrega ao dono/);
+  assert.ok(!rem.alternativas.includes(rem.variavel), 'um nome não é alternativa de si mesmo');
+});
+
 test('o remetente do correio tem um nome só', () => {
   assert.equal(remetente({ ORBITA_FROM_EMAIL: 'a@b.pt' }), 'a@b.pt');
   assert.equal(remetente({ ORBITA_EMAIL_FROM: 'c@d.pt' }), 'c@d.pt');
