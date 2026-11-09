@@ -43,6 +43,21 @@ const COLUNAS_DO_1_37 = new Set([
   'responded_at', 'rating', 'reviews', 'score_reasons', 'consent',
 ]);
 
+/** 1.76.0 · as tabelas da porta: contas e sessões nascem em `orbita_1_54_0.sql`.
+ *  Antes desta lista, a falta de `orbita_contas` mandava para `orbita_mesa.sql`
+ *  — o ficheiro errado, que não cria conta nenhuma. */
+export const TABELAS_DA_PORTA = new Set(['orbita_contas', 'orbita_sessoes']);
+
+/** E as colunas que chegaram depois: confirmação (1.54.1) e entrada (1.69.0). */
+export const COLUNAS_DA_PORTA = {
+  confirmado_em: 'orbita_1_54_1.sql', confirmar_hash: 'orbita_1_54_1.sql', confirmar_expira: 'orbita_1_54_1.sql',
+  codigo_hash: 'orbita_1_69_0.sql', codigo_expira: 'orbita_1_69_0.sql', codigo_tentativas: 'orbita_1_69_0.sql',
+  oauth_fornecedor: 'orbita_1_69_0.sql', oauth_id: 'orbita_1_69_0.sql',
+  hash: 'orbita_1_54_0.sql', papel: 'orbita_1_54_0.sql', activo: 'orbita_1_54_0.sql',
+  recuperar_hash: 'orbita_1_54_0.sql', recuperar_expira: 'orbita_1_54_0.sql',
+  token_hash: 'orbita_1_54_0.sql', conta_id: 'orbita_1_54_0.sql', expira: 'orbita_1_54_0.sql', revogada: 'orbita_1_54_0.sql',
+};
+
 /** As tabelas que vivem no `orbita_ia.sql` (e não na mesa). */
 export const TABELAS_DA_IA = new Set(['orbita_ai_config', 'orbita_ai_runs', 'orbita_ai_steps', 'orbita_ai_uso', 'orbita_ai_memoria', 'orbita_media_jobs']);
 
@@ -68,6 +83,8 @@ export function explificar(texto = '', dados = null) {
   let ficheiro = null;
   if (semColuna && coluna && COLUNAS_DO_1_69.has(coluna)) ficheiro = 'orbita_1_69_0.sql';
   if (semColuna && coluna && COLUNAS_DO_1_37.has(coluna)) ficheiro = 'orbita_1_37_0.sql';
+  if (semTabela && tabela && TABELAS_DA_PORTA.has(tabela)) ficheiro = 'orbita_1_54_0.sql';
+  if (semColuna && coluna && COLUNAS_DA_PORTA[coluna]) ficheiro = COLUNAS_DA_PORTA[coluna];
   if (semTabela && tabela && TABELAS_DA_IA.has(tabela)) ficheiro = 'orbita_ia.sql';
   if (semTabela && tabela && !ficheiro) ficheiro = 'orbita_mesa.sql';
   const onde = tabela ? `«${tabela}»` : 'uma tabela da base';
@@ -125,7 +142,11 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     async health() {
       /* 1.56.0 · orbita_faturas entra na lista: sem ela o health não a via e a
          fatura falhava só à primeira emissão. */
-      const tabelas = ['orbita_leads', 'orbita_projects', 'orbita_tasks', 'orbita_messages', 'orbita_receitas', 'orbita_atividade', 'orbita_faturas'];
+      /* 1.76.0 · `orbita_contas` e `orbita_sessoes` entram na lista. Sem elas o
+         health dizia «falta orbita_faturas» com a ENTRADA partida — e foi assim
+         que o dono descobriu, pelo login e não pelo health, que a base não
+         tinha contas. A prova pública tem de olhar para a porta também. */
+      const tabelas = ['orbita_leads', 'orbita_projects', 'orbita_tasks', 'orbita_messages', 'orbita_receitas', 'orbita_atividade', 'orbita_faturas', 'orbita_contas', 'orbita_sessoes'];
       const faltam = [];
       for (const t of tabelas) {
         try { await pedir(`${t}?select=id&limit=1`, { head: false }); }
@@ -168,6 +189,22 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         return um(await pedir(`orbita_contas?select=*&email=eq.${q(String(email || '').trim().toLowerCase())}&limit=1`));
       },
       async porId(id) { return um(await pedir(`orbita_contas?select=*&id=eq.${q(id)}&limit=1`)); },
+      /* 1.76.0 · a sonda da porta: pede À BASE as colunas que o código usa.
+         Uma tabela em falta ou uma coluna por migrar aparecem aqui como
+         `semEsquema` — e é isso que autoriza aplicar o esquema (ver
+         `_autoesquema.mjs`). Um `select=*` não servia: não falta uma coluna que
+         ninguém pede. */
+      async sonda() {
+        const colunas = [
+          'id', 'email', 'nome', 'papel', 'hash', 'activo',
+          'recuperar_hash', 'recuperar_expira',
+          'confirmado_em', 'confirmar_hash', 'confirmar_expira',
+          'codigo_hash', 'codigo_expira', 'codigo_tentativas', 'oauth_fornecedor', 'oauth_id',
+        ].join(',');
+        await pedir(`orbita_contas?select=${colunas}&limit=1`);
+        await pedir('orbita_sessoes?select=id,conta_id,token_hash,expira,revogada&limit=1');
+        return true;
+      },
       async criar(c) { return um(await pedir('orbita_contas', { method: 'POST', body: c, prefer: 'return=representation' })); },
       async actualizar(id, campos) {
         return um(await pedir(`orbita_contas?id=eq.${q(id)}`, { method: 'PATCH', body: campos, prefer: 'return=representation' }));
@@ -537,6 +574,7 @@ export function createMemRepo(seed = {}) {
       async contar() { return d.contas.length; },
       async porEmail(email) { return d.contas.find((c) => c.email === String(email || '').trim().toLowerCase()) || null; },
       async porId(i) { return d.contas.find((c) => c.id === i) || null; },
+      async sonda() { return true; },
       async criar(c) { const nova = { id: id('u'), criado: agora(), activo: true, ultimo_acesso: null, ...c }; d.contas.push(nova); return nova; },
       async actualizar(i, campos) { const c = d.contas.find((x) => x.id === i); if (!c) return null; Object.assign(c, campos); return c; },
     },

@@ -31,6 +31,9 @@
    um 503 com o nome exacto do que falta e onde se cria — nunca um botão morto.
    =========================================================================== */
 import { createSupabaseRepo, envBase } from './_repo.mjs';
+/* 1.76.0 · a volta do fornecedor também cura o esquema: foi por aqui que o dono
+   viu «a base de dados recusou a conta do dono: falta a tabela orbita_contas». */
+import { garantirEsquemaDaPorta } from './_autoesquema.mjs';
 import { abrirSessao } from './_porta.mjs';
 import {
   fornecedorPorId, estadoDosFornecedores, urlDeAutorizacao, perfilDoFornecedor,
@@ -121,6 +124,11 @@ export async function processarOAuth({
 
   if (!repo) return voltar('esta instalação não tem base de dados ligada');
 
+  /* 1.76.0 · a conta do dono precisa de duas tabelas. Se a base não as tiver,
+     aplicam-se agora (os três ficheiros idempotentes da porta) — antes de se
+     tentar escrever, não depois de falhar. */
+  const esquema = await garantirEsquemaDaPorta(repo, env).catch((e) => ({ ok: false, motivo: e.message }));
+
   const perfil = await perfilDoFornecedor(f.id, { code, env, fetchImpl, retorno: uriDeRetorno(f.id, env) });
   if (!perfil.ok) return voltar(perfil.motivo);
   if (!donoDoPerfil(perfil, env)) {
@@ -147,7 +155,10 @@ export async function processarOAuth({
       });
     }
   } catch (e) {
-    return voltar(`a base de dados recusou a conta do dono: ${String(e.message || e).slice(0, 160)}`);
+    /* 1.76.0 · se o esquema não pôde ser aplicado, diz-se porquê — é a única
+       informação que resolve isto; «tenta outra vez» não resolve nada. */
+    const porque = !esquema?.ok && (esquema?.erro || esquema?.motivo) ? ` (o esquema da porta não pôde ser aplicado: ${esquema.erro || esquema.motivo})` : '';
+    return voltar(`a base de dados recusou a conta do dono: ${String(e.message || e).slice(0, 160)}${porque}`);
   }
   if (!conta) return voltar('não consegui guardar a conta do dono');
 
