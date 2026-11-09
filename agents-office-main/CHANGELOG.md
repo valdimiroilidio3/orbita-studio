@@ -1,3 +1,48 @@
+## 1.72.1 — 6 nov 2026 · «Acesso bloqueado: só utilizadores da organização»
+
+O dono carregou em «Continuar com Google» e recebeu, da Google:
+
+> Acesso bloqueado: o app Orbita agente só pode ser usado dentro da organização
+> **Erro 403: org_internal**
+
+Nada disto é o produto: o cliente OAuth está com o **tipo de utilizador
+«Interno»**, que aceita apenas contas da organização — e uma conta `@gmail.com`
+nunca é da organização. Mas o ecrã também não ajudava: mandava para `/app` o
+texto em inglês da Google, a falar de «contacte o desenvolvedor».
+
+### O que a versão muda
+- A volta do fornecedor já **não** despeja o texto inglês: encaminha o **código**
+  (`google:org_internal`) e é a mesa que o traduz. Uma tradução, um sítio.
+- `explicarRecusa()` (`src/entrada-visual.js`, puro) conhece os códigos que
+  aparecem de verdade — `org_internal`, `access_denied`, `redirect_uri_mismatch`,
+  `deleted_client`, `invalid_client`, `invalid_scope` — e para cada um diz o que
+  aconteceu, **o que fazer** e **onde**, em português.
+- No caso `org_internal` a frase é concreta: *«Google Cloud Console → Google Auth
+  Platform (ou «OAuth consent screen») → Público → muda o tipo de utilizador de
+  «Interno» para «Externo»; depois, em «Utilizadores de teste», acrescenta
+  cheltonmahoze7@gmail.com.»*
+- **Código desconhecido não se inventa**: aparece tal e qual, com «tenta outra
+  vez» — nunca uma explicação bonita que ninguém verificou.
+- Uma frase que já é nossa (o `state` inválido) passa intacta: não é traduzida.
+
+### O que isto NÃO resolve
+A mudança de «Interno» para «Externo» é na consola da Google, com a conta dona
+do projecto `orbita-agente`. Não há chave nem API nossa que a faça por ti. O
+GitHub não é afectado por isto e entra já.
+
+### Testes
+- `entrada-visual.test.mjs` (10, +3): o `org_internal` com a acção e o sítio, o
+  código puro e o formato `fornecedor:código`, o desconhecido, e a frase nossa
+  que passa intacta.
+- `volta-google.test.mjs` (6, +1): a raiz manda o **código** para a mesa, não o
+  texto inglês.
+- `entrada-ui.test.mjs` (11, +2): o ecrã a mostrar «fechada à organização» com
+  «Externo» e «Google Auth Platform», e a não mostrar o texto da Google.
+- **Suíte: 1341/1341.** `check.mjs`: 96/97 (o único falhanço é o smoke de
+  browser, sem Chrome nesta máquina).
+
+---
+
 ## 1.72.0 — 6 nov 2026 · O GOOGLE ENTRA COM O ENDEREÇO QUE JÁ ESTÁ REGISTADO
 
 As chaves do Google estavam na Vercel e o botão não entrava. O Google respondia

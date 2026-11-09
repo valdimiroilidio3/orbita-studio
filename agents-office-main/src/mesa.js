@@ -83,7 +83,7 @@ import {
 import { gerarSegredo, GERAVEIS, PASSOS as PASSOS_DA_VERCEL, avisoDoGerado } from './segredos.js';
 /* 1.68.0 · a fila com a razão de cada tarefa: quando corre, e há quanto espera */
 import { analisarFila, faltaPara, decidirAoAbrir } from './fila.js';
-import { palcoHTML, revelar } from './entrada-visual.js';
+import { palcoHTML, revelar, textoDaRecusa } from './entrada-visual.js';
 
 const API = '/api';
 /* 30 out 2026 · pedido do dono: «chega de demonstrações só». Publicada, esta página não tem
@@ -1978,7 +1978,9 @@ function viewLogin() {
   const erroDoLink = (() => {
     try { return new URLSearchParams(location.search).get('erroEntrada') || ''; } catch { return ''; }
   })();
-  const aviso = S.entradaAviso || erroDoLink;
+  /* 1.72.1 · o que o fornecedor recusou vem como código (`google:org_internal`)
+     e é traduzido aqui, com o sítio onde se resolve — não em inglês. */
+  const aviso = S.entradaAviso || (erroDoLink ? textoDaRecusa(erroDoLink) : '');
   const para = S.entradaPara || S.entradaEmail || dono;
 
   const botaoDeFornecedor = (f) => `<button class="btn entrada-fornecedor" data-act="oauth" data-fornecedor="${esc(f.id)}"${f.pronto ? '' : ' data-falta="1"'}>
