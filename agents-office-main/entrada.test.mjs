@@ -295,6 +295,8 @@ test('1.69.0 · o endereço de autorização pede o mínimo e leva o state', () 
   assert.equal(u.searchParams.get('redirect_uri'), uriDeRetorno('github', env));
 
   const g = new URL(urlDeAutorizacao('google', { env: { GOOGLE_CLIENT_ID: 'gid', ORBITA_URL: 'https://orbita.exemplo.pt' }, state: 'xyz' }));
+  assert.equal(g.searchParams.get('redirect_uri'), 'https://orbita.exemplo.pt/',
+    '1.72.0 · o Google volta à raiz — é o endereço que está registado na Cloud Console');
   assert.equal(g.origin, 'https://accounts.google.com');
   assert.equal(g.searchParams.get('scope'), 'openid email profile');
   assert.equal(urlDeAutorizacao('myspace', { env, state: 'x' }), null);
@@ -435,4 +437,43 @@ test('1.69.0 · a migração existe, é idempotente e não guarda segredos', () 
   }
   assert.match(sql, /sha256 do código/, 'e explica que o que fica é o hash');
   assert.doesNotMatch(sql, /drop table|delete from/i, 'uma migração não apaga dados de ninguém');
+});
+
+
+/* ===========================================================================
+   1.72.0 · o Google volta à raiz (o endereço que já está registado)
+   =========================================================================== */
+
+test('1.72.0 · o Google volta à raiz; o GitHub continua no endereço canónico', () => {
+  const env = { ORBITA_URL: 'https://orbita.exemplo.pt' };
+  assert.equal(uriDeRetorno('google', env), 'https://orbita.exemplo.pt/');
+  assert.equal(uriDeRetorno('github', env), 'https://orbita.exemplo.pt/api/oauth?fornecedor=github');
+  assert.equal(uriDeRetorno('google', {}), 'https://orbita-agentes.vercel.app/', 'sem ORBITA_URL, o endereço de produção');
+});
+
+test('1.72.0 · ORBITA_OAUTH_RETORNO_GOOGLE manda sobre a raiz (para o dia em que se registe o endereço certo)', () => {
+  const env = {
+    ORBITA_URL: 'https://orbita.exemplo.pt',
+    ORBITA_OAUTH_RETORNO_GOOGLE: 'https://orbita.exemplo.pt/api/oauth?fornecedor=google',
+  };
+  assert.equal(uriDeRetorno('google', env), 'https://orbita.exemplo.pt/api/oauth?fornecedor=google');
+  const u = new URL(urlDeAutorizacao('google', { env, state: 'x' }));
+  assert.equal(u.searchParams.get('redirect_uri'), 'https://orbita.exemplo.pt/api/oauth?fornecedor=google');
+});
+
+test('1.72.0 · a troca do código usa o MESMO endereço com que se pediu (senão o Google recusa)', async () => {
+  const env = { GOOGLE_CLIENT_ID: 'gid', GOOGLE_CLIENT_SECRET: 'seg', ORBITA_URL: 'https://orbita.exemplo.pt' };
+  let enviado = null;
+  const fetchImpl = async (url, opt = {}) => {
+    if (String(url).includes('oauth2.googleapis.com/token')) enviado = new URLSearchParams(String(opt.body || ''));
+    return {
+      ok: true,
+      json: async () => (String(url).includes('userinfo') ? { email: 'che@gmail.com', email_verified: true, sub: '1' } : { access_token: 't' }),
+      text: async () => '',
+    };
+  };
+  await perfilDoFornecedor('google', { code: 'c', env, fetchImpl });
+  assert.equal(enviado.get('redirect_uri'), uriDeRetorno('google', env),
+    'pedir e trocar têm de levar o mesmo redirect_uri');
+  assert.equal(enviado.get('redirect_uri'), 'https://orbita.exemplo.pt/');
 });

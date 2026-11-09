@@ -95,8 +95,33 @@ export const REDIRECAO = '/api/oauth';
 export const basePublica = (env = {}) =>
   String(env.ORBITA_URL || env.ORBITA_URLAR || 'https://orbita-agentes.vercel.app').replace(/\/+$/, '');
 
-export const uriDeRetorno = (fornecedor, env = {}) =>
-  `${basePublica(env)}${REDIRECAO}?fornecedor=${encodeURIComponent(fornecedor)}`;
+/* 1.72.0 · PORQUE O GOOGLE VOLTA À RAIZ
+
+   O Google não aceita um `redirect_uri` que não esteja registado ao carácter na
+   Cloud Console. O dono registou `https://orbita-agentes.vercel.app/` (a raiz) e
+   não `…/api/oauth?fornecedor=google` — e o Google respondeu
+   «Error 400: redirect_uri_mismatch» sem nunca chegar aqui.
+
+   Duas saídas possíveis: pedir-lhe para registar o endereço certo (mais um
+   passo manual, e ele já tinha dito que queria isto a funcionar), ou usar o
+   endereço que **já está** registado. Ficou a segunda: o Google devolve a
+   pessoa à raiz com `?code=…&state=…`, e a raiz (`src/shell.html`) encaminha-a
+   para `/api/oauth?fornecedor=google&…`, que é quem sabe trocar o código.
+
+   O endereço continua a poder ser trocado sem tocar no código:
+   `ORBITA_OAUTH_RETORNO_GOOGLE` manda sobre isto. No dia em que registares
+   `/api/oauth?fornecedor=google` lá, basta pôr essa variável.
+   O GitHub não muda: o endereço dele é o canónico. */
+export const retornoNaRaiz = (env = {}) => `${basePublica(env)}/`;
+
+export const uriDeRetorno = (fornecedor, env = {}) => {
+  if (String(fornecedor || '').toLowerCase() === 'google') {
+    const escolhido = String(env.ORBITA_OAUTH_RETORNO_GOOGLE || '').trim();
+    if (escolhido) return escolhido;
+    return retornoNaRaiz(env);
+  }
+  return `${basePublica(env)}${REDIRECAO}?fornecedor=${encodeURIComponent(fornecedor)}`;
+};
 
 /** O que falta para cada um. `falta` são NOMES de variáveis, nunca valores. */
 export const FORNECEDORES = [
