@@ -108,7 +108,7 @@ export const APPS = Object.freeze([
 
 /** O que o botão diz em cada tipo — sem prometer o que o serviço não permite. */
 export const PEDIDO = Object.freeze({
-  chave: { verbo: 'Conectar', titulo: 'Ligar {nome}', nota: 'A chave fica no servidor desta máquina, no ficheiro .env, e nunca volta a sair numa resposta.' },
+  chave: { verbo: 'Conectar', titulo: 'Ligar {nome}', nota: 'A chave fica no ambiente do servidor — no `.env` de quem corre o Órbita à mão, ou nas variáveis da Vercel na publicação — e nunca volta a sair numa resposta.' },
   oauth: { verbo: 'Ligar', titulo: 'Ligar {nome}', nota: 'Este serviço só aceita OAuth: é preciso uma app registada no {nome} e o redireccionamento. Colar uma chave aqui não funcionaria, e não se finge que funciona.' },
   cli: { verbo: 'Ver como', titulo: '{nome} nesta máquina', nota: 'Isto não é uma chave: vive na máquina onde o Órbita corre (CLI, pasta ou socket local). O botão explica o que instalar, não pede um token falso.' },
   'sem-api': { verbo: 'Porquê?', titulo: '{nome}', nota: 'O {nome} não publica uma API pública. A ligação é manual — exportar e importar ficheiros — e é isso que aqui se diz.' },
