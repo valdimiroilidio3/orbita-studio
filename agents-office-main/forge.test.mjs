@@ -330,8 +330,16 @@ test('o terminal recebe os eventos por ordem, e ficam no log em disco', async ()
   assert.ok(seen.length >= 8, `esperava uma dúzia de eventos, vi ${seen.length}`);
   assert.ok(seen.every((e, i) => i === 0 || e.seq > seen[i - 1].seq), 'a ordem dos eventos tem de ser crescente');
   assert.ok(seen.some((e) => e.phase === 'code' && e.data?.stream), 'o código tem de ser transmitido linha a linha');
-  await new Promise((r) => setTimeout(r, 60));
-  const log = fs.readFileSync(path.join(root, 'log.ndjson'), 'utf8').trim().split('\n');
+  /* 1.79.1 · o log é escrito em disco de forma assíncrona. Aqui dormia-se 60 ms e
+     lia-se o ficheiro — numa máquina lenta (o CI tem 2 núcleos a correr 8 suites em
+     paralelo) 60 ms não chegam, e o teste falhava sem haver defeito nenhum. Passa a
+     esperar PELO CONTEÚDO, com prazo: rápido quando é rápido, tolerante quando não é. */
+  const lerLog = () => fs.readFileSync(path.join(root, 'log.ndjson'), 'utf8').trim().split('\n').filter(Boolean);
+  const limite = Date.now() + 5000;
+  while (Date.now() < limite && (fs.existsSync(path.join(root, 'log.ndjson')) ? lerLog().length < 8 : true)) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  const log = lerLog();
   assert.ok(log.length >= 8);
   for (const l of log) assert.doesNotThrow(() => JSON.parse(l));
 });

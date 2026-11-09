@@ -391,7 +391,10 @@ export function createApps({ doc = globalThis.document, fetchImpl = globalThis.f
     caixa.hidden = false;
     if (r.semServidor) {
       caixa.className = 'ax-result bad';
-      caixa.textContent = 'Sem servidor nesta página: as chaves só se gravam na máquina onde o Órbita corre (npm start).';
+      /* 1.79.2 · a verdade é outra: as chaves vivem no AMBIENTE do servidor (na
+         Vercel, Settings → Environment Variables). Não se gravam pela página —
+         nem aqui nem num terminal. */
+      caixa.textContent = 'As chaves vivem no ambiente do servidor (na Vercel: Settings → Environment Variables). Esta página mostra quais existem e testa-as de verdade — gravá-las não é coisa que uma página faça.';
       return;
     }
     if (r.erro) {

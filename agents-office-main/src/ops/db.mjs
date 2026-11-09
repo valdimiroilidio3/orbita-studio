@@ -342,7 +342,7 @@ export const uid = (prefix = '') => prefix + Math.random().toString(36).slice(2,
 /** Abre (ou cria) a base de dados. `file` pode ser ':memory:' nos testes. */
 export function openDb(file) {
   if (!DatabaseSync) {
-    throw new Error('Esta versão do Node não traz node:sqlite. Usa Node 22.4+ (node -v) — ou define ORBITA_DB="json" para o modo antigo.');
+    throw new Error('Esta versão do Node não traz node:sqlite. Usa Node 22.5+ (node -v) — ou define ORBITA_DB="json" para o modo antigo.');
   }
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
   const db = new DatabaseSync(file);

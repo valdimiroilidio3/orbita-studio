@@ -123,6 +123,41 @@ export function guardDraft(text, facts, { channel }) {
   return { text: kept.join(' ').trim(), dropped };
 }
 
+/* ---------- a oferta não é opcional ---------- */
+
+/** O fecho da oferta, escrito por nós e sempre igual: preço, prazo, garantia. */
+export function fraseDaOferta(offer) {
+  return `Faço ${offer.nome} por ${offer.preco_eur} €, pronta em ${offer.prazo_dias} dias`
+    + `${offer.garantia ? '; ' + offer.garantia : ''}.`;
+}
+
+/**
+ * Garante que a oferta do dono está na mensagem — e que é a oferta do dono.
+ *
+ * O gate do CI apanhou isto a sério: quando havia um motor de IA disponível, a mensagem
+ * saía bonita e **sem o preço**. O prompt pedia-o; o modelo ignorava-o. Uma mensagem de
+ * prospecção sem preço é uma conversa a mais; e um preço inventado («200 €») é uma
+ * promessa que o dono não fez. Por isso:
+ *   · número antes do € diferente da oferta → recusa (volta-se ao modelo local);
+ *   · sem número nenhum → acrescenta-se a frase da oferta, igual à do modelo local;
+ *   · «450€» passa a «450 €» (espaço fino à portuguesa).
+ */
+export function garantirOferta(texto, offer) {
+  let out = String(texto || '').replace(/(\d)\s*€/g, '$1 €').trim();
+  const precos = [...out.matchAll(/(\d[\d.\s]*)\s€/g)]
+    .map(m => Number(m[1].replace(/[.\s]/g, '')))
+    .filter(n => Number.isFinite(n) && n > 0);
+  const estranhos = precos.filter(n => n !== Number(offer.preco_eur));
+  if (estranhos.length) {
+    throw new Error(`a mensagem prometia ${estranhos[0]} €, e a oferta do dono é ${offer.preco_eur} €`);
+  }
+  if (!precos.length) {
+    out = `${out.replace(/\s*$/, '')} ${fraseDaOferta(offer)}`.trim();
+    return { body: out, acrescentada: true };
+  }
+  return { body: out, acrescentada: false };
+}
+
 /**
  * Escreve o rascunho. Com motor de IA (`ask`) ou sem ele — e diz sempre qual foi.
  * Devolve também o que se prevê que respondam, com a resposta já preparada.
@@ -165,10 +200,23 @@ export async function compose(db, lead, { channel = null, ask = null, actor = 'a
   }
   if (!draft) draft = templateDraft(db, lead, { channel: ch });
 
+  // 1.79.3 · a oferta entra sempre — e se o motor inventou outro preço, o texto cai.
+  let acrescentada = false;
+  try {
+    const g = garantirOferta(draft.body, offer);
+    draft = { ...draft, body: g.body };
+    acrescentada = g.acrescentada;
+  } catch (e) {
+    rejected = [rejected, e.message].filter(Boolean).join(' · ');
+    const t = templateDraft(db, lead, { channel: ch });
+    draft = { ...t, body: garantirOferta(t.body, offer).body };
+  }
+
   const predicted = objections(lead, d, offer, ch);
   const why = [
     draft.hook ? `abri por: ${draft.hook}` : '',
     draft.usedEngine === 'ia' ? 'escrita pelo motor, presa aos factos que li' : 'escrita pelo modelo local (não há motor ligado)',
+    acrescentada ? 'o motor esqueceu-se do preço: a frase da oferta foi acrescentada' : '',
     d.research.status === 'ok' ? `vi o site (${d.evidence.length} factos)` : `sem leitura do site: ${d.research.status}`,
   ].filter(Boolean).join(' · ');
 

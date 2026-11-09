@@ -73,10 +73,12 @@ test('1.79.0 · o cartão nunca fica preso: a escrita continua e a espera é vis
     assert.match(linha.textContent, /à espera da resposta/);
     assert.match(linha.textContent, /0 s|1 s/);
 
-    /* 2 · e a seta é um travão, não um botão morto */
+    /* 2 · a seta continua a ser uma seta: apagada com o campo vazio. O Parar tem
+       o seu próprio botão, escrito, na linha da espera (1.79.1). */
     const seta = doc.getElementById('mSend');
-    assert.equal(seta.disabled, false, 'a seta continua utilizável — agora para parar');
-    assert.equal(seta.getAttribute('aria-label'), 'parar a espera pela resposta');
+    assert.equal(seta.disabled, true, 'sem texto, a seta está apagada — não é um travão disfarçado');
+    assert.equal(seta.getAttribute('aria-label'), 'enviar mensagem');
+    assert.match(linha.textContent, /Parar/, 'o Parar está escrito na linha da espera');
 
     /* 3 · o campo aceita texto (era isto que o dono não conseguia) */
     const campo2 = doc.getElementById('mIn');
@@ -91,7 +93,7 @@ test('1.79.0 · o cartão nunca fica preso: a escrita continua e a espera é vis
     assert.match(doc.getElementById('mcToast').textContent, /Ainda estou à espera/);
 
     /* 5 · Parar solta o cartão e aborta o pedido */
-    clicarEnviar(doc);
+    doc.querySelector('#mcWait [data-parar]').dispatchEvent(new doc.defaultView.MouseEvent('click', { bubbles: true }));
     await esperar(10);
     assert.equal(doc.getElementById('mcWait').hidden, true, 'a linha da espera sai');
     assert.equal(c.state().busy, false);

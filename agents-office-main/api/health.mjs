@@ -27,6 +27,9 @@ import { opcoesDeEntrada } from './_entrada.mjs';   // 1.69.0: quem entra e por 
 /* 1.79.0 · o curador da mesa inteira: se faltar uma tabela, aplica o esquema
    versionado (idempotente) em vez de responder «corre o SQL à mão». */
 import { garantirEsquemaDaMesa } from './_autoesquema.mjs';
+/* 1.79.2 · os conectores que o SERVIDOR tem, por nome de variável (nunca por
+   valor). É a prova pública que a barra do escritório lê sem sessão. */
+import { resumoDosConectores } from './_servicos.mjs';
 
 /**
  * 1.76.1 · «a porta tem as colunas que a entrada usa?»
@@ -78,6 +81,11 @@ export default async function handler(req, res) {
       : 'sem CRON_SECRET o agendador não se autentica: a fila só corre quando carregares em «Correr a fila agora»',
   };
 
+  /* 1.79.2 · os conectores do servidor. A página publicada não lê a máquina do
+     dono (`claude mcp list`) — mas pode ler isto, que é a verdade da instalação:
+     quais serviços têm chave no ambiente. Nomes, nunca valores. */
+  const conectores = resumoDosConectores(pedido);
+
   /* 1.69.0 · a entrada: quem entra, por onde, e o que falta a cada caminho.
      Só nomes de variáveis e o email mascarado — o health é público. */
   const entrada = (() => {
@@ -98,7 +106,7 @@ export default async function handler(req, res) {
   })();
 
   if (!env.pronto) {
-    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
+    res.status(503).json({ ok: false, modo: 'local', error: 'sem SUPABASE_URL/SUPABASE_SECRET_KEY na Vercel', versao: VERSAO, conectores, ia, prontidao, acesso, ciclo, entrada });
     return;
   }
 
@@ -121,8 +129,8 @@ export default async function handler(req, res) {
        de dados recusou a conta do dono» com o health a dizer que estava tudo
        bem. Sem segredos: só sim/não e a frase da base. */
     const porta = await sondaDaPorta(repo);
-    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, porta, esquema, ia, prontidao, acesso, ciclo, entrada });
+    res.status(h.ok ? 200 : 503).json({ ...h, modo: 'base', versao: VERSAO, porta, esquema, conectores, ia, prontidao, acesso, ciclo, entrada });
   } catch (e) {
-    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, ia, prontidao, acesso, ciclo, entrada });
+    res.status(503).json({ ok: false, modo: 'base', error: e.message || 'a base não respondeu', versao: VERSAO, conectores, ia, prontidao, acesso, ciclo, entrada });
   }
 }

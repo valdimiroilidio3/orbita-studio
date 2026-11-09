@@ -438,6 +438,38 @@ test('personalização: um motor que inventa citações é travado', async () =>
   assert.match(ok.why, /presa aos factos/);
 });
 
+test('1.79.3 · a oferta do dono entra sempre — e um preço inventado derruba o texto', async () => {
+  const db = fresh();
+  const lead = leads.upsertLead(db, { name: 'Barbearia Alfredo', city: 'Braga', phone: '+351 912 345 678' }).lead;
+  const oferta = personalize.offerOf(db);
+  assert.equal(oferta.preco_eur, 350);
+
+  // 1 · o motor esqueceu-se do preço: a frase da oferta é acrescentada, e o porquê di-lo
+  const semPreco = async () => JSON.stringify({
+    assunto: 'O site', corpo: 'Bom dia! Vi que não tem site e que o telefone é público. Quer que eu faça uma página?', facto_usado: 'não tem site',
+  });
+  const c = await personalize.compose(db, lead, { channel: 'whatsapp', ask: semPreco });
+  assert.equal(c.generatedBy, 'ia', 'o texto era verdadeiro: passa');
+  assert.match(c.body, /350 €/, 'a oferta tem de estar na mensagem');
+  assert.match(c.why, /esqueceu-se do preço/);
+
+  // 2 · o motor inventou outro preço: cai, e volta o modelo local com a oferta certa
+  const caro = async () => JSON.stringify({
+    assunto: 'O site', corpo: 'Bom dia! Vi que não tem site. Faço a página por 200 € e fica pronta em dois dias.', facto_usado: 'não tem site',
+  });
+  const d = await personalize.compose(db, lead, { channel: 'whatsapp', ask: caro });
+  assert.equal(d.generatedBy, 'modelo', 'um preço que o dono não fez não pode sair');
+  assert.match(d.rejectedReason, /prometia 200 €.*350 €/);
+  assert.ok(!/200 €/.test(d.body), 'o preço inventado não sobrevive: ' + d.body);
+  assert.match(d.body, /350 €/);
+
+  // 3 · tipografia: «450€» passa a «450 €»; e a garantia acompanha
+  const g = personalize.garantirOferta('Faço por 450€, em 5 dias.', { ...oferta, preco_eur: 450, prazo_dias: 5 });
+  assert.equal(g.acrescentada, false);
+  assert.match(g.body, /450 €/);
+  assert.match(personalize.fraseDaOferta(oferta), /350 €.*7 dias.*não paga/);
+});
+
 test('guardDraft: corta promessas e citações inventadas frase a frase', () => {
   const facts = ['o rodapé ainda diz 2019', 'horizontal'];
   const out = personalize.guardDraft(

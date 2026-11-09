@@ -1,3 +1,153 @@
+## 1.79.3 — 9 nov 2026 · o CI verde: Node 22, a oferta sempre na mensagem, e um erro que diz o que falhou
+
+A 1.79.2 pôs o `jsdom` a funcionar no Node 20, mas o CI continuou vermelho. O CI
+passou a dizer o que falhava (ver 2) e a primeira leitura dessas anotações trouxe
+quatro coisas, uma delas um problema de produto a sério:
+
+### 1 · o Node 20 não é uma versão que este projecto saiba correr
+
+A base de operação do escritório (`src/ops/db.mjs`) é SQLite a sério, via
+`node:sqlite` — que só existe a partir do Node 22.4. O `engines.node` dizia
+`>=20.19` e o CI tinha uma matriz `[20, 22]`: no Node 20 metade das suites
+falhava por falta de uma API do próprio Node, não por causa da aplicação.
+
+- o CI corre **22 e só 22** (`gate` e `suites`);
+- `engines.node` passa a `>=22.5` — o primeiro patch em que o `node:sqlite` está
+  lá sem depender de flag;
+- `versoes.test.mjs` prova as duas pontas: o `engines` aceita 22.5 e recusa 22.4,
+  e o abridor da base importa mesmo `node:sqlite`;
+- `src/ops/db.mjs` diz «Usa Node 22.5+» a quem abrir a base numa versão antiga.
+
+### 2 · «Process completed with exit code 1» não é um diagnóstico
+
+Quando o `gate` ou as `suites` ficam vermelhos, o pull request passa a mostrar
+**qual** teste falhou, sem precisar de abrir os logs da acção (que não são
+legíveis de todo o lado):
+
+- cada linha `not ok` (suites) e `✗` (gate) vira uma **anotação de erro** no PR;
+- o resumo do passo leva a contagem (`tests/pass/fail`) e, em falha, as últimas
+  80 linhas do registo.
+
+### 3 · o gate dependia de haver (ou não) um motor de IA à mão
+
+Foi a anotação nova que o mostrou, no primeiro CI depois da 1.79.2: três passos do
+`passo 3` vermelhos, com uma mensagem escrita por um modelo — bonita, em «você»,
+**sem preço nenhum**. Nesta VM não há chaves nem rede para os motores gratuitos, por
+isso o rascunho saía do modelo local (com «350 €») e o gate passava; no CI havia um
+motor disponível e o texto era outro. O gate não pode depender disso.
+
+- `AO_AI=nenhum` passa a ser uma ordem a sério: o `resolve()` devolve **nenhum**
+  motor e diz «motor desligado de propósito». Antes, pedir um motor indisponível
+  caía no *failover* e o escritório ia buscar outro sozinho;
+- o passo 3 do `check.mjs` corre com `AO_AI=nenhum` — prova o encadeamento
+  (site → factos → mensagem → oferta → resposta), não qual modelo escreveu. O motor
+  a sério prova-se com `CHECK_LIVE=1`.
+
+### 4 · a oferta do dono não é um detalhe do modelo
+
+O texto do CI revelou um problema de produto: **a mensagem saía sem o preço**. O
+prompt pedia-o; o modelo ignorava-o. Uma mensagem de prospecção sem preço é uma
+conversa a mais e um preço inventado é uma promessa que o dono não fez.
+
+- `garantirOferta()` (novo, `src/ops/personalize.mjs`): se a mensagem não traz
+  preço, acrescenta-se a frase da oferta — a mesma do modelo local, com preço, prazo
+  e garantia; se traz **outro** preço, o texto é recusado e volta o modelo local;
+- «450€» passa a «450 €» (espaço, à portuguesa);
+- o `why` do rascunho diz quando a frase foi acrescentada — não se esconde.
+
+### 5 · «Failed to load resource: net::ERR_FILE_NOT_FOUND» não é um diagnóstico
+
+O outro passo vermelho não dizia que ficheiro faltava. O smoke passa a ouvir
+`requestfailed` e a mostrar o **URL**:
+
+- um pedido para fora da pasta do projecto numa página `file://` (ícone, manifest,
+  `/app`) é a vista estática a pedir o que só o servidor serve: conta-se e diz-se no
+  resultado do passo, não pinta o gate de vermelho;
+- um ficheiro em falta **dentro** do projecto continua a ser erro, com nome e motivo.
+
+### Provas
+
+- `node build.mjs` → `dist/command-centre-v2.html` (1717 KB) + `dist/mesa.html`;
+- `node --test` → **1441/1441** (entra o teste novo da oferta: acrescenta, recusa
+  preço inventado, corrige «450€»);
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser` — esta máquina não tem
+  Chrome; o CI tem e corre-o a sério).
+
+## 1.79.2 — 9 nov 2026 · o gate volta a verde, os conectores deixam de ser da tua máquina
+
+Quatro coisas que estavam listadas como «problemas», todas resolvidas — e a causa
+do CI vermelho, que afinal não era do código da aplicação.
+
+### 1 · o gate do GitHub: o `jsdom` 30 exigia Node 22 e o CI corria Node 20
+
+O `package.json` prometia `engines: >= 20` e o workflow corria Node 20; o `jsdom`
+tinha subido para a 30, cujo `engines` é `^22.22.2 || ^24.15.0 || >=26`. No CI, as
+suites que abrem o `shell.html` num DOM — o compositor, as apps, as integrações —
+rebentavam ao importar o `jsdom`. Em casa corria tudo, porque aqui há Node 22.
+
+- `jsdom` fixado em `~29.1.1` (aceita 20.19, 22.13 e 24+), `engines.node` passou a
+  `>=20.19` (era `>=20`, que incluía versões onde o jsdom não entra).
+- o workflow passa a testar **as duas versões** (`matrix.node: [20, 22]`), para uma
+  delas não se partir em silêncio outra vez.
+- **`versoes.test.mjs`** (novo) prende isto: compara a versão do CI com
+  `engines.node` e com o `engines` de **cada dependência directa instalada**. Foi
+  este teste que teria dito «jsdom@30 exige ^22.22.2» em vez de se descobrir pela
+  suite vermelha.
+
+### 2 · «não há browser nesta VM»
+
+`node check.mjs` falhava em `smoke: browser` com
+`Chromium distribution 'chrome' is not found` — uma máquina sem Chrome não é uma
+avaria da aplicação. O passo passa a ser **saltado com a razão escrita** (e com
+`CHROME_PATH` para apontar um browser); se o browser existir e a abertura falhar
+por outra razão, continua a ser erro. E a `cena` voltou a passar: a seta do
+compositor, depois de esvaziar o campo, volta a apagar-se (ver §3).
+
+Local: **96/96 checks, 1 saltado (smoke: browser)**. No CI há Chrome e o passo
+corre a sério.
+
+### 3 · o compositor, visto ao pormenor
+
+- A seta voltou a ser uma **seta**: apagada com o campo vazio. Durante a espera
+  deixou de se transformar num travão disfarçado — o **Parar** vive na linha da
+  espera, com o nome escrito.
+- O que se envia sai **já** da caixa; se o envio falhar (ou o prazo estourar), o
+  texto **volta** à caixa, mas só se ela ainda estiver vazia — nunca por cima do
+  que a pessoa começou a escrever a seguir.
+
+### 4 · os conectores e a oficina deixaram de ler a tua máquina
+
+- **`api/_servicos.mjs`** (novo): o catálogo dos 22 serviços saiu da `_rotas.mjs`
+  (que o re-exporta) para poder ser lido pelo `/api/health`, que é **público**.
+- `/api/health` publica agora `conectores`: total, **ligados por nome** e o que
+  falta a cada um. Nomes de variáveis, nunca valores. (O `/platform/apis` exige
+  sessão — por isso a página não o podia ler.)
+- **`src/mcp.js`**: a barra deixou de dizer «os conectores vêm do `claude mcp list`
+  desta máquina» (não é verdade para quem abre a publicação). Passa a dizer
+  «N ligado(s) no servidor · Supabase, Resend…», ou «nenhum conector ligado no
+  servidor — liga-os em Configurações».
+- **`src/forge.js`**: a oficina diz o que é — «forja ferramentas em ficheiros desta
+  máquina; na publicação, o trabalho corre nas tarefas e na IA da Órbita» — em vez
+  de mandar arrancar um terminal.
+- **`src/apps.js`, `src/config.js`, `src/mesa.js`**: as chaves vivem no **ambiente
+  do servidor** (Vercel → Settings → Environment Variables). Era isso que faltava
+  dizer; o `npm start` desapareceu do texto que o dono lê (e um teste novo prenda-o).
+
+### 5 · o correio deixou de estar «desligado»
+
+`RESEND_API_KEY` e `ORBITA_EMAIL_FROM` criadas na Vercel (production, preview,
+development). Com elas, o código de 6 dígitos da entrada passa a sair, e a fatura
+passa a poder ir por email. O domínio por omissão é `onboarding@resend.dev` (o do
+próprio Resend): serve para enviar **ao dono**; para outros destinatários é preciso
+verificar um domínio no Resend e trocar `ORBITA_EMAIL_FROM`.
+
+### Provas
+
+`node --test` — **1439/1439** (1429 na 1.79.1). Novos: `versoes` (3) e `conectores`
+(7). `node check.mjs` — **96/96**. Suite também corrida a `--test-concurrency=8`,
+três vezes, verde (era aqui que o `forge` caía por esperar 60 ms por uma escrita em
+disco).
+
 ## 1.79.1 — 9 nov 2026 · a barra do motor diz quantos motores há (prova pública)
 
 O `/ia/estado` pede sessão. Na página do escritório, sem sessão aberta, a barra do
