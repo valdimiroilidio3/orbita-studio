@@ -33,11 +33,11 @@ const ENTRADA = {
 
 const EU = { user: { id: 'u1', name: 'Chelton', role: 'dono' }, perms: { admin: true, read: true, write: true, approve: true }, horasSessao: 12, modo: 'base' };
 
-async function abrir({ entrada = ENTRADA, entraComCodigo = false, semCodigo = false, primeiraConta = true } = {}) {
+async function abrir({ entrada = ENTRADA, entraComCodigo = false, semCodigo = false, primeiraConta = true, url = 'https://mesa.test/app' } = {}) {
   const pedidos = [];
   let sessao = false;
   const dom = new JSDOM(HTML, {
-    url: 'https://mesa.test/app',
+    url,
     runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
       w.HTMLElement.prototype.scrollIntoView = () => {};
@@ -196,4 +196,25 @@ test('1.71.0 · a cascata e o halo existem no ficheiro publicado (não são deco
   assert.match(css, /prefers-reduced-motion[\s\S]{0,120}animation: none/, 'e pára para quem pediu menos movimento');
   assert.match(css, /@media \(max-width: 900px\)[\s\S]{0,160}\.palco-arte \{ display: none;? \}/,
     'no telemóvel a arte sai da frente do formulário');
+});
+
+
+/* ===========================================================================
+   1.72.1 · a recusa do fornecedor, explicada no ecrã
+   =========================================================================== */
+
+test('1.72.1 · org_internal aparece em português, com o sítio onde se resolve', async () => {
+  const { texto } = await abrir({ url: 'https://mesa.test/app?erroEntrada=google%3Aorg_internal' });
+  const t = texto();
+  assert.match(t, /fechada à organização/, 'o ecrã diz o que aconteceu');
+  assert.match(t, /Externo/, 'e o que mudar');
+  assert.match(t, /Google Auth Platform|OAuth consent screen/, 'e onde');
+  assert.doesNotMatch(t, /Apenas usuarios da organizacao/, 'não despeja o texto inglês da Google');
+});
+
+test('1.72.1 · uma recusa que não conhecemos aparece com o código à vista (não se inventa uma explicação)', async () => {
+  const { texto } = await abrir({ url: 'https://mesa.test/app?erroEntrada=google%3Aalgum_codigo_novo' });
+  const t = texto();
+  assert.match(t, /algum_codigo_novo/);
+  assert.match(t, /tenta outra vez/i);
 });

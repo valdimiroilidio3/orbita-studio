@@ -16,7 +16,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ORBITAS, ANEIS, aneisHTML, orbitasHTML, palcoHTML, revelar, escapar } from './src/entrada-visual.js';
+import {
+  ORBITAS, ANEIS, aneisHTML, orbitasHTML, palcoHTML, revelar, escapar,
+  RECUSAS, explicarRecusa, textoDaRecusa,
+} from './src/entrada-visual.js';
 
 test('1.71.0 · o palco tem a arte à esquerda e o formulário à direita', () => {
   const html = palcoHTML({ titulo: 'Órbita', sub: 'entra', corpo: '<form id="x"></form>' });
@@ -71,4 +74,35 @@ test('1.71.0 · um número de anéis inválido não parte o ecrã', () => {
   assert.equal((aneisHTML(0).match(/class="anel"/g) || []).length, ANEIS, 'zero não é uma escolha: cai no valor por omissão');
   assert.equal((aneisHTML('abc').match(/class="anel"/g) || []).length, ANEIS, 'texto cai no valor por omissão');
   assert.equal((aneisHTML(3).match(/class="anel"/g) || []).length, 3, 'um número a sério é respeitado');
+});
+
+/* ===========================================================================
+   1.72.1 · quando o fornecedor recusa, o ecrã diz o que fazer
+   =========================================================================== */
+
+test('1.72.1 · org_internal: diz que a app está fechada à organização e onde se abre', () => {
+  const r = explicarRecusa('google:org_internal');
+  assert.equal(r.conhecido, true);
+  assert.equal(r.codigo, 'org_internal');
+  assert.equal(r.fornecedor, 'google');
+  assert.match(r.titulo, /fechada à organização/);
+  assert.match(r.texto, /Externo/, 'a acção é mudar o tipo de utilizador para Externo');
+  assert.match(r.texto, /Google Auth Platform|OAuth consent screen/, 'e diz onde');
+  assert.match(r.texto, /cheltonmahoze7@gmail\.com/, 'e qual conta acrescentar como utilizador de teste');
+});
+
+test('1.72.1 · aceita o código puro e o formato com fornecedor; um desconhecido não é inventado', () => {
+  assert.equal(explicarRecusa('org_internal').codigo, 'org_internal');
+  assert.equal(explicarRecusa('github:access_denied').fornecedor, 'github');
+  const x = explicarRecusa('qualquer_coisa_nova');
+  assert.equal(x.conhecido, false);
+  assert.match(x.texto, /qualquer_coisa_nova/, 'o código aparece — não se esconde o que a Google disse');
+  assert.doesNotMatch(x.texto, /Como resolver: undefined/);
+});
+
+test('1.72.1 · uma frase já escrita (o state inválido) passa intacta — não é traduzida', () => {
+  const nossa = 'este regresso não é deste browser (state inválido) — começa a entrada outra vez';
+  assert.equal(textoDaRecusa(nossa), nossa);
+  assert.equal(textoDaRecusa(''), '');
+  assert.equal(textoDaRecusa('google:redirect_uri_mismatch').includes('endereço de retorno'), true);
 });

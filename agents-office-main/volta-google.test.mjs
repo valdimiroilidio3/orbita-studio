@@ -63,12 +63,21 @@ test('1.72.0 · caracteres que partem URLs vão codificados', () => {
   assert.equal(u.searchParams.get('state'), 'x&y', 'e um «&» no state não inventa parâmetros novos');
 });
 
-test('1.72.0 · se o Google recusar, a razão vai escrita para a mesa', () => {
+test('1.72.0 · se o Google recusar, a razão vai para a mesa', () => {
   const d = correr('?error=access_denied&error_description=O+utilizador+recusou&state=1');
   assert.equal(d.length, 1);
   const u = new URL(d[0], 'https://orbita-agentes.vercel.app');
   assert.equal(u.pathname, '/app');
-  assert.match(u.searchParams.get('erroEntrada'), /o Google recusou: O utilizador recusou/);
+  /* 1.72.1: passa o CÓDIGO, não o texto inglês — quem traduz é a mesa */
+  assert.equal(u.searchParams.get('erroEntrada'), 'google:access_denied');
+});
+
+test('1.72.1 · a recusa «org_internal» chega à mesa como código, para ser explicada em português', () => {
+  const d = correr('?error=org_internal&error_description=A+penas+usuarios+da+organizacao&state=1');
+  assert.equal(d.length, 1);
+  const u = new URL(d[0], 'https://orbita-agentes.vercel.app');
+  assert.equal(u.pathname, '/app');
+  assert.equal(u.searchParams.get('erroEntrada'), 'google:org_internal');
 });
 
 test('1.72.0 · um pedido já com `fornecedor` passa ao lado (não faz ciclos)', () => {

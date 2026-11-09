@@ -3388,10 +3388,14 @@
     var code = q.get('code');
     var state = q.get('state');
     if (q.get('fornecedor')) return;
-    /* a recusa vem SEM código: é por isso que se olha para ela primeiro */
+    /* a recusa vem SEM código: é por isso que se olha para ela primeiro.
+       1.72.1 · passa-se o CÓDIGO (`google:org_internal`), não o texto inglês da
+       Google: quem traduz para português e diz onde se resolve é a mesa
+       (`explicarRecusa`, em `src/entrada-visual.js`). Aqui só se encaminha. */
     var erro = q.get('error_description') || q.get('error');
     if (erro && state) {
-      location.replace('/app?erroEntrada=' + encodeURIComponent('o Google recusou: ' + erro));
+      var codigo = q.get('error') || erro;
+      location.replace('/app?erroEntrada=' + encodeURIComponent('google:' + codigo));
       return;
     }
     if (!code || !state) return;
