@@ -359,6 +359,12 @@ test('1.64.0 · nenhum grupo inventado na tabela de acções', () => {
   for (const chave of ACOES_DOS_GRUPOS) {
     assert.ok(reais.has(chave), `«${chave}» não é um grupo de api/_prontidao.mjs`);
   }
+  /* 1.79.3 · e o contrário: um grupo novo sem acção era meia resposta — «falta X» e
+     nenhum sítio onde o resolver. Apanhou-se ao juntar «Correio — respostas». */
+  for (const g of GRUPOS) {
+    assert.ok(ACOES_DOS_GRUPOS.includes(String(g.nome).toLowerCase()),
+      `o grupo «${g.nome}» não tem acção em ACAO_DO_GRUPO (src/arranque.js)`);
+  }
 });
 
 test('1.66.1 · um nome quase certo vira uma peça que diz o nome certo (e manda a outra embora)', () => {
