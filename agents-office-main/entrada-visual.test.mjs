@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 
 import {
   ORBITAS, ANEIS, aneisHTML, orbitasHTML, palcoHTML, revelar, escapar,
-  RECUSAS, explicarRecusa, textoDaRecusa,
+  RECUSAS, explicarRecusa, textoDaRecusa, avisoDaRecusa,
 } from './src/entrada-visual.js';
 
 test('1.71.0 · o palco tem a arte à esquerda e o formulário à direita', () => {
@@ -100,9 +100,29 @@ test('1.72.1 · aceita o código puro e o formato com fornecedor; um desconhecid
   assert.doesNotMatch(x.texto, /Como resolver: undefined/);
 });
 
-test('1.72.1 · uma frase já escrita (o state inválido) passa intacta — não é traduzida', () => {
-  const nossa = 'este regresso não é deste browser (state inválido) — começa a entrada outra vez';
+test('1.72.1 · uma frase já escrita passa intacta — não é traduzida', () => {
+  const nossa = 'a volta expirou — tenta entrar outra vez';
   assert.equal(textoDaRecusa(nossa), nossa);
   assert.equal(textoDaRecusa(''), '');
   assert.equal(textoDaRecusa('google:redirect_uri_mismatch').includes('endereço de retorno'), true);
+});
+
+/* 1.73.0 · a página de entrada mostra UMA frase, não o relatório inteiro. A
+   precisão não se perde: fica no «Estado da instalação», que é outro sítio. */
+test('1.73.0 · «avisoDaRecusa» devolve uma frase para a página — e uma só', () => {
+  assert.equal(avisoDaRecusa(''), '', 'sem recusa não há aviso nenhum');
+  const org = avisoDaRecusa('google:org_internal');
+  assert.match(org, /só aceita contas da organização/);
+  assert.match(org, /Externo/, 'diz o que mudar');
+  assert.ok(org.split('. ').length <= 3, 'é uma frase, não um manual');
+  assert.doesNotMatch(org, /Como resolver:/, 'o relatório completo não vem para a face da página');
+
+  /* uma frase escrita por nós passa intacta */
+  const nossa = 'a volta expirou — tenta entrar outra vez';
+  assert.equal(avisoDaRecusa(nossa), nossa);
+
+  /* um código que não conheço não desaparece: aparece entre parênteses */
+  const novo = avisoDaRecusa('github:coisa_nova');
+  assert.match(novo, /coisa_nova/);
+  assert.match(novo, /tenta outra vez/i);
 });

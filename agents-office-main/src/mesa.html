@@ -328,41 +328,54 @@
   }
 
   /* =========================================================================
-     1.71.0 · A ENTRADA A DOIS TEMPOS (6 nov 2026)
-     O desenho pedido (anéis, portas a girar, cascata) feito com o CSS que este
-     produto já tem. Nada de bibliotecas de animação: `@keyframes` e variáveis.
-     A regra que não se quebra: **a arte não come o trabalho** — é a metade
-     esquerda no ecrã grande e desaparece no telemóvel, onde o formulário manda.
+     1.73.0 · A ENTRADA (6 nov 2026, terceira passagem)
+
+     O dono disse-o sem rodeios: «o design da página de login está ridículo» — e
+     o que estava ridículo era a PÁGINA, não a arte: meia dúzia de parágrafos
+     técnicos por baixo de dois campos, com nomes de variáveis de ambiente
+     (`RESEND_API_KEY`, `SETUP_TOKEN`), o modo da instalação e um cartão com as
+     tabelas em falta. Nada disso é uma página de entrada; é o diagnóstico de uma
+     máquina. Isso mudou de sítio (fica atrás de «Estado da instalação», fechado)
+     e o que ficou é o que uma pessoa precisa de ver:
+
+       um título, uma linha, as duas contas com que se entra, dois campos, um
+       botão. E nada mais.
+
+     A arte (anéis + portas a girar) continua: é a metade esquerda, desaparece no
+     telemóvel, e não se põe entre a pessoa e o botão.
      ========================================================================= */
+  /* a entrada ocupa a janela toda: o `main` tem margem para as vistas de
+     trabalho, e aqui só roubava altura ao formulário */
+  main:has(> .palco) { padding: 0; }
   .palco {
-    display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
     min-height: 100dvh; background: #FBFBFD;
   }
   .palco-arte {
     position: relative; overflow: hidden; border-right: 1px solid var(--hair);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: var(--s4); padding: var(--s6) var(--s5);
+    gap: var(--s5); padding: var(--s7) var(--s6);
     background:
-      radial-gradient(58% 46% at 50% 42%, rgba(21,94,239,.10) 0%, rgba(21,94,239,0) 70%),
-      linear-gradient(180deg, #FAFBFF 0%, #FBFBFD 70%);
+      radial-gradient(52% 40% at 50% 44%, rgba(21,94,239,.085) 0%, rgba(21,94,239,0) 72%),
+      linear-gradient(180deg, #F8FAFF 0%, #FBFBFD 68%);
   }
   .palco-centro {
-    position: relative; width: min(560px, 92%); aspect-ratio: 1 / 1;
+    position: relative; width: min(520px, 94%); aspect-ratio: 1 / 1;
     display: grid; place-items: center;
   }
   .aneis {
     position: absolute; inset: 0; display: grid; place-items: center;
-    -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
-    mask-image: linear-gradient(to bottom, #000 30%, transparent 92%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 26%, transparent 90%);
+    mask-image: linear-gradient(to bottom, #000 26%, transparent 90%);
   }
   .anel {
     position: absolute; width: var(--px); height: var(--px); border-radius: 50%;
-    border: 1px solid rgba(21,94,239,.42);
-    animation: anelPulso 3.6s ease-in-out infinite;
+    border: 1px solid rgba(21,94,239,.30);
+    animation: anelPulso 4.2s ease-in-out infinite;
   }
   @keyframes anelPulso {
     0%, 100% { transform: scale(1); }
-    50% { transform: scale(.925); }
+    50% { transform: scale(.945); }
   }
   .orbitas { position: absolute; inset: 0; }
   .orbita {
@@ -375,66 +388,166 @@
     position: absolute; top: 0; left: 0;
     width: calc(var(--tam) * 1px); height: calc(var(--tam) * 1px);
     display: grid; place-items: center; border-radius: 50%;
-    background: #fff; box-shadow: 0 8px 22px rgba(17,19,24,.10), 0 0 0 1px var(--hair);
+    background: #fff; box-shadow: 0 6px 18px rgba(17,19,24,.09), 0 0 0 1px rgba(17,19,24,.05);
     transform: translate(-50%, -50%) translateY(calc(var(--raio) * -1px));
   }
   /* o ícone contra-gira para não andar de pernas para o ar */
   .porta > .ic {
-    width: 56%; height: 56%;
+    width: 54%; height: 54%;
     animation: orbitaGiro calc(var(--dur) * 1s) linear infinite;
     animation-delay: inherit; animation-direction: reverse;
   }
   .orbita.reversa .porta > .ic { animation-direction: normal; }
   @keyframes orbitaGiro { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  /* a marca é a mesma do resto da mesa: um anel azul com o miolo cheio */
+  .palco-marca .mark, .marca-mini .mark {
+    width: 22px; height: 22px; border-radius: 50%; flex: none;
+    border: 2.5px solid var(--blue); position: relative;
+  }
+  .palco-marca .mark::after, .marca-mini .mark::after {
+    content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--blue);
+  }
   .palco-marca {
     position: relative; z-index: 2; display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px; background: rgba(255,255,255,.86); border-radius: 999px;
-    box-shadow: 0 8px 26px rgba(17,19,24,.08), 0 0 0 1px var(--hair);
-    font-size: 17px; letter-spacing: .01em; backdrop-filter: blur(6px);
+    padding: 11px 18px; background: rgba(255,255,255,.9); border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(17,19,24,.09), 0 0 0 1px rgba(17,19,24,.05);
+    font-size: 17px; letter-spacing: .01em; backdrop-filter: blur(8px);
   }
   .palco-marca b { font-weight: 650; }
   .palco-sub {
-    margin: 0; max-width: 40ch; text-align: center; color: var(--muted);
-    font-size: 13.5px; line-height: 1.55;
+    margin: 0; max-width: 34ch; text-align: center; color: var(--muted);
+    font-size: 13px; line-height: 1.6;
   }
-  .palco-rodape { color: var(--muted); font-size: 12px; }
-  .palco-lado {
-    display: grid; place-items: center; padding: var(--s6) var(--s5);
-    background: #FBFBFD;
+  .palco-rodape { color: #9AA1AC; font-size: 11.5px; letter-spacing: .01em; }
+  .palco-lado { display: grid; place-items: center; padding: var(--s6) var(--s5); }
+  .palco-cartao { width: 100%; max-width: 392px; }
+  /* a arte desaparece no telemóvel: a marca fica, discreta, acima do título */
+  .marca-mini { display: none; align-items: center; gap: 8px; margin-bottom: 22px; font-size: 15px; letter-spacing: .01em; }
+  .marca-mini b { font-weight: 650; }
+  @media (max-width: 900px) { .marca-mini { display: flex; } }
+
+  /* ---------- a ficha: título, caminhos, campos, botão. Nada mais. ---------- */
+  .enta { display: flex; flex-direction: column; gap: 0; }
+  .enta-h1 {
+    margin: 0 0 6px; font-size: 30px; line-height: 1.14; font-weight: 660;
+    letter-spacing: -.022em; color: var(--ink);
   }
-  .palco-cartao { width: 100%; max-width: 430px; }
-  .palco-cartao h1 { font-size: 30px; letter-spacing: -.01em; margin: 0 0 var(--s2); }
-  .palco-cartao .marca-mini {
-    display: flex; align-items: center; gap: 9px; margin-bottom: var(--s5);
-    font-size: 15px; font-weight: 600; color: var(--muted);
+  .enta-sub { margin: 0 0 26px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+  .enta-aviso {
+    display: flex; gap: 10px; align-items: flex-start;
+    margin: 0 0 20px; padding: 11px 13px; border-radius: 11px;
+    background: #FFF6F5; color: #8A2B23; font-size: 13px; line-height: 1.5;
+    border: 1px solid #F6DCD8;
   }
-  /* a cascata (o `BoxReveal`): cada bloco entra 18 px abaixo e assenta */
-  .rev { animation: revEntra .58s cubic-bezier(.2,.7,.2,1) both; }
+  .enta-aviso .ic { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+  /* o que é boa notícia não se veste de erro */
+  .enta-aviso[data-tom="ok"] { background: #F1FAF5; color: #1B6B4C; border-color: #D5EDE0; }
+  /* o detalhe preciso do clique (nome da variável, sítio, endereço de retorno):
+     vive dentro do «Estado da instalação», com quebras onde fazem falta */
+  .enta-det-preciso { color: #4A515C; line-height: 1.55; overflow-wrap: anywhere; }
+  .enta-prov { display: grid; gap: 9px; }
+  .enta-prov-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; height: 46px; padding: 0 14px;
+    background: #fff; color: var(--ink); font-size: 14.5px; font-weight: 550;
+    border: 1px solid #E2E5EB; border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(17,19,24,.04);
+    transition: background-color .15s var(--ease), border-color .15s var(--ease), transform .15s var(--ease);
+  }
+  .enta-prov-btn:hover { background: #F7F8FB; border-color: #D6DAE2; }
+  .enta-prov-btn:active { transform: translateY(1px); }
+  /* um caminho sem chave NÃO fica cinzento: fica tracejado e diz o que falta */
+  .enta-prov-btn[data-falta="1"] { border-style: dashed; color: var(--muted); }
+  .enta-prov-btn .ic { width: 18px; height: 18px; flex: none; }
+  .enta-ou {
+    display: flex; align-items: center; gap: 12px;
+    color: #9AA1AC; font-size: 12px; margin: 18px 0;
+  }
+  .enta-ou::before, .enta-ou::after { content: ''; height: 1px; flex: 1; background: #E7E9EE; }
+  .enta-campos { display: grid; gap: 13px; }
+  .enta-campo { display: grid; gap: 6px; }
+  .enta-lb { font-size: 12.5px; font-weight: 560; color: #4A515C; letter-spacing: .005em; }
+  .enta-in-cx { position: relative; }
+  /* o olho ocupa 44 px à direita: o texto não passa por baixo dele */
+  .enta-in-cx:has(.enta-olho) .enta-in { padding-right: 46px; }
+  .enta-in {
+    width: 100%; box-sizing: border-box; height: 46px; padding: 0 13px;
+    border: 1px solid #E2E5EB; border-radius: 12px; background-color: #fff;
+    font-size: 14.5px; color: var(--ink); -webkit-appearance: none;
+    transition: border-color .15s var(--ease), box-shadow .15s var(--ease), background-image .2s linear;
+    /* o halo segue o rato: `--mx`/`--my` são escritos em `mesa.js` */
+    background-image: radial-gradient(150px circle at var(--mx, -300px) var(--my, -300px),
+      rgba(21,94,239,.10), rgba(21,94,239,0) 72%);
+    background-repeat: no-repeat;
+  }
+  .enta-in::placeholder { color: #A3A9B4; }
+  .enta-in:hover { border-color: #D6DAE2; }
+  .enta-in:focus {
+    outline: none; border-color: var(--blue);
+    box-shadow: 0 0 0 3.5px rgba(21,94,239,.13);
+  }
+  .enta-in:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px #fff inset; }
+  .enta-olho {
+    position: absolute; top: 0; right: 0; height: 46px; width: 44px;
+    display: grid; place-items: center; background: none; border: 0;
+    color: #8A919C; border-radius: 0 12px 12px 0;
+  }
+  .enta-olho:hover { color: var(--ink); }
+  .enta-olho .ic { width: 18px; height: 18px; }
+  .enta-btn {
+    width: 100%; height: 48px; margin-top: 18px;
+    background: var(--ink); color: #fff; font-size: 15px; font-weight: 600;
+    border: 0; border-radius: 12px; letter-spacing: -.005em;
+    box-shadow: 0 1px 2px rgba(17,19,24,.18);
+    transition: background-color .15s var(--ease), transform .15s var(--ease);
+  }
+  .enta-btn:hover { background: #000; }
+  .enta-btn:active { transform: translateY(1px); }
+  .enta-btn[aria-disabled="true"] { opacity: .55; }
+  .enta-links {
+    display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center;
+    margin-top: 18px;
+  }
+  .enta-link {
+    background: none; border: 0; padding: 2px; font-size: 13px; color: #5A6270;
+    text-decoration: none; border-radius: 6px;
+  }
+  .enta-link:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+  .enta-pe {
+    margin: 26px 0 0; padding-top: 18px; border-top: 1px solid #EDEFF3;
+    color: #9AA1AC; font-size: 12px; line-height: 1.5; text-align: center;
+  }
+  .enta-pe b { color: #6B7280; font-weight: 560; }
+  .enta-det { margin-top: 14px; }
+  .enta-det > summary {
+    cursor: pointer; list-style: none; text-align: center;
+    font-size: 12px; color: #A4AAB4; padding: 6px 0; border-radius: 8px;
+  }
+  .enta-det > summary::-webkit-details-marker { display: none; }
+  .enta-det > summary:hover { color: #6B7280; }
+  .enta-det[open] > summary { color: #6B7280; }
+  .enta-det-corpo {
+    margin-top: 10px; padding: 14px; border: 1px solid #EDEFF3; border-radius: 12px;
+    background: #FCFCFE; font-size: 12.5px; color: var(--muted);
+  }
+  .enta-det-corpo .card { box-shadow: none; border: 0; padding: 0; background: none; }
+  .enta-det-corpo p { margin: 0 0 8px; }
+  .enta-codigo {
+    font: 600 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .42em; text-align: center; padding: 0 8px 0 14px; text-indent: .42em;
+  }
+  /* a cascata (o `BoxReveal`): cada bloco entra 14 px abaixo e assenta */
+  .rev { animation: revEntra .5s cubic-bezier(.22,.7,.2,1) both; }
   @keyframes revEntra {
-    from { opacity: 0; transform: translateY(18px); }
+    from { opacity: 0; transform: translateY(14px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  /* o halo do rato nos campos: `--mx`/`--my` são escritos em `mesa.js` */
-  .palco-cartao .in {
-    background-image: radial-gradient(150px circle at var(--mx, -300px) var(--my, -300px),
-      rgba(21,94,239,.13), rgba(21,94,239,0) 72%);
-    background-repeat: no-repeat;
-    transition: border-color .16s var(--ease), box-shadow .16s var(--ease), background-image .2s linear;
-  }
-  .palco-cartao .btn.primary { position: relative; overflow: hidden; }
-  .palco-cartao .btn.primary::after {
-    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, #7FD4FF, transparent);
-    opacity: 0; transition: opacity .45s var(--ease);
-  }
-  .palco-cartao .btn.primary:hover::after { opacity: 1; }
-  .palco-cartao .entrada-fornecedor { position: relative; overflow: hidden; }
-  .palco-cartao .in::placeholder { color: #98A0AC; }
   @media (max-width: 900px) {
     .palco { grid-template-columns: 1fr; }
     .palco-arte { display: none; }
-    .palco-lado { padding: var(--s5) var(--s4); align-items: start; padding-top: 8vh; }
-    .palco-cartao h1 { font-size: 26px; }
+    .palco-lado { padding: 9vh var(--s4) var(--s6); align-items: start; }
+    .palco-cartao { max-width: 440px; }
+    .enta-h1 { font-size: 27px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .anel, .orbita, .porta > .ic, .rev { animation: none !important; }

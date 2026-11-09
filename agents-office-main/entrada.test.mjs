@@ -373,7 +373,11 @@ test('1.69.0 · a volta sem o cookie deste browser não abre sessão nenhuma', a
   const r = await processarOAuth({ repo: createMemRepo(), env, query: 'fornecedor=github&code=abc&state=xyz', cookies: {} });
   assert.equal(r.status, 302);
   assert.match(r.location, /^\/app\?erroEntrada=/);
-  assert.match(descodificar(r.location), /state inválido/);
+  /* 1.73.0 · a frase que a página mostra é curta: o ecrã de entrada não leva
+     «state inválido» nem vocabulário de OAuth (o dono leu-a e disse basta) */
+  const saida = descodificar(r.location);
+  assert.match(saida, /a volta expirou/);
+  assert.doesNotMatch(saida, /state/i);
 });
 
 test('1.69.0 · a volta com o state certo abre a sessão do dono e volta à app', async () => {

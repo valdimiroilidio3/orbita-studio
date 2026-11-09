@@ -1,3 +1,77 @@
+## 1.73.0 — 6 nov 2026 · a página de entrada, sem o diagnóstico à vista
+
+O dono escreveu o que faltava dizer: «o design da página de login está ridículo
+assim». E o que estava ridículo não era a arte da 1.71.0 — era a **página**:
+por baixo de dois campos havia meia dúzia de parágrafos técnicos. O primeiro
+deles, o que ele viu, era uma frase de OAuth:
+
+> este regresso não é deste browser (state inválido) — começa a entrada outra vez
+
+E, à volta do formulário: o parágrafo de «um dono só / `RESEND_API_KEY` /
+`ORBITA_EMAIL_FROM` / `SETUP_TOKEN`», a linha «modo actual: …», o botão
+«Continuar sem contas (modo local)» e o cartão «O que falta nesta instalação»
+com as tabelas em falta. Isso não é uma página de entrada: é o diagnóstico de
+uma máquina — e a máquina não é quem está a entrar.
+
+### O que mudou (na página)
+- **Um título, uma linha, os caminhos, os campos, um botão.** A ficha abre com
+  «Entrar como dono» (ou «Entrar», ou «Criar conta») e uma frase que diz o que
+  se está a fazer ali. Nada mais aparece à primeira vista.
+- **Campos com rótulo em cima** (o `placeholder` sozinho desaparece mal se
+  escreve) e **um olho para ver a palavra-passe** — sem a copiar para sítio
+  nenhum; o mesmo botão esconde outra vez e diz em que estado está
+  (`aria-pressed`).
+- **O botão escuro, sozinho**: `Criar a conta e entrar` · `Entrar` · `Guardar a
+  palavra-passe nova`. É o único elemento com esse peso na página.
+- **Os caminhos sem chave continuam a não ser cinzentos** — ficam tracejados e,
+  ao clique, dizem o que falta. A frase da página é curta; o nome da variável, o
+  sítio onde se cria a aplicação e o endereço de retorno ficam em «Estado da
+  instalação».
+- **«Estado da instalação», fechado**, no fim da ficha: é para lá que vai o
+  diagnóstico todo — o modo da instalação, a entrada sem contas nesta máquina e
+  o cartão do arranque. **Não se apagou nada**: mudou de sítio e passou a estar
+  à distância de um clique em vez de à frente de quem quer entrar. Quando um
+  clique precisa do detalhe (um fornecedor sem chaves, o correio por configurar),
+  é este painel que se abre — com a linha exacta do que falta.
+- **Uma frase por recusa.** `avisoDaRecusa()` (novo, em `src/entrada-visual.js`)
+  usa o campo `curto` das recusas conhecidas: *«O Google recusou: esta app só
+  aceita contas da organização. Muda o tipo de utilizador para «Externo» em
+  Google Auth Platform.»* Um código desconhecido aparece entre parênteses —
+  esconder o que o fornecedor disse não é honestidade, é sorte.
+- **A frase do `state` encurtou** em `api/_oauth.mjs`: passou a *«a volta
+  expirou — tenta entrar outra vez»*. O que era preciso dizer continua dito; o
+  que era vocabulário nosso saiu.
+- **Avisos:** o que é boa notícia («o código foi para …») deixou de aparecer
+  numa caixa vermelha de erro.
+- No telemóvel a arte sai da frente (já saía); fica a marca discreta acima do
+  título, e a ficha sobe para o topo do ecrã.
+
+### Uma correcção que apareceu ao arrumar isto
+`/auth/codigo` responde **503** quando não há `RESEND_API_KEY`. A mesa lia
+qualquer 503 como «a base não responde» e caía para o armazém do browser — o
+ecrã dizia *«o modo local ainda não faz «/auth/codigo»»*, o que não era verdade:
+o servidor estava vivo e tinha explicado tudo. Agora um 503 **com a lista do que
+falta** (`falta: [...]`) é uma recusa a mostrar, com o corpo à mão
+(`recusaConfigurada()` em `src/respostas.js`); um 503 sem lista continua a ser a
+base em baixo.
+
+### O que isto NÃO resolve
+O `403: org_internal` continua a depender da consola da Google (tipo de
+utilizador «Externo» + utilizador de teste) — nenhuma API nossa o muda. O correio
+continua sem `RESEND_API_KEY`, por isso o caminho do código por email diz que não
+sai daqui e aponta a palavra-passe. E o design foi verificado por estrutura,
+contraste e medidas no HTML publicado, não num browser a sério: **a validação
+no telemóvel é do dono**.
+
+### Provas
+- suite: **1345/1345** (`node --test *.test.mjs`), incluindo
+  `entrada-ui.test.mjs` com «a entrada não é um diagnóstico» (o texto técnico só
+  existe dentro do `.enta-det`, fechado) e o olho da palavra-passe;
+- `check.mjs`: **96/97** (o único falhanço é o smoke de browser, que precisa de um
+  Chromium que este ambiente não tem);
+- `entrada.test.mjs` passou a exigir que a frase do `state` **não** diga
+  «state»: o que sai do servidor é o que a página mostra.
+
 ## 1.72.1 — 6 nov 2026 · «Acesso bloqueado: só utilizadores da organização»
 
 O dono carregou em «Continuar com Google» e recebeu, da Google:

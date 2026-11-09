@@ -249,6 +249,22 @@ test('F3: um 404 de rota cai no armazém do browser; um 404 de recurso mostra o 
   assert.equal(e.mensagem, 'geração não encontrada');
 });
 
+/* 1.73.0 · um 503 que diz o que falta não é a base em baixo. `/auth/codigo`
+   responde 503 sem `RESEND_API_KEY`; tratá-lo como avaria fazia a entrada dizer
+   «o modo local ainda não faz «/auth/codigo»» — mentira: o servidor respondeu. */
+test('1.73.0 · um 503 com a lista do que falta é uma recusa a mostrar, não «base em baixo»', () => {
+  const corpo = { error: 'não há correio configurado: o código não pode sair daqui', falta: ['RESEND_API_KEY'], como: 'resend.com → API Keys' };
+  const d = decidirResposta({ httpOk: true, httpStatus: 200, envelope: { status: 503, corpo } });
+  assert.equal(d.tipo, 'erro', 'não cai para o armazém do browser');
+  assert.equal(d.estado, 503);
+  assert.deepEqual(d.corpo.falta, ['RESEND_API_KEY'], 'a lista chega à mesa, para o clique saber o que dizer');
+  assert.match(d.mensagem, /correio/);
+
+  /* sem lista, um 503 continua a ser a base que não responde */
+  const avaria = decidirResposta({ httpOk: true, httpStatus: 200, envelope: { status: 503, corpo: { error: 'a base não respondeu' } } });
+  assert.equal(avaria.tipo, 'base');
+});
+
 test('F3: o servidor marca o 404 de rota (e o de recurso não fica marcado)', async () => {
   const repo = createMemRepo();
   await assert.rejects(
