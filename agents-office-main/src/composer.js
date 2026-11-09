@@ -352,6 +352,10 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     pararEspera();
     if (!era) return;
     try { era.controlador?.abort?.(); } catch { /* já não havia pedido */ }
+    /* um prazo estourado não deita fora o que a pessoa escreveu: se a caixa ainda
+       estiver vazia, o texto volta para ela (e pode ser enviado outra vez). Um
+       «Parar» a pedido não devolve nada: quem parou sabe o que fez. */
+    if (motivo === 'prazo' && !value() && era.texto) { el.input.value = era.texto; syncSend(); }
     toast(MOTIVO[motivo] || 'Envio cancelado.');
   }
 
@@ -796,14 +800,20 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
   /* ---------------------------------------------------------------- enviar */
   function value() { return el.input.value.trim(); }
   function syncSend() {
-    /* 1.79.0 · durante a espera a seta passa a ser um travão (Parar), nunca um
-       botão morto: o cartão tem de dizer o que está a acontecer. */
+    /* 1.79.1 · a seta continua a ser uma SETA: apagada com o campo vazio, acesa
+       quando há texto. A 1.79.0 transformou-a num travão durante a espera e isso
+       tornou-a ambígua (uma seta que às vezes pára). O Parar tem o seu próprio
+       sítio — a linha da espera (`#mcWait [data-parar]`) —, com o nome escrito.
+       O campo NUNCA é desactivado: é isso que faz o cartão continuar a aceitar
+       texto depois da primeira resposta. */
     const tem = !!value();
-    el.send.disabled = !tem && !state.busy;
+    el.send.disabled = !tem;
     el.send.setAttribute('aria-disabled', String(el.send.disabled));
     el.send.classList.toggle('busy', state.busy);
-    el.send.setAttribute('aria-label', state.busy ? 'parar a espera pela resposta' : 'enviar mensagem');
-    el.send.title = state.busy ? 'parar a espera (a resposta anterior deixa de contar)' : 'enviar (Enter)';
+    el.send.setAttribute('aria-label', 'enviar mensagem');
+    el.send.title = state.busy
+      ? 'há uma resposta em curso — escreve já a próxima, ou carrega em Parar na linha da espera'
+      : 'enviar (Enter)';
     el.card.classList.toggle('hasText', tem);
     /* o campo não pode colapsar quando está escondido (o separador «Ao vivo», o
        painel recolhido): aí o `scrollHeight` é 0 e a altura antiga ficava a 0 px —
@@ -837,8 +847,13 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
     const n = ++envioN;
     const controlador = typeof AbortController === 'function' ? new AbortController() : null;
     envio = {
-      desde: Date.now(), controlador, prazo: 0, aviso: 0, lento: 0,
+      desde: Date.now(), controlador, prazo: 0, aviso: 0, lento: 0, texto: text,
     };
+    /* 1.79.1 · o que foi enviado sai JÁ da caixa (como em qualquer conversa). Antes
+       ficava lá até a resposta chegar — e quando ela chegava, o `clear()` apagava
+       o que a pessoa entretanto tivesse começado a escrever. Se o envio falhar, o
+       texto volta (ver o `catch`), para não se perder nada. */
+    clear();
     state.busy = true; syncSend(); pintarEspera();
     envio.lento = setInterval(pintarEspera, 1000);
     if (envio.lento.unref) envio.lento.unref();
@@ -848,7 +863,12 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       if (n === envioN) clear();
     } catch (e) {
       /* um pedido abortado por nós não é uma avaria: já se disse «Parado» */
-      if (!(e && (e.name === 'AbortError' || e.abortado)) && n === envioN) toast(e?.message || 'Não foi possível enviar.', 'err');
+      if (!(e && (e.name === 'AbortError' || e.abortado)) && n === envioN) {
+        /* o texto não se perde: volta à caixa, mas só se ela ainda estiver vazia
+           (nunca por cima do que a pessoa já começou a escrever a seguir) */
+        if (!value()) { el.input.value = text; syncSend(); }
+        toast(e?.message || 'Não foi possível enviar.', 'err');
+      }
     } finally {
       if (n === envioN) {
         pararEspera();
@@ -856,7 +876,7 @@ export function initComposer({ onSubmit, onHealth = null, storage = (typeof loca
       }
     }
   }
-  el.send.addEventListener('click', () => { if (state.busy) soltar('parar'); else submit(); });
+  el.send.addEventListener('click', () => submit());
   /* o botão Parar que vive na linha da espera — um só ouvinte, no cartão */
   el.card?.addEventListener('click', (e) => {
     if (e.target && e.target.closest && e.target.closest('[data-parar]')) { e.preventDefault(); soltar('parar'); }

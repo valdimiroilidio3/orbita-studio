@@ -168,10 +168,13 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
     if (SEM_SERVIDOR) {
       const none = document.createElement('span');
       none.className = 'tc-none';
-      /* 1.79.0 · a publicação não lê a tua máquina — mas isso não é «sem servidor»:
-         os conectores MCP vivem no `claude mcp list` do posto, e é isso que se diz. */
-      none.textContent = 'os conectores vêm do `claude mcp list` desta máquina — a publicação não lê o teu posto';
+      /* 1.79.2 · a publicação deixou de falar da máquina do dono: pergunta ao
+         SERVIDOR que conectores ele tem (`/api/health` → `conectores`, público:
+         nomes de serviços, nunca chaves) e mostra isso. Se nada estiver ligado,
+         diz para onde ir ligá-los — em Configurações, não num terminal. */
+      none.textContent = 'a perguntar ao servidor que conectores tem…';
       topconn.appendChild(none);
+      perguntarConectores(topconn);
     } else if (LIVE && !uniqKeys.length) { // honest empty state — nothing is wired until the user connects something
       const none = document.createElement('span');
       none.className = 'tc-none';
@@ -267,6 +270,31 @@ export function initMcp({ scene, hud, LAYOUT, DEPTS, FR, R, connectors = null, s
     });
     shared[key] = { ink, drop, jdot, wires: wiresOf, offset: 0, jy: 92 + si * 10 };
   });
+
+  /* 1.79.2 · os conectores do SERVIDOR, lidos na prova pública. Uma página
+     publicada não tem `claude mcp list` nenhum — tem o ambiente da Vercel, e é
+     isso que aqui se mostra: quais serviços estão ligados (por nome) e quais
+     faltam. Sem sessão aberta, sem inventar, sem falar da máquina de ninguém. */
+  async function perguntarConectores(caixa) {
+    const alvo = caixa && caixa.querySelector('.tc-none');
+    if (!alvo || typeof fetch !== 'function') return;
+    try {
+      const r = await fetch('/api/health', { headers: { accept: 'application/json' } });
+      const h = await r.json().catch(() => ({}));
+      const c = h && h.conectores;
+      if (!c || !Array.isArray(c.ligados)) throw new Error('sem retrato dos conectores');
+      if (!c.ligados.length) {
+        alvo.textContent = `nenhum conector ligado no servidor (${c.total} disponíveis) — liga-os em Configurações`;
+        alvo.title = 'as chaves vivem no ambiente da Vercel; ligam-se na mesa, em Configurações';
+        return;
+      }
+      alvo.textContent = `${c.ligados.length} ligado(s) no servidor · ${c.ligados.slice(0, 3).map((x) => x.nome).join(', ')}`;
+      alvo.title = `${c.ligados.map((x) => x.nome).join(' · ')} — ligados no ambiente do servidor; os restantes ligam-se em Configurações`;
+      caixa.setAttribute('data-conectores', String(c.ligados.length));
+    } catch {
+      alvo.textContent = 'os conectores vivem no ambiente do servidor — vê-os na mesa, em Configurações';
+    }
+  }
 
   /* 1.79.0 · o estado real dos motores, lido no servidor da Órbita. Nunca inventa:
      se o servidor não responder (ou pedir sessão), a barra diz isso e a conversa

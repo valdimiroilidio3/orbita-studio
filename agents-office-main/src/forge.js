@@ -139,10 +139,20 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
   /* 29 out 2026: o cabeçalho dizia «a ligar…» para sempre na vista publicada. Sem servidor não há
      nada a ligar — e um «a ligar…» eterno é exactamente o tipo de mentira que este escritório não
      faz. Passa a dizer o que é. */
+  /* 1.79.2 · a oficina forja FICHEIROS: escreve ferramentas em `data/forge` e
+     corre-as no processo do Órbita. Isso é trabalho de máquina, e a publicação
+     (funções sem disco) não o faz — mas a frase antiga mandava o dono arrancar um
+     terminal, o que não é resposta. O que se diz agora é o que a oficina é e onde
+     está o trabalho que a publicação FAZ (as tarefas e a IA da Órbita). */
   function semServidor() {
-    if (statsEl) statsEl.textContent = 'sem servidor — abre com `npm start` para ver a oficina a trabalhar';
+    if (statsEl) statsEl.textContent = 'oficina local: forja ferramentas em ficheiros desta máquina — na publicação, o trabalho corre nas tarefas e na IA da Órbita';
     el.classList.add('tm-off');
+    if (!semServidorAvisado) {
+      semServidorAvisado = true;
+      info('esta é a publicação: a oficina não tem disco aqui. O trabalho a sério vive nas tarefas (/app) e na conversa dos agentes.');
+    }
   }
+  let semServidorAvisado = false;
   function refreshStats() {
     // sem servidor (ou a abrir o ficheiro com duplo clique) não há API: o terminal fica quieto
     if (typeof fetch !== 'function') { semServidor(); return Promise.resolve(); }
@@ -153,7 +163,7 @@ export function createForgeTerminal({ rooms = [], onOpen = null } = {}) {
   function info(text) { addLine({ ts: Date.now(), phase: 'info', text }); }
 
   async function api(path, payload) {
-    if (typeof fetch !== 'function') throw new Error('sem servidor: este terminal precisa do `npm start`');
+    if (typeof fetch !== 'function') throw new Error('a oficina precisa de rede e de disco: aqui não há nenhum dos dois');
     const r = await fetch(path, {
       method: payload ? 'POST' : 'GET',
       headers: payload ? { 'content-type': 'application/json' } : {},

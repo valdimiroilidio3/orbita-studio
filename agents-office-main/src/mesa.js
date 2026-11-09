@@ -3348,7 +3348,7 @@ function paint() {
        e nesse caso diz-se isso, não se manda ninguém instalar nada. */
     main().innerHTML = `<div class="wrap"><div class="card empty"><h3>Não consegui abrir o armazém deste browser</h3>
         <p>${esc(S.error)}</p>
-        <p class="hint">Se estás em navegação privada, o browser apaga os dados ao fechar a janela e pode bloquear o armazenamento. Abre numa janela normal, ou corre o Órbita na tua máquina com <code>npm start</code>.</p>
+        <p class="hint">Se estás em navegação privada, o browser apaga os dados ao fechar a janela e pode bloquear o armazenamento. Abre numa janela normal — o servidor do Órbita é o mesmo, a base de dados não muda.</p>
         <div class="acts" style="justify-content:center"><button class="btn primary" data-act="reload" style="max-width:220px">Tentar outra vez</button></div></div></div>`;
     return;
   }

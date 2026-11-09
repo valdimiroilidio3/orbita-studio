@@ -291,11 +291,14 @@ export function createConfig({
 
   function apisSection() {
     if (semServidor) {
+      /* 1.79.2 · «não há servidor aqui» era falso: há — o da Órbita, na Vercel,
+         com 22 serviços e as chaves deles no ambiente. O que não há é um `.env`
+         nesta página. Diz-se isso, e diz-se onde se muda. */
       return `<div class="cfg-sec">
-        <div class="cfg-h"><b>APIs</b><span class="cfg-note">as chaves vivem na máquina onde o Órbita corre</span></div>
-        <p class="cfg-honest">Esta é a vista publicada: não há servidor aqui, por isso não há `.env` para escrever nem
-        sondas para correr. Na tua máquina — <code>npm start</code> — este mesmo painel lista os serviços, aceita as
-        chaves e sonda cada um a sério. Nada é guardado no browser.</p>
+        <div class="cfg-h"><b>APIs</b><span class="cfg-note">as chaves vivem no ambiente do servidor</span></div>
+        <p class="cfg-honest">Os serviços e as chaves desta instalação vivem no ambiente do servidor (na Vercel:
+        Settings → Environment Variables). Esta página não tem um <code>.env</code> para escrever — e não guarda
+        nada no browser.</p>
       </div>`;
     }
     if (!apis) {
@@ -312,9 +315,9 @@ export function createConfig({
     const lista = (k) => apis.list.filter((p) => (k === 'outros' ? !grupos.includes(p.kind) : p.kind === k));
     return `<div class="cfg-sec">
       <div class="cfg-h"><b>APIs</b><span class="cfg-note">${prontas} com sonda a responder · ${s.configured || 0} com chave · ${s.total || apis.list.length} no catálogo</span></div>
-      <p class="cfg-honest">Aqui vê-se o que existe no ambiente do servidor e o que falta a cada serviço. Escrever
-      chaves pela interface só funciona na tua máquina (<code>npm start</code>); em produção as variáveis são
-      geridas na Vercel (Settings → Environment Variables) e esta aba diz isso em vez de fingir que guardou.</p>
+      <p class="cfg-honest">Aqui vê-se o que existe no ambiente do servidor e o que falta a cada serviço. As variáveis
+      gerem-se na Vercel (Settings → Environment Variables); esta aba mostra o que está lá e testa cada uma a sério,
+      em vez de fingir que guardou.</p>
       ${porTipo.map((k) => `<div class="cfg-group"><h4>${esc(KIND_LABEL[k] || 'Outros')}</h4>${lista(k).map(apiRow).join('')}</div>`).join('')}
     </div>`;
   }

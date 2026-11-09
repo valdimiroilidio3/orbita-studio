@@ -408,8 +408,21 @@ const abrirBrowser = async (opts = {}) => {
 if (!chromium) bad('smoke: playwright', 'not installed — npm i -D playwright-core (uses your Chrome)');
 else {
   let browser = null;
+  /* 1.79.2 · uma máquina sem Chrome (esta VM, por exemplo) não é uma avaria da
+     aplicação: o passo é SALTADO e di-lo, em vez de pintar o gate de vermelho com
+     «Chromium distribution 'chrome' is not found». No CI há Chrome e o passo corre
+     a sério. Se o browser existir e a abertura falhar por outra razão, continua a
+     ser um erro — não se esconde nada atrás de um «saltado». */
+  const SEM_BROWSER = /distributions? .* not found|Executable doesn't exist|is not found at|no executable|ENOENT.*chrome/i;
+  try { browser = await abrirBrowser(); }
+  catch (e) {
+    if (SEM_BROWSER.test(String(e.message || e))) {
+      saltados.push('smoke: browser');
+      console.log(`• smoke: browser  — saltado: não há Chrome nesta máquina (indica CHROME_PATH); o CI corre-o a sério`);
+    } else throw e;
+  }
   try {
-    browser = await abrirBrowser();
+    if (!browser) throw Object.assign(new Error('__saltado__'), { saltado: true });
     const page = await browser.newPage({ viewport: { width: 1512, height: 900 } });
     const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 120)); });
     await page.goto('file://' + path.join(ROOT, 'dist', 'command-centre-v2.html') + '?s=check'); await page.waitForTimeout(3000);
@@ -454,7 +467,9 @@ else {
       const reais = errors.filter((t) => !ruidoEstatico(t));
       if (reais.length) throw new Error(reais[0]);
     });
-  } catch (e) { bad('smoke: browser', e.message); }
+  } catch (e) {
+    if (!e || !e.saltado) bad('smoke: browser', e.message);
+  }
   finally { if (browser) await browser.close(); }
 }
 

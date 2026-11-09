@@ -1,3 +1,78 @@
+## 1.79.2 — 9 nov 2026 · o gate volta a verde, os conectores deixam de ser da tua máquina
+
+Quatro coisas que estavam listadas como «problemas», todas resolvidas — e a causa
+do CI vermelho, que afinal não era do código da aplicação.
+
+### 1 · o gate do GitHub: o `jsdom` 30 exigia Node 22 e o CI corria Node 20
+
+O `package.json` prometia `engines: >= 20` e o workflow corria Node 20; o `jsdom`
+tinha subido para a 30, cujo `engines` é `^22.22.2 || ^24.15.0 || >=26`. No CI, as
+suites que abrem o `shell.html` num DOM — o compositor, as apps, as integrações —
+rebentavam ao importar o `jsdom`. Em casa corria tudo, porque aqui há Node 22.
+
+- `jsdom` fixado em `~29.1.1` (aceita 20.19, 22.13 e 24+), `engines.node` passou a
+  `>=20.19` (era `>=20`, que incluía versões onde o jsdom não entra).
+- o workflow passa a testar **as duas versões** (`matrix.node: [20, 22]`), para uma
+  delas não se partir em silêncio outra vez.
+- **`versoes.test.mjs`** (novo) prende isto: compara a versão do CI com
+  `engines.node` e com o `engines` de **cada dependência directa instalada**. Foi
+  este teste que teria dito «jsdom@30 exige ^22.22.2» em vez de se descobrir pela
+  suite vermelha.
+
+### 2 · «não há browser nesta VM»
+
+`node check.mjs` falhava em `smoke: browser` com
+`Chromium distribution 'chrome' is not found` — uma máquina sem Chrome não é uma
+avaria da aplicação. O passo passa a ser **saltado com a razão escrita** (e com
+`CHROME_PATH` para apontar um browser); se o browser existir e a abertura falhar
+por outra razão, continua a ser erro. E a `cena` voltou a passar: a seta do
+compositor, depois de esvaziar o campo, volta a apagar-se (ver §3).
+
+Local: **96/96 checks, 1 saltado (smoke: browser)**. No CI há Chrome e o passo
+corre a sério.
+
+### 3 · o compositor, visto ao pormenor
+
+- A seta voltou a ser uma **seta**: apagada com o campo vazio. Durante a espera
+  deixou de se transformar num travão disfarçado — o **Parar** vive na linha da
+  espera, com o nome escrito.
+- O que se envia sai **já** da caixa; se o envio falhar (ou o prazo estourar), o
+  texto **volta** à caixa, mas só se ela ainda estiver vazia — nunca por cima do
+  que a pessoa começou a escrever a seguir.
+
+### 4 · os conectores e a oficina deixaram de ler a tua máquina
+
+- **`api/_servicos.mjs`** (novo): o catálogo dos 22 serviços saiu da `_rotas.mjs`
+  (que o re-exporta) para poder ser lido pelo `/api/health`, que é **público**.
+- `/api/health` publica agora `conectores`: total, **ligados por nome** e o que
+  falta a cada um. Nomes de variáveis, nunca valores. (O `/platform/apis` exige
+  sessão — por isso a página não o podia ler.)
+- **`src/mcp.js`**: a barra deixou de dizer «os conectores vêm do `claude mcp list`
+  desta máquina» (não é verdade para quem abre a publicação). Passa a dizer
+  «N ligado(s) no servidor · Supabase, Resend…», ou «nenhum conector ligado no
+  servidor — liga-os em Configurações».
+- **`src/forge.js`**: a oficina diz o que é — «forja ferramentas em ficheiros desta
+  máquina; na publicação, o trabalho corre nas tarefas e na IA da Órbita» — em vez
+  de mandar arrancar um terminal.
+- **`src/apps.js`, `src/config.js`, `src/mesa.js`**: as chaves vivem no **ambiente
+  do servidor** (Vercel → Settings → Environment Variables). Era isso que faltava
+  dizer; o `npm start` desapareceu do texto que o dono lê (e um teste novo prenda-o).
+
+### 5 · o correio deixou de estar «desligado»
+
+`RESEND_API_KEY` e `ORBITA_EMAIL_FROM` criadas na Vercel (production, preview,
+development). Com elas, o código de 6 dígitos da entrada passa a sair, e a fatura
+passa a poder ir por email. O domínio por omissão é `onboarding@resend.dev` (o do
+próprio Resend): serve para enviar **ao dono**; para outros destinatários é preciso
+verificar um domínio no Resend e trocar `ORBITA_EMAIL_FROM`.
+
+### Provas
+
+`node --test` — **1439/1439** (1429 na 1.79.1). Novos: `versoes` (3) e `conectores`
+(7). `node check.mjs` — **96/96**. Suite também corrida a `--test-concurrency=8`,
+três vezes, verde (era aqui que o `forge` caía por esperar 60 ms por uma escrita em
+disco).
+
 ## 1.79.1 — 9 nov 2026 · a barra do motor diz quantos motores há (prova pública)
 
 O `/ia/estado` pede sessão. Na página do escritório, sem sessão aberta, a barra do
