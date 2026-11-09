@@ -1,3 +1,56 @@
+## 1.75.0 — 6 nov 2026 · «Entrar como dono» funciona sem ir à Vercel copiar um segredo
+
+O dono apontou o ecrã: **«entrada sem colocação de token nesta página — Token de
+instalação»**, e pediu a conta dele **100% funcional agora**.
+
+Ele tinha razão nas duas coisas. Em produção o `SETUP_TOKEN` está definido, e
+`estadoDaPorta()` traduzia isso em `exigeToken: true` — daí o campo «Token de
+instalação» na página, e daí o 403 ao criar a conta sem ele. Só que a primeira
+conta **já só pode ser a do `ORBITA_DONO_EMAIL`** (1.69.0): quem chegar primeiro
+não fica com a instalação. O token não acrescentava protecção nenhuma — só
+obrigava o dono a ir buscar um segredo à Vercel antes de entrar em casa.
+
+### O que muda
+- **O campo «Token de instalação» saiu da página.** Não está escondido: não é
+  desenhado. Nada de `lgToken`, nada de `token` no corpo do pedido.
+- **O servidor deixou de o pedir numa instalação de um dono só**
+  (`estadoDaPorta()` em `api/_conta.mjs`): `exigeToken` passa a ser
+  `registoAberto(env) && SETUP_TOKEN`. Quem fecha a porta é o **email do dono**,
+  e essa verificação continua onde estava, no `/auth/primeiro-dono`.
+- **Com o registo ABERTO (`ORBITA_REGISTO=aberto`) o token continua a ser
+  exigido** — aí não há identidade a valer, e qualquer email podia criar a
+  primeira conta. A regra antiga não se perdeu: passou a valer só onde faz
+  sentido (há três testes para as três situações).
+- **As recusas ficam na página, não num toast de quatro segundos.** Criar a
+  conta passou a ter o seu próprio tratamento: palavra-passe curta, palavras-
+  passe diferentes, email que não é o do dono, base sem tabelas — tudo aparece
+  no aviso, onde se corrige, com o detalhe em «Estado da instalação».
+- `SETUP_TOKEN` continua a existir e a servir para o que é dele: autorizar
+  `/api/setup` a aplicar o SQL. A nota do arranque foi corrigida para não dizer
+  que a primeira conta o pede.
+
+### Como entrar agora
+1. **GitHub** — «Continuar com GitHub» com a conta `valdimiroilidio3` (a 1.74.0
+   ancora a entrada no `id` dessa conta, não no email).
+2. **Email + palavra-passe** — o email do dono, uma frase de 12+ caracteres,
+   repetida. Sem token, sem código, sem Vercel.
+
+### Provas
+- suite: **1357/1357**, com três testes de servidor novos (`entrada.test.mjs`:
+  com `SETUP_TOKEN` definido o dono cria a conta SEM token; sem token um estranho
+  continua de fora; com registo aberto o token continua a ser exigido) e quatro
+  de interface (`entrada-ui.test.mjs`: o campo não existe; «Criar a conta e
+  entrar» vai sem token; a recusa do servidor fica na página; palavras-passe
+  diferentes nem chegam a sair do browser).
+- `check.mjs`: **96/97** (o único falhanço é o smoke de browser, que precisa de
+  um Chromium que este ambiente não tem).
+
+### O que isto NÃO resolve
+O **`org_internal` do Google** continua a depender da consola (tipo de utilizador
+«Externo» + utilizador de teste) — o botão que abre a página certa está no aviso
+desde a 1.74.0. O **código por email** continua a precisar de `RESEND_API_KEY`.
+Nenhum dos dois impede a entrada: o GitHub e a palavra-passe chegam.
+
 ## 1.74.0 — 6 nov 2026 · a conta do dono é a conta do dono
 
 O dono continuou a bater na mesma porta:

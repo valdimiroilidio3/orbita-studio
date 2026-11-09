@@ -1977,9 +1977,12 @@ function campoEntrada({
 function viewLogin() {
   const primeira = S.primeiraConta;
   const estado = S.authEstado || {};
-  /* 1.54.0 · a porta: se a instalação pede o token de criação, o campo aparece
-     (e diz onde está), em vez de o botão falhar sem explicação. */
-  const exigeToken = !!(primeira && estado.exigeToken);
+  /* 1.75.0 · o «Token de instalação» SAIU da página.
+     Numa instalação de um dono só, a primeira conta já só pode ser a do email
+     do dono — o token não protegia mais nada e obrigava a ir à Vercel copiar um
+     segredo antes de se poder entrar em casa. O servidor também deixou de o
+     pedir nesse caso (`estadoDaPorta`); quando o registo está aberto, ele
+     continua a ser exigido, e a frase da recusa diz isso (aviso, não campo). */
   const aRecuperar = !!S.aRecuperar;
   /* 1.54.1 · quem chega de um link de confirmação vê o passo em que está */
   const aConfirmar = !!S.aConfirmar;
@@ -2089,7 +2092,6 @@ function viewLogin() {
     olho: true,
   })}
         ${(primeira || aRegistar || aRecuperar) ? campoEntrada({ id: 'lgPass2', rotulo: 'Repetir a palavra-passe', tipo: 'password', auto: 'new-password', olho: true }) : ''}
-        ${exigeToken ? campoEntrada({ id: 'lgToken', rotulo: 'Token de instalação', tipo: 'password', ph: 'o token desta instalação', auto: 'off' }) : ''}
       </div>
       <button class="enta-btn" data-act="${acao}">${esc(rotuloAcao)}</button>
       <div class="enta-links">
@@ -3859,12 +3861,31 @@ async function act(name, el, ev) {
       const pass = String($('#lgPass')?.value || '');
       if (!email || !pass) { toast('Diz o email e a palavra-passe.', true); return; }
       if (name === 'criar-primeira-conta') {
-        if (pass !== String($('#lgPass2')?.value || '')) { toast('As palavras-passe não são iguais.', true); return; }
-        await call('/auth/primeiro-dono', 'POST', {
-          email, password: pass, name: String($('#lgNome')?.value || '').trim(),
-          token: String($('#lgToken')?.value || '').trim(),
-        });
-        toast('Conta criada. Bem-vindo ao Órbita.');
+        S.entradaAviso = ''; S.entradaDetalhe = ''; S.entradaAvisoTom = 'erro';
+        if (pass !== String($('#lgPass2')?.value || '')) {
+          S.entradaAviso = 'As duas palavras-passe não são iguais.';
+          paint();
+          return;
+        }
+        try {
+          /* 1.75.0 · sem token: quem entra nesta instalação é o dono, e é o
+             email dele que fecha a porta (ver `estadoDaPorta`) */
+          await call('/auth/primeiro-dono', 'POST', {
+            email, password: pass, name: String($('#lgNome')?.value || '').trim(),
+          });
+          toast('Conta criada. Bem-vindo ao Órbita.');
+        } catch (e) {
+          /* uma recusa tem de ficar na página, não num toast de 4 segundos: é
+             aqui que se corrige o email, a palavra-passe ou o nome */
+          S.entradaAviso = e.message || 'não consegui criar a conta';
+          S.entradaAvisoTom = 'erro';
+          if (e.body?.falta) {
+            S.entradaDetalhe = [e.body.como, e.body.instrucao].filter(Boolean).join(' · ') || String(e.body.falta);
+            S.entradaDetalhes = true;
+          }
+          paint();
+          return;
+        }
       } else {
         try {
           const r = await call('/auth/entrar', 'POST', { email, password: pass });

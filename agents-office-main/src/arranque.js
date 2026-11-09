@@ -37,7 +37,7 @@ const ACAO = {
   SUPABASE_SECRET_KEY: { onde: VERCEL, texto: 'SUPABASE_SECRET_KEY (Supabase → API → a chave service_role / sb_secret_)' },
   ORBITA_API_TOKEN: { onde: VERCEL, texto: 'ORBITA_API_TOKEN — 32 caracteres ou mais, gerados à sorte (não é uma palavra)', nota: 'é o caminho das máquinas: `Authorization: Bearer …` lê e escreve na API sem sessão. A mesa em si é fechada pelas contas' },
   ORBITA_ADMIN_TOKEN: { onde: VERCEL, texto: 'ORBITA_ADMIN_TOKEN — 16 caracteres ou mais', nota: 'acesso total por token (aprova, entrega, pára envios); contas e palavras-passe continuam a pedir sessão' },
-  SETUP_TOKEN: { onde: VERCEL, texto: 'SETUP_TOKEN — 12 caracteres ou mais', nota: 'é o `?token=` que autoriza aplicar o SQL por `/api/setup`, e o que a primeira conta pede' },
+  SETUP_TOKEN: { onde: VERCEL, texto: 'SETUP_TOKEN — 12 caracteres ou mais', nota: 'é o `?token=` que autoriza aplicar o SQL por `/api/setup`; a primeira conta já não o pede (é o email do dono que fecha a porta)' },
   DATABASE_URL: { onde: VERCEL, texto: 'DATABASE_URL (Postgres → Connection string → URI)', nota: 'o `pg` precisa da ligação directa para criar as tabelas' },
   TAVILY_API_KEY: { onde: 'app.tavily.com', texto: 'TAVILY_API_KEY na Vercel', nota: 'sem ela não há pesquisa web nem leitura de páginas' },
   GEOAPIFY_API_KEY: { onde: 'myprojects.geoapify.com', texto: 'GEOAPIFY_API_KEY na Vercel', nota: 'sem ela não há empresas reais por actividade e cidade' },

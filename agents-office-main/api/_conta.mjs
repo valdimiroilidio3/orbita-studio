@@ -234,6 +234,11 @@ export function criarLimitador({ janelaMs = 15 * 60 * 1000, max = 5, agora = () 
  *   · `sem-contas` — a instalação é nova: deixa criar a primeira conta (uma vez);
  *   · `aberta`     — decisão explícita (`ORBITA_AUTH=aberta`), com o aviso à vista.
  */
+/** A instalação aceita contas que não são as do dono? (só por decisão explícita) */
+export function registoAberto(env = {}) {
+  return String(env.ORBITA_REGISTO || '').toLowerCase() === 'aberto';
+}
+
 export function estadoDaPorta({ temContas = false, env = {} } = {}) {
   if (String(env.ORBITA_AUTH || '').toLowerCase() === 'aberta') {
     return {
@@ -246,7 +251,15 @@ export function estadoDaPorta({ temContas = false, env = {} } = {}) {
       modo: 'sem-contas',
       descricao: 'esta instalação ainda não tem contas — cria a primeira, que fica dona',
       primeiraContaPossivel: true,
-      exigeToken: !!(env.SETUP_TOKEN || env.PROVA_TOKEN),
+      /* 1.75.0 · O TOKEN NÃO É A FECHADURA; O EMAIL É.
+         Numa instalação de um dono só, a primeira conta só pode ser a do
+         `ORBITA_DONO_EMAIL` — quem chegar primeiro não fica com nada. Pedir
+         ainda o `SETUP_TOKEN` só servia para pôr na página uma caixa que obriga
+         a ir à Vercel copiar um segredo: um degrau que não protege mais nada e
+         que travou o dono da própria casa. O token continua a ser exigido
+         quando o registo está ABERTO (`ORBITA_REGISTO=aberto`) — aí sim,
+         qualquer email podia criar a primeira conta. */
+      exigeToken: registoAberto(env) && !!(env.SETUP_TOKEN || env.PROVA_TOKEN),
     };
   }
   return { modo: 'sessao', descricao: `entra com a tua conta · a sessão dura ${HORAS_SESSAO} h`, primeiraContaPossivel: false };
