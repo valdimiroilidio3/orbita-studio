@@ -32,6 +32,21 @@ export function rotaAusente(corpo = null) {
   return AVISO_ROTA.test(frase);
 }
 
+/**
+ * 1.73.0 · um 503 que diz o que FALTA não é uma avaria da base.
+ *
+ * `/auth/codigo` responde 503 quando não há `RESEND_API_KEY`: é uma recusa
+ * deliberada, com a lista do que falta. Tratá-la como «a base não responde»
+ * fazia a mesa cair para o armazém do browser e mostrar «o modo local ainda não
+ * faz «/auth/codigo»» — uma frase que não é verdade nenhuma: o servidor estava
+ * vivo e tinha explicado tudo. Um 503 com `falta` é um erro a mostrar, com o
+ * corpo à mão.
+ */
+export function recusaConfigurada(corpo = null) {
+  if (!corpo || typeof corpo !== 'object') return false;
+  return Array.isArray(corpo.falta) && corpo.falta.length > 0;
+}
+
 /** A frase que se mostra ao dono, seja qual for a chave que o servidor usou. */
 export function mensagemDe(corpo = null, estado = 0) {
   if (corpo && typeof corpo === 'object') {
@@ -61,7 +76,10 @@ export function decidirResposta({ httpOk = true, httpStatus = 200, envelope = nu
     if (httpStatus === 404 || httpStatus === 405) {
       return rotaAusente(j) ? { tipo: 'local' } : { tipo: 'erro', estado: httpStatus, mensagem: mensagemDe(j, httpStatus) };
     }
-    if (httpStatus === 503) return { tipo: 'base', motivo: mensagemDe(j, httpStatus) };
+    if (httpStatus === 503) {
+      if (recusaConfigurada(j)) return { tipo: 'erro', estado: 503, mensagem: mensagemDe(j, 503), codigo: j.codigo || null, corpo: j };
+      return { tipo: 'base', motivo: mensagemDe(j, httpStatus) };
+    }
     if (httpStatus === 401) return { tipo: 'login', mensagem: mensagemDe(j, 401), corpo: j };
     return { tipo: 'erro', estado: httpStatus, mensagem: mensagemDe(j, httpStatus) };
   }
@@ -75,7 +93,10 @@ export function decidirResposta({ httpOk = true, httpStatus = 200, envelope = nu
       ? { tipo: 'local' }
       : { tipo: 'erro', estado, mensagem: mensagemDe(corpo, estado), codigo: corpo?.codigo || null };
   }
-  if (estado === 503) return { tipo: 'base', motivo: mensagemDe(corpo, estado) };
+  if (estado === 503) {
+    if (recusaConfigurada(corpo)) return { tipo: 'erro', estado, mensagem: mensagemDe(corpo, estado), codigo: corpo.codigo || null, corpo };
+    return { tipo: 'base', motivo: mensagemDe(corpo, estado) };
+  }
   if (estado === 401) return { tipo: 'login', mensagem: mensagemDe(corpo, estado), corpo };
   if (estado >= 400) {
     return { tipo: 'erro', estado, mensagem: mensagemDe(corpo, estado), codigo: corpo?.codigo || null, corpo };

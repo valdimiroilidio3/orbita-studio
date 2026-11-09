@@ -116,7 +116,7 @@ export async function processarOAuth({
   if (!guardado || guardado !== state) {
     /* sem o cookie não sabemos que foi este browser a pedir: um link montado por
        outra pessoa não pode abrir sessão nenhuma */
-    return voltar('este regresso não é deste browser (state inválido) — começa a entrada outra vez');
+    return voltar('a volta expirou — tenta entrar outra vez');
   }
 
   if (!repo) return voltar('esta instalação não tem base de dados ligada');

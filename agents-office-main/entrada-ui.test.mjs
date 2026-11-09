@@ -100,6 +100,10 @@ test('1.69.0 · um fornecedor sem chaves não é um botão morto: o clique diz o
   btn.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await esperar(200);
   const t = texto();
+  /* 1.73.0 · a frase que a página mostra é curta; a precisão (nome da variável,
+     sítio, endereço de retorno) vive no «Estado da instalação», que o clique abre */
+  assert.match(t, /ainda não está ligada a esta instalação/);
+  assert.ok(doc.querySelector('.enta-det[open]'), 'o clique abre o diagnóstico em vez de o despejar na página');
   assert.match(t, /GITHUB_CLIENT_ID/, 'o nome da variável, à letra');
   assert.match(t, /OAuth Apps/, 'e o sítio onde se cria a aplicação');
   assert.match(t, /\/api\/oauth\?fornecedor=github/, 'com o endereço de retorno para colar');
@@ -111,9 +115,11 @@ test('1.69.0 · sem correio, pedir o código diz o que falta e qual é o caminho
   doc.querySelector('[data-act="pedir-codigo"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   await esperar(500);
   const t = texto();
-  assert.match(t, /RESEND_API_KEY/, 'nomeia a chave');
-  assert.match(t, /resend\.com/, 'e o sítio');
+  assert.match(t, /correio ainda não está ligado/, 'a página diz o essencial numa frase');
   assert.match(t, /palavra-passe/, 'e diz que a palavra-passe ainda serve');
+  assert.ok(doc.querySelector('.enta-det[open]'), 'e abre o diagnóstico');
+  assert.match(t, /RESEND_API_KEY/, 'nomeia a chave, no diagnóstico');
+  assert.match(t, /resend\.com/, 'e o sítio');
   assert.doesNotMatch(t, /Falta o código/, 'não avança para um ecrã onde nada pode chegar');
 });
 
@@ -192,7 +198,7 @@ test('1.71.0 · a cascata e o halo existem no ficheiro publicado (não são deco
   assert.match(css, /@keyframes orbitaGiro/);
   assert.match(css, /@keyframes anelPulso/);
   assert.match(css, /@keyframes revEntra/);
-  assert.match(css, /\.palco-cartao \.in \{[\s\S]{0,200}--mx/, 'o halo usa as coordenadas do rato');
+  assert.match(css, /\.enta-in \{[\s\S]{0,700}--mx/, 'o halo usa as coordenadas do rato');
   assert.match(css, /prefers-reduced-motion[\s\S]{0,120}animation: none/, 'e pára para quem pediu menos movimento');
   assert.match(css, /@media \(max-width: 900px\)[\s\S]{0,160}\.palco-arte \{ display: none;? \}/,
     'no telemóvel a arte sai da frente do formulário');
@@ -206,7 +212,7 @@ test('1.71.0 · a cascata e o halo existem no ficheiro publicado (não são deco
 test('1.72.1 · org_internal aparece em português, com o sítio onde se resolve', async () => {
   const { texto } = await abrir({ url: 'https://mesa.test/app?erroEntrada=google%3Aorg_internal' });
   const t = texto();
-  assert.match(t, /fechada à organização/, 'o ecrã diz o que aconteceu');
+  assert.match(t, /só aceita contas da organização/, 'o ecrã diz o que aconteceu');
   assert.match(t, /Externo/, 'e o que mudar');
   assert.match(t, /Google Auth Platform|OAuth consent screen/, 'e onde');
   assert.doesNotMatch(t, /Apenas usuarios da organizacao/, 'não despeja o texto inglês da Google');
@@ -217,4 +223,44 @@ test('1.72.1 · uma recusa que não conhecemos aparece com o código à vista (n
   const t = texto();
   assert.match(t, /algum_codigo_novo/);
   assert.match(t, /tenta outra vez/i);
+});
+
+/* 1.73.0 · o dono olhou para esta página e chamou-lhe «ridícula»: meia dúzia de
+   parágrafos técnicos por baixo de dois campos. Este teste agarra o que ele
+   pediu — a página mostra título, uma linha, os caminhos, os campos e um botão;
+   o diagnóstico existe, mas fechado. */
+test('1.73.0 · a entrada não é um diagnóstico: o texto técnico só vive dentro do «Estado da instalação»', async () => {
+  const { doc, texto } = await abrir();
+  const det = doc.querySelector('.enta-det');
+  assert.ok(det, 'o diagnóstico existe — não se apagou funcionalidade');
+  assert.equal(det.hasAttribute('open'), false, 'mas fechado: a página não começa por ele');
+  assert.equal(doc.querySelector('.enta-det > summary').textContent.trim(), 'Estado da instalação');
+
+  /* o que se lê com os olhos, sem abrir nada: o cartão sem o painel */
+  const copia = doc.documentElement.cloneNode(true);
+  copia.querySelectorAll('.enta-det, script, style').forEach((n) => n.remove());
+  const visivel = copia.textContent.replace(/\s+/g, ' ');
+  for (const proibido of [/RESEND_API_KEY/, /SETUP_TOKEN/, /modo actual/i, /Continuar sem contas/i, /O que falta nesta instalação/i, /state inválido/i]) {
+    assert.doesNotMatch(visivel, proibido, `${proibido} não aparece na face da página`);
+  }
+  assert.match(visivel, /Entrar como dono/);
+  assert.match(visivel, /GitHub/);
+  assert.ok(doc.querySelector('#lgEmail') && doc.querySelector('#lgPass'), 'os dois campos');
+  assert.ok(doc.querySelector('.enta-btn[data-act="criar-primeira-conta"]'), 'e um botão');
+  assert.equal(doc.querySelectorAll('.enta-campo').length >= 2, true, 'cada campo tem rótulo em cima');
+  assert.ok(doc.querySelector('.enta-lb[for="lgEmail"]'), 'o rótulo aponta para o campo');
+});
+
+test('1.73.0 · a palavra-passe pode ser vista e escondida outra vez (sem a copiar para lado nenhum)', async () => {
+  const { doc, w } = await abrir();
+  const campo = doc.querySelector('#lgPass');
+  assert.equal(campo.type, 'password');
+  const olho = doc.querySelector('#lgPass').parentElement.querySelector('[data-act="ver-passe"]');
+  assert.ok(olho, 'há um botão para ver');
+  olho.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  assert.equal(campo.type, 'text');
+  assert.equal(olho.getAttribute('aria-pressed'), 'true');
+  olho.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  assert.equal(campo.type, 'password');
+  assert.equal(olho.getAttribute('aria-pressed'), 'false');
 });

@@ -123,31 +123,37 @@ export function escapar(t) {
 export const RECUSAS = {
   org_internal: {
     titulo: 'a app do Google está fechada à organização',
+    curto: 'O Google recusou: esta app só aceita contas da organização. Muda o tipo de utilizador para «Externo» em Google Auth Platform.',
     oQue: 'O cliente OAuth está com o tipo de utilizador «Interno», por isso só contas da organização entram — e uma conta @gmail.com nunca é da organização.',
     como: 'Google Cloud Console → Google Auth Platform (ou «OAuth consent screen») → Público → muda o tipo de utilizador de «Interno» para «Externo»; depois, em «Utilizadores de teste», acrescenta cheltonmahoze7@gmail.com.',
   },
   access_denied: {
     titulo: 'a entrada foi cancelada no fornecedor',
+    curto: 'Cancelaste a entrada no fornecedor. Tenta outra vez.',
     oQue: 'Quem estava a entrar fechou a janela do fornecedor, ou a conta escolhida não tem permissão para esta app.',
     como: 'Carrega em «Continuar com Google» (ou com GitHub) outra vez e escolhe a conta do dono.',
   },
   redirect_uri_mismatch: {
     titulo: 'o endereço de retorno não é o que está registado',
+    curto: 'O endereço de retorno não está registado no fornecedor. Regista https://orbita-agentes.vercel.app/ e tenta outra vez.',
     oQue: 'O fornecedor recusa devolver a pessoa a um endereço que não esteja registado ao carácter.',
     como: 'Regista exactamente https://orbita-agentes.vercel.app/ (Google) ou https://orbita-agentes.vercel.app/api/oauth?fornecedor=github (GitHub) e tenta outra vez.',
   },
   deleted_client: {
     titulo: 'o cliente OAuth já não existe',
+    curto: 'As chaves apontam para uma aplicação que já não existe. Cria uma nova e actualiza a Vercel.',
     oQue: 'A aplicação foi apagada (ou recriada) na consola e as chaves na Vercel ficaram a apontar para o cliente antigo.',
     como: 'Cria um cliente novo, actualiza GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET (ou as do GitHub) na Vercel e faz Redeploy.',
   },
   invalid_client: {
     titulo: 'o cliente e o segredo não combinam',
+    curto: 'O ID e o segredo não são o mesmo par. Copia outra vez da consola para a Vercel.',
     oQue: 'O ID e o segredo guardados na Vercel não são o par que o fornecedor conhece — normalmente de uma chave rodada.',
     como: 'Copia outra vez o ID e o segredo da consola para a Vercel e faz Redeploy.',
   },
   invalid_scope: {
     titulo: 'o fornecedor não aceita os âmbitos pedidos',
+    curto: 'A app não tem os âmbitos email e profile no ecrã de consentimento.',
     oQue: 'A app pede openid/email/profile; se o ecrã de consentimento não tiver esses âmbitos, recusa.',
     como: 'Na consola, em «Âmbitos», acrescenta email e profile (e openid) ao ecrã de consentimento.',
   },
@@ -189,4 +195,24 @@ export function textoDaRecusa(valor) {
   /* uma frase já escrita por nós (por exemplo a do `state`) passa intacta */
   if (!/^[a-z0-9_]+$/i.test(t.split(':').pop() || '') || /\s/.test(t)) return t;
   return explicarRecusa(t).texto;
+}
+
+/**
+ * 1.73.0 · A FRASE CURTA, PARA A PÁGINA.
+ *
+ * O dono olhou para o ecrã de entrada e viu, por baixo de dois campos, um
+ * relatório técnico: nomes de variáveis, o modo da instalação, as tabelas em
+ * falta. Uma página de entrada não é isso. Aqui só fica uma frase — o que
+ * aconteceu e o gesto que resolve; o resto vive no «Estado da instalação»,
+ * fechado, ou no `/api/health`.
+ */
+export function avisoDaRecusa(valor) {
+  const t = String(valor == null ? '' : valor).trim();
+  if (!t) return '';
+  /* já é uma frase escrita por nós (com espaços e pontuação): passa intacta */
+  if (/\s/.test(t)) return t;
+  const r = explicarRecusa(t);
+  /* um código que não conheço não se esconde: sem o nome, ninguém o procura */
+  if (!r.conhecido) return `O fornecedor recusou a entrada (${r.codigo || 'sem razão'}). Tenta outra vez.`;
+  return r.curto || r.texto;
 }
