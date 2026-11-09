@@ -76,9 +76,25 @@ export function explificar(texto = '', dados = null) {
     /* «column orbita_messages.subject does not exist»: a tabela vem antes do ponto */
     tabela = tabela || (msg.match(/column\s+"?(?:public\.)?(\w+)"?\./i) || [])[1] || null;
   }
+  /* 1.77.0 · «null value in column "hash" … violates not-null constraint» não é
+     um dado em falta: é a BASE a exigir uma palavra-passe a uma conta que nasceu
+     de um fornecedor (GitHub/Google). O esquema é que está velho — e o ficheiro
+     que o corrige é o `orbita_1_77_0.sql`. Sem esta tradução, o dono lia o erro
+     cru do Postgres no ecrã de entrada. */
+  const nulo = codigo === '23502' || /violates not-null constraint/i.test(msg);
+  const colunaNula = nulo ? ((msg.match(/column\s+"?(\w+)"?\s+of relation/i) || [])[1] || null) : null;
+  const tabelaNula = nulo ? ((msg.match(/of relation\s+"?(?:public\.)?(\w+)"?/i) || [])[1] || null) : null;
+
   const semColuna = codigo === '42703' || !!coluna;
   const semTabela = codigo === '42P01' || codigo === 'PGRST205' || (!!tabela && /does not exist|Could not find/i.test(msg));
-  if (!semColuna && !semTabela) return { mensagem: msg, semEsquema: false, tabela: null, coluna: null, ficheiro: null };
+  const semRegra = nulo && (colunaNula === 'hash' || colunaNula === null);
+  if (!semColuna && !semTabela && !semRegra) return { mensagem: msg, semEsquema: false, tabela: null, coluna: null, ficheiro: null };
+  if (semRegra) {
+    return {
+      mensagem: `a base ainda exige uma palavra-passe em «${tabelaNula || 'orbita_contas'}» para contas que entram por GitHub/Google: o esquema está desactualizado — a correcção está em supabase/orbita_1_77_0.sql`,
+      semEsquema: true, tabela: tabelaNula || 'orbita_contas', coluna: colunaNula || 'hash', ficheiro: 'orbita_1_77_0.sql', regra: true,
+    };
+  }
 
   let ficheiro = null;
   if (semColuna && coluna && COLUNAS_DO_1_69.has(coluna)) ficheiro = 'orbita_1_69_0.sql';

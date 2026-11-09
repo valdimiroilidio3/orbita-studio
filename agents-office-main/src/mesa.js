@@ -3910,6 +3910,17 @@ async function act(name, el, ev) {
             paint();
             return;
           }
+          /* 1.77.0 · a conta existe, entra por um fornecedor e não tem
+             palavra-passe: a página diz o caminho certo em vez de «não
+             conferem» — que mandaria adivinhar uma palavra-passe inexistente. */
+          if (e.body && e.body.entraPorFornecedor) {
+            S.entradaAviso = e.message;
+            S.entradaAvisoTom = 'erro';
+            S.entradaDetalhe = e.body.hint || '';
+            S.entradaDetalhes = !!e.body.hint;
+            paint();
+            return;
+          }
           throw e;
         }
       }

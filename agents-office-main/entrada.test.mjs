@@ -592,3 +592,87 @@ test('1.72.0 · a troca do código usa o MESMO endereço com que se pediu (senã
     'pedir e trocar têm de levar o mesmo redirect_uri');
   assert.equal(enviado.get('redirect_uri'), 'https://orbita.exemplo.pt/');
 });
+
+/* ===========================================================================
+   1.77.0 · A CONTA QUE NASCE DE UM FORNECEDOR NÃO TEM PALAVRA-PASSE
+
+   O dono entrou pelo GitHub e leu, no ecrã:
+
+     a base de dados recusou a conta do dono: null value in column "hash" of
+     relation "orbita_contas" violates not-null constraint
+
+   A tabela da 1.54.0 exigia `hash` porque só havia uma porta (email + palavra-
+   passe). O GitHub não traz palavra-passe nenhuma — e inventar uma seria pior:
+   uma conta com um hash falso é uma porta que ninguém conhece.
+
+   O que se prova aqui:
+     · a primeira escrita que falha por `hash` não termina a entrada: tenta-se
+       outra vez depois da migração, e o dono entra;
+     · se a segunda também falhar, a frase nomeia o ficheiro certo;
+     · quem tem conta só de fornecedor e tenta email+palavra-passe não lê «não
+       conferem» — lê por onde entra.
+   =========================================================================== */
+
+/** Um repositório em memória cuja tabela ainda exige `hash` — uma vez. */
+function repoTabelaAntiga({ falharSempre = false, erro = 'null value in column "hash" of relation "orbita_contas" violates not-null constraint' } = {}) {
+  const repo = createMemRepo();
+  const criar = repo.contas.criar.bind(repo.contas);
+  let vezes = 0;
+  repo.contas.criar = async (dados) => {
+    vezes += 1;
+    if (vezes === 1 || falharSempre) {
+      throw Object.assign(new Error(erro), { code: '23502', status: 400 });
+    }
+    return criar(dados);
+  };
+  repo.contas.vezesQueFalhou = () => vezes;
+  return repo;
+}
+
+const GITHUB_DONO = async (url) => {
+  if (String(url).includes('login/oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+  if (String(url).endsWith('/user/emails')) return { ok: true, status: 200, json: async () => ([{ email: DONO, primary: true, verified: true }]) };
+  return { ok: true, status: 200, json: async () => ({ id: 239872116, login: 'valdimiroilidio3', name: 'Chelton' }) };
+};
+const ENV_GH = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', ORBITA_URL: 'https://orbita.exemplo.pt', ORBITA_DONO_GITHUB_ID: '239872116' };
+
+test('1.77.0 · a escrita que a base recusou por `hash` é repetida — e o dono entra', async () => {
+  const repo = repoTabelaAntiga();
+  const r = await processarOAuth({ repo, env: ENV_GH, fetchImpl: GITHUB_DONO, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  assert.equal(r.status, 302, 'a entrada não morre no primeiro erro da base');
+  assert.equal(r.location, '/app?entrou=github');
+  assert.ok(r.cabecalhos['Set-Cookie'].some((c) => /orbita_sessao|sessao/.test(c)), 'com sessão');
+  const conta = await repo.contas.porEmail(DONO);
+  assert.equal(conta.hash, null, 'a conta guardada NÃO leva uma palavra-passe inventada');
+  assert.equal(conta.oauth_fornecedor, 'github');
+});
+
+test('1.77.0 · se a base continuar a recusar, a frase nomeia o ficheiro certo — não o erro cru', async () => {
+  const repo = repoTabelaAntiga({ falharSempre: true });
+  const r = await processarOAuth({ repo, env: ENV_GH, fetchImpl: GITHUB_DONO, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  assert.equal(r.status, 302);
+  assert.match(r.location, /^\/app\?erroEntrada=/);
+  const texto = descodificar(r.location);
+  assert.doesNotMatch(texto, /violates not-null/, 'o dono não volta a ler o erro do Postgres');
+  assert.match(texto, /orbita_1_77_0\.sql/, 'e sabe qual é o ficheiro');
+});
+
+test('1.77.0 · quem entra por um fornecedor não lê «email ou palavra-passe não conferem»', async () => {
+  const repo = createMemRepo();
+  await processarOAuth({ repo, env: ENV_GH, fetchImpl: GITHUB_DONO, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  const r = await chamar(repo, '/auth/entrar', 'POST', { email: DONO, password: 'qualquer-coisa-longa' });
+  assert.equal(r.status, 409, 'não é credenciais erradas: é uma conta sem palavra-passe');
+  assert.match(r.corpo.error, /entra pelo GitHub/);
+  assert.equal(r.corpo.entraPorFornecedor, 'github');
+  assert.ok(r.corpo.hint, 'e diz o que fazer a seguir');
+});
+
+test('1.77.0 · «hash» nulo continua a não abrir sessão por palavra-passe (nenhuma palavra-passe serve)', async () => {
+  const repo = createMemRepo();
+  await processarOAuth({ repo, env: ENV_GH, fetchImpl: GITHUB_DONO, query: 'fornecedor=github&code=abc&state=xyz', cookies: COOKIE('xyz') });
+  for (const tentativa of ['', '1234', DONO]) {
+    const r = await chamar(repo, '/auth/entrar', 'POST', { email: DONO, password: tentativa });
+    assert.notEqual(r.status, 200, `«${tentativa}» não pode abrir a conta`);
+    assert.equal(r.corpo?.token, undefined);
+  }
+});
