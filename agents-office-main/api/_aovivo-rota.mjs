@@ -50,7 +50,11 @@ const digital = (r) => JSON.stringify([
   r.abertas.map((t) => [t.id, t.state]),
 ]);
 
-export default async function handler(req, res) {
+/**
+ * O tratamento, com a base e o ambiente injectáveis: é assim que o teste prova o
+ * `hello` do fluxo sem rede. O `handler` por omissão lê-os do ambiente.
+ */
+export async function servirAoVivo(req, res, { repo: repoDado = null, env: envDado = null } = {}) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -67,14 +71,16 @@ export default async function handler(req, res) {
     || /\/stream\/?$/.test(url.pathname);
   const agentes = lerAgentes(url);
 
-  const env = envBase();
-  if (!env.pronto) {
+  const env = envDado || envBase();
+  if (!repoDado && !env.pronto) {
     res.status(503).json({ modo: 'local', erro: 'esta instalação não tem base de dados ligada (faltam SUPABASE_URL e SUPABASE_SECRET_KEY)' });
     return;
   }
 
-  let repo;
-  try { repo = createSupabaseRepo(env); } catch (e) { res.status(503).json({ modo: 'local', erro: String(e.message || e) }); return; }
+  let repo = repoDado;
+  if (!repo) {
+    try { repo = createSupabaseRepo(env); } catch (e) { res.status(503).json({ modo: 'local', erro: String(e.message || e) }); return; }
+  }
 
   /* sem sessão, o escritório não mostra trabalho nenhum a estranhos — mas diz
      PORQUE, para o painel poder pedir a entrada em vez de «sem ligação» */
@@ -136,6 +142,9 @@ export default async function handler(req, res) {
     }
     if (Date.now() - comeca >= DURACAO_MS) { fechar('fim-do-turno'); return; }
     timer = setTimeout(passo, PASSO_MS);
+    /* não segura o processo: um fluxo esquecido não pode prender o servidor (nem
+       os testes) depois de a ligação morrer */
+    if (timer.unref) timer.unref();
   };
 
   /* um sinal de vida mais espaçado, para um proxy não cortar a ligação calada */
@@ -143,4 +152,8 @@ export default async function handler(req, res) {
   if (pings.unref) pings.unref();
 
   await passo();
+}
+
+export default async function handler(req, res) {
+  return servirAoVivo(req, res);
 }

@@ -33,7 +33,7 @@ import assert from 'node:assert/strict';
 import { explificar } from './api/_repo.mjs';
 import { faltaEsquemaDaPorta, FICHEIROS_DA_PORTA } from './api/_autoesquema.mjs';
 import { retrato, estadoDoPosto, redigir, SEAT } from './api/_aovivo.mjs';
-import handler from './api/_aovivo-rota.mjs';
+import handler, { servirAoVivo } from './api/_aovivo-rota.mjs';
 
 /* ---------- 1 · a conta do dono, sem palavra-passe ---------- */
 
@@ -162,4 +162,32 @@ test('1.77.0 · o caminho do fluxo é reconhecido pelo `?aovivo=stream` (a reesc
   /* sem base, o 503 é o mesmo — o que importa é que pedir o fluxo não devolve JSON de retrato */
   assert.equal(res.codigo, 503);
   assert.equal(res.cabecalhos['Content-Type'], undefined, 'um 503 de fluxo ainda não abre text/event-stream');
+});
+
+/* ---------- 4 · o fluxo, com sessão a sério ---------- */
+
+test('1.77.0 · o fluxo diz `hello` com o retrato e fecha-se sozinho (não promete ligação eterna)', async () => {
+  const { createMemRepo } = await import('./api/_repo.mjs');
+  const { abrirSessao } = await import('./api/_porta.mjs');
+
+  const repo = createMemRepo();
+  const conta = await repo.contas.criar({ email: 'dono@exemplo.pt', nome: 'Dono', papel: 'dono', activo: true, hash: 'x' });
+  await repo.tarefas.insert({ kind: 'lead.pesquisar', title: 'Pesquisar o site', state: 'running', attempts: 1, max_attempts: 3 });
+  const sessao = await abrirSessao(repo, conta, { headers: {}, secure: true });
+
+  const res = resFalso();
+  res.setHeader = (k, v) => { res.cabecalhos[k] = v; };
+  await servirAoVivo(
+    { method: 'GET', url: '/api/rpc?aovivo=stream&agentes=vmail', headers: { cookie: sessao.cabecalho.split(';')[0] }, on: () => {} },
+    res,
+    { repo },
+  );
+
+  const texto = res.escrito.join('');
+  assert.equal(res.codigo, 200);
+  assert.match(String(res.cabecalhos['Content-Type']), /text\/event-stream/);
+  assert.match(texto, /^retry: \d+/m, 'diz ao browser quando voltar a ligar');
+  assert.match(texto, /event: hello/, 'o primeiro retrato chega já');
+  assert.match(texto, /"state":"live"/, 'com o trabalho que está a correr');
+  assert.doesNotMatch(texto, /hash|password|segredo/i, 'e sem segredos');
 });
