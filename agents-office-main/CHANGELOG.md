@@ -1,3 +1,27 @@
+## 1.79.6 — 9 nov 2026 · as chaves vivem no servidor — e o painel já o diz
+
+A 1.79.2 mudou onde as chaves vivem (o ambiente do servidor, na Vercel), mas o texto
+que o dono lê continuava a dizer «esta máquina» e «o `.env` desta máquina». Na
+publicação isso é falso: não há `.env` nenhum no browser, e quem guarda a chave é a
+Vercel.
+
+- `src/shell.html`: o cabeçalho do painel de Configurações passa de «Configurações ·
+  **esta máquina**» a «Configurações · **no servidor**»;
+- `src/config.js`: o campo da chave diz «fica no ambiente do servidor, nunca na
+  página» (antes: «fica só no `.env` desta máquina»);
+- `src/catalogo-apps.js`: a nota de cada app com chave nomeia os dois sítios reais —
+  o `.env` de quem corre o Órbita à mão, ou as variáveis da Vercel na publicação.
+
+O que continua a dizer «nesta máquina» é o que é mesmo da máquina: os CLIs (Claude
+Code, Ollama) e a oficina local — esses não existem na página publicada, e o painel
+di-lo.
+
+### Provas
+
+- `node --test` → **1443/1443**;
+- `node check.mjs` → **96/96 · 1 saltado** (`smoke: browser`, sem Chrome nesta máquina);
+- `apps.test.mjs`, `controlo.test.mjs`, `controlo-vivo.test.mjs` → 40/40.
+
 ## 1.79.5 — 9 nov 2026 · «sem servidor» deixa de ser uma frase deste escritório
 
 O dono foi claro: **o projecto tem de ter servidor**, e a frase «aberto sem servidor

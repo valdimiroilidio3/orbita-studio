@@ -158,7 +158,7 @@ export function createConfig({
       const falta = (p.missing || []).includes(k);
       return `<label class="cfg-fld">
         <span class="cfg-k">${esc(k)}${falta ? '' : ' · configurada'}</span>
-        <input type="password" autocomplete="off" spellcheck="false" data-env="${esc(k)}" placeholder="${falta ? 'cola a chave e guarda — fica só no .env desta máquina' : 'já está — cola outra para substituir'}">
+        <input type="password" autocomplete="off" spellcheck="false" data-env="${esc(k)}" placeholder="${falta ? 'cola a chave e guarda — fica no ambiente do servidor, nunca na página' : 'já está — cola outra para substituir'}">
       </label>`;
     }).join('');
     const when = p.checkedAt ? new Date(p.checkedAt) : null;
