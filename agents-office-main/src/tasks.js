@@ -1127,7 +1127,12 @@ export function initTasks(ctx) {
     // 26 out 2026: não há percentagem. Uma tarefa está num estado e tem uma hora de início; o resto
     // seria um número escolhido por nós, e o painel não inventa números.
     const chip = `<span class="tp-st ${t.state}">${t.state === 'scheduled' ? '◷' : STATE_LABEL[t.state]}</span>`;
-    const bar = t.state === 'doing' ? `<div class="tp-bar run"><i></i></div>` : t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCELAR</button><button data-act="calendar">CALENDÁRIO</button></div>` : '';
+    /* 1.80.0 · o que acabou tem uma porta para a entrega: ver o site aqui dentro e
+       levar o .zip. Só nas tarefas concluídas — a meio não há nada para entregar. */
+    const bar = t.state === 'doing' ? `<div class="tp-bar run"><i></i></div>`
+      : t.state === 'scheduled' ? `<div class="tp-act"><button data-act="cancel">CANCELAR</button><button data-act="calendar">CALENDÁRIO</button></div>`
+      : (t.state === 'done' || t.state === 'failed') ? `<div class="tp-act"><button data-act="entrega" title="abrir a entrega: ver o que foi produzido e descarregar o .zip">ENTREGA</button></div>`
+      : '';
     return `<div class="tp-row ${t.state}${t.last === 'handoff' ? ' handoff' : ''}${t.live ? ' live' : ''}${t.piece ? ' piece' : ''}" data-id="${t.id}" data-dept="${t.dept}" data-agent="${t.agent}">
       ${chip}<div class="tp-body"><div class="tp-t">${t.routine || t.state === 'scheduled' ? '⏱ ' : ''}${t.team?.members?.length ? '⚑ ' : ''}${esc(t.title)}</div><div class="tp-m">${metaFor(t)}</div>${bar}</div>
       <span class="tp-ago" data-ago="${t.id}">${span(Date.now() - t.changedAt)}</span></div>`;
@@ -1172,7 +1177,15 @@ export function initTasks(ctx) {
       ? ((scopedRoutines().sort(byNext).map(rowHTMLr).join('') + scoped().filter(t => t.state === 'scheduled').sort((a, b) => a.dueAt - b.dueAt).map(rowHTMLp).join('')) || `<div class="tp-empty">Ainda não há rotinas. Escreve uma com uma hora dentro — «todos os dias úteis às 8h, …» — ou prime REPETIR. Prime <b>P</b> para o calendário agendar uma tarefa numa data.${RT_DEPTS.includes(dept) ? '' : ' Rotinas: E-mails, Contabilidade e Vendas nesta versão.'}</div>`)
       : (list.map(rowHTMLp).join('') || `<div class="tp-empty">Nada aqui neste momento.</div>`);
     renderNext();
-    P_.rows.querySelectorAll('.tp-act button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); const row = b.closest('.tp-row'); if (row.dataset.rid) rtAct(row.dataset.rid, b.dataset.act); else if (b.dataset.act === 'cancel') cancelScheduled(tasks.find(t => String(t.id) === row.dataset.id)); else if (b.dataset.act === 'calendar' && calendar) calendar.open(); }));
+    P_.rows.querySelectorAll('.tp-act button').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      const row = b.closest('.tp-row');
+      /* 1.80.0 · a entrega abre-se pelo mesmo sítio para onde a cena já sabe olhar */
+      if (b.dataset.act === 'entrega') { try { dispatchEvent(new CustomEvent('orbita:entrega')); } catch { /* sem CustomEvent */ } return; }
+      if (row.dataset.rid) rtAct(row.dataset.rid, b.dataset.act);
+      else if (b.dataset.act === 'cancel') cancelScheduled(tasks.find(t => String(t.id) === row.dataset.id));
+      else if (b.dataset.act === 'calendar' && calendar) calendar.open();
+    }));
     P_.rows.querySelectorAll('.tp-row.waiting').forEach(n => n.addEventListener('click', () => zoomToApproval(n.dataset.dept)));
     P_.rows.querySelectorAll('.tp-row.live.done').forEach(n => n.addEventListener('click', () => openAgent && openAgent(n.dataset.agent, 'chat')));
     if (!structural) flip(before);

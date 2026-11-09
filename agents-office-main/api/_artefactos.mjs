@@ -542,6 +542,39 @@ export async function publicar(id, { repo = null, aprovado = false, por = null, 
   return { ok: true, artefacto: publico(art), guardado, nota: 'aprovado — os ficheiros podem ser publicados no alojamento' };
 }
 
+/* ---------- 1.80.0 · o pacote: o site inteiro num .zip ----------
+   Pedido do dono: «logo que acabar a tarefa, possibilidade de execução e baixar
+   o arquivo em zip». O site já existe em memória como três ficheiros; o que
+   faltava era poder levá-lo dali. O ZIP é escrito à mão em `src/ops/zip.mjs`
+   (método «store», sem dependências), e os nomes vão em UTF-8 para os acentos
+   não se perderem.
+
+   Devolve os bytes em base64 porque o caminho que a página usa é o `/api/rpc`,
+   que fala JSON — um `Response` binário não passa por lá. São três ficheiros
+   pequenos: a codificação não custa nada e evita uma função nova na Vercel. */
+export async function pacoteZip(id, { repo = null, agora = new Date() } = {}) {
+  const art = await obter(id, { repo });
+  if (!art) return { ok: false, codigo: 'nao-existe', erro: `não há artefacto «${id}»` };
+  const p = await preview(id, { repo });
+  if (!p) return { ok: false, codigo: 'nao-existe', erro: `não há artefacto «${id}»` };
+  const nomes = Object.keys(p).filter((k) => k !== 'id' && k !== 'estado' && typeof p[k] === 'string' && !k.startsWith('_'));
+  if (!nomes.length) return { ok: false, codigo: 'vazio', erro: 'este artefacto não tem ficheiros' };
+  const { zipBuffer } = await import('../src/ops/zip.mjs');
+  const { buffer, sha256 } = zipBuffer(nomes.map((n) => ({ name: n, data: p[n] })), { at: agora });
+  return {
+    ok: true,
+    id: art.id,
+    nome: `${id}.zip`,
+    ficheiros: nomes.map((n) => ({ nome: n, bytes: Buffer.byteLength(p[n], 'utf8') })),
+    bytes: buffer.length,
+    sha256,
+    base64: buffer.toString('base64'),
+    nota: art.meta?.estado === 'aprovado'
+      ? 'aprovado: este pacote pode ir para o alojamento'
+      : 'rascunho: o pacote sai na mesma, mas ninguém aprovou este site',
+  };
+}
+
 /** Só para testes. */
 export function reiniciar() { SESSOES.clear(); }
 

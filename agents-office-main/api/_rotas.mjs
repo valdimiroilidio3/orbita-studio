@@ -1886,6 +1886,17 @@ export async function responder(repo, {
     return { status, corpo: r };
   }
 
+  /* 1.80.0 · o pacote .zip do site (base64 no envelope JSON do /api/rpc) */
+  if (seg[0] === 'artefactos' && seg[1] && seg[2] === 'zip' && m !== 'GET') {
+    return { status: 405, corpo: { ok: false, erro: 'o pacote é só de leitura (GET)' } };
+  }
+  if (seg[0] === 'artefactos' && seg[1] && seg[2] === 'zip' && m === 'GET') {
+    const a = await import('./_artefactos.mjs');
+    const z = await a.pacoteZip(seg[1], { repo });
+    if (!z.ok) return { status: z.codigo === 'nao-existe' ? 404 : 409, corpo: z };
+    return { status: 200, corpo: z };
+  }
+
   if (seg[0] === 'artefactos' && seg[1] && !seg[2] && m === 'GET') {
     const a = await import('./_artefactos.mjs');
     const art = await a.obter(seg[1], { repo });
