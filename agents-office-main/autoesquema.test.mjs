@@ -151,3 +151,22 @@ test('1.76.0 · em memória (testes, modo local) o curador não toca em nada', a
   assert.deepEqual(r, { ok: true, memoria: true });
   assert.equal(mexeu, false);
 });
+
+/* 1.76.1 · o health passa a dizer se a PORTA está inteira. Foi por não o dizer
+   que ele respondia «falta orbita_faturas» com a entrada partida. */
+test('1.76.1 · a sonda do health diz sim/não sobre a porta — e não inventa', async () => {
+  const { sondaDaPorta } = await import('./api/health.mjs');
+
+  assert.deepEqual(await sondaDaPorta({ contas: { async sonda() { return true; } } }), { ok: true });
+
+  const mau = await sondaDaPorta({
+    contas: { async sonda() { throw Object.assign(new Error('falta a coluna «codigo_hash»'), { semEsquema: true, ficheiro: 'orbita_1_69_0.sql' }); } },
+  });
+  assert.equal(mau.ok, false);
+  assert.equal(mau.semEsquema, true);
+  assert.equal(mau.ficheiro, 'orbita_1_69_0.sql', 'diz qual ficheiro aplicar');
+  assert.match(mau.erro, /codigo_hash/);
+
+  assert.equal(await sondaDaPorta({ contas: {} }), null, 'sem sonda, sem opinião');
+  assert.equal(await sondaDaPorta(null), null);
+});

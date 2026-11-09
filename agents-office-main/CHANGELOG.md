@@ -1,3 +1,21 @@
+## 1.76.1 — 6 nov 2026 · o health olha para a porta
+
+A 1.76.0 passou a auditar `orbita_contas` e `orbita_sessoes` na lista de tabelas.
+Faltava o que realmente parte a entrada: as **colunas** (o código de uso único, o
+fornecedor de OAuth, a confirmação). Uma tabela pode existir e a conta ser
+recusada à mesma — e o health dizia que estava tudo bem.
+
+`/api/health` passa a trazer `porta`:
+
+```json
+"porta": { "ok": true }
+"porta": { "ok": false, "erro": "falta a coluna «codigo_hash» …", "ficheiro": "orbita_1_69_0.sql", "semEsquema": true }
+```
+
+Sem segredos — só sim/não e a frase da base, com o ficheiro que a corrige. A
+sonda vive em `sondaDaPorta()` (exportada, provada sem rede em
+`autoesquema.test.mjs`); um repositório que não saiba responder devolve `null`, e
+o health não inventa um estado.
 ## 1.76.0 — 6 nov 2026 · a base que se cura sozinha (e o ficheiro certo no erro)
 
 O dono tentou entrar pelo GitHub e leu:
