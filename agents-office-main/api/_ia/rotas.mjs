@@ -121,17 +121,29 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
 
   /* ---------------- estado / catálogo ---------------- */
   if (limpo === '/ia/estado' && m === 'GET') {
+    /* 1.78.0 · o estado tem de responder depressa: é a primeira coisa que a vista
+       IA pede, e uma leitura lenta (a memória, o estúdio) não pode segurar a
+       página inteira. Cada resumo opcional tem prazo; o resto do estado não
+       depende deles. */
+    const comPrazo = (p, ms, oQue) => {
+      let t = null;
+      const prazo = new Promise((_, rejeitar) => {
+        t = setTimeout(() => rejeitar(new Error(`${oQue} não respondeu em ${Math.round(ms / 1000)} s`)), ms);
+        if (t.unref) t.unref();
+      });
+      return Promise.race([p, prazo]).finally(() => { if (t) clearTimeout(t); });
+    };
     const estado = await motor.estado();
     const cfg = await motor.config();
     /* 1.19.0 · a memória e o estúdio fazem parte do estado: se a base não os
        tiver (SQL por correr), diz-se em vez de rebentar a página toda. */
     let resumoMemoria = null;
     try {
-      const e = await memoria.estado(repo, { env, fetchImpl });
+      const e = await comPrazo(memoria.estado(repo, { env, fetchImpl }), 3000, 'a memória');
       resumoMemoria = { total: e.total, usos: e.usos, modo: e.modo, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5), mem0: e.mem0 };
     } catch (e) { resumoMemoria = { erro: `a memória ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
     let estudio = null;
-    try { estudio = await media.estado(repo, env); } catch (e) { estudio = { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
+    try { estudio = await comPrazo(media.estado(repo, env), 3000, 'o estúdio'); } catch (e) { estudio = { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
 
     return { status: 200, corpo: {
       ...estado,

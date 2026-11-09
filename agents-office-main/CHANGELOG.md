@@ -1,3 +1,87 @@
+## 1.78.0 — 7 nov 2026 · o comando à mão e o «a carregar» que acaba
+
+Dois pedidos do dono, no mesmo dia:
+
+> vamos melhorar o remote de controle do escritório, dando mais qualidade e mais
+> realismo, ícones reais e deixando mais elegante
+
+> o **A carregar o Control Center…** devia estar 100% funcional — a pedir o estado
+> ao servidor
+
+### 1 · o comando (`#remoto`)
+
+O que existia no canto inferior esquerdo era um dock de catorze glifos de texto
+(`⌂ + − ◍ ‹ ›`), cada um com um peso diferente e nenhum a dizer o que fazia. Não
+se retocou: ficou um **comando à mão**, fechado por omissão, com 44 px de altura
+(`src/remoto.js`). Aberto, mede 316 px e diz, de relance:
+
+- **o estado da ligação** — «ao vivo», «a ler» (o retrato lido a cada 8 s não é
+  ao vivo a fingir), «a ligar», «sem dados novos», «sem ligação». É o mesmo
+  `liveUi` que pinta os monitores;
+- **as seis salas**, com a cor de cada uma e o número de quem lá trabalha — a
+  mesma conta de `deptCount` que acende a luz da sala. Um posto à espera do OK
+  aparece como «à espera», não como «a trabalhar». Sem ligação escreve «sem
+  ligação» e **não** mostra um zero inventado;
+- **os números do dia** (a trabalhar · à espera · na fila · decisões), sendo que
+  o das decisões leva ao «Hoje» e acende quando há alguma à tua espera;
+- **a vista**: geral, aérea, rodar à esquerda/direita, planta 2D; e no rodapé,
+  abrir a mesa, Configurações e o tema.
+
+Nada é simulado: as acções entram por parâmetro (`acoes`), com as funções reais
+do `main.js` (`zoomOut`, `virarAerea`, `virarAngulo`, `alternarVista`,
+`enterFocus`, `cfg.toggle`, `applyTheme`, `tasks.toggle`). Abre com um clique ou
+com a tecla **R** (condição: não estar a escrever num campo, e não levar
+Modificador), fecha com `Esc` dentro do painel devolvendo o foco. O estado aberto
+fica guardado; no telemóvel (≤640 px) sobe acima do dock para não ficar debaixo
+do polegar.
+
+### 2 · ícones a sério — Lucide (`src/icones.js`)
+
+O dono escolheu a biblioteca: **Lucide** (ISC). Importa-se o ficheiro de cada
+ícone (`lucide/dist/esm/icons/<nome>.mjs`, `lucide@1.70.0` como devDependency),
+não as 2 029; o `esbuild` empacota só as 25 que o produto usa. O SVG é construído
+com `createElementNS` (nunca `innerHTML` com dados de fora), todos a 24×24 com o
+mesmo traço redondo, decorativos por omissão (`aria-hidden`) para quem lê o ecrã
+ouvir o botão e não «ícone de casa».
+
+Os mesmos ícones vestem o dock da câmara, que perde os glifos `+ − ⌂ ◍ ‹ ›`. Os
+`id`s (`zIn`, `zOut`, `zHome`, `zAerea`, `zLeft`, `zRight`, `zAngle`, `zIndex`,
+`z2d`), os títulos e os atalhos **não mudaram** — só o que está dentro de cada
+botão; quem não tinha `aria-label` passou a ter («ampliar», «reduzir», «visão
+geral»), porque o glifo de texto era o nome acessível do botão.
+
+### 3 · «A carregar o Control Center…» deixa de poder ficar preso
+
+Eram dois problemas, e os dois estão fechados com prazos, não com optimismo:
+
+- **no cliente** (`src/ia.js`): o `/ia/estado` tem **12 s** e as leituras
+  secundárias **10 s**; cada promessa é cortada com o nome do pedido que faltou
+  («o catálogo de modelos não respondeu em 12 s»). O cartão passa a dizer **o que
+  está a pedir** e **há quantos segundos**; a partir dos 6 s avisa que está lento
+  e anuncia o prazo; há sempre um botão «Pedir outra vez»; e o estado que chega
+  primeiro **desenha-se já**, com o resto a completar-se depois
+  (`iaCarregando: {passo, parcial}`), em vez de se esperar por tudo para mostrar
+  alguma coisa;
+- **no servidor** (`api/_ia/rotas.mjs`): a memória e o `estado` do estúdio
+  passam a ter **3 s**. Uma leitura lenta deixa de arrastar a rota inteira.
+
+O que continua a exigir o dono: com sessão fechada o `/ia/estado` responde
+**401** e é a mesa que mostra o ecrã de entrada — a vista da IA não fica a
+carregar, mas também não inventa números.
+
+### Provas
+
+`remoto.test.mjs` — **18 testes** contra um DOM a sério (jsdom): abre e fecha,
+diz o estado verdadeiro, as seis salas com cor e número, «sem ligação» sem
+números inventados, cada botão chama a acção certa com o argumento certo, lê no
+máximo uma vez por segundo e só quando está aberto, os 25 ícones são SVG com
+`viewBox` 24×24 e traço redondo, o SVG em texto é igual ao do DOM, o prazo corta
+e diz o nome do pedido, o estado chega antes do fim, o cartão conta segundos,
+e o pacote publicado leva o comando e os ícones (sem pedidos à rede).
+
+Suite: **1400/1400** (1382 antes; +18). Falta a validação no telemóvel, que só o
+dono pode fazer.
+
 ## 1.77.1 — 6 nov 2026 · o fluxo ao vivo provado com uma sessão a sério
 
 Também: a recusa «esta conta entra pelo GitHub» **não conta como tentativa
