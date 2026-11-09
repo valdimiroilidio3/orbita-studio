@@ -30,10 +30,10 @@
    Sem `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` (ou as do Google) a resposta é
    um 503 com o nome exacto do que falta e onde se cria — nunca um botão morto.
    =========================================================================== */
-import { createSupabaseRepo, envBase } from './_repo.mjs';
+import { createSupabaseRepo, envBase, explificar } from './_repo.mjs';
 /* 1.76.0 · a volta do fornecedor também cura o esquema: foi por aqui que o dono
    viu «a base de dados recusou a conta do dono: falta a tabela orbita_contas». */
-import { garantirEsquemaDaPorta } from './_autoesquema.mjs';
+import { garantirEsquemaDaPorta, aplicarEsquemaDaPorta, faltaEsquemaDaPorta } from './_autoesquema.mjs';
 import { abrirSessao } from './_porta.mjs';
 import {
   fornecedorPorId, estadoDosFornecedores, urlDeAutorizacao, perfilDoFornecedor,
@@ -140,25 +140,50 @@ export async function processarOAuth({
   }
 
   let conta = await repo.contas.porEmail(perfil.email).catch(() => null);
-  try {
+  /* 1.77.0 · uma conta que nasce de um fornecedor NÃO tem palavra-passe, e a base
+     antiga exigia uma (`hash not null`). A primeira escrita falha com isso; em
+     vez de desistir, aplica-se a migração que o corrige e tenta-se UMA vez mais.
+     A cura da 1.76.0 não chegava aqui: a sonda olha para colunas que faltam, não
+     para regras antigas numa coluna que já existe. */
+  const guardar = async () => {
     if (!conta) {
-      conta = await repo.contas.criar({
+      return repo.contas.criar({
         email: perfil.email, nome: perfil.nome || perfil.email.split('@')[0], papel: 'dono',
         activo: true, criado: agoraIso(), confirmado_em: agoraIso(), hash: null,
         oauth_fornecedor: f.id, oauth_id: perfil.id || null,
       });
-    } else {
-      conta = await repo.contas.actualizar(conta.id, {
-        oauth_fornecedor: f.id, oauth_id: perfil.id || null,
-        confirmado_em: conta.confirmado_em || agoraIso(),
-        activo: true,
-      });
+    }
+    return repo.contas.actualizar(conta.id, {
+      oauth_fornecedor: f.id, oauth_id: perfil.id || null,
+      confirmado_em: conta.confirmado_em || agoraIso(),
+      activo: true,
+    });
+  };
+  try {
+    try {
+      conta = await guardar();
+    } catch (e) {
+      if (!faltaEsquemaDaPorta(e)) throw e;
+      /* aplica-se a migração que aceita uma conta sem palavra-passe… */
+      const arranjo = await aplicarEsquemaDaPorta(env).catch((x) => ({ ok: false, erro: x.message }));
+      /* …e tenta-se a escrita outra vez, mesmo que o DDL não tenha podido correr:
+         pode tê-la aplicado outro pedido, ou a base pode ter voltado. Se voltar a
+         falhar, aí sim a frase diz as duas coisas — o erro e o que impediu a cura. */
+      try {
+        conta = await guardar();
+      } catch (e2) {
+        const porque = arranjo.ok ? '' : ` — e a correcção do esquema (supabase/orbita_1_77_0.sql) não pôde ser aplicada: ${arranjo.erro || 'sem motivo'}`;
+        /* a frase que o dono lê não é o erro do Postgres: é o que ele significa */
+        const claro = explificar(e2, { code: e2.code }).mensagem || String(e2.message || e2).slice(0, 140);
+        return voltar(`a conta do dono não pôde ser guardada: ${claro}${porque}`);
+      }
     }
   } catch (e) {
     /* 1.76.0 · se o esquema não pôde ser aplicado, diz-se porquê — é a única
        informação que resolve isto; «tenta outra vez» não resolve nada. */
     const porque = !esquema?.ok && (esquema?.erro || esquema?.motivo) ? ` (o esquema da porta não pôde ser aplicado: ${esquema.erro || esquema.motivo})` : '';
-    return voltar(`a base de dados recusou a conta do dono: ${String(e.message || e).slice(0, 160)}${porque}`);
+    const claro = explificar(e, { code: e.code }).mensagem || String(e.message || e).slice(0, 160);
+    return voltar(`a conta do dono não pôde ser guardada: ${claro}${porque}`);
   }
   if (!conta) return voltar('não consegui guardar a conta do dono');
 

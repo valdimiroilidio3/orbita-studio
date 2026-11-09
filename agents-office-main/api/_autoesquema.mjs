@@ -25,7 +25,7 @@
 import { aplicarEsquema } from './_esquema.mjs';
 
 /** Os ficheiros que criam e completam a porta (contas + sessões). */
-export const FICHEIROS_DA_PORTA = ['orbita_1_54_0.sql', 'orbita_1_54_1.sql', 'orbita_1_69_0.sql'];
+export const FICHEIROS_DA_PORTA = ['orbita_1_54_0.sql', 'orbita_1_54_1.sql', 'orbita_1_69_0.sql', 'orbita_1_77_0.sql'];
 
 /** A porta vive nestas duas tabelas. Só se mexe no esquema por causa delas. */
 export const TABELAS_DA_PORTA = new Set(['orbita_contas', 'orbita_sessoes']);
@@ -42,6 +42,15 @@ export function faltaEsquemaDaPorta(erro) {
   const texto = String(erro.message || erro.mensagem || erro || '');
   const tabela = String(erro.tabela || '');
   if (erro.semEsquema) return !tabela || TABELAS_DA_PORTA.has(tabela);
+  /* 1.77.0 · a regra ANTIGA numa coluna que já existe. A sonda da 1.76.0 só via
+     colunas que faltam, por isso um `hash not null` da 1.54.0 passava despercebido
+     e só se descobria ao escrever — com o erro cru do Postgres no ecrã do dono.
+     Este caso é esquema, não é dado: nenhum utilizador escreve `hash`. */
+  if (/null value in column\s+"?([\w]+)"?/i.test(texto) && /violates not-null/i.test(texto)) {
+    const coluna = (texto.match(/null value in column\s+"?([\w]+)"?/i) || [])[1] || '';
+    const rel = (texto.match(/of relation\s+"?(?:public\.)?([\w]+)"?/i) || [])[1] || '';
+    return coluna === 'hash' && (!rel || TABELAS_DA_PORTA.has(rel));
+  }
   return /orbita_contas|orbita_sessoes/i.test(texto)
     && /does not exist|Could not find the table|não existe/i.test(texto);
 }

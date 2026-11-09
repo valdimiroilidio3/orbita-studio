@@ -572,6 +572,20 @@ export async function avaliarPorta(repo, {
     const conta = email ? await repo.contas.porEmail(email).catch(() => null) : null;
     const certa = conta && conta.activo !== false && verifyPassword(corpo?.password, conta.hash);
     if (!certa) {
+      /* 1.77.0 · uma conta que nasceu de um fornecedor não tem palavra-passe
+         nenhuma. Dizer «email ou palavra-passe não conferem» a quem É o dono é
+         mandá-lo adivinhar uma palavra-passe que nunca existiu. A frase só é
+         específica para o email do dono: para os outros continua genérica (não
+         se enumera contas). */
+      if (conta && !conta.hash && eODono(email, env)) {
+        const porOnde = conta.oauth_fornecedor === 'github' ? 'GitHub' : conta.oauth_fornecedor === 'google' ? 'Google' : 'fornecedor';
+        limitador.falhou(chave);
+        return { resposta: { status: 409, corpo: {
+          error: `esta conta entra pelo ${porOnde} — não tem palavra-passe`,
+          entraPorFornecedor: conta.oauth_fornecedor || null,
+          hint: `carrega em «Continuar com ${porOnde}»; se quiseres uma palavra-passe, define-a depois de entrares`,
+        } } };
+      }
       limitador.falhou(chave);
       /* a mesma frase para «não existe» e «palavra-passe errada»: não se diz a
          um estranho quais dos emails existem nesta instalação */

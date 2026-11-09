@@ -27,6 +27,14 @@ const OK = '#6FE3A6';
 const WARN = '#F2B84B';
 const BAD = '#F2705F';
 const SILENCE_MS = 20000;
+/* 1.77.0 · a Vercel não tinha estes caminhos (viviam só no `serve.mjs`): o fluxo
+   batia num 404 e o ecrã ficava «desactualizado» para sempre. Passa a haver um
+   retrato em JSON na base de dados e, quando o fluxo contínuo não se estabelece,
+   o cliente LÊ esse retrato a cada poucos segundos — a mesma verdade, dita com
+   a frescura que tem. Nenhum dos dois é fingimento: o painel mostra a hora do
+   último dado em qualquer dos modos. */
+const SONDAGEM_MS = 8000;      // leitura do retrato quando não há fluxo
+const ESPERA_FLUXO_MS = 10000; // sem `hello` neste tempo, passa-se a sondar
 
 const STATUS = {
   live: { label: 'LIVE', pt: 'a trabalhar', color: ACID },
@@ -88,9 +96,12 @@ const semTitulo = (lines, title) => {
   });
 };
 const stateOf = (data, status) => {
+  /* 1.77.0 · `sondagem` é o retrato lido da base a cada poucos segundos: dados
+     frescos por um caminho diferente. Só `stale` e `off` são «não há dado novo». */
   if (status === 'stale' || status === 'off') return 'stale';
   return data?.state || 'idle';
 };
+const estaFresco = st => st === 'live' || st === 'sondagem';
 
 /**
  * Pinta um monitor. `view` = { agent:{name, role, deptName, chip}, data, status, at }.
@@ -323,6 +334,9 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
   const screens = new Map();
   let source = null; let lastHeard = 0; let status = 'off'; let stopped = false; let retry = 0;
   let dirty = true; let lastPaint = 0;
+  /* `modo`: 'sse' (fluxo contínuo) ou 'sondagem' (leituras espaçadas). Não é um
+     detalhe interno — o painel di-lo, para o dono saber o que está a ver. */
+  let modo = 'parado'; let sonda = null; let chegouFluxo = false; let esperaFluxo = null; let falhasSeguidas = 0;
 
   const setStatus = (next, why = '') => {
     if (status === next) return;
@@ -355,29 +369,94 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     emit('update');
   }
 
+  /* ---------- sondagem: o retrato lido a cada 8 s ---------- */
+  function pararSondagem() { if (sonda) { clearInterval(sonda); sonda = null; } }
+  function iniciarSondagem(porque = 'sem fluxo contínuo') {
+    if (stopped || sonda) return;
+    modo = 'sondagem';
+    if (esperaFluxo) { clearTimeout(esperaFluxo); esperaFluxo = null; }
+    /* não se inventa um estado novo para o resto da app: enquanto chegar retrato
+       novo, está `live` — o `modo` é que diz por que caminho veio */
+    if (!estaFresco(status)) setStatus('connecting', porque);
+    sonda = setInterval(() => { sondar(); }, SONDAGEM_MS);
+    if (sonda.unref) sonda.unref();
+    sondar();
+  }
+  async function sondar() {
+    try {
+      const r = await fetch(`${url.replace(/\/stream$/, '')}${agents.length ? `?agentes=${encodeURIComponent(agents.join(','))}` : ''}`,
+        { headers: { accept: 'application/json' }, credentials: 'same-origin' });
+      if (r.status === 401) { falhasSeguidas += 1; setStatus('off', 'a sessão expirou — entra outra vez'); return false; }
+      if (!r.ok) throw new Error(`o servidor respondeu ${r.status}`);
+      const dados = await r.json();
+      falhasSeguidas = 0;
+      ingest(dados);
+      return true;
+    } catch (e) {
+      falhasSeguidas += 1;
+      /* uma falha isolada não pinta o ecrã de vermelho; três seguidas, sim, e
+         diz-se desde quando não há dado nenhum */
+      if (falhasSeguidas >= 3) setStatus('off', e.message || 'sem resposta do servidor');
+      return false;
+    }
+  }
+
   function start() {
     if (stopped) return;
-    if (typeof EventSource === 'undefined') { setStatus('off', 'o browser não suporta eventos do servidor'); return; }
+    /* 1.77.0 · primeiro o retrato (uma leitura, sem esperar pelo fluxo): com o
+       fluxo em baixo, o escritório já mostra o trabalho real em vez de nada */
+    sondar();
+    if (typeof EventSource === 'undefined') { iniciarSondagem('este browser não suporta o fluxo contínuo'); return; }
     try { source = new EventSource(`${url}${agents.length ? `?agentes=${encodeURIComponent(agents.join(','))}` : ''}`); }
     catch { setStatus('off', 'ligação recusada'); return; }
-    source.addEventListener('hello', e => { retry = 0; ingest(JSON.parse(e.data)); });
+    source.addEventListener('hello', e => {
+      retry = 0; chegouFluxo = true; modo = 'sse';
+      if (esperaFluxo) { clearTimeout(esperaFluxo); esperaFluxo = null; }
+      pararSondagem();
+      ingest(JSON.parse(e.data));
+    });
     source.addEventListener('update', e => ingest(JSON.parse(e.data)));
     source.addEventListener('ping', () => { lastHeard = Date.now(); if (status === 'stale') { setStatus('live'); emit('update'); } });
     source.addEventListener('erro', () => setStatus('stale', 'o servidor respondeu com erro'));
     source.onerror = () => {
-      // o EventSource tenta sozinho; enquanto isso os ecrãs dizem que estão velhos
+      /* Duas tentativas e desiste-se do fluxo: insistir num caminho que o
+         servidor publicado não serve era a tempestade de pedidos que deixava o
+         ecrã «desactualizado» e a função a arder invocações. Passa-se a ler. */
       retry += 1;
-      setStatus(retry > 1 ? 'off' : 'stale', 'à espera do servidor');
+      if (retry >= 2 || !chegouFluxo) {
+        if (source) { try { source.close(); } catch { /* já fechado */ } source = null; }
+        iniciarSondagem('este servidor não serve o fluxo contínuo — a ler o retrato da base');
+        return;
+      }
+      setStatus('stale', 'à espera do servidor');
     };
     source.onopen = () => { if (status === 'off') setStatus('stale'); };
     setStatus('connecting');
+    /* o fluxo pode abrir e nunca dizer nada: também conta como «não serve» */
+    esperaFluxo = setTimeout(() => {
+      if (stopped || chegouFluxo) return;
+      if (source) { try { source.close(); } catch { /* já fechado */ } source = null; }
+      iniciarSondagem('o fluxo abriu mas não enviou retrato');
+    }, ESPERA_FLUXO_MS);
   }
-  function stop() { stopped = true; if (source) { try { source.close(); } catch { /* já fechado */ } source = null; } setStatus('off'); }
+  function stop() {
+    stopped = true;
+    if (source) { try { source.close(); } catch { /* já fechado */ } source = null; }
+    if (esperaFluxo) { clearTimeout(esperaFluxo); esperaFluxo = null; }
+    pararSondagem();
+    modo = 'parado';
+    setStatus('off');
+  }
 
   /** Chamado pelo loop da cena: decide se vale a pena redesenhar, e marca o que ficou velho. */
   function tick(now = Date.now(), slow = false) {
-    if (status !== 'off' && status !== 'connecting' && lastHeard && now - lastHeard > SILENCE_MS) {
-      setStatus('stale', `sem eventos há ${Math.round((now - lastHeard) / 1000)} s`);
+    /* com sondagem, o que conta é a última leitura ter chegado; o tecto é o dobro
+       do intervalo, para um pedido lento não pintar o ecrã de «desactualizado» */
+    const limite = modo === 'sondagem' ? SONDAGEM_MS * 3 : SILENCE_MS;
+    if (status !== 'off' && status !== 'connecting' && lastHeard && now - lastHeard > limite) {
+      setStatus('stale', modo === 'sondagem'
+        ? `sem retrato novo há ${Math.round((now - lastHeard) / 1000)} s`
+        : `sem eventos há ${Math.round((now - lastHeard) / 1000)} s`);
     }
     if (!screens.size) return;
     // 60 fps aqui seria desperdício: repinta quando chegou um retrato novo, ou de vez em quando
@@ -385,7 +464,8 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     if (!dirty && now - lastPaint < (slow ? 15000 : 2500)) return;
     dirty = false; lastPaint = now;
     for (const [id, scr] of screens) {
-      if (status !== 'live') { scr.view.status = status === 'off' ? 'off' : 'stale'; scr.view.at = state.at; }
+      if (!estaFresco(status)) { scr.view.status = status === 'off' ? 'off' : 'stale'; scr.view.at = state.at; }
+      else { scr.view.status = 'live'; scr.view.at = state.at; }
       scr.draw();
     }
   }
@@ -396,7 +476,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     screens.set(agent.id, scr);
     const d = state.agents[agent.id];
     if (d) { scr.view.data = d; scr.view.status = 'live'; scr.view.at = state.at; }
-    scr.view.status = state.at ? (status === 'live' ? 'live' : 'stale') : 'off';
+    scr.view.status = state.at ? (estaFresco(status) ? 'live' : 'stale') : 'off';
     scr.draw(true);
     return scr;
   }
@@ -413,13 +493,11 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
 
   /** Um retrato à mão (o botão «atualizar»): o mesmo caminho do fluxo, sem esperar pelo evento. */
   async function refresh() {
-    try {
-      const r = await fetch(`${url.replace(/\/stream$/, '')}${agents.length ? `?agentes=${encodeURIComponent(agents.join(','))}` : ''}`,
-        { headers: { accept: 'application/json' }, credentials: 'same-origin' });
-      if (!r.ok) throw new Error(r.status === 401 ? 'a sessão expirou — entra outra vez' : `o servidor respondeu ${r.status}`);
-      ingest(await r.json());
-      return true;
-    } catch (e) { setStatus('stale', e.message || 'sem resposta'); return false; }
+    const antes = status;
+    const ok = await sondar();
+    /* um botão «actualizar» que falha não pode deixar o ecrã a dizer «live» */
+    if (!ok && antes === 'live') setStatus('stale', 'a última leitura falhou');
+    return ok;
   }
 
   /* ---------- o painel de inspeção ---------- */
@@ -445,7 +523,7 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     const el = sel => document.getElementById(sel);
     const d = state.agents[id] || null;
     // o estado mostrado é o da LIGAÇÃO quando ela não está de pé: nunca «ao vivo» com dados velhos
-    const st = status === 'live' ? (d?.state || 'idle')
+    const st = estaFresco(status) ? (d?.state || 'idle')
       : status === 'off' ? 'off' : 'stale';
     const S = STATUS[st] || STATUS.idle;
 
@@ -456,9 +534,11 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     }
     const note = el('lvNote');
     if (note) {
-      note.textContent = status !== 'live' ? (state.at ? `último dado ${hhmm(state.at)}` : 'sem ligação ao servidor')
+      note.textContent = !estaFresco(status)
+        ? (state.at ? `último dado ${hhmm(state.at)}${modo === 'sondagem' ? ` · a ler a cada ${SONDAGEM_MS / 1000} s` : ''}` : 'sem ligação ao servidor')
         : !d ? 'à espera do primeiro retrato'
-        : (d.lastEventAt ? `${d.stateLabel} · última atividade ${ago(d.lastEventAt)}` : d.stateLabel);
+        : (d.lastEventAt ? `${d.stateLabel} · última atividade ${ago(d.lastEventAt)}` : d.stateLabel)
+          + (modo === 'sondagem' ? ` · retrato ${hhmm(state.at)}` : '');
     }
 
     // monitor: a mesma textura que está na cena, desenhada no tamanho do painel
@@ -592,10 +672,22 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
       b.type = 'button'; b.textContent = 'ATUALIZAR AGORA';
       b.addEventListener('click', async () => { b.disabled = true; b.textContent = 'A LER…'; await refresh(); renderPanel(id, agent); b.disabled = false; b.textContent = 'ATUALIZAR AGORA'; });
       foot.appendChild(b);
-      if (status !== 'live') {
+      if (!estaFresco(status)) {
         const w = document.createElement('div');
         w.style.color = '#B23B2B'; w.style.marginTop = '6px';
-        w.textContent = `A ligação ao vivo não está de pé (${status}). O que está acima pode estar desatualizado.`;
+        /* 1.77.0 · esta frase dizia «a ligação ao vivo não está de pé» mesmo
+           quando o problema era o servidor publicado não ter o fluxo nenhum.
+           Agora diz o que se passa e o que está a ser feito — e, quando a
+           sondagem está a correr, não aparece de todo: os dados são frescos. */
+        const porque = status === 'off'
+          ? (state.at ? `o servidor não respondeu desde as ${hhmm(state.at)}` : 'o servidor não respondeu')
+          : `sem retrato novo desde as ${hhmm(state.at)}`;
+        w.textContent = `${porque}. O que está acima é o último retrato conhecido; a app volta a tentar sozinha.`;
+        foot.appendChild(w);
+      } else if (modo === 'sondagem') {
+        const w = document.createElement('div');
+        w.style.color = '#8D9096'; w.style.marginTop = '6px';
+        w.textContent = `Este servidor não serve o fluxo contínuo: o retrato é lido da base a cada ${SONDAGEM_MS / 1000} s (último: ${hhmm(state.at)}).`;
         foot.appendChild(w);
       }
     }
@@ -607,7 +699,8 @@ export function createLive({ url = '/api/ops/aovivo/stream', agents = [] } = {})
     status: () => status,
     forAgent: id => state.agents[id] || null,
     all: () => state.agents,
-    meta: () => ({ at: state.at, totais: state.totais, fonte: state.fonte, abertas: state.abertas, status }),
+    meta: () => ({ at: state.at, totais: state.totais, fonte: state.fonte, abertas: state.abertas, status, modo, sondagemSegundos: SONDAGEM_MS / 1000 }),
+    modo: () => modo,
     screens,
   };
 }

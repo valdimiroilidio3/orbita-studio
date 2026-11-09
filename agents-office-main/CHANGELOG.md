@@ -1,3 +1,63 @@
+## 1.77.0 — 6 nov 2026 · a conta sem palavra-passe e o escritório ao vivo em produção
+
+Duas frases que o dono leu no ecrã, e as duas eram nossas:
+
+> a base de dados recusou a conta do dono: null value in column "hash" of relation
+> "orbita_contas" violates not-null constraint
+
+> A ligação ao vivo não está de pé (stale). O que está acima pode estar
+> desactualizado.
+
+### 1 · a conta que nasce de um fornecedor não tem palavra-passe
+
+A `orbita_1_54_0.sql` desenhou `hash` como obrigatório porque só existia uma
+porta: email e palavra-passe. A 1.69.0 acrescentou GitHub e Google — e uma conta
+que nasce de um fornecedor não tem palavra-passe, nem deve ter. O código já
+enviava `hash: null`; a regra antiga recusava-o, e o erro do Postgres ia parar ao
+ecrã de entrada.
+
+* **`supabase/orbita_1_77_0.sql`** (idempotente): `hash` deixa de ser `not null`
+  e entra uma regra que diz a verdade — *palavra-passe **ou** fornecedor*. Uma
+  conta sem nenhum dos dois não entra em lado nenhum, e a base recusa-a.
+* **A cura é do servidor**: a escrita que falha com `23502`/`null value in
+  column "hash"` faz o `_oauth.mjs` aplicar essa migração e **voltar a tentar a
+  escrita uma vez**. Sem SQL à mão.
+* **O erro passou a nomear o ficheiro certo** (`orbita_1_77_0.sql`), e o erro
+  cru do Postgres deixou de aparecer ao dono: `explificar()` tradu-lo.
+* **`/auth/entrar` com uma conta só de fornecedor** deixa de dizer «email ou
+  palavra-passe não conferem» (que manda adivinhar uma palavra-passe que nunca
+  existiu): responde 409 com `entraPorFornecedor` e a página diz *«esta conta
+  entra pelo GitHub»*.
+* `faltaEsquemaDaPorta()` reconhece este caso — a sonda da 1.76.0 só via
+  colunas que faltam, e uma regra antiga numa coluna existente passava-lhe ao
+  lado.
+
+### 2 · o escritório ao vivo, também na Vercel
+
+`/api/ops/aovivo` e `/api/ops/aovivo/stream` viviam **só** no `serve.mjs`. Em
+produção não havia nenhum dos dois: o `EventSource` batia num 404, o botão
+«actualizar» noutro, e o painel ficava «DESATUALIZADO» para sempre — a tentar
+religar em ciclo.
+
+* **`api/_aovivo.mjs`** — o retrato lido das tarefas e da atividade do Supabase,
+  com a mesma forma que o cliente já conhece (`estadoDoPosto`, `retrato`,
+  `redigir`). As regras do local mantêm-se: `live` só com trabalho a correr ou
+  evento recente, `idle` sem tarefas, `error` só com falha fresca, zero
+  percentagens inventadas.
+* **`api/_aovivo-rota.mjs`** — JSON (`/api/ops/aovivo`) e SSE
+  (`/api/ops/aovivo/stream`), com `hello`/`update`/`ping` e um **fluxo curto**
+  que se fecha em ~25 s (o `EventSource` religa): uma função na Vercel tem tecto
+  de duração e um fluxo «eterno» seria a mentira seguinte. 401 sem sessão.
+* Servido por **`api/rpc.mjs`** através de duas reescritas do `vercel.json` —
+  não se acrescenta uma função ao deploy (o plano tem tecto).
+* **O cliente (`src/live.js`) deixou de depender do fluxo**: lê o retrato logo
+  ao arrancar e, se o fluxo não se estabelecer em 10 s (ou falhar duas vezes),
+  passa a **ler a cada 8 s** — e diz isso no rodapé, em vez de alarme falso.
+  Com dados frescos não aparece nenhuma frase de erro.
+
+Provas: `aovivo.test.mjs` (10 testes) e 4 novos em `entrada.test.mjs`; suite
+**1380/1380**.
+
 ## 1.76.1 — 6 nov 2026 · o health olha para a porta
 
 A 1.76.0 passou a auditar `orbita_contas` e `orbita_sessoes` na lista de tabelas.

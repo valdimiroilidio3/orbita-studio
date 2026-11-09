@@ -62,6 +62,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/ops/aovivo/stream",
+      "destination": "/api/rpc?aovivo=stream"
+    },
+    {
+      "source": "/api/ops/aovivo",
+      "destination": "/api/rpc?aovivo=retrato"
+    },
+    {
       "source": "/api/oauth",
       "destination": "/api/rpc"
     }

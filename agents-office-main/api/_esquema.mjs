@@ -56,6 +56,10 @@ export const FICHEIROS = [
   /* 1.69.0 · a entrada: o código de uso único por email e o fornecedor de OAuth
      em que a conta entrou. Idempotente (`add column if not exists`). */
   'orbita_1_69_0.sql',
+  /* 1.77.0 · a conta que nasce de um fornecedor não tem palavra-passe: `hash`
+     deixa de ser obrigatório, e passa a haver uma regra (palavra-passe OU
+     fornecedor). Idempotente. */
+  'orbita_1_77_0.sql',
 ];
 
 /** O que está no repositório e NÃO se aplica — com a razão, para ninguém «corrigir» isto. */

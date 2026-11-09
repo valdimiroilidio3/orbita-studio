@@ -41,6 +41,16 @@ function lerCorpo(req) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
+  /* 1.77.0 · `/api/ops/aovivo` e `/api/ops/aovivo/stream` chegam aqui pela mesma
+     razão que o OAuth: uma função a mais podia passar o tecto de funções do
+     plano. Ver `api/_aovivo-rota.mjs` (o retrato) — antes desta versão estes
+     caminhos só existiam no `serve.mjs`, e em produção o escritório ficava
+     «desactualizado» para sempre. */
+  if (new URL(String(req.url || '/'), 'http://local').searchParams.has('aovivo')) {
+    const { default: tratarAoVivo } = await import('./_aovivo-rota.mjs');
+    return tratarAoVivo(req, res);
+  }
+
   /* 1.69.0 · `/api/oauth` chega aqui por uma reescrita do `vercel.json`. É a
      mesma função porque o plano Hobby limita as funções por deploy a 12 — e a
      alternativa era não ter login por GitHub/Google. Ver `api/_oauth.mjs`. */
