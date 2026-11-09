@@ -1,3 +1,16 @@
+## 1.79.1 — 9 nov 2026 · a barra do motor diz quantos motores há (prova pública)
+
+O `/ia/estado` pede sessão. Na página do escritório, sem sessão aberta, a barra do
+motor ficava apenas com a frase honesta «o estado dos motores lê-se na mesa». Mas há
+uma prova **pública** do mesmo servidor: o `/api/health` diz quantos fornecedores têm
+chave — e a produção responde **7** (groq, vercel, llm7, opencode, ovh, pollinations,
+tavily). `src/mcp.js` passa a usar essa prova como segunda leitura:
+
+- «MOTOR · ÓRBITA — 7 fornecedor(es) com chave · o detalhe lê-se na mesa (/app#/ia)»;
+- se nem o health responder, fica a frase anterior. Nunca um número inventado.
+
+Prova em `ia-vista.test.mjs` (+2 asserções). `node --test` — **1429/1429**.
+
 ## 1.79.0 — 9 nov 2026 · o trabalho vive no servidor, e a barra nunca fecha a porta
 
 Três frases do dono, no mesmo dia:
