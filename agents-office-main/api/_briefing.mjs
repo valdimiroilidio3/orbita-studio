@@ -106,8 +106,15 @@ export function daLead(lead = {}, projeto = null) {
     b.valores[id] = v;
     b.origens[id] = origem;
   };
-  poe('empresa', lead.name);
-  poe('setor', lead.category);
+  /* 1.82.0 · O NOME DO PROJETO É O NOME DO NEGÓCIO.
+     Só se copiava `lead.name`. Um projeto criado à mão (sem lead) — ou com uma
+     lead sem nome — abria o briefing com «Nome da empresa ou marca» vazio, mesmo
+     com o projeto a chamar-se «Clínica do Bairro» e a ter nicho. Resultado: o
+     Prompt Master recusava para sempre («falta o nome da empresa») e o ecrã pedía
+     à pessoa que escrevesse outra vez uma coisa que já estava no projeto.
+     Isto não é inventar: o nome do projeto e o nicho são factos da ficha. */
+  poe('empresa', lead.name || projeto?.client || projeto?.name);
+  poe('setor', lead.category || projeto?.niche);
   /* o site é um facto; a identidade visual que lá está é uma avaliação que
      ninguém fez ainda — diz-se isso, em vez de a inventar */
   if (limpo(lead.website)) {
@@ -117,6 +124,33 @@ export function daLead(lead = {}, projeto = null) {
      tipo, e o objetivo continua vazio até alguém o dizer — a cidade também fica
      na ficha, não se copia para um campo que não existe. */
   return b;
+}
+
+/**
+ * 1.82.0 · A CURA DO REGISTO ANTIGO.
+ *
+ * Um briefing gravado antes desta versão pode ter `empresa`/`setor` vazios mesmo
+ * quando o projeto tem nome e nicho (o projeto criado à mão nunca os recebeu, e
+ * o registo ficou assim para sempre). Aqui preenche-se **só o que está vazio**,
+ * **só com factos** da ficha, e devolve-se a lista do que mudou — para quem
+ * chamou poder gravar. O que uma pessoa escreveu nunca é tocado.
+ */
+export function semear(registo, { projeto = null, lead = null } = {}) {
+  if (!registo) return [];
+  if (!registo.briefing || typeof registo.briefing !== 'object') registo.briefing = { valores: {}, origens: {} };
+  if (!registo.briefing.valores || typeof registo.briefing.valores !== 'object') registo.briefing.valores = {};
+  if (!registo.briefing.origens || typeof registo.briefing.origens !== 'object') registo.briefing.origens = {};
+  const semente = daLead(lead || {}, projeto);
+  const curados = [];
+  for (const campo of CAMPO_IDS) {
+    const valor = limpo(semente.valores[campo]);
+    if (!valor) continue;
+    if (limpo(registo.briefing.valores[campo])) continue;
+    registo.briefing.valores[campo] = valor;
+    registo.briefing.origens[campo] = semente.origens[campo] || 'lead';
+    curados.push(campo);
+  }
+  return curados;
 }
 
 /* ---------------------------------------------------------------------------
@@ -813,14 +847,9 @@ export async function abrirRegisto(repo, { projeto, lead = null }) {
     arquivo.projetos[id] = registo;
     criado = true;
   } else {
-    /* a lead mudou de nome ou de setor? actualiza-se só o que ninguém escreveu */
-    const semente = daLead(lead || {}, projeto);
-    for (const campo of ['empresa', 'setor']) {
-      if (limpo(semente.valores[campo]) && !limpo(registo.briefing.valores?.[campo])) {
-        registo.briefing.valores[campo] = semente.valores[campo];
-        registo.briefing.origens[campo] = 'lead';
-      }
-    }
+    /* a ficha mudou de nome, de nicho ou de site? preenche-se SÓ o que ninguém
+       escreveu (1.82.0: também quando o projeto tem nome e o registo não) */
+    semear(registo, { projeto, lead });
     registo.leadId = registo.leadId || projeto.lead_id || lead?.id || null;
   }
   return { ok: true, arquivo, registo, criado };
@@ -838,12 +867,41 @@ export async function gravarRegisto(repo, arquivo, registo) {
    escrito em `erro` e o HTTP decide-se na camada das rotas.
    ------------------------------------------------------------------------ */
 
-const minimoParaGerar = (briefing) => {
-  const v = briefing?.valores || {};
+/** Os cinco campos que dão matéria a um Prompt Master. Um deles chega. */
+export const CAMPOS_DE_MATERIA = ['objetivo', 'descricao', 'produtos', 'publico', 'valor'];
+
+/**
+ * O mínimo para gerar. 1.82.0: a mesma semente que abre o briefing entra aqui —
+ * um registo antigo (gravado quando o projeto criado à mão não recebia o nome)
+ * tinha `empresa` vazio e o gerador recusava para sempre, mesmo com o nome no
+ * projeto. E devolve-se `falta` com os campos, para a recusa poder ser precisa
+ * em vez de listar tudo de uma vez.
+ */
+const minimoParaGerar = (briefing, { projeto = null, lead = null } = {}) => {
+  const v = { ...(briefing?.valores || {}) };
+  const semente = daLead(lead || {}, projeto);
+  for (const id of CAMPO_IDS) if (!limpo(v[id]) && limpo(semente.valores[id])) v[id] = semente.valores[id];
   const preenchidos = CAMPO_IDS.filter((id) => limpo(v[id]));
   const temEmpresa = !!limpo(v.empresa);
-  const temMateria = ['objetivo', 'descricao', 'produtos', 'publico', 'valor'].some((id) => limpo(v[id]));
-  return { ok: temEmpresa && temMateria, preenchidos };
+  const materia = CAMPOS_DE_MATERIA.filter((id) => limpo(v[id]));
+  const falta = [];
+  if (!temEmpresa) falta.push('empresa');
+  if (!materia.length) falta.push(...CAMPOS_DE_MATERIA);
+  return { ok: falta.length === 0, preenchidos, falta, temEmpresa, temMateria: materia.length > 0, valores: v };
+};
+
+/** A frase da recusa: diz o que falta, não a lista toda. */
+export const fraseDaFalta = (falta = [], { paraImagens = false } = {}) => {
+  const nome = falta.includes('empresa');
+  const materia = falta.filter((id) => CAMPOS_DE_MATERIA.includes(id)).length > 0;
+  const pedacos = [];
+  if (nome) pedacos.push('o nome da empresa (campo «Nome da empresa ou marca»)');
+  if (materia) {
+    pedacos.push(paraImagens
+      ? 'uma frase sobre o que ela vende (objetivo, descrição, produtos, público ou proposta de valor)'
+      : 'pelo menos um destes — objetivo, descrição, produtos, público ou proposta de valor');
+  }
+  return pedacos.join(' e ');
 };
 
 export function vistaDoRegisto(registo, { projeto = null } = {}) {
@@ -952,11 +1010,15 @@ export async function gerarMaster(repo, { projeto, lead = null, motor = null, in
   if (!ab.ok) return ab;
   const { registo, arquivo } = ab;
   const briefing = registo.briefing || briefingVazio();
-  const minimo = minimoParaGerar(briefing);
+  /* 1.82.0 · o registo antigo é curado (e gravado) antes de se julgar: o nome do
+     projeto passa a contar como nome da empresa, e a recusa deixa de ser eterna */
+  const curados = semear(registo, { projeto, lead });
+  if (curados.length) await gravarRegisto(repo, arquivo, registo);
+  const minimo = minimoParaGerar(briefing, { projeto, lead });
   if (!minimo.ok) {
     return {
-      ok: false, codigo: 'briefing-vazio',
-      erro: 'o briefing guardado ainda não chega para o Prompt Master: precisa do nome da empresa e de pelo menos o objetivo, a descrição, os produtos, o público ou a proposta de valor',
+      ok: false, codigo: 'briefing-vazio', faltaParaGerar: minimo.falta,
+      erro: `o briefing guardado ainda não chega para o Prompt Master: falta ${fraseDaFalta(minimo.falta)}`,
       vista: vistaDoRegisto(registo, { projeto }),
     };
   }
@@ -1002,11 +1064,13 @@ export async function gerarImagens(repo, { projeto, lead = null, motor = null, p
   if (!ab.ok) return ab;
   const { registo, arquivo } = ab;
   const briefing = registo.briefing || briefingVazio();
-  const minimo = minimoParaGerar(briefing);
+  const curados = semear(registo, { projeto, lead });
+  if (curados.length) await gravarRegisto(repo, arquivo, registo);
+  const minimo = minimoParaGerar(briefing, { projeto, lead });
   if (!minimo.ok) {
     return {
-      ok: false, codigo: 'briefing-vazio',
-      erro: 'os prompts de imagem precisam de um briefing com o nome da empresa e o que ela vende',
+      ok: false, codigo: 'briefing-vazio', faltaParaGerar: minimo.falta,
+      erro: `os prompts de imagem precisam de mais do que isto no briefing: falta ${fraseDaFalta(minimo.falta, { paraImagens: true })}`,
       vista: vistaDoRegisto(registo, { projeto }),
     };
   }
@@ -1079,5 +1143,9 @@ export async function lerBriefing(repo, { projeto, lead = null } = {}) {
       semRegisto: true,
     };
   }
+  /* 1.82.0 · um registo antigo mostra o nome do projeto no campo da empresa: o
+     ecrã passa a ver o mesmo que o gerador vai ver. Um GET não escreve — isto
+     persiste na próxima gravação (ou no primeiro gerar, que grava antes de julgar). */
+  semear(registo, { projeto, lead });
   return { ok: true, vista: vistaDoRegisto(registo, { projeto }) };
 }

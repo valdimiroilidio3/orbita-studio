@@ -1349,13 +1349,17 @@ export async function responder(repo, {
     if (seg[3] === 'master') {
       const motor = await motorDoBriefing();
       const r = await bf.gerarMaster(repo, { projeto, lead, motor, instrucao: limpo(corpo?.instrucao), por: porQuem() });
-      if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, ...(r.vista || {}) } };
+      /* 1.82.0 · `faltaParaGerar` viaja: a mesa marca no formulário exactamente os
+         campos que travam a geração. Nome próprio porque `emFalta` já é outra
+         coisa na vista (todos os campos vazios) — duas listas com o mesmo nome
+         era o género de confusão que esconde um bug. */
+      if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, faltaParaGerar: r.faltaParaGerar || [], ...(r.vista || {}) } };
       await repo.atividade.add('briefing', `Prompt Master de «${projeto.name}» ${r.via === 'ia' ? 'escrito pela IA' : 'montado por regras'}`).catch(() => null);
       return { status: 200, corpo: { ok: true, master: r.master, via: r.via, motivo: r.motivo, avisos: r.avisos || [], ...r.vista } };
     }
     const motor = await motorDoBriefing();
     const r = await bf.gerarImagens(repo, { projeto, lead, motor, por: porQuem() });
-    if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, violacoes: r.violacoes || [], ...(r.vista || {}) } };
+    if (!r.ok) return { status: r.codigo === 'briefing-vazio' ? 409 : 502, corpo: { ok: false, codigo: r.codigo, erro: r.erro, error: r.erro, faltaParaGerar: r.faltaParaGerar || [], violacoes: r.violacoes || [], ...(r.vista || {}) } };
     await repo.atividade.add('briefing', `prompts de imagem de «${projeto.name}» ${r.via === 'ia' ? 'escritos pela IA' : 'montados por regras'}`).catch(() => null);
     return { status: 200, corpo: { ok: true, imagens: r.imagens, via: r.via, motivo: r.motivo, ...r.vista } };
   }
