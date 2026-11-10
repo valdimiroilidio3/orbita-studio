@@ -1,3 +1,86 @@
+## 1.82.0 — 9 nov 2026 · o Prompt Master voltou a gerar (e a recusa passa a ter endereço)
+
+O dono, com o ecrã à frente:
+
+> «Ainda não dá para gerar: o briefing guardado ainda não chega para o Prompt
+> Master: precisa do nome da empresa e de pelo menos o objetivo, a descrição, os
+> produtos, o público ou a proposta de valor.»
+
+Ele tinha o briefing preenchido. O que faltava era o **nome da empresa** — e não
+por culpa dele.
+
+### A causa, reproduzida antes de ser corrigida
+
+A semente do briefing (`daLead`) olhava só para a lead: `lead.name` e
+`lead.category`. Um projeto **criado à mão** — sem lead —, ou com uma lead sem
+nome, abria o formulário com «Nome da empresa ou marca» **vazio**, apesar de o
+projeto se chamar «Clínica do Bairro» e ter nicho. Gravava-se assim, e a partir
+daí era para sempre: o gerador recusava, a frase listava cinco campos de uma vez,
+e quem lia aquilo só podia concluir «falta tudo».
+
+Reproduzido com a rota real, antes da correção:
+
+```
+abre com empresa = "" | setor = ""
+gravação 200 | guardado em empresa = ""
+gerar master → 409 o briefing guardado ainda não chega para o Prompt Master: …
+```
+
+E depois:
+
+```
+abre com empresa = "Clínica do Bairro" | setor = "Clínica dentária"
+gerar master → 200
+```
+
+### O que mudou
+
+1. **O nome do projeto é o nome da empresa.** `daLead` passa a usar
+   `lead.name || projeto.client || projeto.name` (e o setor: `lead.category ||
+   projeto.niche`). É um facto da ficha, não uma invenção — a origem continua
+   marcada «da lead».
+2. **Os briefings já gravados são curados.** `semear()` preenche **só** o que está
+   vazio, **só** com factos: ao abrir (sem escrever, uma leitura não grava) e
+   **antes de gerar** (aí grava — o registo antigo fica bom de vez). O que uma
+   pessoa escreveu nunca é tocado.
+3. **A recusa diz o que falta, não a lista toda.** `faltaParaGerar` viaja no corpo
+   do 409 (nome próprio: `emFalta` já é outra coisa na vista — todos os campos
+   vazios). As frases passam a ser três, não uma:
+   - falta o nome → «falta o nome da empresa (campo «Nome da empresa ou marca»)»;
+   - falta matéria → «falta pelo menos um destes — objetivo, descrição, produtos,
+     público ou proposta de valor»;
+   - faltam os dois → as duas, por essa ordem.
+4. **O ecrã dá o passo seguinte.** O aviso «Ainda não dá para gerar o Prompt
+   Master» mostra **um atalho por campo em falta**: carregar nele leva ao
+   formulário (e, na página do projeto, muda a aba), põe o cursor no campo e
+   acende-o. A regra está escrita em português: o nome, e **uma só** das cinco.
+5. **Gerar com alterações por gravar** deixa de ser um ecrã parado: além do
+   toast, fica um aviso no ecrã a dizer que o Prompt Master sai do briefing
+   guardado e que o botão é «Salvar».
+
+### Provas
+
+`briefing-gerar.test.mjs` (novo, 9 provas), pela mão do cliente e pela rota:
+
+```
+node --test  → 1488 · pass 1488 · fail 0     (1479 antes; +9)
+node check.mjs → 96/96 · 1 saltado (smoke: browser)
+node build.mjs → publicado
+```
+
+Cobre: projeto à mão com o nome no briefing; preencher → gravar → gerar de ponta a
+ponta; registo antigo curado na leitura **e** na base depois de gerar; recusa que
+fala só do nome; recusa que pede **uma** das cinco; `faltaParaGerar` →
+`bf-ir` → aba e campo; a regra do ecrã igual à do servidor; os prompts de imagem
+com as palavras deles; e o aviso de «alterações por gravar».
+
+### O que continua a ser recusado — de propósito
+
+Sem matéria nenhuma (nenhuma das cinco frases) o Prompt Master **não** é gerado.
+Não é um bug: é a regra que impede um prompt oco, cheio de «não informado». O que
+mudou é que agora se sabe exactamente qual campo falta, e chega **uma frase** num
+deles.
+
 ## 1.81.0 — 9 nov 2026 · o calendário no telemóvel, e o que só o rato revelava
 
 A 1.80.0 fechou o painel das tarefas e a gaveta do posto. Faltava a superfície que

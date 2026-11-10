@@ -64,6 +64,7 @@ export function estadoNovo(projetoId = null) {
     versoes: null,         // { master: [], imagens: [] }
     aCarregarVersoes: false,
     semRegisto: false,
+    emFalta: [],           // 1.82.0: os campos que o servidor disse faltarem
   };
 }
 
@@ -86,6 +87,7 @@ export async function carregarBriefing(api, projetoId, { forcar = false } = {}) 
     B.origens = { ...(r.briefing?.origens || {}) };
     B.base = r.briefing?.hash || null;
     B.sujo = false;
+    B.emFalta = [];
     B.semRegisto = !!r.semRegisto;
     B.semBase = false;
   } catch (e) {
@@ -118,10 +120,27 @@ export function rotuloOrigem(id, valores = {}, origens = {}) {
   return BADGE[origens?.[id]] || BADGE.manual;
 }
 
+/** Os cinco campos que dão matéria a um Prompt Master (um deles chega). */
+export const CAMPOS_DE_MATERIA = ['objetivo', 'descricao', 'produtos', 'publico', 'valor'];
+
+/**
+ * 1.82.0 · O QUE FALTA, CAMPO A CAMPO.
+ * Antes isto era um `sim/não` e o ecrã só sabia dizer a frase toda de uma vez —
+ * «precisa do nome da empresa e de pelo menos o objetivo, a descrição…» — mesmo
+ * quando faltava um único campo. Agora devolve a lista, e cada item vira um
+ * atalho para o campo que o resolve.
+ */
+export function faltaParaGerar(valores = {}) {
+  const v = (id) => String(valores?.[id] ?? '').trim();
+  const falta = [];
+  if (!v('empresa')) falta.push('empresa');
+  if (!CAMPOS_DE_MATERIA.some((id) => v(id))) falta.push(...CAMPOS_DE_MATERIA);
+  return falta;
+}
+
 /** Há matéria suficiente para o Prompt Master? (nome + uma coisa concreta) */
 export function podeGerar(valores = {}) {
-  const v = (id) => String(valores?.[id] ?? '').trim();
-  return !!v('empresa') && ['objetivo', 'descricao', 'produtos', 'publico', 'valor'].some((id) => v(id));
+  return faltaParaGerar(valores).length === 0;
 }
 
 /** Sair da página com alterações por gravar pede confirmação (no diálogo da casa). */
@@ -185,6 +204,47 @@ function camposHTML(B) {
   }).join('')}</div>`;
 }
 
+const NOME_CURTO = {
+  empresa: 'Nome da empresa',
+  objetivo: 'Objetivo',
+  descricao: 'Descrição',
+  produtos: 'Produtos',
+  publico: 'Público',
+  valor: 'Proposta de valor',
+};
+
+/**
+ * 1.82.0 · «AINDA NÃO DÁ PARA GERAR» COM O CAMINHO À VISTA.
+ * A frase do servidor é exacta; aqui dá-se o passo seguinte: um atalho para cada
+ * campo que falta, e a regra dita em português («o nome + uma frase»). Sem isto,
+ * quem chega ao fim do formulário só via uma lista de cinco campos e não sabia
+ * que bastava um.
+ */
+function blocoFalta(B) {
+  const falta = (B.emFalta && B.emFalta.length ? B.emFalta : faltaParaGerar(B.valores));
+  if (!falta.length) return '';
+  const nome = falta.includes('empresa');
+  const materia = falta.filter((id) => CAMPOS_DE_MATERIA.includes(id));
+  const chip = (id, txt) => `<button class="bf-chip" type="button" data-act="bf-ir" data-campo="${E(id)}">${E(txt)}</button>`;
+  let frase;
+  if (nome && materia.length) {
+    frase = 'Precisa de <b>duas</b> coisas: o <b>nome da empresa</b> e <b>uma só</b> destas cinco. O nome é o que falta primeiro:';
+  } else if (nome) {
+    frase = 'Falta o <b>nome da empresa</b> — é o único campo obrigatório. Tudo o resto do briefing já está escrito:';
+  } else {
+    frase = 'Falta <b>uma frase</b> sobre o negócio. Basta <b>uma só</b> destas cinco — o nome da empresa já está:';
+  }
+  const chips = [
+    ...(nome ? [chip('empresa', NOME_CURTO.empresa)] : []),
+    ...materia.map((id) => chip(id, NOME_CURTO[id] || id)),
+  ].join(' ');
+  return `<div class="bf-falta" role="status">
+    <b>Ainda não dá para gerar o Prompt Master.</b>
+    <span>${frase}</span>
+    <span class="bf-falta-chips">${chips}</span>
+  </div>`;
+}
+
 function painelBriefing(B, S) {
   const conta = resumoOrigens(B.valores, B.origens);
   const gravado = B.dados?.briefing?.gravadoEm ? fromUnix(B.dados.briefing.gravadoEm) : null;
@@ -213,7 +273,8 @@ function painelBriefing(B, S) {
       </button>
       ${B.dados?.master || B.dados?.imagens ? `<button class="btn quiet small" data-act="bf-rascunho-tudo"${B.aGerar ? ' disabled' : ''} title="a IA reescreve os campos que ela própria sugeriu; o que escreveste fica">Reescrever sugestões</button>` : ''}
     </div>
-    <div class="hint">O rascunho da IA só preenche campos vazios e só com o que a ficha da lead sustenta. Podes escrever tudo à mão — o projeto não depende da IA.${pode ? '' : ' Para o Prompt Master precisas do nome da empresa e de pelo menos o objetivo, a descrição, os produtos, o público ou a proposta de valor.'}</div>
+    ${pode ? '' : blocoFalta(B)}
+    <div class="hint">O rascunho da IA só preenche campos vazios e só com o que a ficha da lead sustenta. Podes escrever tudo à mão — o projeto não depende da IA.</div>
   </div>`;
 }
 
@@ -225,6 +286,7 @@ function painelMaster(B) {
       <div class="bf-vazio">
         <h3>Ainda não há Prompt Master</h3>
         <p>Ele é escrito a partir do <b>briefing guardado</b> — não de uma conversa. Se a IA não responder, é montado por regras com os mesmos factos, e o ecrã diz qual dos dois foi.</p>
+        ${podeGerar(B.valores) ? '' : blocoFalta(B)}
         <button class="btn primary" data-act="bf-master"${B.aGerar ? ' disabled' : ''}>${B.aGerar === 'master' ? 'A escrever…' : 'Escrever o Prompt Master'}</button>
       </div>
     </div>`;
@@ -421,6 +483,23 @@ export async function accaoBriefing(name, el, api) {
   if (!B) return false;
   const id = B.projetoId;
 
+  /* 1.82.0 · o atalho de um campo que falta: leva ao formulário e põe o cursor
+     lá dentro. Uma recusa tem de terminar num campo, não numa frase. */
+  if (name === 'bf-ir') {
+    const campo = el?.dataset?.campo;
+    if (!campo) return true;
+    B.aba = 'briefing';
+    if ('projetoTab' in S) S.projetoTab = 'briefing';
+    api.paint();
+    const alvo = globalThis.document?.getElementById(`bf-${campo}`);
+    if (alvo) {
+      if (typeof alvo.scrollIntoView === 'function') alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (typeof alvo.focus === 'function') alvo.focus({ preventScroll: true });
+      alvo.classList.add('bf-pede');
+    }
+    return true;
+  }
+
   if (name === 'bf-aba') {
     B.aba = el?.dataset?.aba || 'briefing';
     B.versoes = null;
@@ -453,6 +532,7 @@ export async function accaoBriefing(name, el, api) {
       B.base = r.briefing?.hash || null;
       B.sujo = false;
       B.semRegisto = false;
+      B.emFalta = [];
       comAviso(B, 'Briefing gravado. O Prompt Master e os prompts de imagem ficam marcados como desactualizados até serem gerados outra vez.', false);
       api.toast('briefing gravado');
     } catch (e) {
@@ -490,7 +570,12 @@ export async function accaoBriefing(name, el, api) {
      primeiro — é a diferença entre gerar do que está confirmado e do que não está */
   const precisaGravar = () => {
     if (!B.sujo) return false;
+    /* 1.82.0 · o aviso fica no ecrã (não só num toast de dois segundos) e o botão
+       de gravar é o que recebe o foco: quem carrega em «Gerar» com o briefing por
+       gravar não fica a olhar para um ecrã que não mudou */
+    comAviso(B, 'Tens alterações por gravar. O Prompt Master é escrito a partir do briefing guardado — carrega em «Salvar» e volta a gerar.', true);
     api.toast('tens alterações no briefing por gravar — grava primeiro e gero a partir da versão guardada', true);
+    api.paint();
     const btn = globalThis.document?.querySelector('[data-act="bf-guardar"]');
     if (btn && !btn.disabled) btn.focus();
     return true;
@@ -532,11 +617,15 @@ export async function accaoBriefing(name, el, api) {
       B.campos = r.campos || B.campos;
       B.base = r.briefing?.hash || B.base;
       B.sujo = false;
+      B.emFalta = [];
       comAviso(B, r.via === 'ia'
         ? (tipo === 'master' ? 'Prompt Master escrito pela IA a partir do briefing guardado.' : 'Prompts de imagem escritos pela IA a partir do briefing guardado.')
         : `Sem resposta da IA (${r.motivo || 'motivo não indicado'}). Ficou a versão por regras, com os factos do briefing guardado.`, r.via !== 'ia');
       api.toast(tipo === 'master' ? `Prompt Master ${r.via === 'ia' ? 'escrito pela IA' : 'montado por regras'}` : `prompts de imagem ${r.via === 'ia' ? 'escritos pela IA' : 'montados por regras'}`);
     } catch (e) {
+      /* 1.82.0 · o servidor diz QUE campos faltam (`emFalta`) e o ecrã usa isso:
+         a recusa deixa de ser uma frase comprida e passa a ser um atalho */
+      B.emFalta = Array.isArray(e?.body?.faltaParaGerar) ? e.body.faltaParaGerar : [];
       comAviso(B, e?.status === 409
         ? `Ainda não dá para gerar: ${e.message}`
         : `Não consegui gerar (${e?.message || 'sem resposta'}). O briefing está guardado; podes tentar outra vez.`, true);
