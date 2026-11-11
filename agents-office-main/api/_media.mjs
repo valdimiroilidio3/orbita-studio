@@ -285,9 +285,10 @@ export async function criar(repo, { projeto, lead = null, conta = null, pedido =
    4 · AVANÇAR — aqui acontece a chamada ao fornecedor
    O trabalho não fica preso numa única requisição HTTP longa: o pedido cria o
    registo, e quem o consulta (a mesa, de 2 em 2 segundos) faz avançar um passo.
-   Em produção há também um cron (`/api/ops/media/pump`) para quando ninguém
-   está a olhar; os dois caminhos chamam esta função, e a marca `em_processamento`
-   evita que dois pedidos gerem a mesma imagem duas vezes.
+   Quando ninguém está a olhar para a mesa, quem faz avançar é `avancarPendentes`
+   (1.86.0), chamado pelo agendador de 30 em 30 minutos através de `/api/ciclo?so=midia`.
+   Os dois caminhos chamam `avancar`, e a marca `em_processamento` evita que dois
+   pedidos gerem a mesma imagem duas vezes.
    ------------------------------------------------------------------------ */
 export async function avancar(repo, geracao, { env = {}, armazem = null, fetchImpl = fetch, agora = Date.now() } = {}) {
   if (!geracao || geracao.estado !== 'aguardando') return geracao;
@@ -362,6 +363,74 @@ export async function avancar(repo, geracao, { env = {}, armazem = null, fetchIm
     fornecedor: geracao.fornecedor || F.FORNECEDOR_IMAGEM,
   };
   return (await repo.geracoes.actualizar(geracao.id, campos).catch(() => null)) || { ...geracao, ...campos };
+}
+
+/* ---------------------------------------------------------------------------
+   4b · O PUMP (1.86.0) — quem faz avançar a fila quando ninguém está a olhar
+
+   Até à 1.85 este caminho existia só no papel: a mesa avançava as gerações ao
+   consultá-las, e mais nada. Um pedido feito pelos agentes (`imagem_gerar`) ou
+   por alguém que fechou o separador ficava «aguardando» para sempre.
+
+   Regras que não quebra:
+     · uma função da Vercel tem 60 s: o pump NÃO começa uma imagem depois do seu
+       orçamento (por omissão 25 s), e uma imagem demora até ~26 s — por isso
+       nunca passa de ~51 s no pior caso;
+     · só imagens: o vídeo é composto no browser;
+     · uma geração presa («a gerar» há mais de `limiarPresaMs`) é curada: a
+       função morreu depois de reivindicar a linha, por isso PODE ter sido
+       cobrada. Não se volta a gerar às cegas: fica `falhou` com essa razão
+       escrita, e quem quiser refaz com «gerar outra vez».
+   ------------------------------------------------------------------------ */
+export const LIMIAR_PRESA_MS = 3 * 60 * 1000;
+
+export async function curarPresas(repo, { agora = Date.now(), limiarMs = LIMIAR_PRESA_MS } = {}) {
+  const antes = new Date(agora - limiarMs).toISOString();
+  const presas = await repo.geracoes.listarPresas(antes, 20).catch(() => []);
+  const curadas = [];
+  for (const g of presas || []) {
+    const campos = {
+      estado: 'falhou',
+      erro: 'a geração ficou presa a meio (a função parou antes de acabar) — pode ter sido cobrada; se a queres, usa «gerar outra vez»',
+      actualizado: new Date(agora).toISOString(),
+    };
+    const nova = await repo.geracoes.actualizar(g.id, campos).catch(() => null);
+    curadas.push({ id: g.id, estado: 'falhou' });
+    if (!nova) curadas[curadas.length - 1].erro = 'não consegui atualizar a linha';
+  }
+  return curadas;
+}
+
+/**
+ * Faz avançar as imagens pendentes dentro de um orçamento de tempo.
+ * Devolve o que aconteceu — nunca finge que acabou quando parou no orçamento.
+ */
+export async function avancarPendentes(repo, { env = {}, fetchImpl = fetch, limite = 5, orcamentoMs = 25000, agora = () => Date.now() } = {}) {
+  const t0 = agora();
+  const curadas = await curarPresas(repo, { agora: t0 });
+  let pendentes = [];
+  try {
+    pendentes = (await repo.geracoes.listarPendentes(Math.max(1, Math.min(20, Number(limite) || 5)))) || [];
+  } catch (e) {
+    return { ok: false, erro: `não consegui ler a fila de mídia: ${String(e?.message || e).slice(0, 160)}`, avancadas: [], curadas, restantes: 0, gastouMs: agora() - t0 };
+  }
+  const arm = criarArmazem({ env, fetchImpl });
+  const avancadas = [];
+  let parou = false;
+  for (const g of pendentes) {
+    if (g.tipo !== 'imagem') continue;
+    if (agora() - t0 > orcamentoMs) { parou = true; break; }
+    const depois = await avancar(repo, g, { env, armazem: arm, fetchImpl });
+    avancadas.push({ id: g.id, estado: depois?.estado || null, erro: depois?.erro || null });
+  }
+  const restantes = Math.max(0, pendentes.filter((g) => g.tipo === 'imagem').length - avancadas.length);
+  return {
+    ok: true, avancadas, curadas, restantes, parou,
+    gastouMs: agora() - t0,
+    frase: !pendentes.length && !curadas.length
+      ? 'a fila de imagens está vazia'
+      : `avancei ${avancadas.length} imagem(ns)${curadas.length ? ` · curei ${curadas.length} presa(s)` : ''}${restantes ? ` · ficaram ${restantes} para a próxima volta` : ''}`,
+  };
 }
 
 /* ---------------------------------------------------------------------------

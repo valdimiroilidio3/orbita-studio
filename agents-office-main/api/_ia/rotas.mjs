@@ -655,17 +655,11 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
        tua usa este caminho para quando ninguém está a olhar). Mesmo token do
        worker, e nunca mais do que 5 por chamada — uma função da Vercel tem 60 s. */
     if (limpo === '/media/geracoes/avancar') {
+      /* 1.86.0 · o mesmo pump que o agendador usa, com orçamento de tempo (antes
+         eram 5 imagens sem limite de tempo: passava dos 60 s da função). */
       const MD = await import('../_media.mjs');
-      const { criarArmazem } = await import('../_armazem.mjs');
-      const armazem = criarArmazem({ env });
-      const pendentes = await repo.geracoes.listarPendentes(Number(c.limite) || 5).catch(() => []);
-      const feitas = [];
-      for (const g of pendentes) {
-        if (g.tipo === 'video') continue;   // vídeo: quem compõe é o browser
-        const depois = await MD.avancar(repo, g, { env, armazem });
-        feitas.push({ id: depois.id, estado: depois.estado, erro: depois.erro || null });
-      }
-      return { status: 200, corpo: { ok: true, avancadas: feitas, restantes: Math.max(0, pendentes.length - feitas.length) } };
+      const r = await MD.avancarPendentes(repo, { env, fetchImpl, limite: Number(c.limite) || 5, orcamentoMs: Number(c.orcamentoMs) || 25000 });
+      return { status: r.ok ? 200 : 503, corpo: r };
     }
 
     const acao = seg[seg.length - 1];

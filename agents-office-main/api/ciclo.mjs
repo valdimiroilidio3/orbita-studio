@@ -84,6 +84,21 @@ export default async function handler(req, res) {
     return;
   }
 
+  /* 1.86.0 · `?so=midia`: só a fila de imagens (o pump). O agendador de 30 em 30
+     minutos chama este caminho e depois o ciclo de tarefas, em pedidos separados,
+     para que nenhum passe dos 60 s da função. */
+  const so = new URL(req.url || '/', 'http://localhost').searchParams.get('so');
+  if (so === 'midia') {
+    try {
+      const { avancarPendentes } = await import('./_media.mjs');
+      const midia = await avancarPendentes(repo, { env, orcamentoMs: 25000 });
+      res.status(200).json({ ok: midia.ok, via, so: 'midia', frase: midia.frase || midia.erro, midia });
+    } catch (e) {
+      res.status(500).json({ ok: false, via, so: 'midia', error: String(e.message || e).slice(0, 300) });
+    }
+    return;
+  }
+
   try {
     const r = await correrCiclo({ repo, env });
     const resumo = resumoDoCiclo(r);
