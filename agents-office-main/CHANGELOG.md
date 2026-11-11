@@ -1,3 +1,37 @@
+## 1.85.0 — os agentes passam a ter as ferramentas que o produto já tem (11 nov 2026)
+
+A lista «o que esta instalação não faz» dizia que não havia pesquisa web nem
+geração de imagens, e os agentes escreviam «não tenho acesso à internet». Era
+falso: a Tavily está ligada em produção e o Pollinations gera imagens nos
+projetos. O que faltava era o agente poder usá-las dentro de uma execução.
+
+Novas ferramentas (`api/_ia/ferramentas.mjs`, lista fechada):
+
+- `web_pesquisar` — pesquisa web via Tavily, com excertos, URL, relevância e
+  os resultados fracos contados (não escondidos). Sem `TAVILY_API_KEY` diz que
+  variável falta e não pesquisa.
+- `web_ler` — lê o texto de uma página (Tavily `extract`); só aceita http(s).
+- `imagem_gerar` — pede uma imagem ao pipeline de mídia do projeto. Pede o OK
+  humano em cada chamada (é uma acção com custo, como as destrutivas) e cria o
+  pedido na aba Mídia; a imagem só existe quando a geração acaba. Nunca devolve
+  bytes ao modelo.
+
+Permissões (`api/_ia/agentes.mjs`): a Investigação (Research) tem pesquisa e
+leitura de páginas; o Designer e o Criativo têm `imagem_gerar`. Os prompts deixam
+de dizer que não há internet nem imagem. A lista de indisponíveis fica só com o
+que falta de facto: execução de código, ficheiros do workspace e navegação de
+sites.
+
+O painel mostra, para cada ferramenta, quem a pode usar e quais pedem OK humano.
+
+Provas: `node --test` 1529/1529 (13 novas em `ferramentas-web.test.mjs`) ·
+`node check.mjs` 96/96 · 1 saltado · `node build.mjs` OK.
+
+Ainda por fazer (ver o mapa de prioridades): a fila de mídia precisa de uma
+bomba em produção (`/api/ops/media/pump`), e o despertar de 30 em 30 minutos
+ainda não existe — o ciclo da Vercel corre uma vez por dia.
+
+
 ## 1.84.0 — o Control Center deixa de dizer que o escritório está vazio (11 nov 2026)
 
 O escritório tem 47 lugares, o Orchestrator corre 8 motores e o motor de

@@ -20,7 +20,7 @@ export const AGENTES = {
     numero: '01', nome: 'Orchestrator', papel: 'Planeia e distribui',
     instrucoes: `Recebes o objectivo do dono e divides o trabalho em passos pequenos, cada um para um agente concreto.
 Cada passo tem: que agente, o que fazer, que ferramentas pode usar e como se sabe que ficou bem.
-Não inventes passos que nenhum agente consegue executar (pesquisa web, execução de código, imagens) — se o objectivo exigir isso, di-lo na lista de limites.
+Não inventes passos que nenhum agente consegue executar (execução de código, navegador controlado) — se o objectivo exigir algo que nenhum agente tem ferramenta para, di-lo na lista de limites.
 Usa no máximo 6 passos. ${HONESTIDADE}`,
     ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['plano'],
@@ -29,18 +29,19 @@ Usa no máximo 6 passos. ${HONESTIDADE}`,
   research: {
     numero: '02', nome: 'Research', papel: 'Recolhe e organiza contexto',
     instrucoes: `Organizas o que já se sabe: lês a mesa (leads, projetos, dinheiro) e resumos o contexto que os outros agentes precisam.
-Não tens acesso à internet nesta instalação; se precisares de uma fonte externa, escreve exactamente o que falta consultar, para o dono decidir.
+Podes pesquisar na web (web_pesquisar) e ler páginas encontradas (web_ler) quando o contexto interno não chega.
+Sempre que usares uma fonte externa, cita o URL.
 ${HONESTIDADE}`,
-    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'memoria_procurar', 'memoria_guardar'],
+    ferramentas: ['mesa_resumo', 'leads_listar', 'projetos_listar', 'web_pesquisar', 'web_ler', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['investigar'],
-    criterios: ['distingue o que veio da base do que é sugestão'],
+    criterios: ['distingue o que veio da base do que é sugestão', 'cita a fonte externa sempre que usa uma'],
   },
   design: {
     numero: '03', nome: 'UI/UX Designer', papel: 'Estrutura interface',
     instrucoes: `Propões arquitectura de informação, componentes, estados e comportamento responsivo, com acessibilidade incluída.
-Trabalhas com texto: não geras imagens (não há serviço de imagem configurado). Se o pedido exigir uma imagem, dizes que fica por fazer e porquê.
+Trabalhas com texto e estrutura. Se o pedido exigir uma imagem de referência, podes pedi-la com imagem_gerar; descreve o que pediste e o que voltou.
 ${HONESTIDADE}`,
-    ferramentas: ['projetos_listar', 'mesa_resumo', 'memoria_procurar', 'memoria_guardar'],
+    ferramentas: ['projetos_listar', 'mesa_resumo', 'imagem_gerar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['ui'],
     criterios: ['cada componente tem estados (vazio, erro, carregando)', 'o teclado e o telemóvel estão previstos'],
   },
@@ -76,9 +77,9 @@ ${HONESTIDADE}`,
   },
   creative: {
     numero: '07', nome: 'Creative Specialist', papel: 'Conteúdo e imagem',
-    instrucoes: `Escreves texto criativo (mensagens, nomes, descrições). Para imagem não tens serviço: descreves o que seria preciso e não finges ter gerado.
+    instrucoes: `Escreves texto criativo (mensagens, nomes, descrições). Para imagem tens imagem_gerar: usa-a quando o pedido é uma imagem, e só dizes que ficou pronta se a ferramenta devolveu ok:true.
 ${HONESTIDADE}`,
-    ferramentas: ['leads_listar', 'mensagem_rascunhar', 'memoria_procurar', 'memoria_guardar'],
+    ferramentas: ['leads_listar', 'mensagem_rascunhar', 'imagem_gerar', 'memoria_procurar', 'memoria_guardar'],
     tipos: ['texto'],
     criterios: ['o texto está pronto a enviar', 'não promete imagens que não existem'],
   },

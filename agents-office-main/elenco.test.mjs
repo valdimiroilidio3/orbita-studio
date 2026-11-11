@@ -200,28 +200,17 @@ test('1.84.0 · o estúdio chega ao Control Center dentro do estado (e sem inven
 
 /* ---------- 5 · «o que não faz» deixa de mentir ---------- */
 
-test('1.84.0 · com a Tavily ligada, a lista não diz que não há pesquisa — diz onde ela está', () => {
-  const comTavily = indisponiveisComAmbiente({ TAVILY_API_KEY: 'x' });
-  const pesquisa = comTavily.find((i) => i.id === 'pesquisa_web');
-  assert.equal(pesquisa.existe, true);
-  assert.match(pesquisa.onde, /Prospeção/);
-  assert.doesNotMatch(pesquisa.porque, /não há fornecedor de pesquisa/);
-  assert.match(pesquisa.porque, /o que falta é o agente poder chamá-la/);
-
-  const semTavily = indisponiveisComAmbiente({}).find((i) => i.id === 'pesquisa_web');
-  assert.equal(semTavily.existe, false);
-  assert.match(semTavily.porque, /TAVILY_API_KEY/);
-
-  /* a imagem existe em todo o lado (Pollinations é sem chave) */
-  const imagem = indisponiveisComAmbiente({}).find((i) => i.id === 'geracao_de_imagens');
-  assert.equal(imagem.existe, true);
-  assert.match(imagem.onde, /Mídia/);
-
-  /* e os ids continuam os mesmos: nada desapareceu da lista */
+test('1.85.0 · a pesquisa e a imagem são ferramentas: deixam de estar na lista do que falta', () => {
+  /* a lista do que NÃO existe só tem o que de facto falta */
+  const ids = INDISPONIVEIS.map((i) => i.id);
+  assert.ok(!ids.includes('pesquisa_web'), 'a pesquisa já é ferramenta (web_pesquisar)');
+  assert.ok(!ids.includes('geracao_de_imagens'), 'a imagem já é ferramenta (imagem_gerar)');
+  assert.ok(ids.includes('execucao_de_codigo'));
+  assert.equal(FERRAMENTAS.web_pesquisar.parametros.required[0], 'consulta');
+  assert.equal(FERRAMENTAS.web_ler.parametros.required[0], 'url');
+  assert.equal(FERRAMENTAS.imagem_gerar.aprovacao, true);
+  /* e o estado ambiental não inventa uma lista paralela */
   assert.deepEqual(indisponiveisComAmbiente({}).map((i) => i.id), INDISPONIVEIS.map((i) => i.id));
-  /* o que não existe como ferramenta continua a não existir */
-  assert.equal(FERRAMENTAS.pesquisa_web, undefined);
-  assert.equal(FERRAMENTAS.geracao_de_imagens, undefined);
 });
 
 test('1.84.0 · o Control Center pinta o «existe em…» e o elenco inteiro', async () => {
@@ -233,7 +222,11 @@ test('1.84.0 · o Control Center pinta o «existe em…» e o elenco inteiro', a
   assert.match(html, /47 lugares no escritório/);
   assert.match(html, /5 com trabalho próprio/);
   assert.match(html, /42 consultivos/);
-  assert.match(html, /existe em Prospeção/);
+  /* 1.85.0 · a pesquisa e a imagem já são ferramentas dos agentes, com quem as pode usar */
+  assert.match(html, /web_pesquisar/);
+  assert.match(html, /quem pode: research/);
+  assert.match(html, /pede OK \(custo\)/);
+  assert.doesNotMatch(html, /existe em Prospeção/);
   assert.match(html, /Quem tem trabalho próprio e quem é consultivo/);
 });
 

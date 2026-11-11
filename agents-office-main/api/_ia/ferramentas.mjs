@@ -17,6 +17,24 @@
    =========================================================================== */
 import { chaveLead } from '../_repo.mjs';
 
+/* 1.85.0 · PESQUISA E IMAGEM SÃO FERRAMENTAS DE VERDADE (11 nov 2026).
+
+   Antes desta versão, `INDISPONIVEIS` dizia que não havia fornecedor de pesquisa
+   nem de imagem — falso: a Tavily está ligada em produção (é ela que dá os
+   leads) e o Pollinations gera imagens dentro dos projetos. A verdade é outra:
+   as capacidades existem, o que faltava era o agente poder chamá-las dentro de
+   uma execução.
+
+   Três novas ferramentas entram na lista fechada:
+
+     · web_pesquisar — pesquisa web via Tavily (contexto, notícias, páginas)
+     · web_ler — lê o texto de uma página já encontrada (Tavily /extract)
+     · imagem_gerar — pede uma imagem ao pipeline de mídia do projeto (com OK humano)
+
+   Cada agente só chama o que está na sua lista `ferramentas` em `agentes.mjs`.
+   O servidor decide, não o modelo.
+   */
+
 const s = (descricao, extra = {}) => ({ type: 'string', description: descricao, ...extra });
 const n = (descricao, extra = {}) => ({ type: 'number', description: descricao, ...extra });
 
@@ -190,42 +208,105 @@ export const FERRAMENTAS = {
       return { ok: apagou, resumo: apagou ? 'entrada apagada' : 'não encontrei essa entrada' };
     },
   },
+
+  /* ---------------- 1.85.0 · pesquisa web (Tavily) ---------------- */
+
+  web_pesquisar: {
+    descricao: 'Pesquisa na web (Tavily) e devolve resultados reais com excerto, URL e relevância. Usa quando precisas de contexto externo: mercado, concorrência, notícias, o que uma empresa diz de si.',
+    parametros: {
+      type: 'object',
+      properties: {
+        consulta: s('o que pesquisar (obrigatório)', { minLength: 3, maxLength: 500 }),
+        limite: n('quantos resultados (1–20)', { minimum: 1, maximum: 20 }),
+        profundidade: s('basic ou advanced', { enum: ['basic', 'advanced'] }),
+        resposta: s('se quer resposta curta da IA (true/false)', { enum: ['true', 'false'] }),
+        topico: s('general ou news', { enum: ['general', 'news'] }),
+        dias: n('dias de recorte (só faz sentido com news)', { minimum: 1, maximum: 365 }),
+      },
+      required: ['consulta'],
+      additionalProperties: false,
+    },
+    async executar(args, ctx) {
+      const { pesquisarWeb } = await import('../_pesquisa.mjs');
+      const r = await pesquisarWeb({
+        consulta: args.consulta,
+        limite: args.limite || 8,
+        profundidade: args.profundidade || 'basic',
+        resposta: args.resposta !== 'false',
+        topico: args.topico || 'general',
+        dias: args.dias,
+      }, { env: ctx.env, fetchImpl: ctx.fetchImpl });
+      return { ok: true, resumo: `${r.encontrados} resultado(s) reais`, dados: r };
+    },
+  },
+
+  web_ler: {
+    descricao: 'Lê o texto de uma página web (Tavily /extract). Usa depois de web_pesquisar para ir ao detalhe de um resultado.',
+    parametros: {
+      type: 'object',
+      properties: {
+        url: s('endereço http(s) completo (obrigatório)', { minLength: 8, maxLength: 2000 }),
+      },
+      required: ['url'],
+      additionalProperties: false,
+    },
+    async executar(args, ctx) {
+      const { extrairPagina } = await import('../_pesquisa.mjs');
+      const r = await extrairPagina({ url: args.url }, { env: ctx.env, fetchImpl: ctx.fetchImpl });
+      const texto = String(r.texto || '');
+      return { ok: true, resumo: texto ? `página lida (${texto.length} car.)` : 'sem conteúdo', dados: r };
+    },
+  },
+
+  /* ---------------- 1.85.0 · geração de imagem (Pollinations) ---------------- */
+
+  imagem_gerar: {
+    descricao: 'Pede uma imagem para um projeto. Não gera às escondidas: cria o pedido na aba Mídia do projeto, que é onde a geração, o custo e o ficheiro vivem. Precisa de aprovação humana em cada chamada.',
+    /* 1.85.0 · gasta o fornecedor e ocupa a fila de mídia: é uma acção com custo,
+       por isso pede o mesmo OK humano que uma destrutiva (ver `executar`). */
+    aprovacao: true,
+    parametros: {
+      type: 'object',
+      properties: {
+        projeto_id: s('id do projeto a que a imagem pertence (obrigatório)', { maxLength: 80 }),
+        prompt: s('a cena a gerar, com pelo menos 12 caracteres (obrigatório)', { minLength: 12, maxLength: 2000 }),
+        formato: s('proporção', { enum: ['1:1', '4:3', '16:9', '3:4'] }),
+        resolucao: s('tamanho', { enum: ['768', '1024', '1344'] }),
+      },
+      required: ['projeto_id', 'prompt'],
+      additionalProperties: false,
+    },
+    async executar(args, ctx) {
+      const MD = await import('../_media.mjs');
+      const projeto = await ctx.repo.projetos.byId(args.projeto_id);
+      if (!projeto) return { ok: false, resumo: 'projeto não encontrado' };
+      const r = await MD.criar(ctx.repo, {
+        projeto, lead: null, conta: null, env: ctx.env,
+        /* a aprovação humana desta chamada É a confirmação que a mídia exige */
+        pedido: { tipo: 'imagem', prompt: args.prompt, formato: args.formato, resolucao: args.resolucao, confirmado: true },
+      });
+      if (!r.ok) return { ok: false, resumo: r.erro || 'o pedido de imagem não foi aceite' };
+      /* o pedido fica «aguardando»: a imagem só existe quando a geração acaba.
+         O resumo diz isso, para que ninguém conte uma imagem que não está lá. */
+      return {
+        ok: true,
+        resumo: r.repetido ? 'este pedido já existia no projeto' : `pedido de imagem criado em «${projeto.name}» (ainda a aguardar geração)`,
+        dados: { geracao_id: r.geracao?.id || null, estado: r.geracao?.estado || 'aguardando', projeto: projeto.name, repetido: !!r.repetido },
+      };
+    },
+  },
 };
 
 /** O que esta arquitectura NÃO consegue fazer — dito por palavras, não fingido. */
 export const INDISPONIVEIS = [
-  { id: 'pesquisa_web', porque: 'não há fornecedor de pesquisa configurado (nem chave, nem serviço autorizado)' },
   { id: 'execucao_de_codigo', porque: 'as funções da Vercel não correm código arbitrário dos agentes; é preciso um executor à parte' },
   { id: 'ficheiros_do_workspace', porque: 'o sistema de ficheiros da função é temporário e não é o repositório' },
-  { id: 'geracao_de_imagens', porque: 'nenhum fornecedor de imagem está configurado — o Creative Specialist não desenha nada até haver um' },
-  { id: 'navegacao_de_sites', porque: 'não há browser controlado no servidor' },
+  { id: 'navegacao_de_sites', porque: 'não há browser controlado no servidor (web_ler lê uma página via Tavily, não navega por si)' },
 ];
 
-/** O que falta como FERRAMENTA — e se a capacidade existe noutro sítio do produto.
- *
- *  1.84.0 · A lista de cima nasceu quando não havia nem pesquisa nem imagem. Em
- *  produção, hoje, há as duas: a Tavily está ligada (é ela que dá os leads) e o
- *  Pollinations gera imagens dentro dos projetos. A frase «não há fornecedor de
- *  pesquisa configurado» era, por isso, falsa — e aparecia no Control Center.
- *
- *  A verdade tem duas partes, e é assim que se diz:
- *    · o agente NÃO pode chamar pesquisa nem gerar imagem a meio de uma execução;
- *    · o produto TEM as duas coisas, noutro caminho, e é esse caminho que se
- *      indica — em vez de deixar o dono a pensar que a instalação não as tem.
- */
+/** O que falta como ferramenta — cada uma com o porquê, sem fingir. */
 export function indisponiveisComAmbiente(env = {}) {
-  const tavily = !!(env.TAVILY_API_KEY || env.TAVILY_KEY);
-  return INDISPONIVEIS.map((i) => {
-    if (i.id === 'pesquisa_web') {
-      return tavily
-        ? { ...i, existe: true, onde: 'Prospeção · /ops/pesquisa', porque: 'a pesquisa existe nesta instalação (Tavily ligada) e é ela que dá os leads; o que falta é o agente poder chamá-la dentro de uma execução' }
-        : { ...i, existe: false, onde: null, porque: 'falta a chave TAVILY_API_KEY no ambiente — sem ela não há pesquisa web em lado nenhum do produto (cria a chave em app.tavily.com)' };
-    }
-    if (i.id === 'geracao_de_imagens') {
-      return { ...i, existe: true, onde: 'Projetos · aba Mídia', porque: 'as imagens dos projetos geram-se a sério (Pollinations, tier gratuito); o que falta é o agente poder pedir uma imagem dentro de uma execução' };
-    }
-    return { ...i, existe: false, onde: null };
-  });
+  return INDISPONIVEIS.map((i) => ({ ...i, existe: false, onde: null }));
 }
 
 const TIPO_DE = { string: 'string', number: 'number', boolean: 'boolean', object: 'object', array: 'array' };
@@ -324,12 +405,14 @@ export async function executar(nome, args, ctx = {}) {
      partida); `ctx.aprovadas` é a lista do que uma pessoa autorizou uma a uma.
      Uma acção destrutiva que não esteja em nenhuma das duas não corre. */
   const autorizada = ctx.aprovado || (Array.isArray(ctx.aprovadas) && ctx.aprovadas.includes(nome));
-  if (f.destrutivo && !autorizada) {
-    return { ok: false, precisaAprovacao: true, erro: `«${nome}» é destrutiva e precisa de aprovação humana` };
+  if ((f.destrutivo || f.aprovacao) && !autorizada) {
+    return { ok: false, precisaAprovacao: true, erro: `«${nome}» ${f.destrutivo ? 'é destrutiva' : 'gasta recursos'} e precisa de aprovação humana` };
   }
   const t0 = Date.now();
   try {
-    const r = await f.executar(v.valor, ctx);
+    /* 1.85.0 · as ferramentas de rede precisam do ambiente e do fetch; quem chama
+       pode trocá-los (testes), mas por omissão é o do servidor. */
+    const r = await f.executar(v.valor, { env: process.env, fetchImpl: fetch, ...ctx });
     return { ...r, ferramenta: nome, ms: Date.now() - t0 };
   } catch (e) {
     return { ok: false, erro: e.message || 'falhou', ferramenta: nome, ms: Date.now() - t0 };

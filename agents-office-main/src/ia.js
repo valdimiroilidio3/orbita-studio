@@ -734,7 +734,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
     <div class="card">
       <h3 style="margin-top:0">Ferramentas reais</h3>
       <div class="ia-grade">
-        ${(ia.ferramentas || []).map((f) => `<div class="ia-ferramenta"><b>${esc(f.id)}</b>${f.destrutiva ? etiqueta('pede aprovação', 'warn') : ''}<div class="ia-sub">${esc(f.descricao)}</div></div>`).join('')}
+        ${(ia.ferramentas || []).map((f) => `<div class="ia-ferramenta"><b>${esc(f.id)}</b>${f.destrutiva || f.aprovacao ? etiqueta(f.destrutiva ? 'pede aprovação' : 'pede OK (custo)', 'warn') : ''}<div class="ia-sub">${esc(f.descricao)}</div>${(f.agentes || []).length ? `<div class="ia-sub">quem pode: ${esc(f.agentes.join(', '))}</div>` : ''}</div>`).join('')}
       </div>
       <h4>O que esta instalação não faz</h4>
       <ul class="ia-erros">${(ia.indisponiveis || []).map((i) => `<li><b>${esc(i.id)}</b>${i.existe ? ` ${etiqueta(`existe em ${esc(i.onde || 'outro sítio')}`, 'warn')}` : ''} — ${esc(i.porque)}</li>`).join('')}</ul>
