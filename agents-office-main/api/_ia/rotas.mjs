@@ -51,6 +51,8 @@ import { correr } from './orquestrador.mjs';
 import * as memoria from './memoria.mjs';
 import * as mem0 from './mem0.mjs';
 import * as media from './media.mjs';
+/* 1.83.0 · o painel é a MESMA composição do estado, servida num só pedido. */
+import { ESFORCOS, montarEstado, montarPainel, modelosDoCatalogo, resumoDeUso, runsDaIA, gratuitosComCadeia } from './painel.mjs';
 import { TIPOS } from './router.mjs';
 /* 1.61.0 · a leitura da execução é a MESMA no servidor e na mesa: estados,
    recuperação, repetição segura e quem autorizou vêm de `src/execucao.js`. */
@@ -74,7 +76,8 @@ export function ehRotaIA(caminho) {
    `maxTokens`, e a resposta diz os dois: o que se pediu e o que se aplicou.
    Inventar «esforço máximo» sem mexer em nada seria a simulação que o dono
    proibiu (pedido 19). */
-export const ESFORCOS = { low: 400, medium: 1200, high: 2400, xhigh: 4000, max: 6000 };
+/* o mapa vive no painel (uma definição só, partilhada pela vista e pelo motor) */
+export { ESFORCOS } from './painel.mjs';
 
 export function tokensDoEsforco(esforco) {
   const k = String(esforco || '').trim().toLowerCase();
@@ -121,67 +124,27 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
 
   /* ---------------- estado / catálogo ---------------- */
   if (limpo === '/ia/estado' && m === 'GET') {
-    /* 1.78.0 · o estado tem de responder depressa: é a primeira coisa que a vista
-       IA pede, e uma leitura lenta (a memória, o estúdio) não pode segurar a
-       página inteira. Cada resumo opcional tem prazo; o resto do estado não
-       depende deles. */
-    const comPrazo = (p, ms, oQue) => {
-      let t = null;
-      const prazo = new Promise((_, rejeitar) => {
-        t = setTimeout(() => rejeitar(new Error(`${oQue} não respondeu em ${Math.round(ms / 1000)} s`)), ms);
-        if (t.unref) t.unref();
-      });
-      return Promise.race([p, prazo]).finally(() => { if (t) clearTimeout(t); });
-    };
-    const estado = await motor.estado();
-    const cfg = await motor.config();
-    /* 1.19.0 · a memória e o estúdio fazem parte do estado: se a base não os
-       tiver (SQL por correr), diz-se em vez de rebentar a página toda. */
-    let resumoMemoria = null;
-    try {
-      const e = await comPrazo(memoria.estado(repo, { env, fetchImpl }), 3000, 'a memória');
-      resumoMemoria = { total: e.total, usos: e.usos, modo: e.modo, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5), mem0: e.mem0 };
-    } catch (e) { resumoMemoria = { erro: `a memória ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
-    let estudio = null;
-    try { estudio = await comPrazo(media.estado(repo, env), 3000, 'o estúdio'); } catch (e) { estudio = { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` }; }
+    /* 1.83.0 · a composição saiu daqui para `painel.mjs` (uma definição só).
+       O prazo da memória desceu de 3 s para 2 s e a memória e o estúdio passam
+       a ser lidos AO MESMO TEMPO: antes eram 3 s + 3 s em série. */
+    return { status: 200, corpo: await montarEstado(motor, {
+      repo, env, fetchImpl, resumos: qs.get('semResumos') !== '1',
+    }) };
+  }
 
-    return { status: 200, corpo: {
-      ...estado,
-      memoria: resumoMemoria,
-      estudio,
-      agentes: LISTA.map((a) => {
-        /* 1.50.0 · `cfg.agentes[x].modelo` é `{ fornecedor, modelo }`. A interface
-           mostrava o objecto em bruto; agora vão os três campos separados. */
-        const esc = cfg.agentes?.[a.id]?.modelo || null;
-        const par = esc && typeof esc === 'object' ? esc : (esc ? { modelo: String(esc) } : null);
-        return {
-          id: a.id, numero: a.numero, nome: a.nome, papel: a.papel,
-          ferramentas: a.ferramentas, tipos: a.tipos, criterios: a.criterios,
-          modelo: par?.modelo || null,
-          fornecedor: par?.fornecedor || null,
-          escolha: par ? { fornecedor: par.fornecedor || null, modelo: par.modelo || null } : null,
-        };
-      }),
-      ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({ id, descricao: f.descricao, destrutiva: !!f.destrutivo })),
-      tipos: TIPOS,
-      desligados: cfg.desligados || [],
-      pronto: estado.diagnostico.pronto,
-      instalacao: estado.diagnostico.pronto
-        ? 'ha pelo menos um fornecedor com chave e catalogo'
-        : 'nenhum fornecedor com chave — as chaves vivem no ambiente da Vercel (nunca no browser)',
-    } };
+  /* 1.83.0 · «A carregar o Control Center…» — a página pede ISTO, e só isto.
+     Devolve num pedido o que antes eram seis (estado, modelos, uso, execuções,
+     trabalhos, gratuitas), com as partes em paralelo e cada uma com o seu prazo.
+     `parcial` diz, por escrito, o que não chegou — a página mostra o resto em
+     vez de ficar no cartão de carregamento. */
+  if (limpo === '/ia/painel' && m === 'GET') {
+    return { status: 200, corpo: await montarPainel(repo, { env, fetchImpl, motor }) };
   }
 
   /* 1.32.0 · «há IA gratuita a funcionar?» — uma resposta curta e verdadeira.
      Mostra o que foi medido em produção e a cadeia real por tipo de trabalho. */
   if (limpo === '/ia/gratuitos' && m === 'GET') {
-    const motor = criarMotor({ repo, env, fetchImpl });
-    const r = await motor.gratuitos();
-    const tipos = {};
-    for (const t of ['plano', 'codigo', 'texto', 'investigar', 'revisao', 'rapido', 'visao']) {
-      tipos[t] = await motor.cadeiaPara(t).catch(() => []);
-    }
-    return { status: 200, corpo: { ...r, cadeia: tipos } };
+    return { status: 200, corpo: await gratuitosComCadeia(motor) };
   }
 
   /* 1.42.0 · DIAGNÓSTICO DOS MOTORES — um pedido real, sem escrever nada.
@@ -323,19 +286,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   }
 
   if (limpo === '/ia/modelos' && m === 'GET') {
-    const alvo = qs.get('fornecedor');
-    const cfg = await motor.config();
-    const descobertos = cfg.descobertos || {};
-    const fornecedores = Object.entries(FORNECEDORES)
-      .filter(([id]) => !alvo || id === alvo)
-      .map(([id, p]) => ({
-        id, nome: p.nome, estilo: p.estilo, gratuito: !!p.gratuito, limites: p.limites,
-        comChave: motor.temChave(id), desligado: (cfg.desligados || []).includes(id),
-        catalogo: modelosDe(id).map((x) => ({ modelo: x.modelo, etiquetas: x.etiquetas, janela: x.janela, preco: x.preco, gratuito: !!x.gratuito })),
-        descobertos: descobertos[id]?.modelos || [],
-        descobertosEm: descobertos[id]?.quando || null,
-      }));
-    return { status: 200, corpo: { fornecedores, totalModelosCatalogo: MODELOS.length, esforcos: Object.keys(ESFORCOS), esforcoNota: 'o esforço é o tecto de tokens da resposta: baixo 400 · médio 1200 · alto 2400 · muito alto 4000 · máximo 6000' } };
+    return { status: 200, corpo: await modelosDoCatalogo(motor, { fornecedor: qs.get('fornecedor') }) };
   }
 
   /* 1.45.1 · também por GET, com `?fornecedor=&forcar=1`. A descoberta é a
@@ -499,14 +450,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   if (limpo === '/ia/runs' && m === 'GET') {
     /* 1.61.0 · a lista já vem traduzida: estado em português, passos, custo e o
        que se pode fazer. A mesa desenha isto; não recalcula a verdade. */
-    const runs = await repo.ia.runs.listar(Number(qs.get('limite')) || 20);
-    const comEstado = runs.map((r) => ({
-      ...r,
-      visivel: estadoDoRun(r),
-      resumo: resumoDoRun(r, []),
-      accoes: { cancelar: podeCancelar(r), repetir: podeRepetir(r, runs), aprovar: podeAprovar(r) },
-    }));
-    return { status: 200, corpo: { runs: comEstado } };
+    return { status: 200, corpo: { runs: await runsDaIA(repo, { limite: Number(qs.get('limite')) || 20 }) } };
   }
 
   if (limpo === '/ia/runs' && m === 'POST') {
@@ -733,48 +677,7 @@ export async function rotasIA(repo, { caminho, metodo = 'GET', corpo = null, env
   /* ---------------- uso ---------------- */
   if (limpo === '/ia/uso' && m === 'GET') {
     const linhas = await repo.ia.uso.recentes(Number(qs.get('limite')) || 200);
-    const dinheiro = await import('../_dinheiro.mjs');
-    const cambio = dinheiro.cambioDe(env);
-    const conta = dinheiro.agregarUso(linhas, env);
-    const porFornecedor = new Map();
-    for (const l of linhas) {
-      const k = l.fornecedor || '—';
-      const a = porFornecedor.get(k) || { fornecedor: k, pedidos: 0, ok: 0, erros: 0, msTotal: 0, tokens: 0 };
-      a.pedidos += 1;
-      if (l.ok) a.ok += 1; else a.erros += 1;
-      a.msTotal += l.ms || 0;
-      a.tokens += (l.tokens_in || 0) + (l.tokens_out || 0);
-      porFornecedor.set(k, a);
-    }
-    const resumo = [...porFornecedor.values()].map((a) => {
-      const linhasFornec = conta.linhas.filter((l) => l.fornecedor === a.fornecedor);
-      const micro = linhasFornec.reduce((n, l) => n + (l.microUsd || 0), 0);
-      return {
-        ...a, latenciaMediaMs: a.pedidos ? Math.round(a.msTotal / a.pedidos) : null, msTotal: undefined,
-        custoMicroUsd: micro,
-        custoCentimos: dinheiro.centimosDeMicro(micro, cambio.taxa),
-        desconhecidas: linhasFornec.reduce((n, l) => n + (l.desconhecidas || 0), 0),
-        modelos: linhasFornec.map((l) => ({
-          modelo: l.modelo, chamadas: l.chamadas, tokensIn: l.tokensIn, tokensOut: l.tokensOut,
-          preco: l.preco, fonte: l.fonte, microUsd: l.microUsd,
-          centimos: dinheiro.centimosDeMicro(l.microUsd, cambio.taxa), desconhecidas: l.desconhecidas,
-        })),
-      };
-    });
-    return { status: 200, corpo: {
-      resumo, ultimos: linhas.slice(0, 25),
-      errosRecentes: linhas.filter((l) => !l.ok).slice(0, 10).map((l) => ({ fornecedor: l.fornecedor, modelo: l.modelo, quando: l.criado, erro: l.erro })),
-      /* 1.55.0 · quanto custou o que aqui está, com a conta à vista */
-      custos: {
-        microUsd: conta.microUsd,
-        centimos: dinheiro.centimosDeMicro(conta.microUsd, cambio.taxa),
-        desconhecidas: conta.desconhecidas,
-        chamadas: conta.chamadas,
-        cambio,
-        conta: conta.linhas.map((l) => ({ ...l, centimos: dinheiro.centimosDeMicro(l.microUsd, cambio.taxa) })),
-        nota: 'preços do catálogo (USD por milhão de tokens) ou de ORBITA_PRECOS_IA; é uma conta, não uma fatura',
-      },
-    } };
+    return { status: 200, corpo: await resumoDeUso(linhas, env) };
   }
 
   /* ---------------- configuração ---------------- */
