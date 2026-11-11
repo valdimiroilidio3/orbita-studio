@@ -201,6 +201,33 @@ export const INDISPONIVEIS = [
   { id: 'navegacao_de_sites', porque: 'não há browser controlado no servidor' },
 ];
 
+/** O que falta como FERRAMENTA — e se a capacidade existe noutro sítio do produto.
+ *
+ *  1.84.0 · A lista de cima nasceu quando não havia nem pesquisa nem imagem. Em
+ *  produção, hoje, há as duas: a Tavily está ligada (é ela que dá os leads) e o
+ *  Pollinations gera imagens dentro dos projetos. A frase «não há fornecedor de
+ *  pesquisa configurado» era, por isso, falsa — e aparecia no Control Center.
+ *
+ *  A verdade tem duas partes, e é assim que se diz:
+ *    · o agente NÃO pode chamar pesquisa nem gerar imagem a meio de uma execução;
+ *    · o produto TEM as duas coisas, noutro caminho, e é esse caminho que se
+ *      indica — em vez de deixar o dono a pensar que a instalação não as tem.
+ */
+export function indisponiveisComAmbiente(env = {}) {
+  const tavily = !!(env.TAVILY_API_KEY || env.TAVILY_KEY);
+  return INDISPONIVEIS.map((i) => {
+    if (i.id === 'pesquisa_web') {
+      return tavily
+        ? { ...i, existe: true, onde: 'Prospeção · /ops/pesquisa', porque: 'a pesquisa existe nesta instalação (Tavily ligada) e é ela que dá os leads; o que falta é o agente poder chamá-la dentro de uma execução' }
+        : { ...i, existe: false, onde: null, porque: 'falta a chave TAVILY_API_KEY no ambiente — sem ela não há pesquisa web em lado nenhum do produto (cria a chave em app.tavily.com)' };
+    }
+    if (i.id === 'geracao_de_imagens') {
+      return { ...i, existe: true, onde: 'Projetos · aba Mídia', porque: 'as imagens dos projetos geram-se a sério (Pollinations, tier gratuito); o que falta é o agente poder pedir uma imagem dentro de uma execução' };
+    }
+    return { ...i, existe: false, onde: null };
+  });
+}
+
 const TIPO_DE = { string: 'string', number: 'number', boolean: 'boolean', object: 'object', array: 'array' };
 
 /** Validador mínimo de JSON Schema — o suficiente para não aceitar lixo. */

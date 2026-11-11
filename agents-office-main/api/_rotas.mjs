@@ -52,6 +52,10 @@ const DEPARTAMENTOS = [
   { id: 'design', nome: 'Design' }, { id: 'engenharia', nome: 'Engenharia' },
 ];
 
+/* 1.84.0 · uma só verdade sobre o elenco: 47 lugares, quais têm trabalho
+   próprio, e a ponte entre os tipos de tarefa e os postos. */
+import { elenco, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './_elenco.mjs';
+
 const semAcentos = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const dedupe = (nome, cidade) => `${semAcentos(nome)}|${semAcentos(cidade)}`;
 const limpo = (s) => String(s ?? '').trim();
@@ -1763,13 +1767,28 @@ export async function responder(repo, {
       const id = DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando';
       if (porSala.has(id)) porSala.get(id).push(t);
     }
+    /* 1.84.0 · `agentes: []` era o retrato de um escritório vazio. Agora vem o
+       elenco real da sala (47 lugares repartidos pelas seis), com `temRotina`
+       por agente — é a prova que o A9 pede: quem tem trabalho próprio e quem é
+       consultivo, dito pelo servidor e não pela interface. */
+    const todos = elenco();
     const departamentos = DEPARTAMENTOS.map((d) => {
       const lista = porSala.get(d.id) || [];
       const n = (estado) => lista.filter((t) => t.state === estado).length;
       const ordenadas = lista.slice().sort((a, b) => String(quando(b) || '').localeCompare(String(quando(a) || '')));
       const falha = ordenadas.find((t) => t.state === 'failed') || null;
+      const daSala = agentesDaSala(SALA_DO_DEPARTAMENTO_PT[d.id] || d.id, todos);
       return {
-        ...d, name: d.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '', agentes: [],
+        ...d, name: d.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '',
+        agentes: daSala.map((a) => ({
+          id: a.id, nome: a.nome, papel: a.papel, temRotina: a.temRotina,
+          rotinas: a.rotinas, consultivo: a.consultivo,
+        })),
+        elenco: {
+          total: daSala.length,
+          comRotina: daSala.filter((a) => a.temRotina).length,
+          consultivos: daSala.filter((a) => a.consultivo).length,
+        },
         /* as contagens, nos dois nomes (o antigo e o novo) para nada partir */
         running: n('running'), awaiting: n('awaiting_approval'), queued: n('queued'),
         succeeded: n('succeeded'), failed: n('failed'),
@@ -1786,6 +1805,13 @@ export async function responder(repo, {
         total: tarefas.length,
         running: conta('running'), awaiting: conta('awaiting_approval'),
         queued: conta('queued'), succeeded: conta('succeeded'), failed: conta('failed'),
+      },
+      /* 1.84.0 · o elenco inteiro num resumo, para o Control Center dizer a
+         mesma coisa que a cena — 47 lugares, quantos trabalham, quantos são
+         consultivos — em vez de mostrar 8 agentes e deixar o resto por contar. */
+      elenco: {
+        total: todos.total, comRotina: todos.comRotina, consultivos: todos.consultivos,
+        motores: todos.motores.length, resumo: todos.resumo,
       },
       modo: 'base',
     } };

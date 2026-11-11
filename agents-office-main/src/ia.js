@@ -462,6 +462,44 @@ export function vistaIA(S, { esc, hhmm, when }) {
     </tr>`;
   }).join('');
 
+  /* 1.84.0 · O ELENCO — a peça que faltava para o Control Center dizer a mesma
+     coisa que o escritório. Antes: esta página mostrava 8 agentes e a cena
+     tinha 47 lugares, sem nada que ligasse os dois. Agora diz, em números do
+     servidor, quantos lugares existem, quantos têm trabalho próprio e quantos
+     são consultivos — e lista-os por sala, com a marca de cada um. */
+  const el = ia.elenco || null;
+  const cartaoElenco = !el ? '' : (() => {
+    const salas = el.porSala || [];
+    const semRotina = (el.agentes || []).filter((a) => a.consultivo);
+    return `<div class="card">
+      <h3 style="margin-top:0">O elenco <span class="ia-sub">· ${esc(el.resumo || '')}</span></h3>
+      <p class="ia-sub" style="margin-top:0">${esc(el.motoresNota || '')}</p>
+      <div class="ia-grade">
+        ${salas.map((s) => `<div class="ia-ferramenta">
+          <b>${esc(s.nome)}</b> ${etiqueta(`${s.agentes.length} lugares`, '')}
+          ${s.comRotina ? etiqueta(`${s.comRotina} com trabalho`, 'ok') : ''}
+          <div class="ia-sub" style="margin-top:4px">${s.agentes.map((id) => {
+            const a = (el.agentes || []).find((x) => x.id === id) || {};
+            return `<span title="${esc(a.papel || '')} — ${esc(a.faz || '')}">${a.temRotina ? '<b>' : ''}${esc(a.nome || id)}${a.temRotina ? '</b>' : ''}</span>`;
+          }).join(' · ')}</div>
+        </div>`).join('')}
+      </div>
+      <details style="margin-top:10px"><summary class="ia-sub">Quem tem trabalho próprio e quem é consultivo</summary>
+        <table class="ia-tab" style="margin-top:8px">
+          <thead><tr><th>Lugar</th><th>Sala</th><th>Papel</th><th>Trabalho próprio</th></tr></thead>
+          <tbody>${(el.agentes || []).filter((a) => a.temRotina).map((a) => `<tr class="ia-ok">
+            <td><b>${esc(a.nome)}</b></td><td class="ia-sub">${esc(a.salaNome)}</td>
+            <td class="ia-sub">${esc(a.papel)}</td>
+            <td>${(a.rotinas || []).map((k) => etiqueta(esc(k), 'ok')).join(' ')}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        ${semRotina.length ? `<div class="ia-sub" style="margin-top:8px"><b>${semRotina.length} consultivos</b> — existem no escritório e têm papel escrito, mas nenhum tipo de tarefa acaba num posto deles. Não se apresenta isto como trabalho: ${semRotina.map((a) => esc(a.nome)).join(' · ')}</div>` : ''}
+      </details>
+      ${(el.tiposDeTrabalho || []).length ? `<div class="ia-sub" style="margin-top:10px"><b>Tipos de trabalho</b> (o que o motor sabe pedir, e a quem):</div>
+        ${el.tiposDeTrabalho.map((t) => `<div class="ia-sub" style="margin-top:2px"><b>${esc(t.titulo || t.kind)}</b> · ${t.posto ? esc(t.posto) : 'vai para o agente escolhido no pedido'}</div>`).join('')}` : ''}
+    </div>`;
+  })();
+
   const run = S.iaRun?.run;
   const passos = S.iaRun?.passos || [];
   const [rotuloRun, tipoRun] = ESTADO_RUN[run?.estado] || ['—', ''];
@@ -647,26 +685,48 @@ export function vistaIA(S, { esc, hhmm, when }) {
            </details>`}
     </div>
 
+    ${cartaoElenco}
+
     <div class="card">
-      <h3 style="margin-top:0">Estúdio de media <span class="ia-sub">· OpenMontage (AGPL-3.0, por fora)</span></h3>
+      <h3 style="margin-top:0">Estúdio de media</h3>
       ${(() => {
+        /* 1.84.0 · DUAS METADES, AS DUAS À VISTA.
+           Este cartão falava só do OpenMontage («precisa de Python e FFmpeg, não
+           corre na Vercel») e dizia «nenhum trabalho pedido» com imagens já
+           geradas na base. A metade que funciona — imagem pelo Pollinations,
+           dentro do projeto — não aparecia. Agora aparecem as duas: primeiro a
+           que existe, depois a que precisa de uma máquina ao lado.
+           `estudio.imagem` é o formato novo; sem essa chave (mesa antiga a
+           falar com servidor novo) lê-se o formato antigo, como dantes. */
         const est = ia.estudio || {};
-        const w = est.worker || {};
-        return `${est.porque ? `<div class="ia-faixa ${est.configurado ? 'warn' : 'bad'}">${esc(est.porque)}</div>` : `<div class="ia-faixa ok"><b>Worker vivo.</b> OpenMontage ${esc(w.versao || '?')}${w.commit ? ` @ ${esc(String(w.commit).slice(0, 7))}` : ''} · visto há ${w.vistoHaMinutos ?? '?'} min${w.ferramentas ? ` · ffmpeg ${w.ferramentas.ffmpeg ? 'sim' : 'não'}, python ${w.ferramentas.python ? 'sim' : 'não'}` : ''}</div>`}
+        const img = est.imagem || null;
+        const open = img ? (est.openmontage || {}) : est;
+        const w = open.worker || {};
+        const s7 = img?.seteDias || null;
+        const imagem = !img ? '' : `<div class="ia-faixa ${img.disponivel ? 'ok' : 'bad'}">
+            <b>Imagem — ${esc(img.fornecedor)}.</b> ${esc(img.porque || '')}
+            ${s7 ? `<div class="ia-sub">Últimos 7 dias: <b>${s7.total}</b> pedido(s) · ${s7.concluidas} concluída(s) · ${s7.falhadas} falhada(s)${s7.aCorrer ? ` · ${s7.aCorrer} a correr` : ''}${img.ultimaEm ? ` · última em ${esc(when(img.ultimaEm))}` : ''}</div>` : ''}
+            ${img.ultima?.projeto ? `<div class="ia-sub">A última foi no projeto <code>${esc(String(img.ultima.projeto).slice(0, 12))}</code> — abre o projeto e a aba Mídia para a ver.</div>` : ''}
+            <div class="ia-sub">Gerar imagem faz-se dentro do projeto, com a estimativa de custo antes de confirmar. Aqui vê-se o estado; não há botão a fingir que gera.</div>
+          </div>`;
+        const montagem = open.porque
+          ? `<div class="ia-faixa ${open.configurado ? 'warn' : ''}"><b>OpenMontage.</b> ${esc(open.porque)}</div>`
+          : `<div class="ia-faixa ok"><b>OpenMontage — worker vivo.</b> ${esc(w.versao || '?')}${w.commit ? ` @ ${esc(String(w.commit).slice(0, 7))}` : ''} · visto há ${w.vistoHaMinutos ?? '?'} min${w.ferramentas ? ` · ffmpeg ${w.ferramentas.ffmpeg ? 'sim' : 'não'}, python ${w.ferramentas.python ? 'sim' : 'não'}` : ''}</div>`;
+        return `${imagem}${montagem}
           <textarea id="iaMediaPedido" class="ia-input" rows="2" maxlength="2000" placeholder="Ex.: explicador de 30 s sobre o Café Central, legendas em português, 1080p"></textarea>
           <div class="ia-acts" style="gap:6px;flex-wrap:wrap;margin-top:6px">
             <select id="iaMediaTipo" class="ia-select">
-              ${(est.tipos || ['video']).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+              ${(open.tipos || ['video']).map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
             </select>
             <select id="iaMediaPipeline" class="ia-select">
               <option value="">pipeline: escolher sozinho</option>
-              ${(est.pipelines || []).map((p) => `<option value="${esc(p.id)}">${esc(p.nome)} · ${esc(p.tipo)}</option>`).join('')}
+              ${(open.pipelines || []).map((p) => `<option value="${esc(p.id)}">${esc(p.nome)} · ${esc(p.tipo)}</option>`).join('')}
             </select>
             <button class="btn primary small" data-act="ia-media-pedir">Pedir produção</button>
           </div>
           ${(S.iaFila || []).length ? `<table class="ia-tab" style="margin-top:10px"><thead><tr><th>Pedido</th><th>Tipo</th><th>Estado</th><th>Resultado</th><th>Quando</th></tr></thead><tbody>
             ${(S.iaFila || []).slice(0, 8).map((j) => `<tr><td>${esc(String(j.pedido).slice(0, 60))}</td><td>${esc(j.tipo)}</td><td>${etiqueta(j.estado, j.estado === 'concluido' ? 'ok' : j.estado === 'falhou' || j.estado === 'indisponivel' ? 'bad' : 'warn')}${j.erro ? `<div class="ia-sub">${esc(String(j.erro).slice(0, 140))}</div>` : ''}</td><td>${j.url_resultado ? `<a href="${esc(j.url_resultado)}" target="_blank" rel="noopener">abrir</a>` : '<span class="ia-sub">—</span>'}</td><td class="ia-sub">${when(j.criado)}</td></tr>`).join('')}
-          </tbody></table>` : '<div class="ia-sub" style="margin-top:8px">Nenhum trabalho de media pedido.</div>'}
+          </tbody></table>` : '<div class="ia-sub" style="margin-top:8px">Nenhum trabalho de produção (OpenMontage) pedido aqui. As imagens dos projetos não passam por esta fila — geram-se no projeto.</div>'}
           <div class="ia-sub" style="margin-top:8px">O OpenMontage não corre na Vercel: precisa de Python, FFmpeg e Node. A mesa só enfileira e mostra o que o worker devolve — <code>scripts/estudio-worker.mjs</code>, instruções em <code>docs/OPENMONTAGE.md</code>.</div>`;
       })()}
     </div>
@@ -677,7 +737,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
         ${(ia.ferramentas || []).map((f) => `<div class="ia-ferramenta"><b>${esc(f.id)}</b>${f.destrutiva ? etiqueta('pede aprovação', 'warn') : ''}<div class="ia-sub">${esc(f.descricao)}</div></div>`).join('')}
       </div>
       <h4>O que esta instalação não faz</h4>
-      <ul class="ia-erros">${(ia.indisponiveis || []).map((i) => `<li><b>${esc(i.id)}</b> — ${esc(i.porque)}</li>`).join('')}</ul>
+      <ul class="ia-erros">${(ia.indisponiveis || []).map((i) => `<li><b>${esc(i.id)}</b>${i.existe ? ` ${etiqueta(`existe em ${esc(i.onde || 'outro sítio')}`, 'warn')}` : ''} — ${esc(i.porque)}</li>`).join('')}</ul>
     </div>
   </div>`;
 }

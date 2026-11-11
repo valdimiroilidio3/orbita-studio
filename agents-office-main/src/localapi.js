@@ -105,6 +105,9 @@ function falha(status, message, extra = {}) {
 import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca as confiancaDoLead,
   verificacao as verificacaoDoLead, proximaAccao, qualificacao as qualificacaoDoLead, nomeDoFicheiro } from './crm.js';
 import { NIVEIS_AUTONOMIA } from './motores.js';
+/* 1.84.0 · o elenco é dado puro (`src/elenco.js`): o mesmo no servidor e aqui,
+   para o Control Center não dizer 47 lugares num modo e nada no outro. */
+import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './elenco.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -303,7 +306,12 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         configurado: true, semChave: true, variavel: 'não precisa', chaveMascarada: '',
         estado: 'por_testar', limites: g.limites, desligado: false, ultimoTeste: null,
       }));
+      /* 1.84.0 · o elenco não depende do servidor: são 47 identidades escritas
+         em `src/data.js`. O que depende do servidor são os 8 motores, e isso
+         diz-se na nota — em vez de deixar o cartão vazio no modo local. */
+      const el = elencoBase();
       return {
+        elenco: { ...el, motores: [], motoresNota: 'os motores do Orchestrator vivem no servidor (as chaves nunca chegam a este browser); os lugares do escritório são os mesmos nos dois modos' },
         pronto: false, modo: 'local',
         motivo: 'a IA corre no servidor: as chaves dos fornecedores vivem no ambiente da Vercel e nunca neste browser',
         fornecedores: gratuitos, agentes: [], ferramentas: [], indisponiveis: [
@@ -842,13 +850,20 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         const id = DEPARTAMENTOS_POR_TIPO[t.kind] || 'comando';
         if (porSala.has(id)) porSala.get(id).push(t);
       }
+      /* 1.84.0 · `agentes: []` também aqui: o elenco é dado puro e é o mesmo
+         nos dois modos. A diferença entre local e servidor é o TRABALHO, não
+         quem existe no escritório. */
+      const todos = elencoBase();
       const departamentos = DEPARTAMENTOS.map((x) => {
         const lista = porSala.get(x.id) || [];
         const n = (estado) => lista.filter((t) => t.state === estado).length;
         const ordenadas = lista.slice().sort((a, b) => String(quando(b) || '').localeCompare(String(quando(a) || '')));
         const falha = ordenadas.find((t) => t.state === 'failed') || null;
+        const daSala = agentesDaSala(SALA_DO_DEPARTAMENTO_PT[x.id] || x.id, todos);
         return {
-          ...x, name: x.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '', agentes: [],
+          ...x, name: x.nome, role: TIPOS_TAREFA[ordenadas[0]?.kind]?.label || '',
+          agentes: daSala.map((a) => ({ id: a.id, nome: a.nome, papel: a.papel, temRotina: a.temRotina, rotinas: a.rotinas, consultivo: a.consultivo })),
+          elenco: { total: daSala.length, comRotina: daSala.filter((a) => a.temRotina).length, consultivos: daSala.filter((a) => a.consultivo).length },
           running: n('running'), awaiting: n('awaiting_approval'), queued: n('queued'),
           succeeded: n('succeeded'), failed: n('failed'),
           tarefas: { aCorrer: n('running'), naFila: n('queued'), porAprovar: n('awaiting_approval'), concluidas: n('succeeded'), falhadas: n('failed'), total: lista.length },
@@ -858,7 +873,12 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         };
       });
       const conta = (estado) => d.tarefas.filter((t) => t.state === estado).length;
-      return { departamentos, resumo: { total: d.tarefas.length, running: conta('running'), awaiting: conta('awaiting_approval'), queued: conta('queued'), succeeded: conta('succeeded'), failed: conta('failed') }, modo: 'local' };
+      return {
+        departamentos,
+        resumo: { total: d.tarefas.length, running: conta('running'), awaiting: conta('awaiting_approval'), queued: conta('queued'), succeeded: conta('succeeded'), failed: conta('failed') },
+        elenco: { total: todos.total, comRotina: todos.comRotina, consultivos: todos.consultivos, motores: 0, resumo: todos.resumo },
+        modo: 'local',
+      };
     }
     if (caminhoLimpo === '/ops/utilizadores') return { utilizadores: [], papeis: [] };
     if (caminhoLimpo === '/ops/sessoes') return { sessoes: [] };

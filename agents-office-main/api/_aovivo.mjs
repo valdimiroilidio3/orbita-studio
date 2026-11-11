@@ -43,8 +43,18 @@ export const DEPT_BRIDGE = {
   command: 'emails', prospect: 'sales', sales: 'ops', design: 'fin', engineering: 'delivery', media: 'marketing',
 };
 
+/* 1.84.0 · A PONTE QUE FALTAVA.
+   O mapa de cima fala `lead.pesquisar`, `projeto.gerar` — os tipos do pipeline
+   antigo (`src/ops/`). O motor de produção (`api/_tarefas.mjs`) escreve
+   `investigar`, `mensagem`, `briefing`, `codigo`, `qa`, `escritorio`. Sem esta
+   ponte, `kinds` nunca casava com uma tarefa real e TODOS os postos diziam «sem
+   tarefas registadas» — no escritório ao vivo, com trabalho na base. A ponte
+   vive em `api/_elenco.mjs` (uma só, partilhada com o Control Center). */
+import { POSTO_DA_ROTINA, DEPARTAMENTO_EN_DA_ROTINA } from './_elenco.mjs';
+
 /** O departamento que trata de cada tipo de trabalho (o mesmo mapa de `tasks.mjs`). */
 export const DEPT_DO_KIND = {
+  ...DEPARTAMENTO_EN_DA_ROTINA,
   'lead.pesquisar': 'prospect', 'lead.qualificar': 'prospect',
   'proposta.preparar': 'sales', 'mensagem.redigir': 'sales',
   'projeto.briefing': 'design', 'projeto.gerar': 'engineering', 'projeto.qa': 'engineering',
@@ -137,10 +147,16 @@ export function estadoDoPosto(tarefas = [], { agora = Date.now(), eventos = [] }
  * ser uma função pura e testável — quem lê a base é a rota.
  */
 export function retrato({ agentes = [], tarefas = [], eventos = [], agora = Date.now(), fonte = 'tarefas e atividade da base de dados' } = {}) {
-  const lista = agentes.length ? agentes : [...new Set(Object.values(SEAT))];
+  const lista = agentes.length ? agentes : [...new Set([...Object.values(SEAT), ...Object.values(POSTO_DA_ROTINA)])];
   const porAgente = {};
   for (const id of new Set(lista)) {
-    const kinds = Object.entries(SEAT).filter(([, posto]) => posto === id).map(([kind]) => kind);
+    /* 1.84.0 · os dois vocabulários: o pipeline antigo (SEAT) e os tipos que o
+       motor de produção escreve (POSTO_DA_ROTINA). Os dois contam — senão uma
+       tarefa real não acende posto nenhum. */
+    const kinds = [...new Set([
+      ...Object.entries(SEAT).filter(([, posto]) => posto === id).map(([kind]) => kind),
+      ...Object.entries(POSTO_DA_ROTINA).filter(([, posto]) => posto === id).map(([kind]) => kind),
+    ])];
     const minhas = kinds.length
       ? tarefas.filter((t) => kinds.includes(t.kind)).sort((a, b) => ms(b.created_at) - ms(a.created_at))
       : [];
