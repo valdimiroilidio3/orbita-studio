@@ -1,3 +1,27 @@
+## 1.84.0 — o Control Center deixa de dizer que o escritório está vazio (11 nov 2026)
+
+O escritório tem 47 lugares, o Orchestrator corre 8 motores e o motor de
+tarefas produz 6 tipos — mas cada um falava a língua sua:
+
+- o mapa de postos escrevia `lead.pesquisar`/`projeto.gerar`, que o motor de
+  produção nunca escreve → nenhuma tarefa acendia posto nenhum ao vivo;
+- `GET /ops/agentes` devolvia `agentes: []` em todas as salas;
+- o Control Center mostrava 8 agentes sem ligação aos 47;
+- o cartão do estúdio falava só do OpenMontage, com imagens geradas na base;
+- a lista «o que esta instalação não faz» dizia que não havia pesquisa, com a
+  Tavily ligada em produção.
+
+Correções: `api/_elenco.mjs` + `src/elenco.js` (uma só tabela dos tipos de
+trabalho, em inglês para o ao vivo e português para a mesa; 47 lugares com
+`temRotina` — 5 com trabalho próprio, 42 consultivos — e os 8 motores como
+camada separada); `/ops/agentes` devolve o elenco de cada sala; o escritório ao
+vivo aceita os dois vocabulários; o estúdio mostra imagem real (Pollinations,
+últimos 7 dias) e OpenMontage; a lista de indisponíveis deixa de mentir
+(pesquisa_web existe em Prospeção; geracao_de_imagens na aba Mídia).
+
+Provas: `node --test` 1516/1516 · `node check.mjs` 96/96 · `node build.mjs` OK.
+
+
 ## 1.83.1 — 11 nov 2026 · o painel não acorda os fornecedores para desenhar a página
 
 Correcção da 1.83.0, encontrada ao reler o caminho do painel.
