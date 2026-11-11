@@ -1,3 +1,25 @@
+## 1.83.1 — 11 nov 2026 · o painel não acorda os fornecedores para desenhar a página
+
+Correcção da 1.83.0, encontrada ao reler o caminho do painel.
+
+A parte das «gratuitas» chamava `descobrirSePreciso()`, que **pergunta a cada
+fornecedor, um a um**, que modelos tem. Com a cache de 6 h válida isso é barato —
+mas quando a cache expira são dezenas de pedidos em série, e o painel tem 6 s
+para responder. Resultado: de seis em seis horas, a primeira visita ao Control
+Center mostrava a faixa «leitura parcial: gratuitos» sem o dono ter feito nada de
+errado, e a função gastava execução a falar com fornecedores só para desenhar um
+cartão.
+
+Agora:
+
+* `motor.gratuitos({ descobrir: false })` lê só o que já se sabe;
+* **o painel usa esse caminho** — desenhar a página não acorda ninguém;
+* a descoberta continua onde é uma acção explícita: o botão «Descobrir modelos»
+  e a rota `/ia/gratuitos`, que é dela.
+
+Provas: duas novas em `ia-painel.test.mjs` (o painel faz **zero** pedidos a
+fornecedores e continua completo; a rota `/ia/gratuitos` continua a descobrir).
+
 ## 1.83.0 — 11 nov 2026 · o Control Center abre num pedido, e o telemóvel deixa de estar apertado
 
 Duas queixas do dono, com o ecrã à frente, e as duas com a mesma raiz: uma coisa

@@ -220,3 +220,23 @@ test('1.83.0 · sem `/ia/painel` (instalação antiga), a vista cai no caminho d
   assert.equal(api.S.iaErro, null, 'uma instalação antiga não é um erro para o dono');
   assert.ok(api.S.ia.fornecedores.length);
 });
+
+test('1.83.1 · o painel lê as gratuitas sem acordar os fornecedores (nada de 60 pedidos em série)', async () => {
+  const repo = createMemRepo();
+  const motor = criarMotor({ repo, env: {} });
+  /* conta os pedidos de descoberta: o painel não pode fazer nenhum */
+  let pedidos = 0;
+  const fetchImpl = async () => { pedidos += 1; throw new Error('o painel não devia falar com fornecedores'); };
+  const p = await montarPainel(repo, { env: {}, fetchImpl, motor, prazos: { gratuitos: 1500 } });
+  assert.equal(pedidos, 0, 'o painel acordou fornecedores só para desenhar a página');
+  assert.equal(p.completo, true, `o painel não pode ficar parcial por causa da descoberta: ${JSON.stringify(p.parcial)}`);
+  assert.ok(p.gratuitos && Array.isArray(p.gratuitos.modelos), 'as gratuitas continuam a vir no painel');
+  assert.ok(p.gratuitos.cadeia && Object.keys(p.gratuitos.cadeia).length, 'a cadeia por tipo continua a vir');
+});
+
+test('1.83.1 · a rota /ia/gratuitos continua a descobrir (é a acção explícita dela)', async () => {
+  const repo = createMemRepo();
+  const r = await rotasIA(repo, { caminho: '/ia/gratuitos', metodo: 'GET', env: {} });
+  assert.equal(r.status, 200);
+  assert.ok(Array.isArray(r.corpo.cadeia ? Object.keys(r.corpo.cadeia) : null), 'a cadeia por tipo vem na resposta');
+});

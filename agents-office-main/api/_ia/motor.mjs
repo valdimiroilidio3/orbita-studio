@@ -576,11 +576,19 @@ const provarModelos = async ({ fornec: so = null, limite = 9, concorrencia = 4, 
       return { ...resultado, orc: orc.resumo() };
     },
 
-    /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora. */
-    async gratuitos() {
+    /** 1.32.0 · o que é gratuito, o que já respondeu e quanto demora.
+     *
+     *  1.83.1 · `descobrir: false` (o caminho da página). A descoberta pergunta
+     *  aos fornecedores, UM A UM, o que têm: com a cache de 6 h válida é barato,
+     *  mas quando ela expira são dezenas de pedidos em série — mais do que o
+     *  prazo que a página tem para responder. Nesse caso a página ficava com a
+     *  faixa «leitura parcial» a cada seis horas, sem culpa nenhuma do dono.
+     *  Agora o painel lê só o que já se sabe; descobrir é uma acção explícita
+     *  (o botão «Descobrir modelos» e a rota `/ia/gratuitos`, que é dela). */
+    async gratuitos({ descobrir = true } = {}) {
       /* antes de responder ao que há, pergunta aos fornecedores o que têm —
          com a cache de 6 h, isto é uma chamada por fornecedor a cada 6 h */
-      const descobriu = await descobrirSePreciso().catch(() => []);
+      const descobriu = descobrir ? await descobrirSePreciso().catch(() => []) : [];
       const cfg = await config();
       const r = resumoGratuitos({ chaves, desligados: cfg.desligados || [], latencias: await latencias(), cfg });
       return {

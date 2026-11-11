@@ -196,9 +196,9 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
  *  leituras independentes e a soma era o que se sentia no ecrã. */
 export const TIPOS_DE_TRABALHO = ['plano', 'codigo', 'texto', 'investigar', 'revisao', 'rapido', 'visao'];
 
-export async function gratuitosComCadeia(motor) {
+export async function gratuitosComCadeia(motor, { descobrir = true } = {}) {
   const [r, ...cadeias] = await Promise.all([
-    motor.gratuitos(),
+    motor.gratuitos({ descobrir }),
     ...TIPOS_DE_TRABALHO.map((t) => motor.cadeiaPara(t).catch(() => [])),
   ]);
   const cadeia = {};
@@ -254,7 +254,10 @@ export async function montarPainel(repo, {
     parte('trabalhos', limites.trabalhos, async () => (await media.listar(repo, 30))?.corpo?.trabalhos || [], []),
     /* a mais cara (pode descobrir modelos no fornecedor, com cache de 6 h): é a
        última a poder falhar, e falhar aqui não estraga nada */
-    parte('gratuitos', limites.gratuitos, () => gratuitosComCadeia(m), null),
+    /* `descobrir: false`: o painel lê o que já se sabe. Perguntar a dezenas de
+       fornecedores, um a um, é trabalho do botão «Descobrir modelos» — não de
+       uma página que tem 6 s para responder (ver 1.83.1). */
+    parte('gratuitos', limites.gratuitos, () => gratuitosComCadeia(m, { descobrir: false }), null),
   ]);
 
   return {
