@@ -2343,7 +2343,7 @@ body.dark .cf-perigo .cf-ok { background: #C8362C; color: #FFF6F4; }
     <div class="card">
       <h3 style="margin-top:0">Ferramentas reais</h3>
       <div class="ia-grade">
-        ${(t.ferramentas||[]).map(v=>`<div class="ia-ferramenta"><b>${e(v.id)}</b>${v.destrutiva?X("pede aprova\xE7\xE3o","warn"):""}<div class="ia-sub">${e(v.descricao)}</div></div>`).join("")}
+        ${(t.ferramentas||[]).map(v=>`<div class="ia-ferramenta"><b>${e(v.id)}</b>${v.destrutiva||v.aprovacao?X(v.destrutiva?"pede aprova\xE7\xE3o":"pede OK (custo)","warn"):""}<div class="ia-sub">${e(v.descricao)}</div>${(v.agentes||[]).length?`<div class="ia-sub">quem pode: ${e(v.agentes.join(", "))}</div>`:""}</div>`).join("")}
       </div>
       <h4>O que esta instala\xE7\xE3o n\xE3o faz</h4>
       <ul class="ia-erros">${(t.indisponiveis||[]).map(v=>`<li><b>${e(v.id)}</b>${v.existe?` ${X(`existe em ${e(v.onde||"outro s\xEDtio")}`,"warn")}`:""} \u2014 ${e(v.porque)}</li>`).join("")}</ul>

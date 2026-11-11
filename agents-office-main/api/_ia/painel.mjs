@@ -32,7 +32,7 @@
    dois caminhos): o painel e a rota antiga não podem divergir em silêncio.
    =========================================================================== */
 import { FORNECEDORES, MODELOS, modelosDe } from './catalogo.mjs';
-import { LISTA } from './agentes.mjs';
+import { LISTA, AGENTES } from './agentes.mjs';
 import { FERRAMENTAS, indisponiveisComAmbiente } from './ferramentas.mjs';
 import { TIPOS } from './router.mjs';
 import * as memoria from './memoria.mjs';
@@ -228,7 +228,11 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
         escolha: par ? { fornecedor: par.fornecedor || null, modelo: par.modelo || null } : null,
       };
     }),
-    ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({ id, descricao: f.descricao, destrutiva: !!f.destrutivo })),
+    /* 1.85.0 · quem tem cada ferramenta e quais pedem o OK humano (destrutivas e as que gastam) */
+    ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({
+      id, descricao: f.descricao, destrutiva: !!f.destrutivo, aprovacao: !!f.aprovacao,
+      agentes: Object.entries(AGENTES).filter(([, a]) => a.ferramentas.includes(id)).map(([k]) => k),
+    })),
     /* 1.84.0 · o que não existe como ferramenta diz PORQUE — e diz também se a
        capacidade existe noutro sítio do produto. Antes, com a Tavily ligada em
        produção, esta lista afirmava «não há fornecedor de pesquisa configurado»:

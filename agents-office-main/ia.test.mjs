@@ -255,8 +255,8 @@ test('ferramentas: lead_criar não duplica nome+cidade', async () => {
 
 test('ferramentas: o que não existe está declarado, não fingido', () => {
   const ids = INDISPONIVEIS.map((i) => i.id);
-  for (const esperado of ['pesquisa_web', 'execucao_de_codigo', 'geracao_de_imagens']) assert.ok(ids.includes(esperado));
-  assert.equal(FERRAMENTAS.pesquisa_web, undefined);
+  for (const esperado of ['execucao_de_codigo', 'ficheiros_do_workspace', 'navegacao_de_sites']) assert.ok(ids.includes(esperado));
+  assert.equal(FERRAMENTAS.pesquisa_web, undefined, 'o nome antigo não volta: é web_pesquisar');
 });
 
 test('validar: aceita args válidos e enumera erros em português', () => {
