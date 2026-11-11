@@ -33,11 +33,12 @@
    =========================================================================== */
 import { FORNECEDORES, MODELOS, modelosDe } from './catalogo.mjs';
 import { LISTA } from './agentes.mjs';
-import { FERRAMENTAS } from './ferramentas.mjs';
+import { FERRAMENTAS, indisponiveisComAmbiente } from './ferramentas.mjs';
 import { TIPOS } from './router.mjs';
 import * as memoria from './memoria.mjs';
 import * as media from './media.mjs';
 import { estadoDoRun, resumoDoRun, podeCancelar, podeRepetir, podeAprovar } from '../../src/execucao.js';
+import { elenco } from '../_elenco.mjs';
 
 /** O tecto de tokens por nível de esforço. Uma definição para o motor, a rota
  *  e a vista — antes só a rota o tinha e o painel repetia os números. */
@@ -150,6 +151,46 @@ export async function modelosDoCatalogo(motor, { fornecedor = null } = {}) {
  * `resumos: false` corta a memória e o estúdio — é o caminho rápido, para quem
  * só quer saber se há motor.
  */
+/**
+ * 1.84.0 · O ESTÚDIO, COM O QUE ELE FAZ DE VERDADE.
+ *
+ * O cartão do Control Center falava só do OpenMontage («precisa de Python e
+ * FFmpeg, não corre na Vercel») e mostrava «nenhum trabalho pedido» — enquanto
+ * os projetos geravam imagens a sério com o Pollinations. Duas metades da mesma
+ * coisa, e a que funciona não aparecia.
+ *
+ * Aqui as duas metades vêm juntas, cada uma com o seu estado: a imagem real
+ * (quantas nos últimos 7 dias, quantas fecharam, quantas falharam, a última) e
+ * o OpenMontage como caminho declarado. Sem números inventados: o que não está
+ * na base vem a zero.
+ */
+export async function estudioComImagem(repo, env = process.env) {
+  const desde = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const geracoes = await repo.geracoes.porPeriodo(desde, 500).catch(() => []);
+  const lista = Array.isArray(geracoes) ? geracoes : [];
+  const concluidas = lista.filter((g) => g.estado === 'concluida');
+  const ultima = lista[0] || null;
+  const openmontage = await media.estado(repo, env).catch(() => null);
+  return {
+    /* o caminho que funciona HOJE, e sem chave */
+    imagem: {
+      fornecedor: 'pollinations',
+      disponivel: true,
+      porque: 'o tier gratuito não pede chave; as imagens geram-se dentro do projeto (aba Mídia)',
+      seteDias: {
+        total: lista.length,
+        concluidas: concluidas.length,
+        falhadas: lista.filter((g) => g.estado === 'falhou').length,
+        aCorrer: lista.filter((g) => g.estado === 'aguardando' || g.estado === 'em_processamento').length,
+      },
+      ultimaEm: ultima?.criado || null,
+      ultima: ultima ? { id: ultima.id, projeto: ultima.projeto_id || null, tipo: ultima.tipo, estado: ultima.estado } : null,
+    },
+    /* o caminho que precisa de uma máquina ao lado — declarado, não escondido */
+    openmontage,
+  };
+}
+
 export async function montarEstado(motor, { repo, env = process.env, fetchImpl = fetch, resumos = true } = {}) {
   const estado = await motor.estado();
   const cfg = await motor.config();
@@ -161,8 +202,11 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
       comPrazo(memoria.estado(repo, { env, fetchImpl }), PRAZOS.memoria, 'a memória')
         .then((e) => ({ total: e.total, usos: e.usos, modo: e.modo, etiquetas: e.etiquetas.slice(0, 8), recentes: e.recentes.slice(0, 5), mem0: e.mem0 }))
         .catch((e) => ({ erro: `a memória ainda não tem tabela: ${String(e.message).slice(0, 120)}` })),
-      comPrazo(media.estado(repo, env), PRAZOS.estudio, 'o estúdio')
-        .catch((e) => ({ configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` })),
+      comPrazo(estudioComImagem(repo, env), PRAZOS.estudio, 'o estúdio')
+        .catch((e) => ({
+          imagem: null,
+          openmontage: { configurado: false, porque: `o estúdio ainda não tem tabela: ${String(e.message).slice(0, 120)}` },
+        })),
     ]);
   }
 
@@ -170,6 +214,9 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
     ...estado,
     memoria: resumoMemoria,
     estudio,
+    /* 1.84.0 · as duas camadas, ditas por inteiro: 47 lugares no escritório (com
+       ou sem trabalho próprio) e os 8 motores que o Orchestrator chama. */
+    elenco: elenco(),
     agentes: LISTA.map((a) => {
       const esc = cfg.agentes?.[a.id]?.modelo || null;
       const par = esc && typeof esc === 'object' ? esc : (esc ? { modelo: String(esc) } : null);
@@ -182,6 +229,11 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
       };
     }),
     ferramentas: Object.entries(FERRAMENTAS).map(([id, f]) => ({ id, descricao: f.descricao, destrutiva: !!f.destrutivo })),
+    /* 1.84.0 · o que não existe como ferramenta diz PORQUE — e diz também se a
+       capacidade existe noutro sítio do produto. Antes, com a Tavily ligada em
+       produção, esta lista afirmava «não há fornecedor de pesquisa configurado»:
+       era falso, e o dono via-a no Control Center. */
+    indisponiveis: indisponiveisComAmbiente(env),
     tipos: TIPOS,
     desligados: cfg.desligados || [],
     pronto: estado.diagnostico.pronto,

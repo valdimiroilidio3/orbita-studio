@@ -149,7 +149,11 @@ test('9 · o vazio honesto: agentes, atividade e pesquisa não inventam nada', a
   const api = createLocalApi({ storage: armazem() });
   const ag = await api.call('/ops/agentes');
   assert.equal(ag.resumo.running, 0);
-  assert.deepEqual(ag.departamentos.map((d) => d.agentes), [[], [], [], [], [], []]);
+  /* 1.84.0 · o elenco não é mais vazio: as seis salas somam 47 lugares, 5 dos quais com trabalho próprio. */
+  assert.equal(ag.departamentos.reduce((n, d) => n + d.agentes.length, 0), 47);
+  const comRotina = ag.departamentos.flatMap((d) => d.agentes).filter((a) => a.temRotina);
+  assert.equal(comRotina.length, 5);
+  for (const d of ag.departamentos) assert.ok(Array.isArray(d.agentes) && d.agentes.length > 0);
   assert.deepEqual((await api.call('/ops/atividade')).eventos, []);
   assert.deepEqual((await api.call('/ops/pesquisa?q=teste')).grupos, []);
   assert.deepEqual((await api.call('/ops/utilizadores')).utilizadores, []);
