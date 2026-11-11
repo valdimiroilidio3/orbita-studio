@@ -40,12 +40,18 @@ export default async function handler(req, res) {
        chamada gastava duas tentativas antes de chegar ao LLM7. Desliga-se para
        esta prova — e o registo diz isso mesmo. */
     await repo.ia.config.gravar('desligados', ['vercel']);
+    /* Um só modelo, o mais directo do LLM7, para o planeamento e a revisão não
+       andarem a saltar entre candidatos dentro dos 60 s da função. */
+    await repo.ia.config.gravar('agentes', {
+      orchestrator: { modelo: { fornecedor: 'llm7', modelo: 'gpt-oss-20b' } },
+      reviewer: { modelo: { fornecedor: 'llm7', modelo: 'gpt-oss-20b' } },
+    });
 
     if (fase === 'correr' || Object.values(testes).some((t) => t.ok)) {
       const run = await correr({
         repo, motor,
-        objetivo: 'Dizer ao dono quantos leads existem agora, com o número real da base, e registar o resultado numa nota de memória.',
-        limites: { maxChamadas: 6, maxTokens: 60000 },
+        objetivo: 'Contar quantos leads existem agora na base e escrever uma nota de memória com esse número real.',
+        limites: { maxChamadas: 4, maxTokens: 40000 },
         env,
       });
       const passos = await repo.ia.steps.porRun(run.id);
