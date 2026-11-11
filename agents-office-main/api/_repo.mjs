@@ -567,8 +567,15 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         })) || linha;
       },
       /* o «pump»: quem faz avançar os trabalhos que ninguém está a olhar */
+      /* 1.86.0 · só IMAGENS: o vídeo quem compõe é o browser, e um vídeo na frente
+         da fila gastava o lugar de uma imagem a cada volta do pump. */
       async listarPendentes(limite = 5) {
-        return (await pedir(`orbita_geracoes?select=*&estado=eq.aguardando&order=criado.asc&limit=${Math.min(20, limite)}`)) || [];
+        return (await pedir(`orbita_geracoes?select=*&estado=eq.aguardando&tipo=eq.imagem&order=criado.asc&limit=${Math.min(20, limite)}`)) || [];
+      },
+      /* 1.86.0 · as gerações que ficaram «a gerar» para sempre: a função morreu a meio
+         (60 s) depois de reivindicar a linha. Quem as lê decide o que fazer. */
+      async listarPresas(antesDeIso, limite = 20) {
+        return (await pedir(`orbita_geracoes?select=*&estado=eq.em_processamento&actualizado=lt.${q(antesDeIso)}&limit=${Math.min(50, limite)}`)) || [];
       },
     },
   };
@@ -820,7 +827,10 @@ export function createMemRepo(seed = {}) {
         return g;
       },
       async listarPendentes(limite = 5) {
-        return [...d.geracoes].filter((g) => g.estado === 'aguardando').reverse().slice(0, limite);
+        return [...d.geracoes].filter((g) => g.estado === 'aguardando' && g.tipo === 'imagem').reverse().slice(0, limite);
+      },
+      async listarPresas(antesDeIso, limite = 20) {
+        return d.geracoes.filter((g) => g.estado === 'em_processamento' && String(g.actualizado || '') < antesDeIso).slice(0, limite);
       },
     },
   };

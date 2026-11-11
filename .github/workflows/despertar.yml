@@ -1,0 +1,55 @@
+# Órbita — o despertar de 30 em 30 minutos (1.86.0).
+#
+# O cron da Vercel no plano Hobby só corre uma vez por dia. Sem isto, a fila de
+# imagens e as tarefas dos agentes só andavam quando alguém abria a mesa.
+#
+# Faz duas chamadas, em pedidos separados (cada uma com o seu limite de 60 s):
+#   1. /api/ciclo?so=midia  → avança as imagens pendentes e cura as presas;
+#   2. /api/ciclo           → corre a fila de tarefas (com a autonomia de cada tipo).
+#
+# Precisa de UM segredo no GitHub: ORBITA_API_TOKEN (o mesmo token da Órbita que
+# o /api/ciclo já aceita). Settings → Secrets and variables → Actions.
+# O endereço é opcional: por omissão, a produção.
+name: despertar
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: despertar
+  cancel-in-progress: false
+
+jobs:
+  despertar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ORBITA_URL: ${{ vars.ORBITA_URL || 'https://orbita-agentes.vercel.app' }}
+      ORBITA_API_TOKEN: ${{ secrets.ORBITA_API_TOKEN }}
+    steps:
+      - name: confirmar que o segredo existe
+        run: |
+          if [ -z "$ORBITA_API_TOKEN" ]; then
+            echo "falta o segredo ORBITA_API_TOKEN no GitHub (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          echo "segredo presente (valor não mostrado)."
+
+      - name: fila de imagens (pump)
+        run: |
+          curl -sS --fail-with-body --max-time 58 \
+            -H "Authorization: Bearer $ORBITA_API_TOKEN" \
+            "$ORBITA_URL/api/ciclo?so=midia"
+          echo
+
+      - name: fila de tarefas dos agentes
+        run: |
+          curl -sS --fail-with-body --max-time 58 \
+            -H "Authorization: Bearer $ORBITA_API_TOKEN" \
+            "$ORBITA_URL/api/ciclo"
+          echo

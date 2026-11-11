@@ -1,3 +1,33 @@
+## 1.86.0 — a fila de imagens anda sozinha (11 nov 2026)
+
+Uma imagem pedida pelos agentes (`imagem_gerar`, 1.85.0) ou por quem fechou o
+separador ficava «aguardando» para sempre: quem a fazia avançar era só a mesa,
+quando alguém a consultava. O cron da Vercel no plano Hobby corre uma vez por
+dia. E havia uma segunda falha: uma geração cuja função morria a meio ficava
+«a gerar» para sempre.
+
+Correcções:
+
+- `avancarPendentes` (api/_media.mjs): faz avançar as imagens pendentes dentro
+  de um orçamento de tempo (25 s). Não começa uma imagem depois do orçamento e
+  diz que parou. Só imagens — o vídeo é composto no browser.
+- `curarPresas`: uma geração «a gerar» há mais de 3 minutos fica `falhou`, com a
+  razão escrita (pode ter sido cobrada). Não volta a gerar às cegas.
+- `/media/geracoes/avancar` (o token do worker) usa o mesmo motor. Antes eram 5
+  imagens sem limite de tempo, o que passava dos 60 s da função.
+- `GET /api/ciclo?so=midia`: só a fila de imagens. A autenticação é a mesma do
+  ciclo; o caminho não corre a fila de tarefas.
+- `.github/workflows/despertar.yml`: acorda a Órbita de 30 em 30 minutos, com
+  dois pedidos separados (imagens, depois tarefas). Precisa do segredo
+  `ORBITA_API_TOKEN` no GitHub; sem ele, falha com a razão escrita.
+
+Provas: `node --test` 1537/1537 (8 novas em `pump-media.test.mjs`) ·
+`node check.mjs` 96/96 · 1 saltado · `node build.mjs` OK.
+
+Por fazer: o agendador só funciona depois de o segredo ser adicionado no GitHub
+e de o workflow sair da fila (ver o estado da verificação).
+
+
 ## 1.85.0 — os agentes passam a ter as ferramentas que o produto já tem (11 nov 2026)
 
 A lista «o que esta instalação não faz» dizia que não havia pesquisa web nem
