@@ -54,31 +54,139 @@ export function comPrazo(promessa, ms, oQue = 'o servidor') {
 
 export const PRAZO_ESTADO_MS = 12000;
 export const PRAZO_RESTO_MS = 10000;
+/* 1.83.0 · o painel inteiro num pedido: um prazo só, e maior, porque já não há
+   seis arranques a somar-se. */
+export const PRAZO_PAINEL_MS = 15000;
 
 function pararRelogioDeCarga() {
   if (relogioCarga) { clearInterval(relogioCarga); relogioCarga = null; }
 }
 
+/* ===========================================================================
+   1.83.0 · UMA LEITURA, UM PEDIDO, E O QUE JÁ SE LEU À FRENTE (9 nov 2026)
+
+   O dono disse, com o ecrã à frente: «A carregar o Control Center…», «a pedir o
+   estado ao servidor», «Pedir outra vez» — «isto deve já estar 100% funcional,
+   sem dar essa lentidão e erro de não carregar».
+
+   A 1.78 tinha posto prazos em cada pedido, o que evitava o ecrã preso para
+   sempre — mas continuava a pedir SEIS rotas (seis invocações da função, seis
+   arranques a frio na Vercel) e esperava pela primeira antes de pedir as outras.
+   Pôr um prazo num caminho lento não o torna rápido.
+
+   Agora:
+     · a página pede **um** caminho, `/ia/painel`, que devolve tudo de uma vez
+       com as partes em paralelo do lado do servidor (ver `api/_ia/painel.mjs`);
+     · antes de pedir, mostra **a última leitura que deu certo** guardada neste
+       browser. Quem já abriu a página vê os fornecedores no primeiro desenho,
+       com uma faixa a dizer que está a actualizar e desde quando. Um ecrã com
+       dados de há um minuto é melhor do que um cartão de carregamento;
+     · se `/ia/painel` não existir (instalação anterior à 1.83, ou servidor sem
+       `/api`), cai no caminho antigo, rota a rota — nada se perde;
+     · o que não chegou fica escrito em `parcial`: a página mostra o resto em vez
+       de esconder tudo por causa de uma parte.
+   =========================================================================== */
+
+const CACHE_KEY = 'orbita.ia.painel';
+
+function lerGuarda() {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const bruto = localStorage.getItem(CACHE_KEY);
+    const j = bruto ? JSON.parse(bruto) : null;
+    return j && j.estado && Array.isArray(j.estado.fornecedores) ? j : null;
+  } catch { return null; }
+}
+
+function gravarGuarda(painel) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    /* guarda-se o que a primeira pintura usa; se não couber, não se guarda nada
+       (um erro de quota não pode estragar uma leitura que correu bem) */
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      estado: painel.estado, modelos: painel.modelos, uso: painel.uso,
+      runs: painel.runs, trabalhos: painel.trabalhos, gratuitos: painel.gratuitos,
+      lidoEm: painel.lidoEm || new Date().toISOString(),
+    }));
+  } catch { /* sem storage ou sem espaço */ }
+}
+
+/** Põe na página o que veio num painel (ou numa leitura anterior). */
+export function aplicarPainel(api, painel = {}) {
+  if (painel.estado && Array.isArray(painel.estado.fornecedores)) api.S.ia = painel.estado;
+  if (painel.modelos) api.S.iaModelos = painel.modelos;
+  if (painel.uso) api.S.iaUso = painel.uso;
+  if (Array.isArray(painel.runs)) api.S.iaRuns = painel.runs;
+  if (Array.isArray(painel.trabalhos)) api.S.iaFila = painel.trabalhos;
+  if (painel.gratuitos) api.S.iaGratuitos = painel.gratuitos;
+}
+
 export async function carregarIA(api) {
-  /* 1.34.0 · esta vista nunca fica presa em «A carregar o Control Center…».
-     Se o servidor não tiver a rota (foi o que a 1.29 publicada fazia), o erro
-     fica escrito com a razão e a página oferece voltar a tentar; se já havia um
-     estado lido, continua à vista com um aviso em cima, em vez de desaparecer. */
   const desde = Date.now();
   let estado = null;
   const pintar = () => { try { api.paint && api.paint(); } catch { /* um desenho que falha não para a leitura */ } };
 
-  /* o cartão passa a dizer o que está a pedir, e a contar os segundos */
-  api.S.iaCarregando = { desde, passo: 'o estado da IA' };
   api.S.iaErro = null;
+  api.S.iaParcial = null;
+
+  /* 1. o que já se leu neste browser aparece JÁ: sem cartão de carregamento */
+  const guardado = lerGuarda();
+  const jaTinha = !!(api.S.ia && Array.isArray(api.S.ia.fornecedores));
+  if (guardado && !jaTinha) {
+    aplicarPainel(api, guardado);
+    api.S.iaLidoEm = guardado.lidoEm || null;
+    api.S.iaLeituraAntiga = true;
+  }
+
+  /* o cartão só aparece a quem nunca leu nada; quem já tem dados vê a faixa */
+  const temAlgo = !!(api.S.ia && Array.isArray(api.S.ia.fornecedores));
+  api.S.iaCarregando = temAlgo ? null : { desde, passo: 'o Control Center' };
+  api.S.iaActualizando = true;
   pintar();
   pararRelogioDeCarga();
-  relogioCarga = setInterval(() => {
-    if (!api.S.iaCarregando) { pararRelogioDeCarga(); return; }
-    pintar();
-  }, 1000);
-  if (relogioCarga.unref) relogioCarga.unref();
+  if (!temAlgo) {
+    relogioCarga = setInterval(() => {
+      if (!api.S.iaCarregando) { pararRelogioDeCarga(); return; }
+      pintar();
+    }, 1000);
+    if (relogioCarga.unref) relogioCarga.unref();
+  }
 
+  /* 2. UM pedido. O servidor compõe o estado, o catálogo, o uso, as execuções,
+        os trabalhos e as gratuitas em paralelo e devolve tudo junto. */
+  let painel = null;
+  try {
+    painel = await comPrazo(api.call('/ia/painel'), PRAZO_PAINEL_MS, 'o Control Center');
+  } catch (e) {
+    api.S.iaErro = e?.message || 'o servidor não respondeu';
+    painel = null;
+  }
+
+  if (painel && painel.estado && Array.isArray(painel.estado.fornecedores)) {
+    aplicarPainel(api, painel);
+    api.S.iaErro = null;
+    api.S.iaLidoEm = painel.lidoEm || new Date().toISOString();
+    api.S.iaLeituraAntiga = false;
+    api.S.iaParcial = (painel.parcial || []).length ? painel.parcial : null;
+    api.S.iaMs = painel.ms ?? null;
+    gravarGuarda(painel);
+  } else {
+    /* instalação anterior à 1.83 (ou servidor que não conhece `/ia/painel`):
+       o caminho antigo, rota a rota, para a página não ficar sem nada */
+    estado = await carregarClassico(api, desde, pintar);
+  }
+
+  api.S.ia = estado || api.S.ia || null;
+  api.S.iaCarregando = null;
+  api.S.iaActualizando = false;
+  pararRelogioDeCarga();
+  pintar();
+  return api.S.ia;
+}
+
+/* O caminho da 1.78, mantido para instalações antigas. Devolve o estado lido. */
+async function carregarClassico(api, desde, pintar) {
+  let estado = null;
   try {
     const lido = await comPrazo(api.call('/ia/estado'), PRAZO_ESTADO_MS, 'o estado da IA');
     if (!lido || !Array.isArray(lido.fornecedores)) throw new Error('o servidor respondeu sem a lista de fornecedores');
@@ -88,39 +196,26 @@ export async function carregarIA(api) {
     api.S.iaErro = e?.message || 'o servidor não respondeu';
     estado = api.S.ia && Array.isArray(api.S.ia.fornecedores) ? api.S.ia : null;
   }
-
-  /* o essencial já está: desenha-se agora, e só depois se pede o resto */
   api.S.ia = estado || api.S.ia || null;
-  api.S.iaCarregando = estado
-    ? { desde, passo: 'o catálogo, o uso e as execuções', parcial: true }
-    : null;
+  if (estado) api.S.iaLidoEm = new Date().toISOString();
+  /* a página já pode desenhar; o cartão sai, e o que falta é dito como parcial */
+  api.S.iaCarregando = estado ? { desde, passo: 'o catálogo, o uso e as execuções', parcial: true } : null;
   pintar();
 
-  /* 1.50.0 · o catálogo com que a conversa escolhe: a lista real de fornecedores
-     e modelos (não uma lista fixa de três nomes). Se a rota não existir, fica
-     null e o selector diz «automático» — nunca inventa opções. */
   const comPrazoCurto = (p, oQue) => comPrazo(p, PRAZO_RESTO_MS, oQue);
   const [modelos, uso, runs, fila, gratuitos] = await Promise.all([
     comPrazoCurto(api.call('/ia/modelos'), 'o catálogo de modelos').catch(() => null),
     comPrazoCurto(api.call('/ia/uso'), 'o uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     comPrazoCurto(api.call('/ia/runs'), 'as execuções').catch(() => ({ runs: [] })),
     comPrazoCurto(api.call('/media/trabalhos'), 'os trabalhos de mídia').catch(() => ({ trabalhos: [] })),
-    /* 1.32.0: o que é gratuito e já respondeu — se a rota não existir, a faixa
-       fica como estava; não se inventa estado nenhum. */
     comPrazoCurto(api.call('/ia/gratuitos'), 'as gratuitas').catch(() => null),
   ]);
-  api.S.ia = estado || api.S.ia || null;
-  api.S.iaCarregando = null;
-  pararRelogioDeCarga();
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
   api.S.iaGratuitos = gratuitos;
   api.S.iaModelos = modelos;
-  if (!api.S.iaRun && api.S.iaRuns.length) {
-    const mais = api.S.iaRuns[0];
-    try { api.S.iaRun = await comPrazoCurto(api.call(`/ia/runs/${mais.id}`), 'a execução'); } catch { api.S.iaRun = null; }
-  }
+  return api.S.ia;
 }
 
 export async function abrirRun(api, id) {
@@ -183,9 +278,9 @@ export function vistaIA(S, { esc, hhmm, when }) {
        indistinguível de um que já morreu. */
     const c = S.iaCarregando || null;
     const seg = c?.desde ? Math.max(0, Math.round((Date.now() - c.desde) / 1000)) : null;
-    const oQue = c?.passo ? `a pedir ${esc(c.passo)} ao servidor` : 'a pedir o estado ao servidor';
+    const oQue = c?.passo ? `a pedir ${esc(c.passo)} ao servidor — um pedido só, com tudo lá dentro` : 'a pedir o estado ao servidor';
     const demora = seg != null && seg >= 6
-      ? `<div class="ia-faixa warn" role="status">Está a demorar mais do que o costume (${seg} s). O prazo é de ${Math.round(PRAZO_ESTADO_MS / 1000)} s — se passar, esta página diz qual pedido não respondeu, em vez de ficar à espera.</div>`
+      ? `<div class="ia-faixa warn" role="status">Está a demorar mais do que o costume (${seg} s). O prazo é de ${Math.round(PRAZO_PAINEL_MS / 1000)} s — se passar, esta página diz qual pedido não respondeu, em vez de ficar à espera.</div>`
       : '';
     return `<div class="wrap"><div class="card empty"><h3>A carregar o Control Center…</h3>
       <p class="ia-sub">${oQue}${seg != null ? ` · <b>${seg} s</b>` : ''}</p>
@@ -206,6 +301,23 @@ export function vistaIA(S, { esc, hhmm, when }) {
   const extraNao = extra.filter((f) => f.estado === 'inutilizavel');
   const semChave = comChave.filter((f) => f.semChave).length;
   const uso = S.iaUso || { resumo: [] };
+
+  /* 1.83.0 · de onde veio o que está no ecrã. Três estados honestos, e todos
+     deixam a página utilizável — nenhum tapa os dados com um cartão:
+       · a actualizar, com dados de há pouco à frente (faixa azul, sem bloquear);
+       · leitura parcial: o servidor respondeu, mas uma parte não chegou;
+       · leitura antiga: o servidor não respondeu agora, mostra-se a última. */
+  const quandoLido = S.iaLidoEm ? String(S.iaLidoEm) : null;
+  const estadoDaLeitura = S.iaActualizando
+    ? `<div class="ia-faixa info" role="status"><b>A actualizar.</b> O que está abaixo é a leitura${quandoLido ? ` de ${esc(quandoLido)}` : ' anterior'} — a página já responde, não precisa de esperar.
+        ${S.iaErro ? '' : '<span class="ia-sub">Um pedido só: o servidor devolve o estado, o catálogo, o uso, as execuções e as gratuitas na mesma resposta.</span>'}</div>`
+    : S.iaParcial && S.iaParcial.length
+      ? `<div class="ia-faixa warn"><b>Leitura parcial.</b> Não chegaram: ${S.iaParcial.map((p) => `${esc(p.parte)} (${esc(p.erro || 'sem resposta')})`).join(' · ')}. O resto está completo.
+          <button class="btn quiet small" data-act="ia-recarregar" style="margin-left:8px">Pedir outra vez</button></div>`
+      : S.iaLeituraAntiga && !S.iaErro
+        ? `<div class="ia-faixa warn"><b>Leitura anterior.</b> Ainda não confirmei com o servidor${quandoLido ? ` — isto é de ${esc(quandoLido)}` : ''}.
+            <button class="btn quiet small" data-act="ia-recarregar" style="margin-left:8px">Actualizar agora</button></div>`
+        : '';
 
   const falhaAoLer = S.iaErro
     ? `<div class="ia-faixa warn"><b>Não consegui actualizar agora.</b> ${esc(S.iaErro)} — o que está abaixo é a última leitura que deu certo.
@@ -447,6 +559,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
   </div>`;
 
   return `<div class="wrap">
+    ${estadoDaLeitura}
     ${falhaAoLer}
     ${aviso}
 

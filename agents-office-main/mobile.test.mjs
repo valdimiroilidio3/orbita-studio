@@ -391,3 +391,72 @@ test('1.81.0 · a mesa (/app) também cabe: a lista de leads e os números colap
   assert.equal(valorEfectivo(css, row, 'grid-template-columns', 1440), '1fr 150px 120px 92px');
   assert.equal(valorEfectivo(css, stats, 'grid-template-columns', 1440), 'repeat(4, 1fr)');
 });
+
+/* ===========================================================================
+   1.83.0 · «AINDA ESTÁ APERTADO SIM NA VERSÃO MOBILE» (9 nov 2026)
+
+   O dono disse-o duas vezes. Estas provas medem, a 360 px, as caixas que
+   estavam a esticar o ecrã:
+     · os BOTÕES de filtro das execuções herdavam o `min-width: 620px` da tabela
+       (as duas coisas chamavam-se `.mo-tab`) — cada filtro tinha 620 px;
+     · as tabelas de 6 colunas não cabiam: passam a cartões (linha a linha);
+     · os separadores do projeto saíam do ecrã em vez de quebrar;
+     · a pesquisa tinha 220 px fixos ao lado de um botão.
+   =========================================================================== */
+test('1.83.0 · os filtros das execuções deixam de ter 620 px (a tabela e o botão não são a mesma coisa)', () => {
+  const html = fs.readFileSync(path.join(AQUI, 'src', 'mesa.html'), 'utf8');
+  const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+  const filtros = { tag: 'div', classes: ['mo-filtros'], pais: [{ tag: 'body', classes: [] }] };
+  const chip = { tag: 'button', classes: ['mo-tab'], pais: [filtros, { tag: 'body', classes: [] }] };
+  for (const largura of [360, 390, 1440]) {
+    assert.equal(valorEfectivo(css, chip, 'min-width', largura), '0', `o filtro tem min-width fixo a ${largura} px`);
+    assert.equal(valorEfectivo(css, chip, 'width', largura), 'auto', `o filtro ocupa a linha toda a ${largura} px`);
+    assert.equal(valorEfectivo(css, chip, 'min-height', largura), '40px', 'o filtro é alvo de dedo');
+  }
+  /* e a tabela continua a ter a largura mínima na secretária (não se perdeu nada) */
+  const tabela = { tag: 'table', classes: ['mo-tab'], pais: [{ tag: 'body', classes: [] }] };
+  assert.equal(valorEfectivo(css, tabela, 'min-width', 1440), '620px');
+  assert.equal(valorEfectivo(css, tabela, 'min-width', 360), '0', 'a 360 px a tabela não pode ter 620 px');
+});
+
+test('1.83.0 · a 360 px as tabelas deixam de rolar para o lado: cada linha é um cartão', () => {
+  const html = fs.readFileSync(path.join(AQUI, 'src', 'mesa.html'), 'utf8');
+  const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+  const tabela = { tag: 'table', classes: ['mo-tab'], pais: [{ tag: 'body', classes: [] }] };
+  const linha = { tag: 'tr', classes: [], pais: [tabela, { tag: 'body', classes: [] }] };
+  const cabecalho = { tag: 'thead', classes: [], pais: [tabela, { tag: 'body', classes: [] }] };
+  const wrap = { tag: 'div', classes: ['mo-tabwrap'], pais: [{ tag: 'body', classes: [] }] };
+  assert.equal(valorEfectivo(css, tabela, 'display', 390), 'block');
+  assert.equal(valorEfectivo(css, cabecalho, 'display', 390), 'none', 'sem cabeçalho repetido a cada cartão');
+  assert.equal(valorEfectivo(css, linha, 'display', 390), 'flex');
+  assert.equal(valorEfectivo(css, linha, 'flex-wrap', 390), 'wrap');
+  assert.equal(valorEfectivo(css, wrap, 'overflow-x', 390), 'visible', 'nada de rolar para o lado');
+  /* a 1440 px a tabela é uma tabela */
+  assert.equal(valorEfectivo(css, tabela, 'display', 1440), null);
+  assert.equal(valorEfectivo(css, cabecalho, 'display', 1440), null);
+  assert.equal(valorEfectivo(css, linha, 'display', 1440), null);
+});
+
+test('1.83.0 · a 390 px cabem os separadores do projeto, a pesquisa e as provas do CRM', () => {
+  const html = fs.readFileSync(path.join(AQUI, 'src', 'mesa.html'), 'utf8');
+  const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+  const el = (tag, classes, pais = []) => ({ tag, classes, pais: [...pais, { tag: 'body', classes: [] }] });
+
+  const tabs = el('div', ['pj-tabs']);
+  assert.equal(valorEfectivo(css, tabs, 'flex-wrap', 390), 'wrap', 'os separadores quebram em linhas');
+  assert.equal(valorEfectivo(css, tabs, 'overflow-x', 390), 'visible');
+  assert.equal(valorEfectivo(css, tabs, 'overflow-x', 1440), 'auto', 'na secretária continuam a rolar');
+
+  const pesquisa = el('div', ['search']);
+  assert.equal(valorEfectivo(css, pesquisa, 'flex', 390), '1 1 100%', 'a pesquisa ocupa a linha');
+  assert.equal(valorEfectivo(css, pesquisa, 'min-width', 390), '0');
+  assert.equal(valorEfectivo(css, pesquisa, 'min-width', 1440), '220px');
+
+  const prova = el('div', ['crm-prova']);
+  const celula = el('td', [], [prova]);
+  assert.equal(valorEfectivo(css, celula, 'display', 390), 'block', 'as duas colunas viram duas linhas');
+
+  const grade = el('div', ['ia-grade']);
+  assert.equal(valorEfectivo(css, grade, 'grid-template-columns', 390), '1fr');
+  assert.equal(valorEfectivo(css, grade, 'grid-template-columns', 1440), 'repeat(auto-fill, minmax(220px, 1fr))');
+});

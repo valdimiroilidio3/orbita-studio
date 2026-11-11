@@ -267,6 +267,32 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
        As chaves vivem no servidor; neste browser não há como falar com fornecedores
        sem as expor. Por isso a vista mostra o Control Center vazio e a razão, em vez
        de fingir um motor ou rebentar com 404. */
+    /* 1.83.0 · o painel também aqui: a vista pede UM caminho, e no modo local
+       ele é composto das mesmas respostas que as seis rotas davam. O servidor
+       faz isto em `api/_ia/painel.mjs`; aqui são leituras instantâneas do
+       armazém do browser, e o resultado tem a mesma forma. */
+    if (caminhoLimpo === '/ia/painel') {
+      const t0 = agora();
+      const [estado, modelos, uso, runs, trabalhos, gratuitos] = await Promise.all([
+        rota('/ia/estado', 'GET'),
+        rota('/ia/modelos', 'GET'),
+        rota('/ia/uso', 'GET'),
+        rota('/ia/runs', 'GET'),
+        rota('/media/trabalhos', 'GET'),
+        rota('/ia/gratuitos', 'GET'),
+      ]);
+      return {
+        ok: true, modo: 'local',
+        estado, modelos, uso, runs,
+        trabalhos: trabalhos.trabalhos || [],
+        gratuitos,
+        parcial: [], completo: true,
+        ms: agora() - t0,
+        lidoEm: new Date(agora()).toISOString(),
+        nota: 'modo local: tudo o que o browser sabe, num pedido. As chaves e as provas vivem no servidor.',
+      };
+    }
+
     if (caminhoLimpo === '/ia/estado') {
       /* 1.34.0 · os motores que não precisam de chave nenhuma aparecem aqui, com o
          nome e o modelo reais, em vez de uma lista vazia. Não é demo: é uma cópia

@@ -1,3 +1,75 @@
+## 1.83.0 — 11 nov 2026 · o Control Center abre num pedido, e o telemóvel deixa de estar apertado
+
+Duas queixas do dono, com o ecrã à frente, e as duas com a mesma raiz: uma coisa
+a fazer o trabalho de outra.
+
+> «A carregar o Control Center… / a pedir o estado ao servidor / Pedir outra vez»
+> — «isto deve já estar 100% funcional, sem dar essa lentidão e erro de não carregar»
+
+> «AINDA ESTÁ APERTADO SIM NA VERSÃO MOBILE»
+
+### 1 · A lentidão eram seis pedidos, não uma rota lenta
+
+A 1.78 tinha posto um prazo em cada pedido, o que impedia o ecrã de ficar preso
+para sempre. Mas a página continuava a pedir **seis rotas** — `/ia/estado`,
+`/ia/modelos`, `/ia/uso`, `/ia/runs`, `/media/trabalhos`, `/ia/gratuitos` — e, na
+Vercel, cada rota é uma invocação de função com o seu arranque. E o pior: pedia a
+primeira e só depois as outras, em fila. Um prazo num caminho lento não o torna
+rápido; só o impede de ser eterno.
+
+Havia ainda uma soma escondida do lado do servidor: `/ia/estado` lia a memória
+(até 3 s) e, **só depois de ela responder**, o estúdio (outros 3 s).
+
+O que muda:
+
+* **um pedido** — `GET /ia/painel` devolve o estado, o catálogo, o uso, as
+  execuções, os trabalhos de mídia e as gratuitas na mesma resposta;
+* as partes correm **em paralelo** (`Promise.all`), cada uma com o seu prazo;
+  uma parte presa entra em `parcial` com o nome e a razão, e **não segura as
+  outras**;
+* a memória e o estúdio são lidos **ao mesmo tempo**, com 2 s cada (eram 3 s em
+  série);
+* a página guarda a última leitura que deu certo neste browser e pinta-a
+  **antes** de pedir: quem já abriu a página vê os fornecedores no primeiro
+  desenho, com a faixa «A actualizar» e a hora da leitura;
+* sem `/ia/painel` (instalação anterior à 1.83) a vista cai no caminho antigo,
+  rota a rota — nada se perde;
+* uma definição só: `/ia/estado`, `/ia/modelos`, `/ia/uso`, `/ia/runs` e
+  `/ia/gratuitos` passam a chamar as mesmas funções que o painel
+  (`api/_ia/painel.mjs`), por isso as duas rotas não podem divergir em silêncio.
+
+Provas em `ia-painel.test.mjs` (9): um pedido devolve tudo; uma parte presa dá
+`parcial` e o resto intacto; memória e estúdio em paralelo medem menos do que um
+prazo, não dois; a vista faz **um** pedido e não mostra cartão de carregamento;
+a leitura anterior pinta o ecrã antes da resposta do servidor.
+
+### 2 · O aperto no telemóvel era uma regra de tabela a apanhar botões
+
+`.mo-tab` era o nome de duas coisas: a **tabela** das execuções e os **botões**
+de filtro. A regra `min-width: 620px` caía nos dois — cada filtro tinha 620 px e
+a barra de filtros passava a rolar sozinha.
+
+O que muda, até 640 px:
+
+* as regras de tabela passam a `table.mo-tab`; os filtros são botões de 40 px de
+  altura, largura do texto;
+* as tabelas deixam de rolar para o lado: cada linha é um cartão (o primeiro
+  campo em cima, os factos por baixo). Vale para `table.mo-tab` e `table.ia-tab`
+  — uma tabela de seis colunas em 360 px não se lê, espreme-se;
+* os separadores do projeto quebram em linhas em vez de sair do ecrã;
+* a pesquisa ocupa a linha inteira (era `min-width: 220px` ao lado de um botão);
+* as provas do CRM empilham as duas colunas; o cartão dos fornecedores da IA fica
+  a uma coluna.
+
+Provas em `mobile.test.mjs` (3 novas, medidas a 360, 390 e 1440 px).
+
+### Verificação
+
+* `node --test` → **1501/1501**
+* `node check.mjs` → **96/96 · 1 saltado** (o `smoke: browser`, que esta máquina
+  não corre)
+* `node build.mjs` → pacotes e ficheiros publicados
+
 ## 1.82.0 — 9 nov 2026 · o Prompt Master voltou a gerar (e a recusa passa a ter endereço)
 
 O dono, com o ecrã à frente:
