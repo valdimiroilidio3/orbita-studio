@@ -2601,8 +2601,58 @@
   }
   #topAppr:focus-visible, #topbar img:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+  /* 12 nov 2026 · a gaveta EMPRESA (src/empresa-painel.js) */
+  #empresaPanel { position: absolute; z-index: 71; width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; font-family: var(--sf); }
+  #empresaPanel[hidden] { display: none; }
+  #empresaPanel .em-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+  #empresaPanel .em-sum { font-size: 11px; color: var(--grey); }
+  #empresaPanel .em-close, #empresaPanel .em-form button[type="submit"] { border-radius: 99px; border: 1px solid var(--hairline); background: none; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 12px; color: var(--ink); }
+  #empresaPanel .em-form button[type="submit"] { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+  #empresaPanel .em-form button[type="submit"]:disabled { opacity: .45; cursor: not-allowed; }
+  #empresaPanel .em-corpo { padding: 12px 16px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  #empresaPanel .em-bloco h2, #empresaPanel .em-form h2 { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--grey); margin: 0 0 6px; font-weight: 700; }
+  #empresaPanel .em-div h3 { font-size: 12px; margin: 8px 0 4px; font-weight: 700; }
+  #empresaPanel .em-div ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+  #empresaPanel .em-div li b { display: block; font-size: 12px; }
+  #empresaPanel .em-div li span { display: block; font-size: 11px; color: var(--grey); line-height: 1.35; }
+  #empresaPanel .em-n { font-size: 10px; color: var(--grey); font-weight: 500; margin-left: 4px; }
+  #empresaPanel .em-pill { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--hairline); }
+  #empresaPanel .em-pill.ok { color: #1f7a45; border-color: #1f7a45; }
+  #empresaPanel .em-pill.off { color: #9a5b00; border-color: #9a5b00; }
+  #empresaPanel .em-pill.live { color: var(--ink); }
+  #empresaPanel .em-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  #empresaPanel .em-lista button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 1px solid var(--hairline); border-radius: 10px; padding: 7px 10px; cursor: pointer; font: inherit; color: var(--ink); }
+  #empresaPanel .em-lista button.on, #empresaPanel .em-lista button:hover { border-color: var(--ink); }
+  #empresaPanel .em-nome { flex: 1; font-size: 13px; }
+  #empresaPanel .em-prog { font-size: 11px; color: var(--grey); }
+  #empresaPanel .em-est { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); }
+  #empresaPanel .em-concluido .em-est, #empresaPanel .em-est.em-concluido { color: #1f7a45; }
+  #empresaPanel .em-falhou .em-est, #empresaPanel .em-est.em-falhou, #empresaPanel .em-est.em-erro { color: #b3261e; }
+  #empresaPanel .em-sem-motor .em-est, #empresaPanel .em-est.em-sem-motor { color: #9a5b00; }
+  #empresaPanel .em-a-correr .em-est, #empresaPanel .em-est.em-a-correr { color: var(--ink); }
+  #empresaPanel .em-etapas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  #empresaPanel .em-etapa { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; }
+  #empresaPanel .em-i { width: 22px; height: 22px; border-radius: 99px; border: 1px solid var(--hairline); display: grid; place-items: center; font-size: 11px; flex: none; }
+  #empresaPanel .em-fase { font-size: 10px; color: var(--grey); margin-left: 4px; }
+  #empresaPanel .em-fich { margin-top: 3px; }
+  #empresaPanel .em-fich code { font-size: 10px; background: var(--fill-hover); border-radius: 6px; padding: 1px 5px; margin-right: 3px; }
+  #empresaPanel .em-erro-t { font-size: 11px; color: #b3261e; margin-top: 3px; }
+  #empresaPanel .em-proj-h { font-size: 13px; margin-bottom: 6px; }
+  #empresaPanel .em-vazio { font-size: 12px; color: var(--grey); margin: 0; }
+  #empresaPanel .em-form { display: flex; flex-direction: column; gap: 6px; }
+  #empresaPanel .em-form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--grey); }
+  #empresaPanel .em-form input, #empresaPanel .em-form textarea { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 1px solid var(--hairline); border-radius: 10px; padding: 6px 9px; }
+  #empresaPanel .em-form button[type="submit"] { align-self: flex-start; }
+  #empresaPanel .em-erro { font-size: 12px; color: #b3261e; margin: 0; min-height: 0; }
+  #empresaPanel .em-erro:empty { display: none; }
+  #empresaPanel .em-foot { padding: 8px 16px; border-top: 1px solid var(--hairline); font-size: 10px; color: var(--grey); }
+  @media (max-width: 640px) {
+    #empresaPanel { left: 8px; right: 8px; width: auto; max-height: 82vh; }
+    #empresaPanel .em-div ul { grid-template-columns: 1fr; }
+  }
+
   /* as gavetas que pendem do menu: o mesmo vidro, mais espesso (o texto tem de se ler) */
-  #leadsPanel, #opsPanel {
+  #leadsPanel, #opsPanel, #empresaPanel {
     top: 72px; right: 12px;
     font-family: var(--sf);
     background-color: var(--glass-strong);
@@ -2614,12 +2664,12 @@
     transform-origin: top right;
     animation: sheetIn .32s var(--ease) both;
   }
-  body.dark #leadsPanel, body.dark #opsPanel {
+  body.dark #leadsPanel, body.dark #opsPanel, body.dark #empresaPanel {
     background-color: var(--glass-strong);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), 0 1px 1px rgba(0,0,0,.4), 0 30px 72px -20px rgba(0,0,0,.66);
   }
   @keyframes sheetIn { from { opacity: 0; transform: translateY(-6px) scale(.99); } }
-  #leadsPanel .ld-h, #opsPanel .op-h { border-bottom: 1px solid var(--hairline); }
+  #leadsPanel .ld-h, #opsPanel .op-h, #empresaPanel .em-h { border-bottom: 1px solid var(--hairline); }
   #leadsPanel .ld-h button, #opsPanel .op-h button { border-radius: 99px; transition: background-color .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease); }
   #leadsPanel .ld-h button:hover, #opsPanel .op-h button:hover { background: var(--fill-hover); border-color: transparent; }
 
@@ -3562,6 +3612,11 @@
     #topbar .brand .ver { display: none; }
     #topbar #topconn, #topbar #topmodels { display: none; }   /* vivem nos painéis, não aqui */
     #topbar .m-group { gap: 2px; flex: 1; min-width: 0; justify-content: flex-end; }
+    /* 12 nov 2026 · com a Empresa, sete botões não cabem ao lado da marca se o espaçador ficar: o
+       espaçador sai, e o grupo usa a largura toda (medido a 390 px: sem sobreposição com a marca) */
+    #topbar .sp { display: none; }
+    #topbar .m-group { gap: 0; padding: 3px 2px; }
+    #topbar .m-group > button, #topbar .m-group > a { min-width: 30px; padding: 5px 0; }
     #topbar .m-group > button, #topbar .m-group > a { padding: 6px 7px; min-width: 34px; min-height: 34px; justify-content: center; }
     #topbar .m-group > button .mb-t, #topbar .m-group > a .mb-t { display: none; }  /* fica o ícone */
     #topbar #topCfg span { display: none; }
@@ -3626,7 +3681,13 @@
   /* a barra de cima em ecrãs muito estreitos (360 px): a marca diminui outra vez */
   @media (max-width: 400px) {
     #topbar .brand { font-size: 11.5px; }
-    #topbar .m-group > button, #topbar .m-group > a { min-width: 34px; min-height: 40px; padding: 5px 5px; }
+    #topbar .m-group > button, #topbar .m-group > a { min-width: 28px; min-height: 40px; padding: 5px 0; }
+    /* 12 nov 2026 · 360 px: a fila de sete botões cabe se a barra apertar um pouco (medido) */
+    #topbar { gap: 4px; }
+    #topbar .m-group { padding: 3px 1px; }
+    #clock { font-size: 10px; }
+    /* 320 px (aparelhos muito pequenos): o relógio sai, a fila de botões e a marca não se sobrepõem */
+    @media (max-width: 340px) { #clock { display: none; } }
     #tpanel .tp-lab { font-size: 13.5px; }
   }
 
@@ -3823,6 +3884,7 @@
   <div class="m-group" role="group" aria-label="menu">
     <button id="topToday" class="td-open" aria-label="Hoje" title="o que precisa de ti, o que aconteceu, o que vem aí (H)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg><span class="mb-t">Hoje</span><span class="td-badge" hidden></span></button>
     <button id="topOps" aria-label="Operação" title="a operação a sério: leads guardados com nota, mensagens à espera do teu OK, fila e auditoria"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8h2.4l1.7-4.4L8.2 12l1.7-4h4.6"/></svg><span class="mb-t">Operação</span></button>
+    <button id="topEmpresa" aria-label="Empresa" title="a empresa de agentes: a equipa por divisão, os projetos e o estado de cada etapa"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4" r="2"/><circle cx="3.5" cy="11.5" r="1.8"/><circle cx="12.5" cy="11.5" r="1.8"/><path d="M8 6v2.2M8 8.2 4.8 10M8 8.2l3.2 1.8"/></svg><span class="mb-t">Empresa</span></button>
     <a id="topMesa" href="/app" target="_blank" rel="noopener" aria-label="Mesa" title="a mesa de trabalho: Hoje, os leads, a aprovação de cada mensagem, o saldo"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="2" width="5.1" height="5.1" rx="1.5"/><rect x="2" y="8.9" width="5.1" height="5.1" rx="1.5"/><rect x="8.9" y="8.9" width="5.1" height="5.1" rx="1.5"/></svg><span class="mb-t">Mesa</span></a>
     <button id="topLeads" aria-label="Leads" title="procura real na Google: empresas (Places) e informação (pesquisa web)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7.1" cy="7.1" r="4.3"/><path d="M10.3 10.3 14 14"/></svg><span class="mb-t">Leads</span></button>
     <button id="topCal" aria-label="Calendário" title="o calendário — tarefas e rotinas nos seus dias (P)"><svg class="mb-i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3.2" width="12" height="10.8" rx="3"/><path d="M2 6.6h12M5.6 1.7v2.6M10.4 1.7v2.6"/></svg><span class="mb-t">Calendário</span></button>
@@ -3869,6 +3931,23 @@
     <button class="ld-task" title="escrever já uma tarefa para o Lead Hunter com estes leads">→ TAREFA</button></div>
 </div>
 <!-- 26 out 2026: OPERAÇÃO — leads com nota e razões, mensagens à espera de aprovação, fila e rasto -->
+<div id="empresaPanel" hidden>
+  <div class="em-h"><span class="lab">Empresa</span><span class="em-sum">a ler…</span><span class="sp"></span><button class="em-close" title="fechar (Esc)">✕</button></div>
+  <div class="em-corpo">
+    <div class="em-motor"></div>
+    <div class="em-bloco"><h2>Equipa</h2><div class="em-equipa"></div></div>
+    <div class="em-bloco"><h2>Projetos</h2><div class="em-projetos"></div></div>
+    <div class="em-bloco"><h2>Etapas</h2><div class="em-detalhe"></div></div>
+    <form class="em-form" autocomplete="off">
+      <h2>Novo projeto</h2>
+      <label>Nome<input name="nome" maxlength="80" placeholder="Ex.: Lista de Compras"></label>
+      <label>O que queres construir<textarea name="pedido" rows="3" maxlength="4000" placeholder="Descreve o projeto em texto livre"></textarea></label>
+      <button type="submit">Criar e correr o fluxo</button>
+    </form>
+    <p class="em-erro" role="status" aria-live="polite"></p>
+  </div>
+  <div class="em-foot"><span>Os agentes escrevem dentro de data/empresa/projetos/. Nada sai daqui para fora.</span></div>
+</div>
 <div id="opsPanel" hidden>
   <div class="op-h"><span class="lab">Operação</span><span class="op-sum">a ler…</span>
     <!-- 1.40.0: a gaveta diz quando leu a base de dados pela última vez. Não é um enfeite:

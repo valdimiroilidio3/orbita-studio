@@ -5,7 +5,7 @@
 //   · cria um projeto e corre o fluxo em segundo plano, em data/empresa/projetos/<id>/;
 //   · lê o estado de um projeto (project.json + passagens em handoffs/).
 // Os projetos e os ficheiros que os agentes escrevem ficam dentro de data/, que não vai para o Git.
-// Quem cria um projeto usa ORBITA_API_TOKEN (é uma rota que gasta motor e escreve ficheiros).
+// Criar um projeto segue a guarda do escritório (como as tarefas): sessão e papel em modo com contas; aberto em modo local.
 
 import fs from 'node:fs';
 import path from 'node:path';

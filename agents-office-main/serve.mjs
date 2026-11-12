@@ -914,7 +914,7 @@ const server = http.createServer(async (req, res) => {
     // 5) o escritório 3D e as suas rotas de dados seguem a mesma guarda que a mesa. Em modo local
     //    (sem contas nem token) continuam abertas; com contas, o browser leva o cookie de sessão
     //    sozinho no mesmo domínio — e quem não entrou é convidado a entrar em /app.
-    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|pesquisa)(\/|$)/;
+    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|pesquisa|empresa)(\/|$)/;
     if (ESCritorio.test(url.pathname)) {
       const a = authenticate(req, { db: OPS?.db });
       if (!a.ok) return json(res, 401, { ok: false, ...a, entrar: '/app' });
@@ -1402,8 +1402,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, r.ok ? 200 : 422, r);
     }
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
-    // 12 nov 2026 · a empresa de agentes (Programação, Produto, Design). Ler é público, como as tarefas;
-    // criar um projeto gasta motor e escreve ficheiros, por isso exige ORBITA_API_TOKEN.
+    // 12 nov 2026 · a empresa de agentes (Programação, Produto, Design). Mesma guarda que as tarefas
+    // (lista ESCritorio acima): em modo local fica aberta; com contas, pede sessão e papel de escrita.
     if (url.pathname === '/api/empresa' && req.method === 'GET') return json(res, 200, empresa.estado({ dataDir: DATA }));
     const pe = url.pathname.match(/^\/api\/empresa\/projetos\/([^/]+)$/);
     if (pe && req.method === 'GET') {
@@ -1411,7 +1411,7 @@ const server = http.createServer(async (req, res) => {
       return p ? json(res, 200, p) : json(res, 404, { error: 'projeto não encontrado' });
     }
     if (url.pathname === '/api/empresa/projetos' && req.method === 'POST') {
-      if (!requireIntegrationToken(req, res)) return;
+      // a guarda do escritório (sessão, papel, CSRF) já correu acima, como em /api/tasks
       let pedido;
       try { pedido = empresa.validarPedido(await limitedBody(req, 10000)); }
       catch (e) { return json(res, e.status || 400, { error: e.message }); }
