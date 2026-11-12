@@ -138,8 +138,9 @@ test('1.84.0 · /ops/agentes devolve o elenco de cada sala (era `agentes: []` em
   assert.equal(r.status, 200);
   const c = r.corpo;
   assert.equal(c.elenco.total, 47);
-  assert.equal(c.elenco.comRotina, 5);
-  assert.equal(c.elenco.consultivos, 42);
+  /* 1.88.0 · 5 + 11 consultivos que passaram a ter rotina própria */
+  assert.equal(c.elenco.comRotina, 16);
+  assert.equal(c.elenco.consultivos, 31);
   assert.equal(c.elenco.motores, 8);
   let soma = 0;
   for (const d of c.departamentos) {
@@ -220,8 +221,8 @@ test('1.84.0 · o Control Center pinta o «existe em…» e o elenco inteiro', a
   const html = desenhar({ ia: corpo });
   assert.match(html, /O elenco/);
   assert.match(html, /47 lugares no escritório/);
-  assert.match(html, /5 com trabalho próprio/);
-  assert.match(html, /42 consultivos/);
+  assert.match(html, /16 com trabalho próprio/);
+  assert.match(html, /31 consultivos/);
   /* 1.85.0 · a pesquisa e a imagem já são ferramentas dos agentes, com quem as pode usar */
   assert.match(html, /web_pesquisar/);
   assert.match(html, /quem pode: research/);
@@ -239,7 +240,7 @@ test('1.84.0 · no modo local o elenco é o mesmo (47 lugares) — muda o trabal
   const local = createLocalApi({ storage });
   const ag = await local.call('/ops/agentes', 'GET');
   assert.equal(ag.elenco.total, 47);
-  assert.equal(ag.elenco.comRotina, 5);
+  assert.equal(ag.elenco.comRotina, 16);
   assert.equal(ag.departamentos.reduce((n, d) => n + d.agentes.length, 0), 47);
   const est = await local.call('/ia/estado', 'GET');
   assert.equal(est.elenco.total, 47);
@@ -252,7 +253,8 @@ test('1.84.0 · a tabela dos tipos de trabalho não inventa nem perde nenhum', a
   const e = elenco();
   assert.deepEqual(e.tiposSemMotor, [], 'há um tipo na tabela que o motor de tarefas não produz');
   assert.deepEqual(e.tiposSemPosto, [], 'há um tipo no motor sem sala nem posto declarado');
-  assert.equal(e.tiposDeTrabalho.length, 6);
+  /* 1.88.0 · 6 tipos + 11 rotinas dos consultivos = 17 */
+  assert.equal(e.tiposDeTrabalho.length, 17);
   /* o trabalho escrito à mão não tem posto fixo, e o painel di-lo por palavras */
   const escritorio = e.tiposDeTrabalho.find((t) => t.kind === 'escritorio');
   assert.equal(escritorio.posto, null);

@@ -904,6 +904,17 @@ function decisionCard() {
 const ROTULO_TAREFA = {
   investigar: 'Investigar o lead', mensagem: 'Escrever uma mensagem',
   briefing: 'Escrever o briefing', codigo: 'Gerar o código', qa: 'Auditoria de qualidade',
+  oportunidade: 'Avaliar uma oportunidade',
+  triagem: 'Triar uma mensagem recebida',
+  consentimento: 'Rever o consentimento',
+  contrato: 'Rever o contrato',
+  renovacao: 'Preparar a renovação',
+  crescimento: 'Propor o passo seguinte',
+  seo_pagina: 'Títulos e descrições da página',
+  caso_estudo: 'Caso de estudo',
+  plano_projeto: 'Plano de projeto',
+  documentacao: 'Documentação do projeto',
+  seguranca: 'Revisão de acessos e segurança',
 };
 
 const ESTADO_SALA = {

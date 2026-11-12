@@ -28,6 +28,18 @@ export const ROTINA = {
   briefing: { posto: 'dasst', dept: 'design', deptPt: 'design', titulo: 'Escrever o briefing' },
   codigo: { posto: 'crep', dept: 'engineering', deptPt: 'engenharia', titulo: 'Código do projeto' },
   qa: { posto: 'qa', dept: 'engineering', deptPt: 'engenharia', titulo: 'Auditoria de qualidade' },
+  /* 1.88.0 · onze consultivos passam a ter trabalho próprio (sem lugares novos) */
+  oportunidade: { posto: 'radar', dept: 'prospect', deptPt: 'prospeccao', titulo: 'Avaliar uma oportunidade' },
+  triagem: { posto: 'atend', dept: 'command', deptPt: 'comando', titulo: 'Triar uma mensagem recebida' },
+  consentimento: { posto: 'comply', dept: 'command', deptPt: 'comando', titulo: 'Rever o consentimento' },
+  contrato: { posto: 'legal', dept: 'sales', deptPt: 'vendas', titulo: 'Rever o contrato' },
+  renovacao: { posto: 'renew', dept: 'sales', deptPt: 'vendas', titulo: 'Preparar a renovação' },
+  crescimento: { posto: 'upsell', dept: 'sales', deptPt: 'vendas', titulo: 'Propor o passo seguinte' },
+  seo_pagina: { posto: 'seo', dept: 'media', deptPt: 'media', titulo: 'Títulos e descrições da página' },
+  caso_estudo: { posto: 'newt', dept: 'media', deptPt: 'media', titulo: 'Caso de estudo' },
+  plano_projeto: { posto: 'pco', dept: 'engineering', deptPt: 'engenharia', titulo: 'Plano de projeto' },
+  documentacao: { posto: 'kmail', dept: 'engineering', deptPt: 'engenharia', titulo: 'Documentação do projeto' },
+  seguranca: { posto: 'sec', dept: 'engineering', deptPt: 'engenharia', titulo: 'Revisão de acessos e segurança' },
 };
 
 /** O tipo de trabalho → o posto que o trata (sem `escritorio`: vai para o agente pedido). */
