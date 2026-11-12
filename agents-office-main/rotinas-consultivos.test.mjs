@@ -1,5 +1,5 @@
 /* 1.88.0 · onze consultivos passam a ter rotina própria (A9 do alvo 1.0).
-   Prova: 16 de 47 com trabalho, nenhum posto com duas rotinas, nenhuma rotina
+   Prova: 16 de 47 com trabalho (1.89.0: 18 de 49), nenhum posto com duas rotinas, nenhuma rotina
    com dois postos, cada pedido distinto e com o contexto real; e uma rotina sem
    resposta do modelo FALHA — não inventa o resultado. */
 import test from 'node:test';
@@ -10,10 +10,10 @@ import { ROTINAS, executarTarefa } from './api/_tarefas.mjs';
 const NOVAS = ['oportunidade', 'triagem', 'consentimento', 'contrato', 'renovacao', 'crescimento',
   'seo_pagina', 'caso_estudo', 'plano_projeto', 'documentacao', 'seguranca'];
 
-test('1.88.0 · o escritório continua com 47 lugares, e 16 têm trabalho próprio', () => {
+test('1.88.0 · o escritório tem 49 lugares (1.89.0: +2), e 18 têm trabalho próprio', () => {
   const e = elencoBase();
-  assert.equal(e.total, 47, 'nenhum lugar novo: a sala não mudou');
-  assert.equal(e.comRotina, 16);
+  assert.equal(e.total, 49, 'nenhum lugar novo: a sala não mudou');
+  assert.equal(e.comRotina, 18); /* 1.89.0: + ata e faq */
   assert.equal(e.consultivos, 31);
 });
 
@@ -31,7 +31,7 @@ test('1.88.0 · não há dois agentes com a mesma rotina, nem um agente com duas
   const postos = Object.values(ROTINA).map((r) => r.posto).filter(Boolean);
   assert.equal(new Set(postos).size, postos.length, 'um posto com duas rotinas');
   const ids = new Set(elencoBase().agentes.map((a) => a.id));
-  for (const p of postos) assert.ok(ids.has(p), `o posto «${p}» não é um dos 47 lugares`);
+  for (const p of postos) assert.ok(ids.has(p), `o posto «${p}» não é um dos 49 lugares`);
   const titulos = Object.values(ROTINA).map((r) => r.titulo);
   assert.equal(new Set(titulos).size, titulos.length, 'dois tipos com o mesmo título');
 });

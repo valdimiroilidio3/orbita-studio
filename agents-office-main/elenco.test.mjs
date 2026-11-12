@@ -37,16 +37,16 @@ const desenhar = (S) => vistaIA(S, { esc: (x) => x, hhmm: (x) => x, when: (x) =>
 
 /* ---------- 1 · o elenco ---------- */
 
-test('1.84.0 · o elenco tem os 47 lugares, repartidos pelas seis salas, sem perder ninguém', () => {
+test('1.84.0 · o elenco tem os 49 lugares, repartidos pelas seis salas, sem perder ninguém', () => {
   const e = elenco();
-  assert.equal(e.total, 47, 'os lugares do escritório mudaram de número sem isto ser revisto');
-  assert.equal(e.agentes.length, 47);
+  assert.equal(e.total, 49, 'os lugares do escritório mudaram de número sem isto ser revisto');
+  assert.equal(e.agentes.length, 49);
   const soma = e.porSala.reduce((n, s) => n + s.agentes.length, 0);
-  assert.equal(soma, 47, 'a soma das salas tem de dar o escritório inteiro');
+  assert.equal(soma, 49, 'a soma das salas tem de dar o escritório inteiro');
   assert.equal(e.porSala.length, 6, 'são seis salas na cena');
   for (const s of e.porSala) assert.ok(SALAS[s.id], `a sala ${s.id} não tem nome em português`);
   /* todos os identificadores são únicos */
-  assert.equal(new Set(e.agentes.map((a) => a.id)).size, 47);
+  assert.equal(new Set(e.agentes.map((a) => a.id)).size, 49);
   /* e nenhum lugar vem sem papel escrito */
   const semPapel = e.agentes.filter((a) => !a.papel || !a.faz);
   assert.deepEqual(semPapel.map((a) => a.id), [], 'há lugares sem papel ou sem descrição');
@@ -69,7 +69,7 @@ test('1.84.0 · com trabalho próprio e consultivos: a conta fecha e é a verdad
   for (const posto of postos) {
     assert.ok(e.agentes.some((a) => a.id === posto), `o posto ${posto} não existe na cena`);
   }
-  assert.match(e.resumo, /47 lugares/);
+  assert.match(e.resumo, /49 lugares/);
   assert.match(e.resumo, /consultivos/);
 });
 
@@ -101,7 +101,7 @@ test('1.84.0 · os 8 motores do Orchestrator são a segunda camada, não os 47 l
   assert.equal(e.motores.find((m) => m.id === 'qa').postoDaCena, 'qa');
   assert.equal(e.motores.find((m) => m.id === 'research').postoDaCena, null);
   assert.match(e.motoresNota, /8 motores/);
-  assert.match(e.motoresNota, /47 lugares/);
+  assert.match(e.motoresNota, /49 lugares/);
 });
 
 /* ---------- 2 · o escritório ao vivo acende os postos ---------- */
@@ -137,9 +137,9 @@ test('1.84.0 · /ops/agentes devolve o elenco de cada sala (era `agentes: []` em
   const r = await responder(createMemRepo(), { caminho: '/ops/agentes', metodo: 'GET', env: {} });
   assert.equal(r.status, 200);
   const c = r.corpo;
-  assert.equal(c.elenco.total, 47);
+  assert.equal(c.elenco.total, 49);
   /* 1.88.0 · 5 + 11 consultivos que passaram a ter rotina própria */
-  assert.equal(c.elenco.comRotina, 16);
+  assert.equal(c.elenco.comRotina, 18);
   assert.equal(c.elenco.consultivos, 31);
   assert.equal(c.elenco.motores, 8);
   let soma = 0;
@@ -154,7 +154,7 @@ test('1.84.0 · /ops/agentes devolve o elenco de cada sala (era `agentes: []` em
     assert.equal(d.elenco.total, d.agentes.length);
     assert.equal(d.elenco.comRotina, d.agentes.filter((a) => a.temRotina).length);
   }
-  assert.equal(soma, 47, 'a soma das salas da mesa tem de dar o escritório inteiro');
+  assert.equal(soma, 49, 'a soma das salas da mesa tem de dar o escritório inteiro');
   /* a prova que o A9 pede: há pelo menos um agente com rotina e um consultivo */
   const todos = c.departamentos.flatMap((d) => d.agentes);
   assert.ok(todos.some((a) => a.temRotina));
@@ -217,11 +217,11 @@ test('1.85.0 · a pesquisa e a imagem são ferramentas: deixam de estar na lista
 test('1.84.0 · o Control Center pinta o «existe em…» e o elenco inteiro', async () => {
   const repo = createMemRepo();
   const { corpo } = await rotasIA(repo, { caminho: '/ia/estado', metodo: 'GET', env: { TAVILY_API_KEY: 'x' } });
-  assert.equal(corpo.elenco.total, 47);
+  assert.equal(corpo.elenco.total, 49);
   const html = desenhar({ ia: corpo });
   assert.match(html, /O elenco/);
-  assert.match(html, /47 lugares no escritório/);
-  assert.match(html, /16 com trabalho próprio/);
+  assert.match(html, /49 lugares no escritório/);
+  assert.match(html, /18 com trabalho próprio/);
   assert.match(html, /31 consultivos/);
   /* 1.85.0 · a pesquisa e a imagem já são ferramentas dos agentes, com quem as pode usar */
   assert.match(html, /web_pesquisar/);
@@ -239,11 +239,11 @@ test('1.84.0 · no modo local o elenco é o mesmo (47 lugares) — muda o trabal
   const storage = { getItem: (k) => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, v), removeItem: (k) => memoria.delete(k) };
   const local = createLocalApi({ storage });
   const ag = await local.call('/ops/agentes', 'GET');
-  assert.equal(ag.elenco.total, 47);
-  assert.equal(ag.elenco.comRotina, 16);
-  assert.equal(ag.departamentos.reduce((n, d) => n + d.agentes.length, 0), 47);
+  assert.equal(ag.elenco.total, 49);
+  assert.equal(ag.elenco.comRotina, 18);
+  assert.equal(ag.departamentos.reduce((n, d) => n + d.agentes.length, 0), 49);
   const est = await local.call('/ia/estado', 'GET');
-  assert.equal(est.elenco.total, 47);
+  assert.equal(est.elenco.total, 49);
   assert.equal(est.modo, 'local');
   assert.deepEqual(est.elenco.motores, [], 'os motores vivem no servidor — e o modo local diz isso');
   assert.match(est.elenco.motoresNota, /vivem no servidor/);
@@ -253,8 +253,8 @@ test('1.84.0 · a tabela dos tipos de trabalho não inventa nem perde nenhum', a
   const e = elenco();
   assert.deepEqual(e.tiposSemMotor, [], 'há um tipo na tabela que o motor de tarefas não produz');
   assert.deepEqual(e.tiposSemPosto, [], 'há um tipo no motor sem sala nem posto declarado');
-  /* 1.88.0 · 6 tipos + 11 rotinas dos consultivos = 17 */
-  assert.equal(e.tiposDeTrabalho.length, 17);
+  /* 1.88.0 · 6 tipos + 11 rotinas dos consultivos + 2 lugares novos (1.89.0) = 19 */
+  assert.equal(e.tiposDeTrabalho.length, 19);
   /* o trabalho escrito à mão não tem posto fixo, e o painel di-lo por palavras */
   const escritorio = e.tiposDeTrabalho.find((t) => t.kind === 'escritorio');
   assert.equal(escritorio.posto, null);

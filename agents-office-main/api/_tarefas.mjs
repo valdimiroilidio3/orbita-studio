@@ -256,6 +256,33 @@ Responde em português de Portugal, em pontos curtos:
 3. Riscos concretos e a correção de cada um, por ordem de gravidade.
 4. O que não se consegue verificar a partir do registo.`,
   },
+  /* 1.89.0 · dois lugares novos no fim do Comando */
+  ata: {
+    alvo: 'lead',
+    titulo: 'Ata de reunião',
+    pedido: (c) => `Transforma as notas desta reunião numa ata, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Decisões tomadas, uma por linha.
+2. O que ficou por decidir e quem decide.
+3. Ações: quem faz o quê e até quando — só se estiver dito nas notas; se não, escreve «a confirmar».
+4. Números e datas citados, tal como foram ditos.
+5. O que não ficou claro nas notas e vale a pena confirmar.`,
+  },
+  faq: {
+    alvo: 'projeto',
+    titulo: 'Perguntas frequentes',
+    pedido: (c) => `Escreve as perguntas frequentes deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal:
+1. Cinco a oito perguntas que um cliente real faria, por ordem de importância.
+2. Uma resposta curta para cada uma, sem promessas que o contrato não diga.
+3. As respostas que dependem de dados que faltam, marcadas com «[a confirmar]».`,
+  },
 };
 
 const corta = (s, n) => String(s ?? '').slice(0, n);
@@ -331,8 +358,29 @@ export function motivoSemMotor(erro = null, env = {}) {
   return `nenhum dos fornecedores com chave (${comChave.slice(0, 3).join(', ')}) respondeu apesar de haver chaves configuradas.${cauda}`;
 }
 
+/* 1.89.0 · o pedido escrito à mão (`payload.pedido`) vale para QUALQUER tipo de
+   trabalho, não só para o escritório. Sem entidade, o pedido é o alvo. Com
+   entidade, o pedido junta-se ao contexto do lead ou do projeto. */
+function pedidoDaTarefa(tarefa) {
+  const p = tarefa?.payload && typeof tarefa.payload === 'object' ? tarefa.payload : {};
+  const daEntidade = /^pedido:/i.test(String(tarefa?.entidade || '')) ? String(tarefa.entidade).slice(7) : '';
+  return String(p.pedido || (tarefa?.kind !== 'escritorio' ? '' : tarefa?.pedido || daEntidade) || '').trim();
+}
+
 /** Lê o alvo da tarefa na base. Devolve `{ ok, texto }` ou `{ ok:false, erro }`. */
 async function lerAlvo(repo, tarefa) {
+  const pedido = pedidoDaTarefa(tarefa);
+  if (String(tarefa?.kind || '') !== 'escritorio' && pedido) {
+    const id = String(tarefa?.entity_id || tarefa?.entityId || '').trim();
+    if (!id) return { ok: true, texto: pedido };
+    const ligado = await lerAlvoDaEntidade(repo, tarefa);
+    if (!ligado.ok) return ligado;
+    return { ok: true, texto: `${ligado.texto}\n\nPedido de quem pediu:\n${pedido}` };
+  }
+  return lerAlvoDaEntidade(repo, tarefa);
+}
+
+async function lerAlvoDaEntidade(repo, tarefa) {
   /* 1.79.0 · uma tarefa do escritório não aponta para um lead nem para um
      projeto: o alvo é o que foi escrito. O pedido vem em `payload.pedido`
      (coluna nova) e, numa base que ainda não a tenha, vai em `entidade`
@@ -517,7 +565,19 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
   }
   const base = { kind: tipo, state: fila ? 'queued' : 'running', error: null, finished_at: null };
   let tarefa;
-  if (tipo === 'escritorio') {
+  /* 1.89.0 · um pedido escrito noutro tipo de trabalho também vai para `payload`.
+     Sem a coluna na base, recusa-se com a razão: não se perde o que foi escrito. */
+  if (tipo !== 'escritorio' && pedido) {
+    try {
+      tarefa = await repo.tarefas.insert({
+        ...base, entity_id: entityId, entidade,
+        payload: { pedido }, title: pedido.slice(0, 160),
+      });
+    } catch (e) {
+      if (!semColunaNova(e)) throw e;
+      return { status: 400, corpo: { error: 'a base ainda não tem a coluna para o pedido escrito (aplica supabase/orbita_1_79_0.sql) — a tarefa não foi criada, para não perder o texto' } };
+    }
+  } else if (tipo === 'escritorio') {
     const registo = {
       ...base, entity_id: null, entidade: 'escritorio',
       payload: { pedido, agente: String(corpo?.agente || ''), dept: String(corpo?.dept || ''), modelo: String(corpo?.modelo || ''), equipa: !!corpo?.equipa },

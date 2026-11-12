@@ -27,6 +27,9 @@ export const DEPARTAMENTO_POR_TIPO = {
   briefing: 'comando',
   codigo: 'engenharia',
   qa: 'engenharia',
+  /* 1.89.0 */
+  ata: 'comando',
+  faq: 'comando',
   /* 1.88.0 · as onze rotinas dos consultivos (ver api/_tarefas.mjs) */
   oportunidade: 'prospeccao',
   triagem: 'comando',

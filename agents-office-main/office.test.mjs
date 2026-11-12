@@ -166,8 +166,8 @@ test('LAYOUT e DEPTS descrevem o mesmo escritório', () => {
   assert.equal(new Set(posicoes).size, posicoes.length, 'dois pods no mesmo sítio');
 });
 
-test('47 agentes, todos numa sala conhecida, um chefe por sala', () => {
-  assert.equal(AGENTS.length, 47);
+test('49 agentes, todos numa sala conhecida, um chefe por sala', () => {
+  assert.equal(AGENTS.length, 49);
   const ids = AGENTS.map((a) => a.id);
   assert.equal(new Set(ids).size, ids.length, 'há ids repetidos');
   for (const a of AGENTS) {
@@ -180,7 +180,7 @@ test('47 agentes, todos numa sala conhecida, um chefe por sala', () => {
     assert.ok(sala.length >= 4, `${k}: sala com pouca gente (${sala.length})`);
     assert.equal(sala.filter((a) => a.lead).length, 1, `${k}: tem de haver um chefe de sala`);
   }
-  assert.equal(AGENTS.map((a) => a.dept).filter((d) => DEPT_KEYS.includes(d)).length, 47);
+  assert.equal(AGENTS.map((a) => a.dept).filter((d) => DEPT_KEYS.includes(d)).length, 49);
 });
 
 test('duas pessoas não se sentam na mesma secretária', () => {
@@ -216,8 +216,9 @@ test('as secretárias encostam à parede de fundo e deixam a entrada livre', () 
 
 test('a grelha muda com a sala, o passo entre filas não', () => {
   // a mesma fila está mais atrás numa sala mais funda — é o que faz a faixa da frente existir
-  const a = stationSpot('emails', [0, 2]).z;   // d 26
-  const b = stationSpot('marketing', [0, 2]).z; // d 34
+  // 1.89.0: Prospeção (emails) cresceu para d 40 com a fila nova; a comparação usa Financeiro (fin, d 32)
+  const a = stationSpot('fin', [0, 2]).z;       // d 32
+  const b = stationSpot('marketing', [0, 2]).z; // d 40
   assert.ok(a - b > 3.5 && a - b < 4.5, `a fila 2 devia recuar ~4 m entre as duas salas (recuou ${(a - b).toFixed(2)})`);
   // o passo horizontal é o mesmo em todas as salas e as duas colunas são simétricas
   for (const k of DEPT_KEYS) {
@@ -529,17 +530,17 @@ test('as preferências do compositor sobrevivem com bom senso (e não rebentam c
    mantém a coloração da roupa, cabelo diferente para cada agente (35), alguns com chapéu, alguns
    serão mulheres» — e, na mesma frase, «mexendo realmente o mouse e digitando nos teclados».
 
-   O que se prova aqui é o que se pode provar sem olhos: que são 47 e diferentes, que a cor vem
+   O que se prova aqui é o que se pode provar sem olhos: que são 49 e diferentes, que a cor vem
    mesmo da sala, que o fato é formal, e que a PONTA DOS DEDOS fica no ponto exacto onde está a
    tecla (e o rato). Esta última é a diferença entre «o ombro oscila» e «a mão digita». */
 
-test('47 agentes, 47 aparências — e a tabela é verificada, não sorteada', () => {
+test('49 agentes, 49 aparências — e a tabela é verificada, não sorteada', () => {
   assert.deepEqual(lookProblems(), []);
-  assert.equal(LOOK_STATS.total, 47);
+  assert.equal(LOOK_STATS.total, 49);
   const sig = AGENTS.map((a) => lookFor(a).signature);
-  assert.equal(new Set(sig).size, 47, 'há dois agentes com o mesmo cabelo/chapéu');
+  assert.equal(new Set(sig).size, 49, 'há dois agentes com o mesmo cabelo/chapéu');
   const cabelos = AGENTS.map((a) => `${lookFor(a).style}.${lookFor(a).variant}`);
-  assert.equal(new Set(cabelos).size, 47, 'o pedido foi «cabelo diferente para cada agente»');
+  assert.equal(new Set(cabelos).size, 49, 'o pedido foi «cabelo diferente para cada agente»');
   assert.ok(LOOK_STATS.women >= 8, `mulheres a menos (${LOOK_STATS.women})`);
   assert.ok(LOOK_STATS.hats >= 5, `chapéus a menos (${LOOK_STATS.hats})`);
   assert.ok(LOOK_STATS.beards >= 4, `barbas a menos (${LOOK_STATS.beards})`);

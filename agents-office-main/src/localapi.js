@@ -60,6 +60,8 @@ const TIPOS_TAREFA = {
   briefing: { label: 'Escrever o briefing' },
   codigo: { label: 'Gerar o código' },
   qa: { label: 'Auditoria de qualidade' },
+  ata: { label: 'Ata de reunião' },
+  faq: { label: 'Perguntas frequentes' },
   oportunidade: { label: 'Avaliar uma oportunidade' },
   triagem: { label: 'Triar uma mensagem recebida' },
   consentimento: { label: 'Rever o consentimento' },
@@ -77,6 +79,8 @@ const TIPOS_TAREFA = {
    que as três não divergem) */
 const DEPARTAMENTOS_POR_TIPO = {
   investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia',
+  /* 1.89.0 */
+  ata: 'comando', faq: 'comando',
   /* 1.88.0 */
   oportunidade: 'prospeccao',
   triagem: 'comando',
@@ -652,7 +656,9 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ops/tarefas' && metodo === 'POST') {
       const tipo = limpo(corpo?.kind);
       if (!TIPOS_TAREFA[tipo]) throw falha(400, 'tipo de tarefa desconhecido');
+      /* 1.89.0 · o pedido escrito fica visível na tarefa, também no modo local */
       const criada = { id: novoId('t'), kind: tipo, entityId: limpo(corpo.entityId), entidade: limpo(corpo.entidade),
+        ...(limpo(corpo.texto) ? { title: limpo(corpo.texto).slice(0, 160), payload: { pedido: limpo(corpo.texto) } } : {}),
         state: 'running', error: null,
         created_at: new Date(agora()).toISOString(), finished_at: null };
       d.tarefas.push(criada); gravar(d);

@@ -56,6 +56,9 @@ export const AGENTS = [
   /* 1.53.0 · a sala cresceu uma fila: um lugar para o que chega e outro para o dia. */
   { id: 'atend',  name: 'ATENDIMENTO E TRIAGEM',        dept: 'emails',   grid: [0, 3], hair: '#2a1d14', skin: '#D89F70' },
   { id: 'plan',   name: 'PLANEAMENTO DO DIA',           dept: 'emails',   grid: [1, 3], hair: '#12100e', skin: '#F0C9A0' },
+  /* 1.89.0 · dois lugares no fim do Comando (a quarta fila, junto à entrada). A sala cresceu para os receber. */
+  { id: 'ata',    name: 'ATAS DE REUNIÃO',              dept: 'emails',   grid: [0, 4], hair: '#4a2c17', skin: '#A8744D' },
+  { id: 'faq',    name: 'PERGUNTAS FREQUENTES',         dept: 'emails',   grid: [1, 4], hair: '#e0c27a', skin: '#FBE0C8' },
   // PROSPEÇÃO (6)
   { id: 'pros', name: 'LEAD HUNTER',                dept: 'sales',    lead: true,  grid: [0.5, 0], hair: '#2a1a0e', skin: '#E8B98E' },
   { id: 'enzo', name: 'ENRIQUECEDOR',               dept: 'sales',    grid: [0, 1], hair: '#1c1c2e', skin: '#E0A878' },
@@ -106,7 +109,7 @@ export const AGENTS = [
 // Plinth placement in world XZ. Brain central; departments well separated (AJ: not too close at zoom-out).
 export const LAYOUT = {
   brain:     { pos: [0, 0],     w: 16, d: 16 },
-  emails:    { pos: [-30, -23], w: 20, d: 32 },   // 1.53.0: 4 filas (entrou o atendimento e o plano do dia)
+  emails:    { pos: [-30, -23], w: 20, d: 40 },   // 1.89.0: 5 filas (+1 fila no fim, para os lugares de atas e perguntas frequentes); antes 4 filas, d 32
   delivery:  { pos: [0, -48],   w: 20, d: 40 },   // 1.53.0: 5 filas (segurança e desempenho)
   sales:     { pos: [30, -23],  w: 20, d: 40 },   // 1.53.0: 5 filas (radar e parceiros)
   marketing: { pos: [-30, 23],  w: 20, d: 40 },   // 1.53.0: 5 filas (SEO e email marketing)

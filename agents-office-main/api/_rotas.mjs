@@ -38,6 +38,9 @@ const TIPOS_TAREFA = {
   briefing: { label: 'Escrever o briefing' },
   codigo: { label: 'Gerar o código' },
   qa: { label: 'Auditoria de qualidade' },
+  /* 1.89.0 */
+  ata: { label: 'Ata de reunião' },
+  faq: { label: 'Perguntas frequentes' },
   /* 1.88.0 · as onze rotinas dos consultivos */
   oportunidade: { label: 'Avaliar uma oportunidade' },
   triagem: { label: 'Triar uma mensagem recebida' },
@@ -57,6 +60,8 @@ const TIPOS_TAREFA = {
 /** A que sala cada tipo de tarefa pertence — para o filtro da mesa não mentir. */
 const DEPARTAMENTOS_POR_TIPO = {
   investigar: 'prospeccao', mensagem: 'vendas', briefing: 'comando', codigo: 'engenharia', qa: 'engenharia',
+  /* 1.89.0 */
+  ata: 'comando', faq: 'comando',
   /* 1.88.0 */
   oportunidade: 'prospeccao', triagem: 'comando', consentimento: 'comando', contrato: 'vendas', renovacao: 'vendas', crescimento: 'vendas', seo_pagina: 'media', caso_estudo: 'media', plano_projeto: 'engenharia', documentacao: 'engenharia', seguranca: 'engenharia',
 };

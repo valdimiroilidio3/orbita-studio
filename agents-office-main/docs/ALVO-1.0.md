@@ -407,6 +407,12 @@ verificável** — cada agente com (a) uma rotina de tarefa real (como as 5 de
 faz» que não seja decoração. Meta: 47 → **60**, todos com rotina ou declarados
 como consultivos (sem tarefa).
 
+**Estado (12 nov 2026, 1.89.0):** **49 lugares**, **18 com rotina própria**, 31
+consultivos. A 1.88.0 deu rotina a 11 consultivos; a 1.89.0 acrescentou os 2
+lugares que faltavam (`ata` no Comando e `faq` no Comando) e cresceu a sala.
+Meta de 60 ainda por cumprir: faltam **11 lugares** (ou o dono aceita uma meta
+menor). `CLAUDE.md` e `roster.mjs` ainda dizem 35 lugares; estão desatualizados.
+
 **Prova:** `GET /ops/agentes` devolve, por agente, `temRotina: true|false`; e não
 há dois agentes com a mesma rotina.
 

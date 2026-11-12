@@ -28,6 +28,9 @@ export const ROTINA = {
   briefing: { posto: 'dasst', dept: 'design', deptPt: 'design', titulo: 'Escrever o briefing' },
   codigo: { posto: 'crep', dept: 'engineering', deptPt: 'engenharia', titulo: 'Código do projeto' },
   qa: { posto: 'qa', dept: 'engineering', deptPt: 'engenharia', titulo: 'Auditoria de qualidade' },
+  /* 1.89.0 · dois lugares novos no fim do Comando */
+  ata: { posto: 'ata', dept: 'command', deptPt: 'comando', titulo: 'Ata de reunião' },
+  faq: { posto: 'faq', dept: 'command', deptPt: 'comando', titulo: 'Perguntas frequentes' },
   /* 1.88.0 · onze consultivos passam a ter trabalho próprio (sem lugares novos) */
   oportunidade: { posto: 'radar', dept: 'prospect', deptPt: 'prospeccao', titulo: 'Avaliar uma oportunidade' },
   triagem: { posto: 'atend', dept: 'command', deptPt: 'comando', titulo: 'Triar uma mensagem recebida' },
