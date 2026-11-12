@@ -1,3 +1,16 @@
+## 1.89.2 — a vista da IA no telemóvel (12 nov 2026)
+
+O dono pediu que o espaço da IA respondesse melhor no telemóvel. Provado num
+ecrã de 390 px, com captura real:
+
+- O traço verde dos modelos com teste caía sobre a primeira letra do nome.
+  Passa a ser o traço da linha inteira.
+- Os seletores da conversa (agente e modelo) ocupam a linha toda, em vez de 165 px.
+- O campo de escrever tem altura para a ajuda inteira, que antes era cortada.
+- «Provar os por provar» e «Descobrir modelos» passam a ter 44 px de alvo de toque.
+
+`ia-movel.test.mjs` (4) prova estas regras no CSS do bloco móvel.
+
 ## 1.89.1 — esquema verificado, atas e FAQ com resposta, versão visível (12 nov 2026)
 
 Três pedidos do dono depois da 1.89.0.
