@@ -1,3 +1,47 @@
+## 1.89.1 — esquema verificado, atas e FAQ com resposta, versão visível (12 nov 2026)
+
+Três pedidos do dono depois da 1.89.0.
+
+**1. O esquema da base.** A auditoria e o `health` não olhavam para
+`orbita_tasks.payload` nem `.title` (`supabase/orbita_1_79_0.sql`). Uma base sem
+elas dizia «ok», e o pedido escrito de uma tarefa só falhava na escrita.
+- `COLUNAS_EXIGIDAS.orbita_tasks` passa a exigir `payload` e `title`.
+- `health` sonda as duas colunas. Se faltarem, diz `ok:false` e lista-as em
+  `colunasFaltam`.
+- O curador da mesa passa a ver colunas em falta (não só tabelas) e aplica o
+  esquema versionado, que é idempotente. O `health` dispara-o também nesse caso.
+- Ao criar uma tarefa com pedido, se a base recusar a coluna, o curador corre e a
+  escrita repete-se uma vez. Só se a cura falhar a tarefa é recusada, com o motivo.
+- O erro de `payload`/`title` aponta para `orbita_1_79_0.sql`.
+
+**2. Ata e perguntas frequentes com resposta real, com qualquer modelo.** O
+orçamento de saída era 900 tokens para todas as rotinas. Uma ata completa não
+cabe, e um modelo de raciocínio que gasta o orçamento a pensar devolve texto
+vazio.
+- `ata` pede 1600 tokens de saída; `faq` pede 2200.
+- Se a cadeia inteira devolver vazio, o orçamento dobra uma vez (teto 4000). Um
+  erro que não é de resposta vazia (chave recusada) não repete.
+- Sem texto, a tarefa continua a falhar com o motivo: não se inventa a ata.
+
+**3. A versão visível.** O único número na página era «Órbita Project 1.0.0»,
+escrito à mão no rodapé da licença, e nunca mudava. Agora:
+- o build (do `package.json`, injetado pelo `build.mjs`) aparece na linha da
+  licença;
+- a página pergunta ao servidor a versão dele (`/api/health`). Se forem
+  diferentes, o build fica âmbar com «o servidor está em X — recarrega a página».
+  Não recarrega sozinha.
+
+Não se mexeu no «1.0.0» da licença: é um número escrito à mão, e a decisão de o
+manter ou trocar é do dono.
+
+Testes: `esquema-tarefas.test.mjs` (7), `rotinas-saida-longa.test.mjs` (6),
+`versao.test.mjs` (6). `node --test` 1595/1595; `node check.mjs` 96/96 · 1
+saltado (browser).
+
+Ainda por fazer: confirmar em produção que a base tem `payload` e `title` (o
+`/api/health` diz-o depois do deploy); a revisão do Kilo não correu (a conta
+ficou sem créditos — ver a nota no PR).
+
 ## 1.89.0 — texto livre em todas as áreas e a sala do Comando cresce (A9, 12 nov 2026)
 
 O dono pediu duas coisas. Primeiro, que o pedido escrito à mão deixe de ser

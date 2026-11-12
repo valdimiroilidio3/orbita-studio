@@ -82,7 +82,9 @@ export const COLUNAS_EXIGIDAS = {
   /* 1.53.2 · onde fica o texto que a tarefa produziu. Sem estas duas, a tarefa
      conclui na mesma (o resultado vai para a Atividade), mas o cartão não o
      mostra — e o `/api/setup` passa a dizer que faltam. */
-  orbita_tasks: ['resultado', 'modelo', 'custo_micro_usd'],
+  /* 1.89.1 · `payload` e `title` (1.79.0). Até aqui a auditoria não os olhava:
+     uma base sem eles dizia «ok» e o pedido de uma tarefa falhava só na escrita. */
+  orbita_tasks: ['resultado', 'modelo', 'custo_micro_usd', 'payload', 'title'],
   /* 1.54.0 · a porta. Sem `hash` não há login; sem `token_hash` não há sessão. */
   /* 1.69.0 · as do código de entrada e do OAuth. Sem elas, o código não tem
      onde ser guardado — e a auditoria do `/api/setup?ler=1` passa a dizê-lo. */

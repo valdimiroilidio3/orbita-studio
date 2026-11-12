@@ -36,6 +36,8 @@ export function envBase(env = process.env) {
    Sem esta lista, o erro do PostgREST dizia «falta o esquema» sem nomear o
    ficheiro — e a resposta já sabe qual é. */
 export const COLUNAS_DO_1_69 = new Set(['codigo_hash', 'codigo_expira', 'codigo_tentativas', 'oauth_fornecedor', 'oauth_id']);
+/* 1.89.1 · o pedido escrito e o título de uma tarefa (supabase/orbita_1_79_0.sql) */
+export const COLUNAS_DO_1_79 = new Set(['payload', 'title']);
 
 const COLUNAS_DO_1_37 = new Set([
   'subject', 'to', 'from', 'provider', 'provider_id', 'enviada_at', 'recebida_at',
@@ -104,6 +106,7 @@ export function explificar(texto = '', dados = null) {
 
   let ficheiro = null;
   if (semColuna && coluna && COLUNAS_DO_1_69.has(coluna)) ficheiro = 'orbita_1_69_0.sql';
+  if (semColuna && coluna && COLUNAS_DO_1_79.has(coluna)) ficheiro = 'orbita_1_79_0.sql';
   if (semColuna && coluna && COLUNAS_DO_1_37.has(coluna)) ficheiro = 'orbita_1_37_0.sql';
   if (semTabela && tabela && TABELAS_DA_PORTA.has(tabela)) ficheiro = 'orbita_1_54_0.sql';
   if (semColuna && coluna && COLUNAS_DA_PORTA[coluna]) ficheiro = COLUNAS_DA_PORTA[coluna];
@@ -187,10 +190,22 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
         if (e.semEsquema) { mensagensProntas = false; mensagensErro = e.message; }
         else throw e;
       }
+      /* 1.89.1 · as colunas que a tarefa usa (1.79.0). Sem esta sonda, a base
+         sem `payload` dizia «ok» e só se descobria quando alguém escrevia um
+         pedido. Uma sonda por coluna: o erro diz qual falta. */
+      const colunasFaltam = {};
+      for (const c of ['payload', 'title']) {
+        try { await pedir(`orbita_tasks?select=id,${c}&limit=1`); }
+        catch (e) {
+          if (e.semEsquema) (colunasFaltam.orbita_tasks = colunasFaltam.orbita_tasks || []).push(c);
+          else throw e;
+        }
+      }
       return {
-        ok: faltam.length === 0 && mensagensProntas !== false,
+        ok: faltam.length === 0 && mensagensProntas !== false && !Object.keys(colunasFaltam).length,
         base: base.replace(/^https?:\/\//, '').split('.')[0],
         faltam,
+        colunasFaltam,
         mensagensProntas,
         ...(mensagensErro ? { mensagensErro } : {}),
       };
