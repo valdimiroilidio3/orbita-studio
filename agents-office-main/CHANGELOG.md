@@ -1,3 +1,38 @@
+## 1.87.0 — o painel «Falhas» (A5, 11 nov 2026)
+
+O alvo 1.0 pede que as falhas se vejam. Cada parte do produto já registava as
+suas (tarefa falhada, pedido a um modelo com `ok: false`, imagem `falhou`,
+execução `falhou`, envio `falhou`), mas nenhum ecrã as juntava: para saber «o
+que falhou esta semana?» era preciso abrir cinco sítios.
+
+O que entra:
+
+- `GET /ops/falhas` (api/_falhas.mjs): por origem, quantas falharam nos últimos
+  7 dias (`?dias=`, até 90), quantas nas últimas 24 h, e a última falha real
+  com a hora, quem a fez e o erro que a origem guardou.
+- Uma origem que não se consegue ler diz porquê (`indisponivel`). Nunca aparece
+  como «0» por omissão.
+- Os erros passam por `limparSegredos` antes de sair: `Bearer`, chaves e tokens
+  em URL, e o valor real de qualquer variável secreta do ambiente que apareça no
+  texto. Erros com mais de 300 caracteres são cortados.
+- Control Center · «Falhas»: o cartão novo, no mesmo pedido paralelo que já
+  carrega o resto da página. Se o pedido não responder, o cartão diz porquê.
+- Modo local: lê as tarefas deste browser e marca as outras quatro origens como
+  «sem leitura» (não existem sem a base).
+
+Testes: `falhas-painel.test.mjs` (13). Suite completa 1550/1550.
+
+Ainda por fazer em A5 (não está feito nesta versão):
+
+- alerta quando um fornecedor cai (heartbeat em `/ia/uso`) — não existe ainda;
+- prova do restauro: copiar a base → apagar → restaurar → 50 leads, com data e
+  hora escritas. Precisa da base real, que esta sandbox não alcança.
+- A prova dos 7 dias sem tarefa pendurada começa a contar a partir deste deploy.
+
+Já existiam e não se mexeu neles: timeout explícito por chamada externa
+(api/_ia/cliente.mjs), retry só no que é `retentavel`, e tecto de custo por
+tarefa (`tectoDeCusto`).
+
 ## 1.86.0 — a fila de imagens anda sozinha (11 nov 2026)
 
 Uma imagem pedida pelos agentes (`imagem_gerar`, 1.85.0) ou por quem fechou o

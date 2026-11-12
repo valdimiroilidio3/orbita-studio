@@ -203,13 +203,16 @@ async function carregarClassico(api, desde, pintar) {
   pintar();
 
   const comPrazoCurto = (p, oQue) => comPrazo(p, PRAZO_RESTO_MS, oQue);
-  const [modelos, uso, runs, fila, gratuitos] = await Promise.all([
+  const [modelos, uso, runs, fila, gratuitos, falhas] = await Promise.all([
     comPrazoCurto(api.call('/ia/modelos'), 'o catálogo de modelos').catch(() => null),
     comPrazoCurto(api.call('/ia/uso'), 'o uso').catch(() => ({ resumo: [], errosRecentes: [] })),
     comPrazoCurto(api.call('/ia/runs'), 'as execuções').catch(() => ({ runs: [] })),
     comPrazoCurto(api.call('/media/trabalhos'), 'os trabalhos de mídia').catch(() => ({ trabalhos: [] })),
     comPrazoCurto(api.call('/ia/gratuitos'), 'as gratuitas').catch(() => null),
+    /* 1.87.0 · o painel «Falhas» (A5). Se não responder, o cartão diz porquê. */
+    comPrazoCurto(api.call('/ops/falhas'), 'as falhas').catch((e) => ({ erroLeitura: e?.message || 'o servidor não respondeu' })),
   ]);
+  api.S.iaFalhas = falhas && !falhas.erroLeitura ? falhas : { erroLeitura: falhas?.erroLeitura || 'não consegui ler as falhas' };
   api.S.iaUso = uso;
   api.S.iaRuns = runs.runs || [];
   api.S.iaFila = fila.trabalhos || [];
@@ -260,6 +263,41 @@ const ESTADO_RUN = {
   aguarda_aprovacao: ['espera aprovação', 'warn'], concluido: ['concluído', 'ok'],
   parcial: ['parcial', 'warn'], falhou: ['falhou', 'bad'], cancelado: ['cancelado', ''],
 };
+
+/* ---------------- 1.87.0 · o painel «Falhas» (A5) ----------------
+   Quantas falharam, por origem, e a última falha real com a hora e o erro que a
+   origem guardou. Uma origem sem leitura diz porquê — nunca «0» por omissão. */
+export function cartaoFalhas(f, { esc, when }) {
+  const cabeca = '<h3 style="margin-top:0">Falhas</h3>';
+  if (!f) return `<div class="card">${cabeca}<div class="ia-faixa warn" role="status">A carregar as falhas…</div></div>`;
+  if (f.erroLeitura) {
+    return `<div class="card">${cabeca}<div class="ia-faixa bad">Não consegui ler as falhas: ${esc(f.erroLeitura)}</div>
+      <p class="ia-sub" style="margin-top:0">O resto da página continua a funcionar. Tenta outra vez daqui a pouco.</p></div>`;
+  }
+  const dias = Number(f.janelaDias) || 7;
+  const semLeitura = Number(f.origensSemLeitura) || 0;
+  const faixa = f.total > 0
+    ? `<div class="ia-faixa ${f.ultimas24h > 0 ? 'bad' : 'warn'}">${esc(f.frase || `${f.total} falha(s) nos últimos ${dias} dias`)}</div>`
+    : `<div class="ia-faixa ${semLeitura ? 'warn' : 'ok'}">${esc(f.frase || `nenhuma falha nos últimos ${dias} dias`)}</div>`;
+  const linhas = (f.porOrigem || []).map((o) => {
+    if (o.indisponivel) {
+      return `<tr><td><b>${esc(o.rotulo)}</b><div class="ia-sub">${esc(o.onde || '')}</div></td>
+        <td colspan="3"><span class="ia-sub">sem leitura — ${esc(o.indisponivel)}</span></td></tr>`;
+    }
+    const ult = o.ultimo
+      ? `<div>${esc(when(o.ultimo.quando))} · ${esc(o.ultimo.quem || '')}</div><div class="ia-sub">${esc(o.ultimo.erro || '')}</div>`
+      : '<span class="ia-sub">—</span>';
+    return `<tr><td><b>${esc(o.rotulo)}</b><div class="ia-sub">${esc(o.onde || '')}</div></td>
+      <td>${esc(String(o.total))}</td><td>${esc(String(o.ultimas24h))}</td><td>${ult}</td></tr>`;
+  }).join('');
+  const recentes = (f.recentes || []).slice(0, 10);
+  return `<div class="card">${cabeca}
+    <p class="ia-sub" style="margin-top:0">Últimos ${esc(String(dias))} dias, por origem. Cada linha é uma falha que a própria origem registou.</p>
+    ${faixa}
+    <table class="ia-tab"><thead><tr><th>Origem</th><th>Falhas (${esc(String(dias))} d)</th><th>Últimas 24 h</th><th>Última falha</th></tr></thead><tbody>${linhas}</tbody></table>
+    ${recentes.length ? `<h4>Mais recentes</h4><ul class="ia-erros">${recentes.map((r) => `<li><b>${esc(r.quem || '')}</b> · ${esc(when(r.quando))} — ${esc(r.titulo || '')}: ${esc(r.erro || '')}</li>`).join('')}</ul>` : ''}
+  </div>`;
+}
 
 export function vistaIA(S, { esc, hhmm, when }) {
   const ia = S.ia;
@@ -653,6 +691,8 @@ export function vistaIA(S, { esc, hhmm, when }) {
       ${usoLinhas ? `<table class="ia-tab"><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Ok</th><th>Erros</th><th>Latência média</th><th>Tokens</th></tr></thead><tbody>${usoLinhas}</tbody></table>` : '<div class="ia-sub">Sem pedidos registados.</div>'}
       ${(uso.errosRecentes || []).length ? `<h4>Erros recentes</h4><ul class="ia-erros">${uso.errosRecentes.map((e) => `<li><b>${esc(e.fornecedor || '')}</b> · ${esc(when(e.quando))} — ${esc(e.erro || '')}</li>`).join('')}</ul>` : ''}
     </div>
+
+    ${cartaoFalhas(S.iaFalhas, { esc, when })}
 
     <div class="card">
       <h3 style="margin-top:0">Memória <span class="ia-sub">· plugins do Graft (Apache-2.0)</span></h3>

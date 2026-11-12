@@ -843,6 +843,36 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
     if (caminhoLimpo === '/ops/pipeline') return pipeline(d);
     if (caminhoLimpo === '/ops/atividade') return { eventos: d.atividade.slice(0, Number(qs.get('limit')) || 20) };
     /* 1.57.2 · as mesmas contagens reais do servidor (ver `api/_rotas.mjs`) */
+    /* 1.87.0 · o painel «Falhas» no modo local: lê só o que este browser tem.
+       As outras origens (modelos, imagens, execuções, envios) vivem na base, e
+       diz-se porquê não se leem — nunca «0» por omissão. */
+    if (caminhoLimpo === '/ops/falhas') {
+      const SEM_BASE = 'modo local: sem base de dados, esta origem não se lê daqui';
+      const agora = Date.now();
+      const desde = agora - 7 * 24 * 3600 * 1000;
+      const quando = (t) => (t.finished_at || t.created_at || null);
+      const falhadas = (d.tarefas || []).filter((t) => t && t.state === 'failed').map((t) => ({
+        origem: 'tarefa', quando: quando(t), quem: String(t.kind || 'tarefa'),
+        titulo: String(t.title || t.kind || 'tarefa').slice(0, 120), erro: String(t.error || 'sem motivo guardado').slice(0, 300),
+      }));
+      const naJanela = falhadas.filter((f) => f.quando && Date.parse(f.quando) >= desde);
+      const ordenadas = [...naJanela].sort((a, b) => Date.parse(b.quando) - Date.parse(a.quando));
+      const porOrigem = [
+        { id: 'tarefa', rotulo: 'Tarefa dos agentes', onde: 'Escritório · Fila de tarefas', total: naJanela.length, ultimas24h: naJanela.filter((f) => Date.parse(f.quando) >= agora - 86400000).length, ultimo: ordenadas[0] ? { quando: ordenadas[0].quando, quem: ordenadas[0].quem, erro: ordenadas[0].erro } : null, indisponivel: null },
+        { id: 'modelo', rotulo: 'Pedido a um modelo', onde: 'Control Center · Uso e erros', total: null, ultimas24h: null, ultimo: null, indisponivel: SEM_BASE },
+        { id: 'imagem', rotulo: 'Imagem gerada', onde: 'Projetos · aba Mídia', total: null, ultimas24h: null, ultimo: null, indisponivel: SEM_BASE },
+        { id: 'execucao', rotulo: 'Execução dos agentes', onde: 'Control Center · Execuções', total: null, ultimas24h: null, ultimo: null, indisponivel: SEM_BASE },
+        { id: 'envio', rotulo: 'Envio de mensagem', onde: 'Mesa · Mensagens', total: null, ultimas24h: null, ultimo: null, indisponivel: SEM_BASE },
+      ];
+      const lidas = porOrigem.filter((o) => !o.indisponivel);
+      const total = lidas.reduce((n, o) => n + o.total, 0);
+      return {
+        ok: true, janelaDias: 7, desde: new Date(desde).toISOString(), quando: new Date(agora).toISOString(),
+        total, ultimas24h: lidas.reduce((n, o) => n + o.ultimas24h, 0), origensSemLeitura: porOrigem.length - lidas.length,
+        porOrigem, recentes: ordenadas.slice(0, 25), modo: 'local',
+        frase: `${total} falha(s) nas tarefas deste browser · ${porOrigem.length - lidas.length} origens sem leitura no modo local`,
+      };
+    }
     if (caminhoLimpo === '/ops/agentes') {
       const quando = (t) => (t ? (t.finished_at || t.created_at || null) : null);
       const porSala = new Map(DEPARTAMENTOS.map((x) => [x.id, []]));
