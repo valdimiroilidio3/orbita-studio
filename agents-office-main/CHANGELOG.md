@@ -1,3 +1,30 @@
+## 1.88.0 — onze consultivos passam a ter trabalho próprio (A9, 11 nov 2026)
+
+O alvo 1.0 pede que cada agente tenha um ofício verificável: uma rotina real, a
+sala certa e uma frase de «o que faz» que não seja decoração. Até aqui só 5 dos
+47 lugares tinham rotina; os outros 42 eram consultivos.
+
+Nesta versão, 11 consultivos que já tinham papel escrito ganham uma rotina
+própria, com pedido ao motor de IA e contexto real da base (lead ou projeto),
+ou o texto que foi escrito. Os lugares e a cena não mudam.
+
+- Rotinas novas (api/_tarefas.mjs): `oportunidade` (radar), `triagem` (atend),
+  `consentimento` (comply), `contrato` (legal), `renovacao` (renew), `crescimento`
+  (upsell), `seo_pagina` (seo), `caso_estudo` (newt), `plano_projeto` (pco),
+  `documentacao` (kmail), `seguranca` (sec).
+- Cada uma tem o seu posto e a sua sala em `src/elenco.js`, e aparece na mesa
+  (`api/_rotas.mjs`), no modo local e na lista de tarefas do cliente.
+- Nenhuma rotina repete outra, e nenhum posto tem duas.
+- Sem resposta do modelo, a tarefa falha com o motivo — não inventa resultado.
+
+Escritório: 47 lugares · 16 com trabalho próprio · 31 consultivos.
+
+Testes: `rotinas-consultivos.test.mjs` (6). Atualizados os números fixos de
+`elenco.test.mjs` e `localapi.test.mjs` (5 → 16 com trabalho; 42 → 31 consultivos).
+
+Ainda por fazer em A9: a meta de 60 agentes. Não há lugares livres nas salas
+sem as mudar. Ficou por decidir onde pôr os 2 lugares novos.
+
 ## 1.87.1 — o alerta quando um fornecedor cai (A5, 11 nov 2026)
 
 Fecha o segundo ponto de A5 que faltava no painel «Falhas». Até aqui uma

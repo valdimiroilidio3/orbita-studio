@@ -110,6 +110,152 @@ prova social, chamada à ação, telemóvel, velocidade, acessibilidade básica,
 contacto visível, e o que falta para poder ser entregue. Termina com
 «entregável hoje: sim/não» e o motivo.`,
   },
+  oportunidade: {
+    alvo: 'lead',
+    titulo: 'Avaliar uma oportunidade',
+    pedido: (c) => `Avalia esta oportunidade, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. O que é, exatamente, e quem a pede.
+2. Prazo e o que é preciso para responder.
+3. O que a Órbita teria de entregar, e se sabe fazê-lo.
+4. Riscos e custos que não estão escritos.
+5. Recomendação: avançar, não avançar, ou pedir mais informação — e o que pedir.`,
+  },
+  triagem: {
+    alvo: 'lead',
+    titulo: 'Triar uma mensagem recebida',
+    pedido: (c) => `Tria o que chegou deste contacto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Urgência: alta, média ou baixa, com uma frase de motivo.
+2. Dono sugerido (que agente ou pessoa) e porquê.
+3. Se há uma resposta simples que se pode enviar já, escreve-a. Se não há, diz o que falta perceber.
+4. O que não se deve prometer nesta resposta.`,
+  },
+  consentimento: {
+    alvo: 'projeto',
+    titulo: 'Rever o consentimento',
+    pedido: (c) => `Revê o que este projeto pode fazer com os dados das pessoas, à luz do RGPD e da prática de contactos em Portugal:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. O que recolhe e para quê — só o que está escrito, sem inventar formulários.
+2. Onde falta consentimento explícito ou informação ao titular.
+3. O que pode sair já e o que tem de esperar por uma correção.
+4. Pontos a confirmar com um jurista. Não dês parecer jurídico definitivo.`,
+  },
+  contrato: {
+    alvo: 'projeto',
+    titulo: 'Rever o contrato',
+    pedido: (c) => `Revê a proposta ou o contrato deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Âmbito: o que está incluído e o que não está, com as palavras do próprio texto.
+2. Prazos e pagamentos, e onde são ambíguos.
+3. Cláusulas que protegem a Órbita e cláusulas que a expõem.
+4. O que falta escrever antes de assinar.
+5. Pontos a confirmar com um jurista.`,
+  },
+  renovacao: {
+    alvo: 'lead',
+    titulo: 'Preparar a renovação',
+    pedido: (c) => `Prepara a renovação deste cliente, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. O que o cliente tem hoje e o que já produziu, só com factos do registo.
+2. O que se propõe para continuar, em duas ou três linhas.
+3. A mensagem de renovação, pronta a enviar, sem promessas de resultados.
+4. O que falta saber antes de a enviar.`,
+  },
+  crescimento: {
+    alvo: 'lead',
+    titulo: 'Propor o passo seguinte',
+    pedido: (c) => `Propõe o passo seguinte para este cliente, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. O que já usa, com os números que estão no registo.
+2. Um passo seguinte concreto, com o que custa e o que devolve, sem estimativas inventadas.
+3. A primeira frase para o dono levar à conversa.
+4. O que falta medir para saber se o passo compensa.`,
+  },
+  seo_pagina: {
+    alvo: 'projeto',
+    titulo: 'Títulos e descrições da página',
+    pedido: (c) => `Escreve os títulos, as descrições e as palavras-chave das páginas deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Título da página (até 60 caracteres) e descrição (até 155 caracteres) para cada página prevista.
+2. Três a cinco palavras-chave por página, com a intenção de pesquisa que servem.
+3. Texto alternativo para as imagens principais.
+4. O que depende de dados que ainda não existem (localidade, preços, nome exato do serviço).`,
+  },
+  caso_estudo: {
+    alvo: 'projeto',
+    titulo: 'Caso de estudo',
+    pedido: (c) => `Escreve o caso de estudo deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Situação de partida, com o que o cliente disse.
+2. O que foi feito, em factos.
+3. Resultado — só o que o cliente confirmou por escrito; se não há, escreve «resultado a confirmar».
+4. Citação do cliente, se existir no registo. Nunca inventes uma citação.
+5. Três linhas para a newsletter.`,
+  },
+  plano_projeto: {
+    alvo: 'projeto',
+    titulo: 'Plano de projeto',
+    pedido: (c) => `Faz o plano deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Marcos, por ordem, com o que termina em cada um.
+2. Prazo de cada marco, e o que o pode atrasar.
+3. Dependências do cliente: o que lhe pedir e até quando.
+4. Horas estimadas só se o registo tiver dados; se não, diz que não há base para estimar.`,
+  },
+  documentacao: {
+    alvo: 'projeto',
+    titulo: 'Documentação do projeto',
+    pedido: (c) => `Escreve a documentação deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Como está feito, em um parágrafo, com as partes principais.
+2. Como se publica e como se atualiza o conteúdo.
+3. O que o cliente precisa de saber para o manter.
+4. O que não está documentado e tem de ser confirmado.`,
+  },
+  seguranca: {
+    alvo: 'projeto',
+    titulo: 'Revisão de acessos e segurança',
+    pedido: (c) => `Revê os acessos e a segurança deste projeto, com o que está escrito e nada inventado:
+
+${c}
+
+Responde em português de Portugal, em pontos curtos:
+1. Quem tem acesso a quê, com os nomes que estão no registo.
+2. Chaves e palavras-passe: onde estão guardadas, nunca os valores.
+3. Riscos concretos e a correção de cada um, por ordem de gravidade.
+4. O que não se consegue verificar a partir do registo.`,
+  },
 };
 
 const corta = (s, n) => String(s ?? '').slice(0, n);

@@ -152,7 +152,7 @@ test('9 · o vazio honesto: agentes, atividade e pesquisa não inventam nada', a
   /* 1.84.0 · o elenco não é mais vazio: as seis salas somam 47 lugares, 5 dos quais com trabalho próprio. */
   assert.equal(ag.departamentos.reduce((n, d) => n + d.agentes.length, 0), 47);
   const comRotina = ag.departamentos.flatMap((d) => d.agentes).filter((a) => a.temRotina);
-  assert.equal(comRotina.length, 5);
+  assert.equal(comRotina.length, 16);
   for (const d of ag.departamentos) assert.ok(Array.isArray(d.agentes) && d.agentes.length > 0);
   assert.deepEqual((await api.call('/ops/atividade')).eventos, []);
   assert.deepEqual((await api.call('/ops/pesquisa?q=teste')).grupos, []);
