@@ -2367,22 +2367,6 @@ function tickSim(now, dt) {
     // 28 out 2026: quem está a caminho do Cérebro — ou a explicar ao grupo — é conduzido pelo
     // `crew`. Sai do laço aqui para não haver duas mãos a mexer no mesmo corpo.
     if (r.trip) { crew.tick(r, now, dt); continue; }
-    /* 1.89.2 · a reação à aprovação. Ao aprovar, o posto festeja de pé; ao recusar, abate-se
-       na cadeira. Estes tempos eram escritos em `resolveApproval` mas nunca lidos: só o emoji
-       aparecia. Têm prioridade sobre «a trabalhar», porque a decisão acontece exactamente
-       quando o posto volta a estar em trabalho. */
-    if (now < (r.cheerUntil || 0)) {
-      poseWork(r.person, 'cheer', now + r.bob * 300, dt);
-      applyStandAndFacing(r, 'cheer', now, dt);
-      if (r.touched.size) driveDesk(r, null, now, 0, dt);
-      continue;
-    }
-    if (now < (r.slumpUntil || 0)) {
-      poseWork(r.person, 'slump', now + r.bob * 200, dt);
-      applyStandAndFacing(r, 'slump', now, dt);
-      if (r.touched.size) driveDesk(r, null, now, 0, dt);
-      continue;
-    }
     // o grupo levanta-se para ouvir o chefe que voltou do Cérebro (ninguém ouve sentado e calado)
     const hd = crew.huddle(r.a.dept);
     if (hd && r.state !== 'stuck' && r.state !== 'error') {
