@@ -28,6 +28,8 @@ export const ORIGENS = [
   { id: 'envio', rotulo: 'Envio de mensagem', onde: 'Mesa · Mensagens' },
 ];
 
+import { saudeDosFornecedores } from './_ia/saude.mjs';
+
 const DIA = 24 * 60 * 60 * 1000;
 const LIMITE_ERRO = 300;
 
@@ -113,12 +115,17 @@ export async function painelDeFalhas(repo, { agora = Date.now(), janelaDias = 7,
 
   const fontes = {
     tarefa: async () => (await repo.tarefas.list(300)).filter(Boolean).filter((t) => t.state === 'failed').map(porTarefa),
-    modelo: async () => (await repo.ia.uso.recentes(500)).filter(Boolean).filter((l) => l.ok === false).map(porModelo),
+    modelo: async () => {
+      usosLidos = (await repo.ia.uso.recentes(500)).filter(Boolean);
+      return usosLidos.filter((l) => l.ok === false).map(porModelo);
+    },
     imagem: async () => (await repo.geracoes.porPeriodo(desde, 500)).filter(Boolean).filter((g) => g.estado === 'falhou').map(porImagem),
     execucao: async () => (await repo.ia.runs.listar(100)).filter(Boolean).filter((r) => r.estado === 'falhou').map(porExecucao),
     envio: async () => (await repo.mensagens.list(300)).filter(Boolean).filter((m) => m.status === 'falhou').map(porEnvio),
   };
 
+  /* 1.87.1 · as linhas de uso lidas uma vez: a origem «modelo» e o alerta de fornecedor usam as mesmas */
+  let usosLidos = [];
   const porOrigem = [];
   const todas = [];
   for (const o of ORIGENS) {
@@ -150,6 +157,7 @@ export async function painelDeFalhas(repo, { agora = Date.now(), janelaDias = 7,
     .slice(0, Math.max(1, Math.min(100, Number(limite) || 25)));
   const lidas = porOrigem.filter((o) => !o.indisponivel);
   const total = lidas.reduce((n, o) => n + o.total, 0);
+  const alertas = usosLidos.length ? saudeDosFornecedores(usosLidos, { agora }).alertas : [];
 
   return {
     ok: true,
@@ -159,6 +167,8 @@ export async function painelDeFalhas(repo, { agora = Date.now(), janelaDias = 7,
     total,
     ultimas24h: lidas.reduce((n, o) => n + o.ultimas24h, 0),
     origensSemLeitura: porOrigem.filter((o) => o.indisponivel).length,
+    /* 1.87.1 · fornecedores que caíram: 3 ou mais falhas seguidas nas últimas 24 h */
+    alertas,
     porOrigem,
     recentes,
     frase: total === 0 && lidas.length === porOrigem.length

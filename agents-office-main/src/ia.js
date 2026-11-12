@@ -264,6 +264,16 @@ const ESTADO_RUN = {
   parcial: ['parcial', 'warn'], falhou: ['falhou', 'bad'], cancelado: ['cancelado', ''],
 };
 
+/* ---------------- 1.87.1 · o alerta de fornecedor que caiu ----------------
+   `alertas` vem de `/ia/uso` e de `/ops/falhas`: cada um é um fornecedor com 3 ou
+   mais falhas seguidas nas últimas 24 h. Sem alertas, não se desenha nada. */
+export function alertasDeFornecedores(alertas, { esc, when }) {
+  if (!Array.isArray(alertas) || !alertas.length) return '';
+  return alertas.map((a) => `<div class="ia-faixa bad" role="alert"><b>${esc(a.fornecedor || 'Fornecedor')} caiu.</b>
+    ${esc(String(a.falhasSeguidas || '?'))} pedidos seguidos falharam${a.desde ? ` · última resposta boa: ${esc(when(a.desde))}` : ' · nunca respondeu bem nesta base'}.
+    Último erro: ${esc(a.erro || 'sem motivo guardado')}.</div>`).join('');
+}
+
 /* ---------------- 1.87.0 · o painel «Falhas» (A5) ----------------
    Quantas falharam, por origem, e a última falha real com a hora e o erro que a
    origem guardou. Uma origem sem leitura diz porquê — nunca «0» por omissão. */
@@ -276,6 +286,7 @@ export function cartaoFalhas(f, { esc, when }) {
   }
   const dias = Number(f.janelaDias) || 7;
   const semLeitura = Number(f.origensSemLeitura) || 0;
+  const avisos = alertasDeFornecedores(f.alertas, { esc, when });
   const faixa = f.total > 0
     ? `<div class="ia-faixa ${f.ultimas24h > 0 ? 'bad' : 'warn'}">${esc(f.frase || `${f.total} falha(s) nos últimos ${dias} dias`)}</div>`
     : `<div class="ia-faixa ${semLeitura ? 'warn' : 'ok'}">${esc(f.frase || `nenhuma falha nos últimos ${dias} dias`)}</div>`;
@@ -293,6 +304,7 @@ export function cartaoFalhas(f, { esc, when }) {
   const recentes = (f.recentes || []).slice(0, 10);
   return `<div class="card">${cabeca}
     <p class="ia-sub" style="margin-top:0">Últimos ${esc(String(dias))} dias, por origem. Cada linha é uma falha que a própria origem registou.</p>
+    ${avisos}
     ${faixa}
     <table class="ia-tab"><thead><tr><th>Origem</th><th>Falhas (${esc(String(dias))} d)</th><th>Últimas 24 h</th><th>Última falha</th></tr></thead><tbody>${linhas}</tbody></table>
     ${recentes.length ? `<h4>Mais recentes</h4><ul class="ia-erros">${recentes.map((r) => `<li><b>${esc(r.quem || '')}</b> · ${esc(when(r.quando))} — ${esc(r.titulo || '')}: ${esc(r.erro || '')}</li>`).join('')}</ul>` : ''}
@@ -689,6 +701,7 @@ export function vistaIA(S, { esc, hhmm, when }) {
     <div class="card">
       <h3 style="margin-top:0">Uso e erros</h3>
       ${usoLinhas ? `<table class="ia-tab"><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Ok</th><th>Erros</th><th>Latência média</th><th>Tokens</th></tr></thead><tbody>${usoLinhas}</tbody></table>` : '<div class="ia-sub">Sem pedidos registados.</div>'}
+      ${alertasDeFornecedores(uso.alertas, { esc, when })}
       ${(uso.errosRecentes || []).length ? `<h4>Erros recentes</h4><ul class="ia-erros">${uso.errosRecentes.map((e) => `<li><b>${esc(e.fornecedor || '')}</b> · ${esc(when(e.quando))} — ${esc(e.erro || '')}</li>`).join('')}</ul>` : ''}
     </div>
 

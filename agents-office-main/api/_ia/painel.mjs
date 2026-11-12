@@ -104,7 +104,11 @@ export async function resumoDeUso(linhas = [], env = process.env) {
       })),
     };
   });
+  /* 1.87.1 · o heartbeat: quem caiu agora (3 ou mais falhas seguidas) */
+  const { saudeDosFornecedores } = await import('./saude.mjs');
+  const saude = saudeDosFornecedores(linhas);
   return {
+    saude: saude.fornecedores, alertas: saude.alertas,
     resumo, ultimos: linhas.slice(0, 25),
     errosRecentes: linhas.filter((l) => !l.ok).slice(0, 10).map((l) => ({ fornecedor: l.fornecedor, modelo: l.modelo, quando: l.criado, erro: l.erro })),
     /* 1.55.0 · quanto custou o que aqui está, com a conta à vista */
