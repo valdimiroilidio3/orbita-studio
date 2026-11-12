@@ -904,6 +904,7 @@ function decisionCard() {
 const ROTULO_TAREFA = {
   investigar: 'Investigar o lead', mensagem: 'Escrever uma mensagem',
   briefing: 'Escrever o briefing', codigo: 'Gerar o código', qa: 'Auditoria de qualidade',
+  ata: 'Ata de reunião', faq: 'Perguntas frequentes',
   oportunidade: 'Avaliar uma oportunidade',
   triagem: 'Triar uma mensagem recebida',
   consentimento: 'Rever o consentimento',
@@ -2402,6 +2403,7 @@ function novaTarefaForm() {
     <div class="form">
       <select class="in" id="tfTipo" aria-label="tipo de tarefa">${tipos.map(t => `<option value="${esc(t.id)}">${esc(t.label)} · ${esc((S.deptos.find(d => d.key === t.dept) || {}).name || t.dept)}</option>`).join('')}</select>
       <input class="in" id="tfEnt" placeholder="Projeto ou lead (id)" aria-label="entidade">
+      <textarea class="in" id="tfTexto" rows="2" placeholder="O que queres que faça (opcional): as notas da reunião, a pergunta, o texto a rever" aria-label="pedido escrito" style="min-height:44px;width:100%"></textarea>
       <label class="hint" style="display:flex;align-items:center;gap:var(--s2);white-space:nowrap"><input type="checkbox" id="tfAprov"> exige aprovação</label>
       <button class="btn primary small" data-act="criar-tarefa" style="padding:0 var(--s5)">Criar e correr</button>
     </div>
@@ -4067,11 +4069,13 @@ async function act(name, el, ev) {
     if (name === 'criar-tarefa') {
       const tipo = $('#tfTipo')?.value || '';
       const ent = String($('#tfEnt')?.value || '').trim();
+      /* 1.89.0 · o pedido escrito vale para qualquer área, não só para o escritório */
+      const texto = String($('#tfTexto')?.value || '').trim();
       const aprov = !!$('#tfAprov')?.checked;
       if (!tipo) { toast('Escolhe o tipo de tarefa.', true); return; }
       const meta = S.tiposTarefa.find(t => t.id === tipo) || {};
       const entidade = String(ent).startsWith('p_') ? 'projeto' : String(ent).startsWith('l_') ? 'lead' : '';
-      const r = await call('/ops/tarefas', 'POST', { kind: tipo, entityId: ent, entidade, aprovacao: aprov, correr: true });
+      const r = await call('/ops/tarefas', 'POST', { kind: tipo, entityId: ent, entidade, aprovacao: aprov, correr: true, ...(texto ? { texto } : {}) });
       const t = r.tarefa;
       toast(t.state === 'succeeded' ? `Tarefa concluída (${meta.label || tipo}).` : t.state === 'awaiting_approval' ? 'Tarefa à espera da tua aprovação.' : `A tarefa não passou: ${t.error || 'sem motivo'}`, t.state !== 'succeeded' && t.state !== 'awaiting_approval');
       S.addingTask = false;

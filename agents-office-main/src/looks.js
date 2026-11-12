@@ -38,6 +38,8 @@ const TABLE = {
   dash:   { style: 'pixie',    variant: 0, female: true,  hat: 'cap',    beard: 'none',      glasses: false },
   comply: { style: 'bun',      variant: 0, female: true,  hat: 'none',   beard: 'none',      glasses: true },
   atend:  { style: 'bob',      variant: 3, female: true,  hat: 'none',   beard: 'none',      glasses: false },
+  ata:    { style: 'curly',    variant: 3, female: false, hat: 'none',   beard: 'none',      glasses: true },
+  faq:    { style: 'pixie',    variant: 3, female: true,  hat: 'none',   beard: 'none',      glasses: false },
   plan:   { style: 'sidepart', variant: 2, female: false, hat: 'none',   beard: 'none',      glasses: false },
   // ── PROSPEÇÃO (sales) ─────────────────────────────────────────────────────
   pros:   { style: 'quiff',    variant: 0, female: false, hat: 'none',   beard: 'stubble',   glasses: false },

@@ -36,7 +36,7 @@ test('cada tipo de tarefa tem uma rotina escrita, com o alvo certo', () => {
   /* 1.79.0 · entrou o `escritorio`: o trabalho escrito à mão na barra da cena.
      O alvo dele não é um lead nem um projeto — é o pedido do dono. */
   /* 1.88.0 · 6 de antes + 11 rotinas dos consultivos */
-  assert.deepEqual(Object.keys(ROTINAS).sort(), ['briefing', 'caso_estudo', 'codigo', 'consentimento', 'contrato', 'crescimento', 'documentacao', 'escritorio', 'investigar', 'mensagem', 'oportunidade', 'plano_projeto', 'qa', 'renovacao', 'seguranca', 'seo_pagina', 'triagem']);
+  assert.deepEqual(Object.keys(ROTINAS).sort(), ['ata', 'briefing', 'caso_estudo', 'codigo', 'consentimento', 'contrato', 'crescimento', 'documentacao', 'escritorio', 'faq', 'investigar', 'mensagem', 'oportunidade', 'plano_projeto', 'qa', 'renovacao', 'seguranca', 'seo_pagina', 'triagem']);
   for (const [id, r] of Object.entries(ROTINAS)) {
     assert.ok(['lead', 'projeto', 'pedido'].includes(r.alvo), `${id}: alvo tem de ser lead, projeto ou o pedido escrito`);
     assert.ok(r.titulo.length > 3, `${id}: falta título`);

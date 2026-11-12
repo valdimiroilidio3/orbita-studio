@@ -1,3 +1,38 @@
+## 1.89.0 — texto livre em todas as áreas e a sala do Comando cresce (A9, 12 nov 2026)
+
+O dono pediu duas coisas. Primeiro, que o pedido escrito à mão deixe de ser
+exclusivo do escritório: qualquer tipo de trabalho aceita agora um texto livre.
+Segundo, que os dois lugares que faltavam para a meta de 60 agentes entrem no
+fim da sala do Comando, e que a sala cresça para os acomodar.
+
+- Servidor (`api/_tarefas.mjs`): `criarECorrer` guarda o pedido em
+  `payload.pedido` para qualquer tipo. Sem entidade, o pedido é o alvo. Com
+  entidade (lead ou projeto), o pedido junta-se ao contexto real da base, sob
+  «Pedido de quem pediu». Se a coluna `payload` não existir, a tarefa é
+  recusada com a razão (`orbita_1_79_0.sql`); o texto não se perde.
+- Mesa (`src/mesa.js`): o formulário «Nova tarefa» ganha o campo «O que queres
+  que faça (opcional)». O modo local (`src/localapi.js`) mostra o pedido na
+  tarefa criada.
+- Dois lugares novos, ambos no Comando (4.ª fila, junto à entrada):
+  `ata` (Atas de reunião: decisões, ações e o que ficou por confirmar, só o que
+  foi dito) e `faq` (Perguntas frequentes do cliente, com «[a confirmar]» onde
+  faltam dados). Cada um com rotina própria, posto e aparência única.
+- Sala: `emails` (Comando) passa de profundidade 32 para 40, com uma fila a
+  mais. Nenhum lugar existente se mexeu; `officeProblems` continua vazio.
+
+Escritório: 49 lugares · 18 com trabalho próprio · 31 consultivos · 19 tipos de
+trabalho.
+
+Testes: `tarefas-livres.test.mjs` (7 — pedido sem entidade, com entidade, sem
+texto, base sem a coluna, todas as áreas aceitam o texto, os dois lugares têm
+rotina, ata sem resposta falha). Atualizados os números fixos de
+`elenco`, `localapi`, `office`, `a11y`, `rotinas-consultivos` e `tarefas`.
+`office.test.mjs` compara agora Financeiro com Marketing para a fila 2, porque
+Prospeção cresceu para a profundidade nova.
+
+Ainda por fazer: a verificação visual da sala nova (o dono confirma no
+preview; nesta VM não há browser para captura).
+
 ## 1.88.0 — onze consultivos passam a ter trabalho próprio (A9, 11 nov 2026)
 
 O alvo 1.0 pede que cada agente tenha um ofício verificável: uma rotina real, a

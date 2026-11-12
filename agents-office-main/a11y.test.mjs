@@ -6,7 +6,7 @@
 // módulo que ninguém executa é uma promessa, não uma garantia. Estes testes executam-no.
 //
 // O que fica provado:
-//   · as 7 salas e os 47 agentes existem, e cada um é um <button> a sério (não um div com
+//   · as 7 salas e os 49 agentes existem, e cada um é um <button> a sério (não um div com
 //     `role="button"`), logo Enter e Espaço funcionam por semântica do browser;
 //   · abrir move o foco para dentro, fechar devolve-o a quem abriu, Esc fecha;
 //   · Tab circula dentro da lista, e Shift+Tab também — não se foge para a cena;
@@ -81,7 +81,7 @@ const tecla = (doc, alvo, key, extra = {}) =>
 
 /* ---------- 1. o que é preciso para navegar ---------- */
 
-test('monta as 7 salas e os 47 agentes, e cada agente é um <button> a sério', () => {
+test('monta as 7 salas e os 49 agentes, e cada agente é um <button> a sério', () => {
   const { doc, api } = montar();
   assert.equal(api.el.id, 'officeIndex');
   assert.equal(api.el.getAttribute('role'), 'dialog');
@@ -94,7 +94,7 @@ test('monta as 7 salas e os 47 agentes, e cada agente é um <button> a sério', 
   // `button` (e não `div role=button`): é o que dá Enter e Espaço de graça e o que o
   // leitor de ecrã anuncia como «botão». Um div com role seria uma imitação.
   const agentes = api.el.querySelectorAll('button.oi-agent');
-  assert.equal(AGENTS_REAIS.length, 47, 'o escritório tem 47 agentes: se este número mudar, o teste muda com ele');
+  assert.equal(AGENTS_REAIS.length, 49, 'o escritório tem 49 agentes: se este número mudar, o teste muda com ele');
   assert.equal(agentes.length, AGENTS_REAIS.length);
   for (const b of agentes) {
     assert.equal(b.tagName, 'BUTTON');
@@ -119,7 +119,7 @@ test('o centro não inventa agentes: diz, por palavras, o que lá está', () => 
 test('a ordem de tabulação é: salas e agentes na ordem dos dados, e o total é o esperado', () => {
   const { api } = montar();
   const lista = api.focusables();
-  // 1 fechar + 7 salas + 47 agentes
+  // 1 fechar + 7 salas + 49 agentes
   assert.equal(lista.length, 1 + 7 + AGENTS_REAIS.length);
   // agrupados por sala (a ordem dos dados), e todos presentes exactamente uma vez
   const ids = lista.filter((n) => n.dataset.agent).map((n) => n.dataset.agent);
@@ -252,7 +252,7 @@ test('refresh() volta a ler o estado sem perder o sítio', () => {
 test('o texto é PT-PT e conta o que está lá', () => {
   const { api, doc } = montar();
   const t = api.el.textContent;
-  assert.match(t, /7 salas · 47 agentes/);
+  assert.match(t, /7 salas · 49 agentes/);
   assert.match(t, /Tab/);
   assert.match(t, /Enter/);
   assert.match(t, /Esc/);
