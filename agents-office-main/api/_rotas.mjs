@@ -1758,6 +1758,14 @@ export async function responder(repo, {
      estava a correr, mesmo com uma tarefa a correr. Agora cada sala leva as
      contagens reais (a correr, na fila, à espera de ti, feitas, falhadas), a
      última tarefa e a última falha — e o resumo soma o que existe. */
+  /* 1.87.0 · o painel «Falhas» (A5): o que falhou, por origem, com a última falha
+     real e a razão de cada origem que não se conseguiu ler. Só leitura. */
+  if (caminhoLimpo === '/ops/falhas' && m === 'GET') {
+    const { painelDeFalhas } = await import('./_falhas.mjs');
+    const dias = Math.max(1, Math.min(90, Number(qs.get('dias')) || 7));
+    return { status: 200, corpo: await painelDeFalhas(repo, { janelaDias: dias, limite: Number(qs.get('limite')) || 25, env }) };
+  }
+
   if (caminhoLimpo === '/ops/agentes') {
     /* uma linha vazia no repositório não é uma tarefa: filtra-se antes de contar */
     const tarefas = (await repo.tarefas.list(200)).filter(Boolean);
