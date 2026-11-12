@@ -1,3 +1,20 @@
+## 1.89.3 — a aprovação tem reação no escritório (12 nov 2026)
+
+Ao aprovar, o posto festeja de pé; ao recusar, abate-se na cadeira. Antes,
+`resolveApproval` escrevia as janelas `cheerUntil` / `slumpUntil`, mas o ciclo de
+desenho nunca as lia: só aparecia o emoji ✅ / ❌.
+
+- `src/main.js` (ciclo de desenho): as duas janelas são lidas antes de «a
+  trabalhar», com prioridade sobre a sala a ouvir.
+- `cheer-slump.test.mjs` (4) prova que as janelas são escritas, lidas, têm a
+  pose correspondente e libertam as teclas.
+- Prova medida no browser (`registo.json`, em `/home/user/.chk/estados/`): antes da
+  correção o braço ficava em -0,3 em todos os estados; depois, ao aprovar sobe para
+  -1,5 e o corpo fica de pé (0,5); ao recusar desce (corpo 0,37) e o braço vai para -1,4.
+
+Nota: a transição é lenta na sandbox, porque o WebGL em software corre a poucos
+fotogramas por segundo. No computador do dono é mais rápida.
+
 ## 1.89.2 — a vista da IA no telemóvel (12 nov 2026)
 
 O dono pediu que o espaço da IA respondesse melhor no telemóvel. Provado num
