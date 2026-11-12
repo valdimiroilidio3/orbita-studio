@@ -46,10 +46,57 @@ test('motor: sem CLI e sem chave resulta em sem-motor, nunca em sucesso falso', 
   assert.match(r.motivo, /Nenhum motor/);
 });
 
-test('motor: escolhe CLI primeiro quando existe e API quando só há chave', () => {
-  assert.equal(escolherMotor({ env: {}, detetarCli: () => true }).motor, 'claude-cli');
+test('motor: por omissão usa a API (se configurada), depois o gratuito; o Claude Code nunca entra sozinho', () => {
+  const perguntar = async () => '';
   const env = { ORBITA_CORE_API_URL: 'https://x.test/v1', ORBITA_CORE_API_KEY: 'k' };
-  assert.equal(escolherMotor({ env, detetarCli: () => false }).motor, 'api');
+  assert.equal(escolherMotor({ env, detetarCli: () => true, perguntar }).motor, 'api');
+  assert.equal(escolherMotor({ env: {}, detetarCli: () => true, perguntar }).motor, 'gratis');
+  assert.equal(escolherMotor({ env: {}, detetarCli: () => true }).motor, 'sem-motor', 'com CLI instalado e sem gratuito, não se usa o Claude Code por omissão');
+});
+
+test('motor gratuito: sem função de pergunta fica sem-motor, com razão', () => {
+  const r = escolherMotor({ preferido: 'gratis', env: {} });
+  assert.equal(r.motor, 'sem-motor');
+  assert.match(r.motivo, /não está ligado/);
+});
+
+test('motor gratuito: corre um agente com a função injetada e escreve os ficheiros', async () => {
+  const pasta = tmp();
+  const pedidos = [];
+  const perguntar = async (system, user) => { pedidos.push({ system, user }); return '=== ficheiro: site/index.html ===\n<h1>Olá</h1>\n=== fim ==='; };
+  const r = await executarAgente({ motor: escolherMotor({ preferido: 'gratis', perguntar }), agente: agente('dev-frontend'), tarefa: 't', entregas: ['site/index.html'], pasta });
+  assert.equal(r.ok, true);
+  assert.equal(r.motor, 'gratis');
+  assert.equal(fs.readFileSync(path.join(pasta, 'site/index.html'), 'utf8'), '<h1>Olá</h1>');
+  assert.match(pedidos[0].system, /=== ficheiro: CAMINHO ===/, 'o formato de blocos segue no pedido');
+  assert.match(pedidos[0].user, /Desenvolvedor Frontend/);
+});
+
+test('motor gratuito: se nenhum modelo responde, a etapa fica em erro com a causa (sem inventar ficheiros)', async () => {
+  const pasta = tmp();
+  const perguntar = async () => { throw new Error('todos os modelos falharam'); };
+  const r = await executarAgente({ motor: escolherMotor({ preferido: 'gratis', perguntar }), agente: agente('dev-frontend'), tarefa: 't', entregas: ['a.html'], pasta });
+  assert.equal(r.ok, false);
+  assert.equal(r.estado, 'erro');
+  assert.match(r.erro, /nenhum modelo gratuito respondeu: todos os modelos falharam/);
+  assert.deepEqual(fs.readdirSync(pasta), []);
+});
+
+test('motor gratuito: resposta sem blocos não escreve nada', async () => {
+  const pasta = tmp();
+  const perguntar = async () => 'desculpa, não posso';
+  const r = await executarAgente({ motor: escolherMotor({ preferido: 'gratis', perguntar }), agente: agente('dev-frontend'), tarefa: 't', entregas: ['a.html'], pasta });
+  assert.equal(r.estado, 'sem-ficheiros');
+  assert.equal(fs.existsSync(path.join(pasta, 'a.html')), false);
+});
+
+test('motor gratuito: um caminho fora do projeto recusa a resposta inteira', async () => {
+  const pasta = tmp();
+  const perguntar = async () => '=== ficheiro: ok.html ===\nbom\n=== fim ===\n=== ficheiro: ../fuga.txt ===\nmau\n=== fim ===';
+  const r = await executarAgente({ motor: escolherMotor({ preferido: 'gratis', perguntar }), agente: agente('dev-frontend'), tarefa: 't', entregas: ['ok.html'], pasta });
+  assert.equal(r.ok, false);
+  assert.match(r.erro, /fora do projeto/);
+  assert.equal(fs.existsSync(path.join(pasta, 'ok.html')), false, 'nada fica a meio');
 });
 
 test('motor: forçar um motor indisponível diz porquê', () => {

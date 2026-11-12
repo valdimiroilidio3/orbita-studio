@@ -12,6 +12,7 @@ import path from 'node:path';
 import { AGENTES, DIVISOES } from '../orbita-core/src/elenco.mjs';
 import { FLUXO, criarProjeto, correrFluxo } from '../orbita-core/src/equipa.mjs';
 import { escolherMotor } from '../orbita-core/src/motores.mjs';
+import * as ai from './providers.mjs';
 
 export const LIMITE_NOME = 80;
 export const LIMITE_PEDIDO = 4000;
@@ -22,13 +23,26 @@ const VALIDADE_MOTOR_MS = 60_000;
 
 export const raizProjetos = (dataDir) => path.join(dataDir, 'empresa', 'projetos');
 
+/**
+ * Motor gratuito do escritório: a cadeia `gratis` (LLM7 → OVH → OpenCode Zen → Pollinations),
+ * sem chave. Devolve `perguntar(sistema, pedido) → texto`, que é tudo o que o núcleo precisa.
+ * A cadeia não tem como saber de antemão se algum modelo responde: a falha aparece na chamada
+ * (e o núcleo regista-a na etapa), por isso aqui não há «disponível» a verificar.
+ */
+export function perguntarGratis(cfg = {}) {
+  return async (sistema, pedido) => {
+    const d = { ...ai.define('gratis', cfg), available: true };
+    return ai.makeRunner(d, cfg).ask(sistema, pedido, { maxTokens: 4000 });
+  };
+}
+
 /** Esquece o motor detetado (testes, ou depois de instalar o Claude Code sem reiniciar). */
 export function limparCacheMotor() { cacheMotor = { quando: 0, valor: null }; }
 
-/** Motor a usar agora. Cacheado 60 s, porque `claude --version` é síncrono. */
-export function motorAgora(env = process.env, { agora = Date.now(), detetar } = {}) {
+/** Motor a usar agora. Cacheado 60 s (o Claude Code só é detetado se for pedido à mão). */
+export function motorAgora(env = process.env, { agora = Date.now(), detetar, perguntar } = {}) {
   if (cacheMotor.valor && agora - cacheMotor.quando < VALIDADE_MOTOR_MS) return cacheMotor.valor;
-  const valor = detetar ? escolherMotor({ env, detetarCli: detetar }) : escolherMotor({ env });
+  const valor = escolherMotor({ env, perguntar, ...(detetar ? { detetarCli: detetar } : {}) });
   cacheMotor = { quando: agora, valor };
   return valor;
 }
@@ -53,8 +67,8 @@ function resumo(raiz, id) {
 }
 
 /** Estado geral: equipa, fluxo, motor e projetos. Não expõe chaves. */
-export function estado({ dataDir, env = process.env, agora, detetar } = {}) {
-  const motor = motorAgora(env, { agora, detetar });
+export function estado({ dataDir, env = process.env, agora, detetar, perguntar = perguntarGratis() } = {}) {
+  const motor = motorAgora(env, { agora, detetar, perguntar });
   return {
     divisoes: DIVISOES,
     agentes: AGENTES.map(({ id, divisao, nome, papel }) => ({ id, divisao, nome, papel })),
@@ -72,7 +86,7 @@ export function validarPedido(b = {}) {
   if (nome.length > LIMITE_NOME) return { erro: `o nome tem no máximo ${LIMITE_NOME} caracteres` };
   if (!pedido) return { erro: 'falta o pedido' };
   if (pedido.length > LIMITE_PEDIDO) return { erro: `o pedido tem no máximo ${LIMITE_PEDIDO} caracteres` };
-  if (b.motor !== undefined && !['claude-cli', 'api'].includes(b.motor)) return { erro: 'motor inválido: usa claude-cli ou api' };
+  if (b.motor !== undefined && !['gratis', 'api', 'claude-cli'].includes(b.motor)) return { erro: 'motor inválido: usa gratis, api ou claude-cli' };
   return { nome, pedido, motor: b.motor };
 }
 
@@ -80,8 +94,10 @@ export function validarPedido(b = {}) {
  * Cria o projeto e começa o fluxo em segundo plano. Não espera pelo fim (pode levar minutos).
  * Sem motor, não cria nada: devolve o motivo.
  */
-export function criar({ dataDir, nome, pedido, motor: preferido, env = process.env, fetchImpl, agora, detetar }) {
-  const m = preferido ? escolherMotor({ preferido, env, detetarCli: detetar }) : motorAgora(env, { agora, detetar });
+export function criar({ dataDir, nome, pedido, motor: preferido, env = process.env, fetchImpl, agora, detetar, perguntar = perguntarGratis() }) {
+  const m = preferido
+    ? escolherMotor({ preferido, env, perguntar, ...(detetar ? { detetarCli: detetar } : {}) })
+    : motorAgora(env, { agora, detetar, perguntar });
   if (m.motor === 'sem-motor') return { status: 422, corpo: { erro: 'sem motor', motivo: m.motivo } };
   const raiz = raizProjetos(dataDir);
   fs.mkdirSync(raiz, { recursive: true });

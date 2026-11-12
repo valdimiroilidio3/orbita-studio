@@ -24,7 +24,7 @@ const ENV_API = { ORBITA_CORE_API_URL: 'https://fornecedor.test/v1', ORBITA_CORE
 
 test('estado: equipa, fluxo e motor, sem projetos ainda', () => {
   const dataDir = tmp();
-  const e = empresa.estado({ dataDir, env: {}, agora: 1, detetar: SEM });
+  const e = empresa.estado({ dataDir, env: {}, agora: 1, detetar: SEM, perguntar: null });
   assert.equal(Object.keys(e.divisoes).length, 3);
   assert.equal(e.agentes.length, 14);
   assert.equal(e.fluxo.length, 10);
@@ -37,7 +37,8 @@ test('validarPedido: recusa nome vazio, pedido vazio, nome longo e motor desconh
   assert.match(empresa.validarPedido({ nome: '', pedido: 'x' }).erro, /nome/);
   assert.match(empresa.validarPedido({ nome: 'a', pedido: '   ' }).erro, /pedido/);
   assert.match(empresa.validarPedido({ nome: 'a'.repeat(81), pedido: 'x' }).erro, /máximo/);
-  assert.match(empresa.validarPedido({ nome: 'a', pedido: 'x', motor: 'gratis' }).erro, /motor inválido/);
+  assert.match(empresa.validarPedido({ nome: 'a', pedido: 'x', motor: 'ollama' }).erro, /motor inválido/);
+  assert.equal(empresa.validarPedido({ nome: 'a', pedido: 'x', motor: 'gratis' }).motor, 'gratis');
   const ok = empresa.validarPedido({ nome: '  Lista  ', pedido: ' x ' });
   assert.equal(ok.nome, 'Lista');
   assert.equal(ok.pedido, 'x');
@@ -45,7 +46,7 @@ test('validarPedido: recusa nome vazio, pedido vazio, nome longo e motor desconh
 
 test('criar sem motor não cria pasta nenhuma e diz porquê', () => {
   const dataDir = tmp();
-  const r = empresa.criar({ dataDir, nome: 'Sem motor', pedido: 'x', env: {}, agora: 1, detetar: SEM });
+  const r = empresa.criar({ dataDir, nome: 'Sem motor', pedido: 'x', env: {}, agora: 1, detetar: SEM, perguntar: null });
   assert.equal(r.status, 422);
   assert.equal(r.corpo.erro, 'sem motor');
   assert.equal(fs.existsSync(path.join(dataDir, 'empresa', 'projetos')), false);
@@ -63,7 +64,7 @@ test('criar com API: arranca o fluxo, escreve as entregas e fica concluído', as
   assert.ok(p.etapas.every((e) => e.estado === 'concluido'), JSON.stringify(p.etapas.map((e) => e.estado)));
   assert.equal(p.passagens.length, 9);
   assert.ok(fs.existsSync(path.join(dataDir, 'empresa', 'projetos', 'lista-de-compras', 'site', 'index.html')));
-  const e = empresa.estado({ dataDir, env: {}, agora: 2, detetar: SEM });
+  const e = empresa.estado({ dataDir, env: {}, agora: 2, detetar: SEM, perguntar: null });
   assert.equal(e.projetos[0].estado, 'concluido');
   assert.equal(e.projetos[0].etapasFeitas, 10);
 });
@@ -85,11 +86,64 @@ test('lerProjeto: recusa ids que não são slugs (sem fugas de caminho) e devolv
   assert.equal(empresa.lerProjeto({ dataDir, id: undefined }), null);
 });
 
-test('motor escolhido por tarefa: CLI quando existe, senão API', () => {
+test('motor escolhido por tarefa: API se o servidor a tiver, senão gratuito; o Claude Code só se for pedido', async () => {
   empresa.limparCacheMotor();
   const dataDir = tmp();
-  const cli = empresa.estado({ dataDir, env: ENV_API, agora: 10, detetar: () => true });
-  assert.equal(cli.motor.motor, 'claude-cli');
-  const api = empresa.estado({ dataDir, env: ENV_API, agora: 100000, detetar: SEM });
+  const perguntar = async () => '';
+  const api = empresa.estado({ dataDir, env: ENV_API, agora: 10, detetar: () => true, perguntar });
   assert.equal(api.motor.motor, 'api');
+  empresa.limparCacheMotor();
+  const gratis = empresa.estado({ dataDir, env: {}, agora: 100000, detetar: () => true, perguntar });
+  assert.equal(gratis.motor.motor, 'gratis', 'com CLI instalado, por omissão não se usa o Claude Code');
+  empresa.limparCacheMotor();
+  const cli = empresa.criar({ dataDir, nome: 'Com CLI', pedido: 'x', motor: 'claude-cli', env: {}, detetar: () => true, perguntar: null });
+  assert.equal(cli.status, 202, 'pedido à mão, o CLI é usado');
+  assert.equal(cli.corpo.motor, 'claude-cli');
+  await empresa.esperarFluxo(cli.corpo.id);
+});
+
+test('motor gratuito: corre o fluxo com a função de pergunta injetada (sem rede)', async () => {
+  const dataDir = tmp();
+  const pedidos = [];
+  const perguntar = async (sistema, pedido) => {
+    pedidos.push(sistema);
+    // o fornecedor falso devolve as entregas pedidas (lidas do próprio pedido)
+    const m = pedido.match(/Escreves estas entregas[^:]*: (.+?)\.?$/m);
+    const lista = m ? m[1].split(', ') : [];
+    return lista.map((f) => `=== ficheiro: ${f} ===\nconteúdo de ${f}\n=== fim ===`).join('\n');
+  };
+  const r = empresa.criar({ dataDir, nome: 'Gratuito', pedido: 'Uma página simples.', motor: 'gratis', env: {}, perguntar });
+  assert.equal(r.status, 202);
+  assert.equal(r.corpo.motor, 'gratis');
+  await empresa.esperarFluxo(r.corpo.id);
+  const p = empresa.lerProjeto({ dataDir, id: 'gratuito' });
+  assert.ok(p.etapas.every((e) => e.estado === 'concluido'), JSON.stringify(p.etapas.map((e) => e.estado)));
+  assert.equal(pedidos.length, 10, 'uma chamada por etapa');
+  assert.ok(pedidos.every((x) => x.includes('=== ficheiro: CAMINHO ===')));
+});
+
+test('motor gratuito de ponta a ponta: a cadeia real (perguntarGratis) corre com a fronteira de rede substituída', async () => {
+  const dataDir = tmp();
+  const original = globalThis.fetch;
+  const chamadas = [];
+  globalThis.fetch = async (url, opts) => {
+    chamadas.push(String(url));
+    const pedido = JSON.parse(opts.body).messages.at(-1).content;
+    const m = pedido.match(/Escreves estas entregas[^:]*: (.+?)\.?$/m);
+    const lista = m ? m[1].split(', ') : [];
+    const content = lista.map((f) => `=== ficheiro: ${f} ===\nconteúdo de ${f}\n=== fim ===`).join('\n');
+    const corpo = JSON.stringify({ choices: [{ message: { content } }] });
+    return { ok: true, status: 200, text: async () => corpo, json: async () => JSON.parse(corpo) };
+  };
+  try {
+    const r = empresa.criar({ dataDir, nome: 'Cadeia Real', pedido: 'Teste.', motor: 'gratis', env: {} });
+    assert.equal(r.status, 202, JSON.stringify(r.corpo));
+    await empresa.esperarFluxo(r.corpo.id);
+    const p = empresa.lerProjeto({ dataDir, id: 'cadeia-real' });
+    assert.ok(p.etapas.every((e) => e.estado === 'concluido'), JSON.stringify(p.etapas.map((e) => e.estado)));
+    assert.ok(chamadas.length >= 10, 'a cadeia gratuita foi chamada');
+    assert.ok(chamadas.every((u) => !u.includes('fornecedor.test')), 'nada foi para fora da cadeia gratuita');
+  } finally {
+    globalThis.fetch = original;
+  }
 });

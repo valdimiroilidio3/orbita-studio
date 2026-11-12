@@ -24,6 +24,7 @@ const nomeDo = (estado, id) => (estado && estado.agentes || []).find((a) => a.id
 
 /** Motor em uma linha: o que seria usado, ou o motivo de não haver nenhum. */
 export function htmlMotor(m = {}) {
+  if (m.motor === 'gratis') return '<span class="em-pill ok">motor · gratuito (sem chave)</span>';
   if (m.motor === 'claude-cli') return '<span class="em-pill ok">motor · Claude Code desta máquina</span>';
   if (m.motor === 'api') return `<span class="em-pill ok">motor · API${m.modelo ? ' · ' + esc(m.modelo) : ''}</span>`;
   return `<span class="em-pill off">sem motor — ${esc(m.motivo || 'nenhum motor disponível')}</span>`;

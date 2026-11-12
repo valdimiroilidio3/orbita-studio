@@ -16,6 +16,7 @@ const estado = {
 
 test('htmlMotor: diz o motor, ou porque não há nenhum', () => {
   assert.match(painel.htmlMotor({ motor: 'claude-cli' }), /Claude Code/);
+  assert.match(painel.htmlMotor({ motor: 'gratis' }), /gratuito/);
   assert.match(painel.htmlMotor({ motor: 'api', modelo: 'm' }), /API · m/);
   assert.match(painel.htmlMotor({ motor: 'sem-motor', motivo: 'sem chave' }), /sem motor — sem chave/);
 });

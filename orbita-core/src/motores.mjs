@@ -1,9 +1,12 @@
-// Motores de execução. Dois caminhos, escolhidos por tarefa:
-//   · claude-cli: o Claude Code instalado nesta máquina, a correr dentro da pasta do projeto.
-//                 Escreve os ficheiros diretamente. Usa a sessão de quem o instalou.
+// Motores de execução. Três caminhos, escolhidos por tarefa:
+//   · gratis:     um modelo gratuito SEM chave (no escritório: a cadeia LLM7 → OVH → OpenCode → Pollinations).
+//                 O núcleo não sabe falar com fornecedores: recebe uma função `perguntar(system, user)`
+//                 de quem o usa, e só converte a resposta em ficheiros.
 //   · api:        um endpoint compatível com OpenAI (chat completions). A chave fica no ambiente
 //                 do servidor (ORBITA_CORE_API_KEY) e nunca é escrita em ficheiros nem em registos.
-//   · sem-motor:  nenhum dos dois está disponível. Nada é inventado: a etapa para e fica registada.
+//   · claude-cli: o Claude Code desta máquina, dentro da pasta do projeto. Só quando é pedido à mão:
+//                 deixou de ser o motor por omissão.
+//   · sem-motor:  nenhum caminho disponível. Nada é inventado: a etapa para e fica registada.
 //
 // Nenhum caminho usa shell. Os ficheiros que um agente escreve ficam sempre dentro da pasta do projeto.
 
@@ -11,7 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const MOTORES = ['claude-cli', 'api'];
+export const MOTORES = ['gratis', 'api', 'claude-cli'];
 const TEMPO_MAX_MS = 10 * 60 * 1000;
 const MAX_SAIDA = 2 * 1024 * 1024;
 
@@ -27,20 +30,26 @@ export function claudeDisponivel(bin = 'claude') {
 
 /**
  * Escolhe o motor. Com `preferido` força esse motor e diz claramente se não está disponível.
- * Sem `preferido`: CLI se existir, senão API se houver URL e chave, senão sem-motor.
+ * Sem `preferido`, por esta ordem: API (se o servidor tiver URL e chave, escolha deliberada),
+ * gratuito (se houver `perguntar`), senão sem-motor. O Claude Code só entra se for pedido à mão.
  */
-export function escolherMotor({ preferido, env = process.env, detetarCli = claudeDisponivel } = {}) {
+export function escolherMotor({ preferido, env = process.env, detetarCli = claudeDisponivel, perguntar } = {}) {
   const bin = env.ORBITA_CORE_CLAUDE_BIN || 'claude';
   const temApi = Boolean(env.ORBITA_CORE_API_URL && env.ORBITA_CORE_API_KEY);
+  if (preferido === 'gratis') {
+    return typeof perguntar === 'function'
+      ? { motor: 'gratis', perguntar }
+      : { motor: 'sem-motor', motivo: 'O motor gratuito não está ligado a este processo (falta a função de pergunta do escritório).' };
+  }
   if (preferido === 'claude-cli') {
     return detetarCli(bin) ? { motor: 'claude-cli', bin } : { motor: 'sem-motor', motivo: 'O CLI do Claude Code não responde a `claude --version` nesta máquina.' };
   }
   if (preferido === 'api') {
     return temApi ? { motor: 'api', modelo: env.ORBITA_CORE_MODEL || '' } : { motor: 'sem-motor', motivo: 'Faltam ORBITA_CORE_API_URL ou ORBITA_CORE_API_KEY no ambiente do servidor.' };
   }
-  if (detetarCli(bin)) return { motor: 'claude-cli', bin };
   if (temApi) return { motor: 'api', modelo: env.ORBITA_CORE_MODEL || '' };
-  return { motor: 'sem-motor', motivo: 'Nenhum motor disponível: instala o Claude Code (claude) ou define ORBITA_CORE_API_URL e ORBITA_CORE_API_KEY no servidor.' };
+  if (typeof perguntar === 'function') return { motor: 'gratis', perguntar };
+  return { motor: 'sem-motor', motivo: 'Nenhum motor disponível: liga o motor gratuito do escritório, ou define ORBITA_CORE_API_URL e ORBITA_CORE_API_KEY no servidor.' };
 }
 
 /** Caminho dentro da pasta do projeto, ou erro. Recusa absolutos, `..` e fugas por links. */
@@ -92,6 +101,7 @@ export async function executarAgente({ motor, agente, tarefa, entregas, pasta, t
   if (motor.motor === 'sem-motor') {
     return { ok: false, motor: 'sem-motor', estado: 'sem-motor', ficheiros: [], erro: motor.motivo };
   }
+  if (motor.motor === 'gratis') return correrPerguntar({ perguntar: motor.perguntar, prompt, pasta, agente });
   if (motor.motor === 'claude-cli') return correrClaudeCli({ bin: motor.bin, prompt, pasta, timeoutMs, agente });
   if (motor.motor === 'api') return correrApi({ prompt, pasta, timeoutMs, env, fetchImpl, modelo: motor.modelo, agente });
   return { ok: false, motor: motor.motor, estado: 'erro', ficheiros: [], erro: `motor desconhecido: ${motor.motor}` };
@@ -123,12 +133,46 @@ function correrClaudeCli({ bin, prompt, pasta, timeoutMs, agente }) {
   });
 }
 
-const FORMATO = [
+export const FORMATO = [
   'Responde só com os ficheiros pedidos, neste formato exato, sem texto fora dos blocos:',
   '=== ficheiro: CAMINHO ===',
   'conteúdo do ficheiro',
   '=== fim ===',
 ].join('\n');
+
+/** Converte a resposta de um modelo em ficheiros. Valida todos os caminhos antes de escrever o
+ *  primeiro, para nada ficar a meio. Serve a todos os motores que devolvem texto. */
+export function escreverBlocos({ texto, pasta, motor, agente }) {
+  const blocos = [...String(texto || '').matchAll(/=== ficheiro: (.+?) ===\n([\s\S]*?)\n=== fim ===/g)];
+  if (!blocos.length) {
+    return { ok: false, motor, estado: 'sem-ficheiros', ficheiros: [], erro: `${agente.nome} respondeu sem blocos de ficheiro` };
+  }
+  let destinos;
+  try {
+    destinos = blocos.map(([, caminho, conteudo]) => ({ alvo: dentroDaPasta(pasta, caminho.trim()), conteudo }));
+  } catch (e) {
+    return { ok: false, motor, estado: 'erro', ficheiros: [], erro: e.message };
+  }
+  const escritos = [];
+  for (const { alvo, conteudo } of destinos) {
+    fs.mkdirSync(path.dirname(alvo), { recursive: true });
+    fs.writeFileSync(alvo, conteudo, 'utf8');
+    escritos.push(path.relative(path.resolve(pasta), alvo));
+  }
+  return { ok: true, motor, estado: 'concluido', ficheiros: escritos };
+}
+
+/** Motor gratuito: pede a resposta à função injetada e escreve os blocos. Nunca lança. */
+export async function correrPerguntar({ perguntar, prompt, pasta, agente }) {
+  let texto;
+  try {
+    texto = await perguntar(FORMATO, prompt);
+  } catch (e) {
+    // a mensagem vem da cadeia gratuita; corta-se para não levar texto longo para o registo
+    return { ok: false, motor: 'gratis', estado: 'erro', ficheiros: [], erro: `nenhum modelo gratuito respondeu: ${String(e?.message || e).slice(0, 300)}` };
+  }
+  return escreverBlocos({ texto, pasta, motor: 'gratis', agente });
+}
 
 async function correrApi({ prompt, pasta, timeoutMs, env, fetchImpl, modelo, agente }) {
   const url = env.ORBITA_CORE_API_URL;
@@ -142,25 +186,7 @@ async function correrApi({ prompt, pasta, timeoutMs, env, fetchImpl, modelo, age
     });
     if (!res.ok) return { ok: false, motor: 'api', estado: 'erro', ficheiros: [], erro: `o fornecedor respondeu HTTP ${res.status}` };
     const j = await res.json();
-    const texto = j?.choices?.[0]?.message?.content || '';
-    const blocos = [...texto.matchAll(/=== ficheiro: (.+?) ===\n([\s\S]*?)\n=== fim ===/g)];
-    if (!blocos.length) {
-      return { ok: false, motor: 'api', estado: 'sem-ficheiros', ficheiros: [], erro: `${agente.nome} respondeu sem blocos de ficheiro` };
-    }
-    // valida todos os caminhos antes de escrever o primeiro: nada fica a meio se um for inválido
-    let destinos;
-    try {
-      destinos = blocos.map(([, caminho, conteudo]) => ({ alvo: dentroDaPasta(pasta, caminho.trim()), conteudo }));
-    } catch (e) {
-      return { ok: false, motor: 'api', estado: 'erro', ficheiros: [], erro: e.message };
-    }
-    const escritos = [];
-    for (const { alvo, conteudo } of destinos) {
-      fs.mkdirSync(path.dirname(alvo), { recursive: true });
-      fs.writeFileSync(alvo, conteudo, 'utf8');
-      escritos.push(path.relative(path.resolve(pasta), alvo));
-    }
-    return { ok: true, motor: 'api', estado: 'concluido', ficheiros: escritos };
+    return escreverBlocos({ texto: j?.choices?.[0]?.message?.content || '', pasta, motor: 'api', agente });
   } catch (e) {
     // sem a chave na mensagem: só o nome do erro e a causa curta
     return { ok: false, motor: 'api', estado: e.name === 'TimeoutError' ? 'tempo-esgotado' : 'erro', ficheiros: [], erro: e.name === 'TimeoutError' ? 'tempo esgotado' : 'falha de ligação ao fornecedor' };

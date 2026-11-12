@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // CLI do núcleo. Uso:
 //   node src/cli.mjs elenco
-//   node src/cli.mjs motor [claude-cli|api]
+//   node src/cli.mjs motor [gratis|api|claude-cli]
 //   node src/cli.mjs criar "Nome do projeto" "pedido em texto livre" [pasta-raiz]
-//   node src/cli.mjs correr <pasta-do-projeto> [claude-cli|api]
+//   node src/cli.mjs correr <pasta-do-projeto> [api|claude-cli]
 // A chave da API lê-se de ORBITA_CORE_API_KEY e nunca é impressa.
 
 import path from 'node:path';
@@ -38,7 +38,7 @@ function main() {
   }
   if (comando === 'correr') {
     const [pasta, preferido] = resto;
-    if (!pasta) throw new Error('uso: correr <pasta-do-projeto> [claude-cli|api]');
+    if (!pasta) throw new Error('uso: correr <pasta-do-projeto> [api|claude-cli]');
     const motor = escolherMotor({ preferido });
     if (motor.motor === 'sem-motor') console.log(`sem motor: ${motor.motivo}`);
     correrFluxo(path.resolve(pasta), { motor }).then((r) => {
@@ -48,7 +48,7 @@ function main() {
     });
     return;
   }
-  console.log('comandos: elenco | motor [claude-cli|api] | criar "Nome" "pedido" [raiz] | correr <pasta> [claude-cli|api]');
+  console.log('comandos: elenco | motor [gratis|api|claude-cli] | criar "Nome" "pedido" [raiz] | correr <pasta> [api|claude-cli]');
   process.exitCode = comando ? 1 : 0;
 }
 
