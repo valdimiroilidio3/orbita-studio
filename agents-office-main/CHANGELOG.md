@@ -1,3 +1,27 @@
+## 1.87.1 — o alerta quando um fornecedor cai (A5, 11 nov 2026)
+
+Fecha o segundo ponto de A5 que faltava no painel «Falhas». Até aqui uma
+falha de fornecedor só aparecia se alguém abrisse a lista; um fornecedor
+que falhava dez pedidos seguidos não se via como «caído».
+
+- `api/_ia/saude.mjs` (novo, puro): por fornecedor, conta as falhas seguidas
+  (das mais recentes para trás), a última resposta boa e o último erro real.
+  Estados: `ok`, `a-falhar` (1–2 falhas), `em-baixo` (3 ou mais seguidas, com
+  a última nas últimas 24 h), `parado` (sem pedidos nas últimas 24 h).
+- Um sucesso devolve o fornecedor a `ok`; o alerta sai sozinho.
+- `/ia/uso` passa a devolver `saude` (o heartbeat) e `alertas`.
+- `/ops/falhas` devolve `alertas`, lidos das mesmas linhas de uso (uma leitura só).
+- Control Center: o alerta aparece por cima do cartão «Falhas» e da secção
+  «Uso e erros», com o último erro e a última resposta boa.
+- Modo local: `alertas: []` — sem base não há heartbeat, e o modo local não
+  inventa um.
+
+Testes: `saude-fornecedores.test.mjs` (12).
+
+Ainda por fazer em A5: prova do restauro (copiar a base → apagar → restaurar →
+50 leads, com data e hora) e os 7 dias sem tarefa pendurada, que contam a partir
+do deploy da 1.87.0.
+
 ## 1.87.0 — o painel «Falhas» (A5, 11 nov 2026)
 
 O alvo 1.0 pede que as falhas se vejam. Cada parte do produto já registava as

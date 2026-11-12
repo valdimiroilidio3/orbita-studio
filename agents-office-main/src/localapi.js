@@ -324,7 +324,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         instalacao: 'modo local — sem motor de IA',
       };
     }
-    if (caminhoLimpo === '/ia/uso') return { resumo: [], ultimos: [], errosRecentes: [], modo: 'local' };
+    if (caminhoLimpo === '/ia/uso') return { resumo: [], ultimos: [], errosRecentes: [], saude: [], alertas: [], modo: 'local' };
     /* As gratuitas, listadas com o estado honesto: existem, estão prontas, e
        nenhuma tem prova registada *neste browser* — porque provar exige o
        servidor. `pronto: false` é a verdade, não um erro. */
@@ -869,7 +869,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
       return {
         ok: true, janelaDias: 7, desde: new Date(desde).toISOString(), quando: new Date(agora).toISOString(),
         total, ultimas24h: lidas.reduce((n, o) => n + o.ultimas24h, 0), origensSemLeitura: porOrigem.length - lidas.length,
-        porOrigem, recentes: ordenadas.slice(0, 25), modo: 'local',
+        porOrigem, recentes: ordenadas.slice(0, 25), modo: 'local', alertas: [],
         frase: `${total} falha(s) nas tarefas deste browser · ${porOrigem.length - lidas.length} origens sem leitura no modo local`,
       };
     }
