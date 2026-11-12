@@ -18,7 +18,9 @@ const res = await build({
   target: 'es2020',
 });
 const js = res.outputFiles[0].text;
-const shell = readFileSync('src/shell.html', 'utf8');
+/* 1.89.1 · a versão do package.json entra no rodapé da página (o dono vê de que build é) */
+const VERSAO_BUILD = String(JSON.parse(readFileSync('package.json', 'utf8')).version || 'desconhecida');
+const shell = readFileSync('src/shell.html', 'utf8').replaceAll('__VERSAO__', VERSAO_BUILD);
 const html = shell.replace('<!--APP-->', () => `<script>${js}</script>`);
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/command-centre-v2.html', html);

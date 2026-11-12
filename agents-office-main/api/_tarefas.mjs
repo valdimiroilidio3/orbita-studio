@@ -24,6 +24,7 @@ import { criarMotor } from './_ia/motor.mjs';
 import { FORNECEDORES } from './_ia/catalogo.mjs';
 /* 1.55.0 · cada tarefa leva o seu orçamento e o seu custo */
 import { orcamento } from './_ia/router.mjs';
+import { garantirEsquemaDaMesa } from './_autoesquema.mjs';
 import { cambioDe, centimosDeMicro, custoDeUso, tectoDeCusto, eurosDeCentimos } from './_dinheiro.mjs';
 
 /** O que cada tipo de tarefa pede ao modelo. `alvo` diz que contexto é preciso. */
@@ -258,6 +259,8 @@ Responde em português de Portugal, em pontos curtos:
   },
   /* 1.89.0 · dois lugares novos no fim do Comando */
   ata: {
+    /* 1.89.1 · uma ata completa (decisões, ações, dúvidas) não cabe em 900 tokens */
+    maxTokens: 1600,
     alvo: 'lead',
     titulo: 'Ata de reunião',
     pedido: (c) => `Transforma as notas desta reunião numa ata, com o que está escrito e nada inventado:
@@ -272,6 +275,8 @@ Responde em português de Portugal, em pontos curtos:
 5. O que não ficou claro nas notas e vale a pena confirmar.`,
   },
   faq: {
+    /* 1.89.1 · 5 a 8 perguntas com resposta: é a rotina com mais texto */
+    maxTokens: 2200,
     alvo: 'projeto',
     titulo: 'Perguntas frequentes',
     pedido: (c) => `Escreve as perguntas frequentes deste projeto, com o que está escrito e nada inventado:
@@ -472,9 +477,28 @@ export async function executarTarefa({ repo, tarefa, env = {}, fetchImpl = fetch
   const t0 = Date.now();
   /* o orçamento desta execução: chamadas, tokens e — 1.55.0 — dinheiro */
   const orc = orcamento({ maxCustoMicroUsd: tectoDeCusto(env) });
+  /* 1.89.1 · o orçamento de SAÍDA é o da rotina (uma ata não cabe nos 900 de
+     uma resposta curta). Se a cadeia inteira devolver vazio, é quase sempre
+     modelo de raciocínio sem espaço para responder: dobra-se o orçamento e
+     tenta-se UMA vez, dentro do mesmo orçamento de custo. */
+  let saidaMax = Number(rotina.maxTokens) || maxTokens;
+  const TECTO_SAIDA = 4000;
+  let tentativas = 0;
   try {
     const m = motor || criarMotor({ repo, env, fetchImpl });
-    const r = await m.pedir('texto', mensagens, { agente: 'orchestrator', maxTokens, temperatura: 0.4, orc });
+    let r;
+    for (;;) {
+      tentativas += 1;
+      try {
+        r = await m.pedir('texto', mensagens, { agente: 'orchestrator', maxTokens: saidaMax, temperatura: 0.4, orc });
+        break;
+      } catch (e) {
+        const todosVazios = e?.codigo === 'todosfalharam' && Array.isArray(e.erros) && e.erros.length
+          && e.erros.every((x) => x.codigo === 'vazio');
+        if (!todosVazios || tentativas >= 2 || saidaMax >= TECTO_SAIDA) throw e;
+        saidaMax = Math.min(saidaMax * 2, TECTO_SAIDA);
+      }
+    }
     const custo = custoDaExecucao({ r, orc, env });
     const texto = String(r?.texto || '').trim();
     if (!texto) {
@@ -544,7 +568,7 @@ export async function registarDesfecho(repo, tarefa, r, { aprovacao = false } = 
 }
 
 /** Cria + corre, que é o que o botão «Criar tarefa» faz na mesa. */
-export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fetch, TIPOS = {}, motor = null } = {}) {
+export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fetch, TIPOS = {}, motor = null, garantir = garantirEsquemaDaMesa } = {}) {
   const tipo = String(corpo?.kind || '').trim();
   if (!TIPOS[tipo]) return { status: 400, corpo: { error: 'tipo de tarefa desconhecido' } };
   const entityId = String(corpo?.entityId || '').trim() || null;
@@ -568,14 +592,27 @@ export async function criarECorrer({ repo, corpo = {}, env = {}, fetchImpl = fet
   /* 1.89.0 · um pedido escrito noutro tipo de trabalho também vai para `payload`.
      Sem a coluna na base, recusa-se com a razão: não se perde o que foi escrito. */
   if (tipo !== 'escritorio' && pedido) {
+    const registo = {
+      ...base, entity_id: entityId, entidade,
+      payload: { pedido }, title: pedido.slice(0, 160),
+    };
     try {
-      tarefa = await repo.tarefas.insert({
-        ...base, entity_id: entityId, entidade,
-        payload: { pedido }, title: pedido.slice(0, 160),
-      });
+      tarefa = await repo.tarefas.insert(registo);
     } catch (e) {
       if (!semColunaNova(e)) throw e;
-      return { status: 400, corpo: { error: 'a base ainda não tem a coluna para o pedido escrito (aplica supabase/orbita_1_79_0.sql) — a tarefa não foi criada, para não perder o texto' } };
+      /* 1.89.1 · a base cura-se sozinha: aplica o esquema versionado (idempotente)
+         e escreve OUTRA vez. Só se a cura falhar é que a tarefa é recusada, com o
+         motivo — e o texto continua no pedido, sem se perder. */
+      const cura = await garantir(repo, env).catch((x) => ({ ok: false, motivo: x.message }));
+      if (!cura?.ok) {
+        return { status: 400, corpo: { error: `a base ainda não tem a coluna para o pedido escrito e a correção automática não resultou (${cura?.erro || cura?.motivo || 'sem motivo'}) — a tarefa não foi criada, para não perder o texto` } };
+      }
+      try {
+        tarefa = await repo.tarefas.insert(registo);
+      } catch (outra) {
+        if (!semColunaNova(outra)) throw outra;
+        return { status: 400, corpo: { error: 'a base foi corrigida mas continua sem a coluna do pedido escrito (supabase/orbita_1_79_0.sql) — a tarefa não foi criada, para não perder o texto' } };
+      }
     }
   } else if (tipo === 'escritorio') {
     const registo = {

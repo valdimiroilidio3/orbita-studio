@@ -26,7 +26,7 @@ import { TOKENS, estadoDosTokens, nomesParecidos } from './_acesso.mjs';
 import { opcoesDeEntrada } from './_entrada.mjs';   // 1.69.0: quem entra e por onde
 /* 1.79.0 · o curador da mesa inteira: se faltar uma tabela, aplica o esquema
    versionado (idempotente) em vez de responder «corre o SQL à mão». */
-import { garantirEsquemaDaMesa } from './_autoesquema.mjs';
+import { garantirEsquemaDaMesa, mesasEmFalta } from './_autoesquema.mjs';
 /* 1.79.2 · os conectores que o SERVIDOR tem, por nome de variável (nunca por
    valor). É a prova pública que a barra do escritório lê sem sessão. */
 import { resumoDosConectores } from './_servicos.mjs';
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
        tabela da mesa, o esquema versionado é aplicado (é idempotente) e a base é
        perguntada outra vez. `esquema` diz o que aconteceu — sem inventar nada. */
     let esquema = null;
-    if (!h.ok && Array.isArray(h.faltam) && h.faltam.length) {
+    if (!h.ok && mesasEmFalta(h).length) {
       esquema = await garantirEsquemaDaMesa(repo, pedido).catch((e) => ({ ok: false, motivo: e.message }));
       if (esquema && esquema.ok) h = await repo.health();
     }

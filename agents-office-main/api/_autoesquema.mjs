@@ -173,9 +173,12 @@ export const garantirEsquemaDaPorta = criarCurador({});
    --------------------------------------------------------------------------- */
 export const FICHEIROS_DA_MESA = FICHEIROS;
 
-/** A sonda da mesa tem tabelas em falta? (aceita o resultado do `repo.health`) */
+/** A sonda da mesa tem tabelas ou colunas em falta? (aceita o resultado do `repo.health`)
+ *  1.89.1 · as colunas entram como `tabela.coluna`: o curador aplica o esquema para elas também. */
 export function mesasEmFalta(h) {
-  return Array.isArray(h?.faltam) ? h.faltam.filter(Boolean) : [];
+  const tabelas = Array.isArray(h?.faltam) ? h.faltam.filter(Boolean) : [];
+  const colunas = Object.entries(h?.colunasFaltam || {}).flatMap(([t, cs]) => (cs || []).map((c) => `${t}.${c}`));
+  return [...tabelas, ...colunas];
 }
 
 export function criarCuradorDaMesa({

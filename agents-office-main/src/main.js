@@ -143,6 +143,7 @@ import { initBrain } from './brain.js';
    o painel das configurações (tema + APIs com sonda real + avisos + painéis). */
 import { readTheme, writeTheme, resolveTheme } from './theme.js';
 import { createNotifier } from './notify.js';
+import { verificarVersao } from './versao.js';
 import { createConfig, readPrefs, writePrefs } from './config.js';
 let tasks = null; // V3 task boards — initialised after the rail constants exist
 
@@ -3163,3 +3164,5 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+/* 1.89.1 · a página diz de que build é e se o servidor já vai noutra versão */
+verificarVersao().catch(() => null);
