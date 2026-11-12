@@ -51,7 +51,8 @@ import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
 import { createPlatform, ensureApiToken } from './platform.mjs'; // 28 out 2026: as APIs reais, a máquina, e o arranque sem passos manuais
-import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
+import * as integrations from './integrations.mjs';
+import * as empresa from './empresa.mjs'; // 12 nov 2026: a base nova de agentes (orbita-core) ligada ao escritório // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as leadsStore from './leads-store.mjs'; // 1.29.0: a lista local de leads, sem fornecedor nenhum agarrado
@@ -1401,6 +1402,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, r.ok ? 200 : 422, r);
     }
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
+    // 12 nov 2026 · a empresa de agentes (Programação, Produto, Design). Ler é público, como as tarefas;
+    // criar um projeto gasta motor e escreve ficheiros, por isso exige ORBITA_API_TOKEN.
+    if (url.pathname === '/api/empresa' && req.method === 'GET') return json(res, 200, empresa.estado({ dataDir: DATA }));
+    const pe = url.pathname.match(/^\/api\/empresa\/projetos\/([^/]+)$/);
+    if (pe && req.method === 'GET') {
+      const p = empresa.lerProjeto({ dataDir: DATA, id: decodeURIComponent(pe[1]) });
+      return p ? json(res, 200, p) : json(res, 404, { error: 'projeto não encontrado' });
+    }
+    if (url.pathname === '/api/empresa/projetos' && req.method === 'POST') {
+      if (!requireIntegrationToken(req, res)) return;
+      let pedido;
+      try { pedido = empresa.validarPedido(await limitedBody(req, 10000)); }
+      catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      if (pedido.erro) return json(res, 400, { error: pedido.erro });
+      const r = empresa.criar({ dataDir: DATA, ...pedido });
+      return json(res, r.status, r.corpo);
+    }
     if (url.pathname === '/api/routines' && req.method === 'GET') return json(res, 200, routinesOut());
     if (url.pathname === '/api/routines' && req.method === 'POST') {
       const b = await body(req);
