@@ -567,6 +567,17 @@ export function poseWork(g, mode, t, dt, con) {
       tg.torsoRx = -0.10;
       tg.headRx = 0.16 + Math.sin(t / 650) * 0.05;
       break;
+    // 3 nov 2026 — 'idle': sem tarefa, o posto está sentado mas não parado. Olha à volta (a cabeça
+    // gira para `u.idleYaw`, que o ciclo de `main.js` define) e balança o tronco devagar. Não pega em
+    // nada nem escreve: é quem espera, não quem trabalha.
+    case 'idle':
+      tg.shLx = -0.30; tg.shLz = -0.35; tg.shRx = -0.30; tg.shRz = 0.35;
+      tg.elbL = 0.55; tg.elbR = 0.55;
+      tg.torsoRx = -0.06 + Math.sin(t / 1100) * 0.04;
+      tg.chestRy = Math.sin(t / 1700) * 0.05;
+      tg.headRx = 0.10 + Math.sin(t / 800) * 0.04;
+      tg.headRy = u.idleYaw || 0;
+      break;
     case 'phone':
       tg.shRx = -2.30; tg.shRz = 0.55; tg.shLx = -0.40; tg.shLz = -0.20;
       tg.elbR = 0.05; tg.elbL = 0.45;
