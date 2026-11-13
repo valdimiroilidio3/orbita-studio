@@ -1,3 +1,39 @@
+## 1.89.4 — a IA no telemóvel, a empresa de agentes e o olhar parado
+
+Sai tudo o que está no ramo desde a 1.89.1, que é a versão em produção. A 1.89.2
+nunca foi publicada (estava no PR #186) e a 1.89.3 foi revertida antes de sair.
+
+**1. A IA no telemóvel (o que era a 1.89.2).** O traço verde dos modelos com teste
+passa a cobrir a linha inteira; os seletores ocupam a largura toda; o campo de
+escrever tem altura para a ajuda inteira; os botões «Provar» e «Descobrir modelos»
+têm 44 px de alvo de toque.
+
+**2. Quem não tem tarefa olha à volta.** O posto sem tarefa deixa de ficar parado:
+a pessoa sentada gira a cabeça para pontos novos a cada ~2,4 s e balança o tronco
+devagar. Não pega em nada e não sugere trabalho. Com reduzir movimento, o olhar
+fica em ±0,2 rad.
+
+**3. A base de agentes da empresa (`orbita-core/`).** Pasta própria, sem código do
+Agents Office. 14 agentes em Programação, Produto e Design. O fluxo tem 10 etapas,
+e cada passagem fica em `handoffs/`. Uma etapa só conta como feita se as entregas
+existirem em disco; o fluxo para na primeira que falha.
+
+**4. Motor por tarefa.** Sem pedido à mão, a ordem é: API (se o servidor tiver
+`ORBITA_CORE_API_URL` e `ORBITA_CORE_API_KEY`), depois o motor gratuito sem chave
+(a cadeia do escritório), depois sem motor. O Claude Code só corre se for pedido.
+
+**5. A gaveta EMPRESA.** Equipa por divisão, projetos e o estado de cada etapa;
+criar e retomar projetos. Só funciona com o servidor local (`serve.mjs`): as rotas
+`/api/empresa` ainda não existem na Vercel, por isso em produção a gaveta mostra
+«não consegui ler a empresa».
+
+**6. Retomar.** Um projeto parado continua da primeira etapa por fazer; as
+concluídas não se refazem.
+
+Provas: `orbita-core` 18/18; empresa e painel 28/28; suíte completa 1627/1627 antes
+da última alteração de CSS, depois dela os 115 testes dos ficheiros tocados.
+Um modelo gratuito real não foi testado (a sandbox não alcança os fornecedores).
+
 ## 1.89.2 — a vista da IA no telemóvel (12 nov 2026)
 
 O dono pediu que o espaço da IA respondesse melhor no telemóvel. Provado num
