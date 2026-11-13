@@ -51,7 +51,8 @@ import * as routines from './routines.mjs';
 import * as usage from './usage.mjs';
 import * as teams from './teams.mjs';
 import { createPlatform, ensureApiToken } from './platform.mjs'; // 28 out 2026: as APIs reais, a máquina, e o arranque sem passos manuais
-import * as integrations from './integrations.mjs'; // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
+import * as integrations from './integrations.mjs';
+import * as empresa from './empresa.mjs'; // 12 nov 2026: a base nova de agentes (orbita-core) ligada ao escritório // 26 out 2026: a ponte para fora (OSM, Gemini, Resend, GitHub, Instagram, Vercel)
 import * as ai from './providers.mjs'; // 25 out 2026: Claude Code · Codex · Gemini · APIs compatíveis
 import { fmtTime, fmtDateTime, fmtDateTimeLong } from './src/time.js'; // 24 horas, num sítio só
 import * as leadsStore from './leads-store.mjs'; // 1.29.0: a lista local de leads, sem fornecedor nenhum agarrado
@@ -913,7 +914,7 @@ const server = http.createServer(async (req, res) => {
     // 5) o escritório 3D e as suas rotas de dados seguem a mesma guarda que a mesa. Em modo local
     //    (sem contas nem token) continuam abertas; com contas, o browser leva o cookie de sessão
     //    sozinho no mesmo domínio — e quem não entrou é convidado a entrar em /app.
-    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|pesquisa)(\/|$)/;
+    const ESCritorio = /^\/api\/(tasks|routines|chat|email|deploy|social|ai|crm|leads|content|pesquisa|empresa)(\/|$)/;
     if (ESCritorio.test(url.pathname)) {
       const a = authenticate(req, { db: OPS?.db });
       if (!a.ok) return json(res, 401, { ok: false, ...a, entrar: '/app' });
@@ -1401,6 +1402,29 @@ const server = http.createServer(async (req, res) => {
       return json(res, r.ok ? 200 : 422, r);
     }
     if (url.pathname === '/api/tasks' && req.method === 'GET') return json(res, 200, load());
+    // 12 nov 2026 · a empresa de agentes (Programação, Produto, Design). Mesma guarda que as tarefas
+    // (lista ESCritorio acima): em modo local fica aberta; com contas, pede sessão e papel de escrita.
+    if (url.pathname === '/api/empresa' && req.method === 'GET') return json(res, 200, empresa.estado({ dataDir: DATA }));
+    const pe = url.pathname.match(/^\/api\/empresa\/projetos\/([^/]+)$/);
+    if (pe && req.method === 'GET') {
+      const p = empresa.lerProjeto({ dataDir: DATA, id: decodeURIComponent(pe[1]) });
+      return p ? json(res, 200, p) : json(res, 404, { error: 'projeto não encontrado' });
+    }
+    // retomar um projeto parado: mesma guarda das escritas (o ESCritorio já cobre /api/empresa)
+    const pr = url.pathname.match(/^\/api\/empresa\/projetos\/([^/]+)\/retomar$/);
+    if (pr && req.method === 'POST') {
+      const r = empresa.retomar({ dataDir: DATA, id: decodeURIComponent(pr[1]) });
+      return json(res, r.status, r.corpo);
+    }
+    if (url.pathname === '/api/empresa/projetos' && req.method === 'POST') {
+      // a guarda do escritório (sessão, papel, CSRF) já correu acima, como em /api/tasks
+      let pedido;
+      try { pedido = empresa.validarPedido(await limitedBody(req, 10000)); }
+      catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      if (pedido.erro) return json(res, 400, { error: pedido.erro });
+      const r = empresa.criar({ dataDir: DATA, ...pedido });
+      return json(res, r.status, r.corpo);
+    }
     if (url.pathname === '/api/routines' && req.method === 'GET') return json(res, 200, routinesOut());
     if (url.pathname === '/api/routines' && req.method === 'POST') {
       const b = await body(req);

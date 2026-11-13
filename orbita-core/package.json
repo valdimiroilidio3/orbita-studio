@@ -1,0 +1,13 @@
+{
+  "name": "orbita-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Núcleo independente da Órbita: equipas de agentes que criam projetos em etapas, com passagens de trabalho entre funções.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test/nucleo.test.mjs",
+    "cli": "node src/cli.mjs"
+  },
+  "license": "MIT"
+}

@@ -123,7 +123,8 @@ import { chamarRpc, corpoDeTarefaDoEscritorio } from './ponte.js';
 import { CAMINHOS, rotaDoEnvio, deveCairParaConversa, avisoDaQueda, metaDaQueda } from './rota.js';
 import { fmtClock } from './time.js'; // 24 horas, sempre
 import { initLeads } from './leads.js'; // V4 (25 out 2026): a pesquisa real da Google
-import { initOps } from './ops.js'; // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
+import { initOps } from './ops.js';
+import { initEmpresaPainel } from './empresa-painel.js'; // 12 nov 2026: a gaveta EMPRESA (equipa, projetos, etapas) // 26 out 2026: a operação a sério — base de dados, aprovações, fila e auditoria
 import { initToday } from './today.js'; // 26 out 2026: o ecrã HOJE — decidir, o que aconteceu, o que vem
 import { loadConnectors } from './connectors.js';
 import { initTasks } from './tasks.js';
@@ -2412,9 +2413,16 @@ function tickSim(now, dt) {
       const k = 2.2 + Math.sin(now / 420) * 0.25;
       r.warn.scale.set(k, k, 1);
     } else {
-      // sem tarefa: sentado, sem gestos de trabalho
-      poseWork(r.person, 'read', now + r.bob * 200, dt);
-      applyStandAndFacing(r, 'read', now, dt);
+      // sem tarefa: sentado, sem gestos de trabalho — mas a olhar à volta. Um ponto novo a cada
+      // ~2,4 s, desfasado por pessoa e determinista (sem sorteio a cada quadro). Com «reduzir
+      // movimento» o olhar fica em ±0,2 rad; sem ele, em ±0,8 rad.
+      const u = r.person.userData;
+      const passo = Math.floor((now + r.bob * 9000) / 2400);
+      const sorte = Math.sin(passo * 12.9898 + r.bob * 78.233) * 43758.5453;
+      const alvo = ((sorte - Math.floor(sorte)) * 2 - 1) * (CALMO ? 0.2 : 0.8);
+      u.idleYaw = (u.idleYaw || 0) + (alvo - (u.idleYaw || 0)) * (1 - Math.exp(-dt * 2.5));
+      poseWork(r.person, 'idle', now + r.bob * 200, dt);
+      applyStandAndFacing(r, 'idle', now, dt);
     }
     // quem não está a trabalhar não deixa uma tecla premida nem a mão no ar
     if (r.state !== 'working' && r.touched.size) driveDesk(r, null, now, 0, dt);
@@ -2587,6 +2595,7 @@ tasks = initTasks({
 });
 const leadsDrawer = initLeads({ api: '/api' }); // a gaveta LEADS na barra: empresas reais e informação (Google Places + Programmable Search)
 const opsDrawer = initOps({ api: '/api' }); // a gaveta OPERAÇÃO: o que está guardado, o que espera OK, o rasto
+const empresaDrawer = initEmpresaPainel({ api: '/api' }); // a gaveta EMPRESA: a equipa por divisão, os projetos e o estado de cada etapa
 // HOJE: abre por cima de tudo. Sem decisões, ensina o próximo passo em vez de dizer «sem resultados».
 const today = initToday({ api: '/api', onOpenLeads: () => { today.close(); leadsDrawer.open(); }, onOpenOps: () => { today.close(); opsDrawer.open(); } });
 // primeira visita do dia → o ecrã abre sozinho; nas seguintes, a barra mostra o número à espera
