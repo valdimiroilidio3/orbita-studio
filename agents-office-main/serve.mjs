@@ -1410,6 +1410,12 @@ const server = http.createServer(async (req, res) => {
       const p = empresa.lerProjeto({ dataDir: DATA, id: decodeURIComponent(pe[1]) });
       return p ? json(res, 200, p) : json(res, 404, { error: 'projeto não encontrado' });
     }
+    // retomar um projeto parado: mesma guarda das escritas (o ESCritorio já cobre /api/empresa)
+    const pr = url.pathname.match(/^\/api\/empresa\/projetos\/([^/]+)\/retomar$/);
+    if (pr && req.method === 'POST') {
+      const r = empresa.retomar({ dataDir: DATA, id: decodeURIComponent(pr[1]) });
+      return json(res, r.status, r.corpo);
+    }
     if (url.pathname === '/api/empresa/projetos' && req.method === 'POST') {
       // a guarda do escritório (sessão, papel, CSRF) já correu acima, como em /api/tasks
       let pedido;

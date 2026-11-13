@@ -90,14 +90,27 @@ export function validarPedido(b = {}) {
   return { nome, pedido, motor: b.motor };
 }
 
+/** Motor para uma tarefa nova ou retomada: o pedido à mão, ou o que o servidor tiver por omissão. */
+function motorPara({ preferido, env, agora, detetar, perguntar }) {
+  return preferido
+    ? escolherMotor({ preferido, env, perguntar, ...(detetar ? { detetarCli: detetar } : {}) })
+    : motorAgora(env, { agora, detetar, perguntar });
+}
+
+/** Arranca o fluxo em segundo plano e regista-o como «a correr» até acabar. */
+function arrancar({ pasta, id, m, env, fetchImpl }) {
+  const execucao = correrFluxo(pasta, { motor: m, env, fetchImpl })
+    .catch((e) => ({ estado: 'erro', erro: e.message }))
+    .finally(() => correm.delete(id));
+  correm.set(id, execucao);
+}
+
 /**
  * Cria o projeto e começa o fluxo em segundo plano. Não espera pelo fim (pode levar minutos).
  * Sem motor, não cria nada: devolve o motivo.
  */
 export function criar({ dataDir, nome, pedido, motor: preferido, env = process.env, fetchImpl, agora, detetar, perguntar = perguntarGratis() }) {
-  const m = preferido
-    ? escolherMotor({ preferido, env, perguntar, ...(detetar ? { detetarCli: detetar } : {}) })
-    : motorAgora(env, { agora, detetar, perguntar });
+  const m = motorPara({ preferido, env, agora, detetar, perguntar });
   if (m.motor === 'sem-motor') return { status: 422, corpo: { erro: 'sem motor', motivo: m.motivo } };
   const raiz = raizProjetos(dataDir);
   fs.mkdirSync(raiz, { recursive: true });
@@ -107,11 +120,24 @@ export function criar({ dataDir, nome, pedido, motor: preferido, env = process.e
   } catch (e) {
     return { status: 409, corpo: { erro: e.message } };
   }
-  const execucao = correrFluxo(projeto.pasta, { motor: m, env, fetchImpl })
-    .catch((e) => ({ estado: 'erro', erro: e.message }))
-    .finally(() => correm.delete(projeto.id));
-  correm.set(projeto.id, execucao);
+  arrancar({ pasta: projeto.pasta, id: projeto.id, m, env, fetchImpl });
   return { status: 202, corpo: { id: projeto.id, estado: 'a-correr', motor: m.motor } };
+}
+
+/**
+ * Retoma um projeto parado (por falha, falta de motor ou reinício do servidor). O fluxo
+ * continua da primeira etapa que não está concluída; as que já estão feitas não se refazem.
+ */
+export function retomar({ dataDir, id, motor: preferido, env = process.env, fetchImpl, agora, detetar, perguntar = perguntarGratis() }) {
+  const p = lerProjeto({ dataDir, id });
+  if (!p) return { status: 404, corpo: { erro: 'o projeto não existe' } };
+  if (p.correndo) return { status: 409, corpo: { erro: 'o projeto já está a correr' } };
+  const primeira = p.etapas.findIndex((e) => e.estado !== 'concluido');
+  if (primeira === -1) return { status: 200, corpo: { id, estado: 'concluido' } };
+  const m = motorPara({ preferido, env, agora, detetar, perguntar });
+  if (m.motor === 'sem-motor') return { status: 422, corpo: { erro: 'sem motor', motivo: m.motivo } };
+  arrancar({ pasta: path.join(raizProjetos(dataDir), id), id, m, env, fetchImpl });
+  return { status: 202, corpo: { id, estado: 'a-correr', motor: m.motor, daEtapa: primeira + 1 } };
 }
 
 /** Lê um projeto. Devolve null se não existir. */

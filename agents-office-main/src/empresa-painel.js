@@ -56,6 +56,13 @@ export function htmlProjetos(projetos = [], selecionado = null) {
 /** Um projeto: cada etapa com o agente, o estado, os ficheiros e o erro, se houver. */
 export function htmlProjeto(p, estado) {
   if (!p) return '';
+  // um projeto parado (falhou, sem motor, ou só por começar) pode retomar-se; um a correr não
+  const parado = !p.correndo && p.etapas.some((e) => e.estado !== 'concluido');
+  const jaComecou = p.etapas.some((e) => e.estado !== 'por-fazer');
+  const semMotor = estado && estado.motor && estado.motor.motor === 'sem-motor';
+  const botaoRetomar = parado
+    ? `<div class="em-acoes"><button type="button" class="em-retomar" data-retomar="${esc(p.id)}"${semMotor ? ' disabled' : ''}${semMotor ? ` title="${esc(estado.motor.motivo || 'sem motor')}"` : ''}>${jaComecou ? 'Retomar' : 'Correr'}</button></div>`
+    : '';
   const etapas = p.etapas.map((e, i) => {
     const fich = (e.ficheiros || []).slice(0, 6);
     return `<li class="em-etapa em-${esc(e.estado)}">
@@ -70,7 +77,7 @@ export function htmlProjeto(p, estado) {
   }).join('');
   const passagens = (p.passagens || []).length;
   return `<div class="em-proj-h"><b>${esc(p.nome)}</b> <span class="em-n">${passagens} passagens</span>${p.correndo ? ' <span class="em-pill live">a correr</span>' : ''}</div>
-    <ol class="em-etapas">${etapas}</ol>`;
+    <ol class="em-etapas">${etapas}</ol>${botaoRetomar}`;
 }
 
 export function initEmpresaPainel({ api = '/api', doc = typeof document !== 'undefined' ? document : null, fetchImpl = (...a) => fetch(...a) } = {}) {
@@ -167,7 +174,28 @@ export function initEmpresaPainel({ api = '/api', doc = typeof document !== 'und
     }
   }
 
+  async function retomar(id) {
+    if (P.erro) P.erro.textContent = '';
+    try {
+      const r = await fetchImpl(api + '/empresa/projetos/' + encodeURIComponent(id) + '/retomar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.motivo || j.erro || j.error || `HTTP ${r.status}`);
+      S.erro = '';
+      await carregar();
+      await abrirProjeto(id);
+      pintar();
+      armarPoll();
+    } catch (e) {
+      S.erro = `não consegui retomar: ${e.message}`;
+      pintar();
+    }
+  }
+
   btn.addEventListener('click', toggle);
+  if (P.detalhe) P.detalhe.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-retomar]');
+    if (b && !b.disabled) return retomar(b.getAttribute('data-retomar'));
+  });
   if (P.close) P.close.addEventListener('click', close);
   if (P.form) P.form.addEventListener('submit', criar);
   if (P.projetos) P.projetos.addEventListener('click', (ev) => {

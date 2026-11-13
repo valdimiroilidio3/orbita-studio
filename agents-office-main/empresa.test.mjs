@@ -147,3 +147,66 @@ test('motor gratuito de ponta a ponta: a cadeia real (perguntarGratis) corre com
     globalThis.fetch = original;
   }
 });
+
+// ---- retomar: um projeto parado continua da primeira etapa que falta ----
+const gratisQueFunciona = async (sistema, pedido) => {
+  const m = pedido.match(/Escreves estas entregas[^:]*: (.+?)\.?$/m);
+  const lista = m ? m[1].split(', ') : [];
+  return lista.map((f) => `=== ficheiro: ${f} ===\nconteúdo de ${f}\n=== fim ===`).join('\n');
+};
+
+test('retomar: um projeto que não existe devolve 404', () => {
+  const r = empresa.retomar({ dataDir: tmp(), id: 'nao-existe', env: {}, perguntar: null });
+  assert.equal(r.status, 404);
+});
+
+test('retomar: depois de uma falha, continua com o motor a funcionar e não refaz as etapas feitas', async () => {
+  const dataDir = tmp();
+  const falha = async () => { throw new Error('todos os modelos falharam'); };
+  const a = empresa.criar({ dataDir, nome: 'Retomado', pedido: 'Teste.', motor: 'gratis', env: {}, perguntar: falha });
+  await empresa.esperarFluxo(a.corpo.id);
+  const antes = empresa.lerProjeto({ dataDir, id: 'retomado' });
+  assert.equal(antes.etapas[0].estado, 'falhou');
+  assert.equal(antes.etapas.filter((e) => e.estado === 'concluido').length, 0);
+
+  let chamadas = 0;
+  const funciona = async (s, p) => { chamadas += 1; return gratisQueFunciona(s, p); };
+  const r = empresa.retomar({ dataDir, id: 'retomado', env: {}, perguntar: funciona });
+  assert.equal(r.status, 202);
+  assert.equal(r.corpo.daEtapa, 1, 'começa na primeira etapa por fazer');
+  await empresa.esperarFluxo('retomado');
+  const depois = empresa.lerProjeto({ dataDir, id: 'retomado' });
+  assert.ok(depois.etapas.every((e) => e.estado === 'concluido'), JSON.stringify(depois.etapas.map((e) => e.estado)));
+  assert.equal(chamadas, 10, 'uma chamada por etapa, sem repetir');
+});
+
+test('retomar: um projeto que já está concluído não volta a correr', async () => {
+  const dataDir = tmp();
+  const a = empresa.criar({ dataDir, nome: 'Feito', pedido: 'x', motor: 'gratis', env: {}, perguntar: gratisQueFunciona });
+  await empresa.esperarFluxo(a.corpo.id);
+  const r = empresa.retomar({ dataDir, id: 'feito', env: {}, perguntar: null });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.estado, 'concluido');
+});
+
+test('retomar: se o projeto já está a correr, devolve 409 e não arranca outro fluxo', async () => {
+  const dataDir = tmp();
+  let libertar;
+  const preso = () => new Promise((resolve) => { libertar = resolve; });
+  const a = empresa.criar({ dataDir, nome: 'Em curso', pedido: 'x', motor: 'gratis', env: {}, perguntar: preso });
+  const r = empresa.retomar({ dataDir, id: 'em-curso', env: {}, perguntar: preso });
+  assert.equal(r.status, 409);
+  libertar('');  // a primeira chamada acaba sem ficheiros: o fluxo para
+  await empresa.esperarFluxo(a.corpo.id);
+});
+
+test('retomar: sem motor não arranca nada e diz porquê', async () => {
+  const dataDir = tmp();
+  const falha = async () => { throw new Error('falhou'); };
+  const a = empresa.criar({ dataDir, nome: 'Sem motor depois', pedido: 'x', motor: 'gratis', env: {}, perguntar: falha });
+  await empresa.esperarFluxo(a.corpo.id);
+  empresa.limparCacheMotor();
+  const r = empresa.retomar({ dataDir, id: 'sem-motor-depois', env: {}, perguntar: null });
+  assert.equal(r.status, 422);
+  assert.equal(empresa.lerProjeto({ dataDir, id: 'sem-motor-depois' }).correndo, false);
+});

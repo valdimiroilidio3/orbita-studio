@@ -140,3 +140,51 @@ test('initEmpresaPainel: campos vazios não chegam ao servidor', async () => {
   assert.equal(chamadas, antes, 'nenhum pedido sem nome');
   assert.match(d.campos['.em-erro'].textContent, /falta o nome/);
 });
+
+test('htmlProjeto: um projeto parado mostra «Retomar»; um concluído ou a correr não', () => {
+  const etapas = [{ agente: 'gestor-produto', fase: 'produto', estado: 'falhou', ficheiros: [], erro: 'sem resposta' }, { agente: 'dev-frontend', fase: 'programacao', estado: 'por-fazer', ficheiros: [] }];
+  const parado = painel.htmlProjeto({ id: 'lista', nome: 'Lista', correndo: false, passagens: [], etapas }, estado);
+  assert.match(parado, /data-retomar="lista"/);
+  assert.match(parado, />Retomar</);
+  const aCorrer = painel.htmlProjeto({ id: 'lista', nome: 'Lista', correndo: true, passagens: [], etapas }, estado);
+  assert.doesNotMatch(aCorrer, /data-retomar/);
+  const feito = painel.htmlProjeto({ id: 'lista', nome: 'Lista', correndo: false, passagens: [], etapas: etapas.map((e) => ({ ...e, estado: 'concluido' })) }, estado);
+  assert.doesNotMatch(feito, /data-retomar/);
+});
+
+test('htmlProjeto: sem motor, o botão de retomar fica desativado com o motivo', () => {
+  const semMotor = { ...estado, motor: { motor: 'sem-motor', motivo: 'Faltam chaves.' } };
+  const h = painel.htmlProjeto({ id: 'lista', nome: 'Lista', correndo: false, passagens: [], etapas: [{ agente: 'gestor-produto', fase: 'produto', estado: 'falhou', ficheiros: [] }] }, semMotor);
+  assert.match(h, /data-retomar="lista" disabled/);
+  assert.match(h, /title="Faltam chaves\."/);
+});
+
+test('initEmpresaPainel: retomar envia POST ao servidor e atualiza o projeto', async () => {
+  const d = criarDoc();
+  const pedidos = [];
+  const fetchImpl = async (u, o) => {
+    if (o && o.method === 'POST') { pedidos.push(u); return { ok: true, status: 202, json: async () => ({ id: 'lista', estado: 'a-correr' }) }; }
+    if (u.endsWith('/empresa/projetos/lista')) return { ok: true, json: async () => ({ id: 'lista', nome: 'Lista', correndo: false, passagens: [], etapas: [{ agente: 'gestor-produto', fase: 'produto', estado: 'concluido', ficheiros: [] }] }) };
+    return { ok: true, json: async () => ({ ...estado, motor: { motor: 'gratis' }, projetos: [] }) };
+  };
+  const ctl = painel.initEmpresaPainel({ doc: d.doc, api: '/api', fetchImpl });
+  await ctl.carregar();
+  await ctl.abrirProjeto('lista');
+  const btn = { disabled: false, getAttribute: () => 'lista', closest() { return this; } };
+  await d.campos['.em-detalhe'].listeners.click({ target: btn });
+  assert.deepEqual(pedidos, ['/api/empresa/projetos/lista/retomar']);
+});
+
+test('initEmpresaPainel: se o servidor recusa o retomar, mostra o motivo', async () => {
+  const d = criarDoc();
+  const fetchImpl = async (u, o) => {
+    if (o && o.method === 'POST') return { ok: false, status: 422, json: async () => ({ erro: 'sem motor', motivo: 'Faltam chaves.' }) };
+    if (u.endsWith('/empresa')) return { ok: true, json: async () => estado };
+    return { ok: true, json: async () => ({ id: 'lista', nome: 'Lista', correndo: false, passagens: [], etapas: [{ agente: 'gestor-produto', fase: 'produto', estado: 'falhou', ficheiros: [] }] }) };
+  };
+  const ctl = painel.initEmpresaPainel({ doc: d.doc, api: '/api', fetchImpl });
+  await ctl.carregar();
+  await ctl.abrirProjeto('lista');
+  await d.campos['.em-detalhe'].listeners.click({ target: { disabled: false, getAttribute: () => 'lista', closest() { return this; } } });
+  assert.match(d.campos['.em-erro'].textContent, /não consegui retomar: Faltam chaves\./);
+});
