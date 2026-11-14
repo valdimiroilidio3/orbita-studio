@@ -21,13 +21,21 @@ import { createHash } from 'node:crypto';
 
 export const FORMATO = 'orbita-backup/1';
 
+/* As tabelas de negócio leem-se TODAS, página a página. O Supabase
+   corta cada pedido (leads a 500, projetos a 200 por omissão, tudo a 1000 no
+   PostgREST): uma leitura única saía truncada e o ensaio dizia «ok». O limite
+   de página é o do próprio repositório; a leitura só para quando a página vem
+   incompleta. */
+const PAGINA = { leads: 500, projetos: 500, tarefas: 300, mensagens: 300, receitas: 500 };
+const LIMITE_LINHAS = 1_000_000;
+
 /* as tabelas que interessam ao dono, e como se lê cada uma */
 const FONTES = {
-  leads: (r) => r.leads.list(1000),
-  projetos: (r) => r.projetos.list(),
-  tarefas: (r) => r.tarefas.list(300),
-  mensagens: (r) => r.mensagens.list(300),
-  receitas: (r) => r.receitas.desde('1970-01-01T00:00:00.000Z', 5000),
+  leads: (r, p, o) => r.leads.list(p, o),
+  projetos: (r, p, o) => r.projetos.list(p, o),
+  tarefas: (r, p, o) => r.tarefas.list(p, o),
+  mensagens: (r, p, o) => r.mensagens.list(p, o),
+  receitas: (r, p, o) => r.receitas.desde('1970-01-01T00:00:00.000Z', p, o),
   atividade: (r) => r.atividade.list(500),
   runs: (r) => r.ia.runs.listar(100),
   uso: (r) => r.ia.uso.recentes(500),
@@ -40,12 +48,26 @@ export function marca(copia) {
   return createHash('sha256').update(alvo).digest('hex').slice(0, 32);
 }
 
+/* lê uma tabela inteira: pede páginas até uma vir incompleta */
+async function lerTodas(nome, lerPagina) {
+  const pagina = PAGINA[nome];
+  const linhas = [];
+  for (let offset = 0; offset < LIMITE_LINHAS; offset += pagina) {
+    const lote = (await lerPagina(pagina, offset)) || [];
+    linhas.push(...lote);
+    if (lote.length < pagina) return linhas;
+  }
+  throw new Error(`mais de ${LIMITE_LINHAS} linhas: paragem de segurança`);
+}
+
 export async function exportar(repo, { agora = new Date() } = {}) {
   const tabelas = {};
   const falhas = [];
   for (const [nome, ler] of Object.entries(FONTES)) {
     try {
-      const v = await ler(repo);
+      const v = PAGINA[nome]
+        ? await lerTodas(nome, (p, o) => ler(repo, p, o))
+        : await ler(repo);
       tabelas[nome] = Array.isArray(v) ? v : [];
     } catch (e) {
       tabelas[nome] = [];
@@ -119,7 +141,7 @@ export async function testar(repo, { agora = new Date(), criarDestino = null } =
       }
     }
     /* e a base de ensaio volta a dar as mesmas linhas por dentro */
-    const deVolta = await destino.leads.list(1000);
+    const deVolta = await lerTodas('leads', (p, o) => destino.leads.list(p, o));
     if (deVolta.length !== (lida.tabelas.leads || []).length) {
       problemas.push(`leads: a base de ensaio devolve ${deVolta.length} depois do restauro`);
     }

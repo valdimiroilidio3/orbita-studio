@@ -306,6 +306,9 @@ export async function responder(repo, {
   /* 1.54.0 · a porta. `null` = decide-se sozinha: dormente em memória (testes e
      modo local), fechada quando há base de dados ligada. */
   seguranca = null, ip = null,
+  /* 1.90 · quem resolve o domínio antes de o servidor o ler (SSRF). Em produção
+     é o DNS do sistema; os testes injetam o seu, para não dependerem da rede. */
+  resolverDestino = undefined,
 }) {
   const caminhoLimpo = '/' + String(caminho || '').replace(/^\/+/, '').split('?')[0];
 
@@ -382,7 +385,13 @@ export async function responder(repo, {
       if (!ok) return { status: 401, corpo: { error: 'assinatura inválida' } };
     }
 
-    const eventos = canal === 'whatsapp' ? e.normalizarWhatsapp(corpo) : e.normalizarEmail(corpo);
+    /* 1.90 · a assinatura já passou. Se a leitura do evento não está escrita nesta
+       versão, diz-se isso (501) em vez de rebentar com «não é uma função». */
+    const normalizar = canal === 'whatsapp' ? e.normalizarWhatsapp : e.normalizarEmail;
+    if (typeof normalizar !== 'function') {
+      return { status: 501, corpo: { error: 'assinatura válida, mas a leitura das respostas ainda não está escrita nesta versão — nada foi guardado', canal } };
+    }
+    const eventos = normalizar(corpo);
     if (!eventos.length) {
       /* não é erro: a Meta manda eventos que não interessam (leitura de recibos,
          números a mudar de estado) e o Resend manda entregas e aberturas */
@@ -1035,8 +1044,12 @@ export async function responder(repo, {
     const t0 = Date.now();
     try {
       const sinal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(9000) : undefined;
-      const r = await fetchImpl(alvo, {
-        redirect: 'follow', signal: sinal,
+      /* 1.90 · o site é um endereço escrito por uma pessoa: só se lê se for público,
+         e cada redireccionamento passa outra vez pela mesma verificação */
+      const { buscarSeguro } = await import('./_rede-segura.mjs');
+      const r = await buscarSeguro(alvo, {
+        fetchImpl, resolver: resolverDestino,
+        signal: sinal,
         headers: { 'user-agent': 'Orbita/1.59 (verificação de site; +https://orbita-agentes.vercel.app)', accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
       });
       codigo = r.status;
@@ -1049,7 +1062,8 @@ export async function responder(repo, {
         : `o site respondeu ${r.status}`;
     } catch (e) {
       const msg = String(e && e.message || e);
-      motivo = /timeout|abort/i.test(msg) ? 'o site não respondeu em 9 segundos'
+      motivo = e && e.bloqueado ? `endereço não lido: ${e.motivo}`
+        : /timeout|abort/i.test(msg) ? 'o site não respondeu em 9 segundos'
         : /ENOTFOUND|getaddrinfo|EAI_AGAIN/i.test(msg) ? 'o endereço não resolve (o domínio pode ter acabado)'
         : /CERT|TLS|SSL/i.test(msg) ? 'o certificado do site não é válido'
         : `não foi possível abrir o site (${msg.slice(0, 120)})`;

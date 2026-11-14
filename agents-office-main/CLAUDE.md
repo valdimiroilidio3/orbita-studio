@@ -20,9 +20,9 @@ Podes mudar **name, role, does, tools, brief, model**. Mantém o `name` curto e 
 
 O plantel é lido por esta ordem, o último ganha: `office.agents.json` → `<cérebro>/Órbita/agents.json` → `office.agents.local.json`. O cérebro é a pasta indicada por `brain` em `office.config.json` (ou `office.config.local.json`, que ganha). Se o proprietário guarda o plantel no cérebro, escreve lá em vez do ficheiro local.
 
-Fixo, e o escritório ignora alterações: `id`, `department`, `lead`. Há **seis departamentos e 35 lugares** e é esse o escritório. Não acrescentes nem removas agentes, departamentos ou grupos. Quando o proprietário quer um novo tipo de agente, **renomeia um lugar** no departamento certo. Quando quer menos, deixa o lugar como está; um agente parado não custa nada.
+Fixo, e o escritório ignora alterações: `id`, `department`, `lead`. Há **seis departamentos e 49 lugares** e é esse o escritório. Não acrescentes nem removas agentes, departamentos ou grupos. Quando o proprietário quer um novo tipo de agente, **renomeia um lugar** no departamento certo. Quando quer menos, deixa o lugar como está; um agente parado não custa nada.
 
-Chaves dos departamentos: `emails` (5 lugares) · `sales` (6) · `marketing` (7) · `ops` (6) · `fin` (4) · `delivery` (7). Cada sala tem um líder (ORBITA Director, Lead Hunter, Sales Closer, Creative Architect, Systems Engineer, Growth Publisher) e o líder continua a ser o líder.
+Chaves dos departamentos: `emails` (9 lugares) · `sales` (8) · `marketing` (9) · `ops` (8) · `fin` (6) · `delivery` (9). Cada sala tem um líder (ORBITA Director, Lead Hunter, Sales Closer, Creative Architect, Systems Engineer, Growth Publisher) e o líder continua a ser o líder.
 
 Depois de editar: corre `npm run check` (valida o plantel e mostra todos os problemas) e diz ao proprietário para reiniciar o escritório (`npm start`). Nomes, funções e descrições atualizam-se no próximo carregamento da página.
 

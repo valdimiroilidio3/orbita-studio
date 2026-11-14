@@ -18,7 +18,7 @@
    a chave. Sem `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` não há GitHub, e a
    resposta diz isso com o sítio exacto onde se cria a aplicação.
    =========================================================================== */
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { normEmail, emailValido } from './_conta.mjs';
 
 /* ---------- quem entra ---------- */
@@ -316,4 +316,43 @@ export function opcoesDeEntrada(env = {}) {
     },
     palavraPasse: { pronto: true, comCodigo: temCorreio },
   };
+}
+
+/* ---------- 1.90 · assinaturas dos webhooks (WhatsApp e Resend) ----------
+   Sem assinatura válida, um evento não é uma resposta de cliente: é alguém a
+   fingir ser a Meta ou o Resend. Estas duas funções provam a assinatura; quem
+   as chama responde 401 quando dão falso e 503 quando falta o segredo.
+   Limite: a assinatura é sobre o corpo BRUTO do pedido. Até a rota receber esse
+   corpo (ver `corpoBruto` em `_rotas.mjs`), um JSON re-serializado pode não
+   bater certo com o que a Meta assinou — e isso falha fechado (401), nunca
+   aceita à sorte. */
+const iguaisBytes = (a, b) => {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && timingSafeEqual(x, y);
+};
+
+/** Meta (WhatsApp Cloud API): `X-Hub-Signature-256: sha256=<hex>`, HMAC do corpo com o segredo da app. */
+export function assinaturaMeta({ segredo, corpoBase, assinatura } = {}) {
+  if (!segredo || !assinatura) return false;
+  const esperado = `sha256=${createHmac('sha256', String(segredo)).update(String(corpoBase ?? '')).digest('hex')}`;
+  return iguaisBytes(esperado, assinatura);
+}
+
+/**
+ * Svix (Resend): `svix-id`, `svix-timestamp` e `svix-signature` = `v1,<base64>` (pode haver várias).
+ * A chave é o segredo `whsec_<base64>` sem o prefixo; assina-se `id.timestamp.corpo`.
+ * Recusa-se um timestamp fora de 5 minutos (repetir um pedido antigo não passa).
+ */
+export function assinaturaSvix({ segredo, id, timestamp, assinatura, corpoBase, agora = Date.now(), tolerancia = 300 } = {}) {
+  if (!segredo || !id || !timestamp || !assinatura) return false;
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(agora / 1000 - ts) > tolerancia) return false;
+  const chave = Buffer.from(String(segredo).replace(/^whsec_/, ''), 'base64');
+  if (!chave.length) return false;
+  const esperado = createHmac('sha256', chave).update(`${id}.${timestamp}.${corpoBase ?? ''}`).digest('base64');
+  return String(assinatura).split(' ').some((parte) => {
+    const [versao, sinal] = parte.split(',');
+    return versao === 'v1' && Boolean(sinal) && iguaisBytes(sinal, esperado);
+  });
 }

@@ -162,7 +162,8 @@ test('11 · o cliente fala PostgREST com a chave certa e nunca a expõe na URL',
   const repo = createSupabaseRepo({ url: 'https://abc.supabase.co', key: 'sb_secret_xyz', fetchImpl: falso });
   await repo.leads.list(10);
   const c = chamadas[0];
-  assert.match(c.url, /^https:\/\/abc\.supabase\.co\/rest\/v1\/orbita_leads\?select=\*&order=created_at\.desc&limit=10$/);
+  /* Desempate por id e página (offset), para a paginação da cópia não repetir nem saltar linhas */
+  assert.match(c.url, /^https:\/\/abc\.supabase\.co\/rest\/v1\/orbita_leads\?select=\*&order=created_at\.desc,id\.asc&limit=10&offset=0$/);
   assert.equal(c.opt.headers.apikey, 'sb_secret_xyz');
   assert.equal(c.opt.headers.Authorization, 'Bearer sb_secret_xyz');
   assert.ok(!c.url.includes('sb_secret'), 'a chave não pode ir na URL');
@@ -255,7 +256,7 @@ test('18 · verificar o site guarda a data e o motivo — e falhar também é um
 
   const antes = (await chamar(api, `/ops/leads/${lead.id}`)).corpo.confianca;
   const bom = async () => ({ ok: true, status: 200, url: 'https://clinicadomondego.pt/', text: async () => '<!doctype html><html><title>Clínica</title></html>' });
-  const r = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom });
+  const r = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom, resolverDestino: async () => ["93.184.216.34"] });
   assert.equal(r.status, 200);
   assert.equal(r.corpo.verificacao.estado, 'ok');
   assert.ok(r.corpo.verificacao.quando, 'sem data, «verificado» é uma palavra vazia');
@@ -269,7 +270,7 @@ test('18 · verificar o site guarda a data e o motivo — e falhar também é um
   assert.ok(ficha.corpo.eventos.some((e) => e.tipo === 'verificacao'), 'o histórico guarda a verificação e quem a fez');
 
   const mau = async () => { throw new Error('getaddrinfo ENOTFOUND'); };
-  const r2 = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: mau });
+  const r2 = await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: mau, resolverDestino: async () => ["93.184.216.34"] });
   assert.equal(r2.corpo.verificacao.estado, 'falhou');
   assert.match(r2.corpo.verificacao.motivo, /não resolve/, 'o motivo diz o que se passou, não «erro»');
   assert.equal(r2.corpo.lead.website_estado, 'falhou');
@@ -318,7 +319,7 @@ test('21 · mudar o site invalida a verificação: a confiança não fica a dize
   await POPULAR(api);
   const lead = (await chamar(api, '/ops/leads')).corpo.leads.find((l) => l.name === 'Clínica do Mondego');
   const bom = async () => ({ ok: true, status: 200, url: 'https://clinicadomondego.pt/', text: async () => '<html><body>ok</body></html>' });
-  await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom });
+  await chamar(api, `/ops/leads/${lead.id}/verificar`, 'POST', null, { fetchImpl: bom, resolverDestino: async () => ["93.184.216.34"] });
   assert.equal((await chamar(api, `/ops/leads/${lead.id}`)).corpo.verificacao.estado, 'ok');
 
   const troca = await chamar(api, `/ops/leads/${lead.id}`, 'PATCH', { website: 'https://outro.pt' });
