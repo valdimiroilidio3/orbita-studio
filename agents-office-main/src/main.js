@@ -2020,9 +2020,8 @@ function resolveApproval(id, approved) {
   r.ask = null;
   r.warn.visible = false;
   if (msg) { msg.pending = false; msg.approved = approved; }
-  // visible reaction in the scene: cheer + ✅, or slump + ❌
-  const now = performance.now();
-  if (approved) r.cheerUntil = now + 2400; else r.slumpUntil = now + 2600;
+  // reação visível na cena: só o emoji. A pose de festejar/abater-se (cheerUntil/slumpUntil)
+  // foi revertida em 999b97f e nunca era lida; não se deixa escrita morta a fingir que existe.
   spawnEmote(r, approved ? '✅' : '❌');
   if (r.liveSid) { r.liveSid = null; if (tasks) tasks.resolveLive(id, approved); syncApprovals(); return; } // live: APPROVE sends, REJECT asks for the note
   if (tasks) tasks.onResolve(id, approved);
