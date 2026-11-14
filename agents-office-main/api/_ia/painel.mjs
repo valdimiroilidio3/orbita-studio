@@ -39,6 +39,7 @@ import * as memoria from './memoria.mjs';
 import * as media from './media.mjs';
 import { estadoDoRun, resumoDoRun, podeCancelar, podeRepetir, podeAprovar } from '../../src/execucao.js';
 import { elenco } from '../_elenco.mjs';
+import { painelDeFalhas } from '../_falhas.mjs';
 
 /** O tecto de tokens por nível de esforço. Uma definição para o motor, a rota
  *  e a vista — antes só a rota o tinha e o painel repetia os números. */
@@ -67,6 +68,8 @@ export const PRAZOS = {
   runs: 6000,
   trabalhos: 6000,
   gratuitos: 6000,
+  /* 1.87.0 · o painel «Falhas» vem no mesmo pedido (antes só havia caminho antigo). */
+  falhas: 4000,
   memoria: 2000,
   estudio: 2000,
 };
@@ -306,7 +309,7 @@ export async function montarPainel(repo, {
      isto que faltava: cada rota antiga criava o seu */
   m = m || (await import('./motor.mjs')).criarMotor({ repo, env, fetchImpl });
 
-  const [estado, modelos, uso, runs, trabalhos, gratuitos] = await Promise.all([
+  const [estado, modelos, uso, runs, trabalhos, gratuitos, falhas] = await Promise.all([
     parte('estado', limites.estado, () => montarEstado(m, { repo, env, fetchImpl }), null),
     parte('modelos', limites.modelos, () => modelosDoCatalogo(m), null),
     parte('uso', limites.uso, async () => resumoDeUso(await repo.ia.uso.recentes(200), env), null),
@@ -318,11 +321,13 @@ export async function montarPainel(repo, {
        fornecedores, um a um, é trabalho do botão «Descobrir modelos» — não de
        uma página que tem 6 s para responder (ver 1.83.1). */
     parte('gratuitos', limites.gratuitos, () => gratuitosComCadeia(m, { descobrir: false }), null),
+    /* 1.87.0 · as falhas: a mesma leitura que `/ops/falhas`. Se não chegarem, o cartão diz porquê. */
+    parte('falhas', limites.falhas, () => painelDeFalhas(repo, { janelaDias: 7, limite: 25, env }), null),
   ]);
 
   return {
     ok: true,
-    estado, modelos, uso, runs, trabalhos, gratuitos,
+    estado, modelos, uso, runs, trabalhos, gratuitos, falhas,
     parcial: parcelas,
     completo: parcelas.length === 0,
     ms: agora() - t0,

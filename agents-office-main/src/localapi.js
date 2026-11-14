@@ -303,19 +303,21 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
        armazém do browser, e o resultado tem a mesma forma. */
     if (caminhoLimpo === '/ia/painel') {
       const t0 = agora();
-      const [estado, modelos, uso, runs, trabalhos, gratuitos] = await Promise.all([
+      const [estado, modelos, uso, runs, trabalhos, gratuitos, falhas] = await Promise.all([
         rota('/ia/estado', 'GET'),
         rota('/ia/modelos', 'GET'),
         rota('/ia/uso', 'GET'),
         rota('/ia/runs', 'GET'),
         rota('/media/trabalhos', 'GET'),
         rota('/ia/gratuitos', 'GET'),
+        rota('/ops/falhas', 'GET').catch((e) => ({ erroLeitura: e?.message || 'o modo local não leu as falhas' })),
       ]);
       return {
         ok: true, modo: 'local',
         estado, modelos, uso, runs,
         trabalhos: trabalhos.trabalhos || [],
         gratuitos,
+        falhas,
         parcial: [], completo: true,
         ms: agora() - t0,
         lidoEm: new Date(agora()).toISOString(),
