@@ -240,3 +240,44 @@ test('1.83.1 · a rota /ia/gratuitos continua a descobrir (é a acção explíci
   assert.equal(r.status, 200);
   assert.ok(Array.isArray(r.corpo.cadeia ? Object.keys(r.corpo.cadeia) : null), 'a cadeia por tipo vem na resposta');
 });
+
+/* 1.87.0 · o painel «Falhas» na vista IA. Antes, as falhas só eram pedidas no caminho
+   antigo (instalações sem /ia/painel): na vista atual o cartão ficava em «A carregar
+   as falhas…» para sempre. Estes testes fixam o caminho que o dono usa. */
+test('1.87.0 · as falhas vêm no mesmo pedido do painel (sem segunda chamada)', async () => {
+  const p = await montarPainel(createMemRepo(), { env: {} });
+  assert.ok(p.falhas && Array.isArray(p.falhas.porOrigem), 'as falhas vêm no painel');
+  assert.equal(p.falhas.erroLeitura, undefined);
+  assert.deepEqual(p.parcial, []);
+});
+
+test('1.87.0 · falhas presas: o cartão diz porquê, não fica em «a carregar»', async () => {
+  const base = createMemRepo();
+  const repo = { ...base, tarefas: { ...base.tarefas, list: nunca } };
+  const p = await montarPainel(repo, { env: {}, prazos: { falhas: 300 } });
+  assert.ok(p.parcial.find((x) => x.parte === 'falhas'), 'as falhas aparecem como parte em falta');
+  const api = {
+    S: {},
+    async call(caminho) { if (caminho === '/ia/painel') return p; throw new Error('rota inesperada: ' + caminho); },
+    paint() {}, toast() {},
+  };
+  await carregarIA(api);
+  const html = desenhar(api.S);
+  assert.doesNotMatch(html, /A carregar as falhas/);
+  assert.match(html, /Não consegui ler as falhas/);
+  assert.match(html, /falhas não respondeu em/);
+});
+
+test('1.87.0 · resposta sem falhas (servidor antigo) não deixa o cartão a carregar', async () => {
+  const p = await montarPainel(createMemRepo(), { env: {} });
+  delete p.falhas;
+  const api = {
+    S: {},
+    async call(caminho) { if (caminho === '/ia/painel') return p; throw new Error('rota inesperada: ' + caminho); },
+    paint() {}, toast() {},
+  };
+  await carregarIA(api);
+  const html = desenhar(api.S);
+  assert.doesNotMatch(html, /A carregar as falhas/);
+  assert.match(html, /não mandou as falhas/);
+});

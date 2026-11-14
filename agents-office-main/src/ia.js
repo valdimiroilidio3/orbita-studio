@@ -119,6 +119,11 @@ export function aplicarPainel(api, painel = {}) {
   if (Array.isArray(painel.runs)) api.S.iaRuns = painel.runs;
   if (Array.isArray(painel.trabalhos)) api.S.iaFila = painel.trabalhos;
   if (painel.gratuitos) api.S.iaGratuitos = painel.gratuitos;
+  /* 1.87.0 · as falhas vêm no mesmo pedido. Se não chegarem, o cartão diz porquê —
+     nunca fica em «A carregar as falhas…» à espera de uma leitura que não vai chegar. */
+  const pf = (painel.parcial || []).find((p) => p && p.parte === 'falhas');
+  if (painel.falhas) api.S.iaFalhas = painel.falhas;
+  else if (pf) api.S.iaFalhas = { erroLeitura: pf.erro || 'não consegui ler as falhas' };
 }
 
 export async function carregarIA(api) {
@@ -169,6 +174,7 @@ export async function carregarIA(api) {
     api.S.iaLeituraAntiga = false;
     api.S.iaParcial = (painel.parcial || []).length ? painel.parcial : null;
     api.S.iaMs = painel.ms ?? null;
+    if (!api.S.iaFalhas) api.S.iaFalhas = { erroLeitura: 'o servidor não mandou as falhas nesta resposta' };
     gravarGuarda(painel);
   } else {
     /* instalação anterior à 1.83 (ou servidor que não conhece `/ia/painel`):
