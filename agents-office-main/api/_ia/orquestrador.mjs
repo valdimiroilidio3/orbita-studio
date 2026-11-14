@@ -19,6 +19,7 @@
 import { AGENTES, promptDe } from './agentes.mjs';
 import { executar as executarFerramenta, paraModelo, INDISPONIVEIS, FERRAMENTAS } from './ferramentas.mjs';
 import { orcamento } from './router.mjs';
+import { tectoDeCusto } from '../_dinheiro.mjs';
 
 const LIMITE_PASSOS = 6;
 const MAX_RODADAS_FERRAMENTA = 3;
@@ -108,7 +109,12 @@ export async function correr({
   repo, motor, objetivo, runId = null, aoMudar = () => {}, aprovado = false,
   limites = {}, env = process.env, retomar = false,
 }) {
-  const orc = orcamento({ maxChamadas: limites.maxChamadas || 16, maxTokens: limites.maxTokens || 160000 });
+  /* o teto de custo (ORBITA_ORCAMENTO_CENTIMOS) vale aqui também: o motor só o
+     põe por omissão quando não recebe um orçamento, e este caminho recebe. */
+  const orc = orcamento({
+    maxChamadas: limites.maxChamadas || 16, maxTokens: limites.maxTokens || 160000,
+    maxCustoMicroUsd: tectoDeCusto(env),
+  });
   /* 1.61.0 · o que uma pessoa autorizou, ferramenta a ferramenta, com nome e
      hora. Sem isto, uma acção destrutiva fica parada — não corre «porque sim». */
   const aprovadasDe = (registo) => (Array.isArray(registo?.autorizacoes) ? registo.autorizacoes : [])
