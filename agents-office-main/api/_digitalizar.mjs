@@ -231,7 +231,7 @@ const novoId = () => {
  * Devolve sempre o mesmo envelope, mesmo quando falha — a interface não tem
  * de adivinhar o que aconteceu.
  */
-export async function digitalizar(args = {}, { env = process.env, fetchImpl = fetch, repo = null, agora = new Date(), lerComIA = null } = {}) {
+export async function digitalizar(args = {}, { env = process.env, fetchImpl = fetch, repo = null, agora = new Date(), lerComIA = null, resolverDestino = undefined } = {}) {
   const base = { ok: false, id: null, tipo: 'documento', texto: '', caracteres: 0, campos: [], faltam: [], avisos: [], ms: 0, erro: null, codigo: null, real: true, inferido: false };
   const t0 = Date.now();
   const fim = (extra) => {
@@ -266,7 +266,9 @@ export async function digitalizar(args = {}, { env = process.env, fetchImpl = fe
       const t = setTimeout(() => ctl.abort(), 20_000);
       let r;
       try {
-        r = await fetchImpl(url, { signal: ctl.signal, headers: { accept: 'image/*,application/pdf' } });
+        /* 1.90 · um documento por URL só se lê se o endereço for público (SSRF) */
+        const { buscarSeguro } = await import('./_rede-segura.mjs');
+        r = await buscarSeguro(url, { fetchImpl, resolver: resolverDestino, signal: ctl.signal, headers: { accept: 'image/*,application/pdf' } });
       } finally { clearTimeout(t); }
       if (!r.ok) return fim({ codigo: 'falha', erro: `não consegui descarregar o documento (HTTP ${r.status})` });
       const buf = typeof r.arrayBuffer === 'function' ? new Uint8Array(await r.arrayBuffer()) : null;

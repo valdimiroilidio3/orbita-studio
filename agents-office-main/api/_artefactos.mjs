@@ -331,6 +331,8 @@ function paraDisco(art) {
 }
 
 function deDisco(id) {
+  /* 1.90 · o id chega de um pedido: só um nome simples vai ao disco (sem / nem ..) */
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(String(id ?? ''))) return null;
   try {
     const j = JSON.parse(fs.readFileSync(path.join(pasta(), `${id}.json`), 'utf8'));
     if (!j?.brief?.nome) return null;
