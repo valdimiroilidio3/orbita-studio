@@ -266,8 +266,8 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     },
 
     leads: {
-      async list(limit = 200) {
-        return (await pedir(`orbita_leads?select=*&order=created_at.desc&limit=${Math.min(500, limit)}`)) || [];
+      async list(limit = 200, offset = 0) {
+        return (await pedir(`orbita_leads?select=*&order=created_at.desc,id.asc&limit=${Math.min(500, limit)}&offset=${Math.max(0, offset)}`)) || [];
       },
       async byId(id) { return um(await pedir(`orbita_leads?select=*&id=eq.${q(id)}&limit=1`)); },
       async existentes(chaves) {
@@ -320,13 +320,13 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     },
 
     projetos: {
-      async list() { return (await pedir('orbita_projects?select=*&order=updated_at.desc&limit=200')) || []; },
+      async list(limit = 200, offset = 0) { return (await pedir(`orbita_projects?select=*&order=updated_at.desc,id.asc&limit=${Math.min(500, limit)}&offset=${Math.max(0, offset)}`)) || []; },
       async byId(id) { return um(await pedir(`orbita_projects?select=*&id=eq.${q(id)}&limit=1`)); },
       async insert(p) { return um(await pedir('orbita_projects', { method: 'POST', body: p, prefer: 'return=representation' })); },
     },
 
     tarefas: {
-      async list(limit = 100) { return (await pedir(`orbita_tasks?select=*&order=created_at.desc&limit=${Math.min(300, limit)}`)) || []; },
+      async list(limit = 100, offset = 0) { return (await pedir(`orbita_tasks?select=*&order=created_at.desc,id.asc&limit=${Math.min(300, limit)}&offset=${Math.max(0, offset)}`)) || []; },
       async byId(id) { return um(await pedir(`orbita_tasks?select=*&id=eq.${q(id)}&limit=1`)); },
       async insert(t) { return um(await pedir('orbita_tasks', { method: 'POST', body: t, prefer: 'return=representation' })); },
       /* 1.67.0 · a fila e o cadeado do ciclo. `reclamar` é condicional no
@@ -348,7 +348,7 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     },
 
     mensagens: {
-      async list(limit = 100) { return (await pedir(`orbita_messages?select=*&order=created_at.desc&limit=${Math.min(300, limit)}`)) || []; },
+      async list(limit = 100, offset = 0) { return (await pedir(`orbita_messages?select=*&order=created_at.desc,id.asc&limit=${Math.min(300, limit)}&offset=${Math.max(0, offset)}`)) || []; },
       async byId(id) { return um(await pedir(`orbita_messages?select=*&id=eq.${q(id)}&limit=1`)); },
       async rascunhos() { return (await pedir('orbita_messages?select=*&status=eq.rascunho&order=created_at.desc&limit=50')) || []; },
       async inserir(m) { return um(await pedir('orbita_messages', { method: 'POST', body: m, prefer: 'return=representation' })); },
@@ -362,8 +362,8 @@ export function createSupabaseRepo({ url, key, fetchImpl = fetch } = {}) {
     },
 
     receitas: {
-      async desde(iso, limite = 200) {
-        return (await pedir(`orbita_receitas?select=*&at=gte.${q(iso)}&order=at.desc&limit=${limite}`)) || [];
+      async desde(iso, limite = 200, offset = 0) {
+        return (await pedir(`orbita_receitas?select=*&at=gte.${q(iso)}&order=at.desc,id.asc&limit=${Math.min(1000, limite)}&offset=${Math.max(0, offset)}`)) || [];
       },
       async insert(r) { return um(await pedir('orbita_receitas', { method: 'POST', body: r, prefer: 'return=representation' })); },
       async remove(id) {
@@ -630,7 +630,7 @@ export function createMemRepo(seed = {}) {
       async revogar(i) { const x = d.sessoes.find((y) => y.id === i); if (!x) return null; x.revogada = agora(); return x; },
     },
     leads: {
-      async list(limit = 200) { return [...d.leads].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
+      async list(limit = 200, offset = 0) { return [...d.leads].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(offset, offset + limit); },
       async byId(i) { return d.leads.find((l) => l.id === i) || null; },
       async existentes(chaves) { return d.leads.filter((l) => chaves.includes(l.dedupe_key)).map((l) => ({ id: l.id, dedupe_key: l.dedupe_key })); },
       // na base o `id` e o `created_at` nascem do Postgres; aqui nascem daqui
@@ -677,12 +677,12 @@ export function createMemRepo(seed = {}) {
       },
     },
     projetos: {
-      async list() { return [...d.projetos].sort((a, b) => b.updated_at.localeCompare(a.updated_at)); },
+      async list(limit = Infinity, offset = 0) { return [...d.projetos].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(offset, offset + limit); },
       async byId(i) { return d.projetos.find((p) => p.id === i) || null; },
       async insert(p) { const novo = { id: id('p'), created_at: agora(), updated_at: agora(), ...p }; d.projetos.push(novo); return novo; },
     },
     tarefas: {
-      async list(limit = 100) { return [...d.tarefas].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
+      async list(limit = 100, offset = 0) { return [...d.tarefas].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(offset, offset + limit); },
       async byId(i) { return d.tarefas.find((t) => t.id === i) || null; },
       async insert(t) { const novo = { id: id('t'), created_at: agora(), ...t }; d.tarefas.push(novo); return novo; },
       async patch(i, campos) { const t = d.tarefas.find((x) => x.id === i); if (!t) return null; Object.assign(t, campos); return t; },
@@ -700,7 +700,7 @@ export function createMemRepo(seed = {}) {
       },
     },
     mensagens: {
-      async list(limit = 100) { return [...d.mensagens].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit); },
+      async list(limit = 100, offset = 0) { return [...d.mensagens].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(offset, offset + limit); },
       async byId(i) { return d.mensagens.find((m) => m.id === i) || null; },
       async rascunhos() { return d.mensagens.filter((m) => m.status === 'rascunho'); },
       async inserir(m) { const novo = { id: id('m'), created_at: agora(), status: 'rascunho', ...m }; d.mensagens.push(novo); return novo; },
@@ -708,7 +708,7 @@ export function createMemRepo(seed = {}) {
       async patch(i, campos) { const m = d.mensagens.find((x) => x.id === i); if (!m) return null; Object.assign(m, campos); return m; },
     },
     receitas: {
-      async desde(iso, limite = 200) { return d.receitas.filter((r) => r.at >= iso).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limite); },
+      async desde(iso, limite = 200, offset = 0) { return d.receitas.filter((r) => r.at >= iso).sort((a, b) => b.at.localeCompare(a.at)).slice(offset, offset + limite); },
       async insert(r) { const novo = { id: id('r'), at: agora(), ...r }; d.receitas.push(novo); return novo; },
       async remove(i) { const antes = d.receitas.length; d.receitas = d.receitas.filter((r) => r.id !== i); return d.receitas.length < antes; },
     },

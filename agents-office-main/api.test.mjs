@@ -162,7 +162,8 @@ test('11 · o cliente fala PostgREST com a chave certa e nunca a expõe na URL',
   const repo = createSupabaseRepo({ url: 'https://abc.supabase.co', key: 'sb_secret_xyz', fetchImpl: falso });
   await repo.leads.list(10);
   const c = chamadas[0];
-  assert.match(c.url, /^https:\/\/abc\.supabase\.co\/rest\/v1\/orbita_leads\?select=\*&order=created_at\.desc&limit=10$/);
+  /* Desempate por id e página (offset), para a paginação da cópia não repetir nem saltar linhas */
+  assert.match(c.url, /^https:\/\/abc\.supabase\.co\/rest\/v1\/orbita_leads\?select=\*&order=created_at\.desc,id\.asc&limit=10&offset=0$/);
   assert.equal(c.opt.headers.apikey, 'sb_secret_xyz');
   assert.equal(c.opt.headers.Authorization, 'Bearer sb_secret_xyz');
   assert.ok(!c.url.includes('sb_secret'), 'a chave não pode ir na URL');
