@@ -209,7 +209,7 @@ export function filaDeAprovacao({ hoje = null, tarefas = [], rotulos = {}, agora
     out.push({
       id: t.id, tipo: 'tarefa', kind: t.kind,
       titulo: rotulos[t.kind] || t.kind || 'Tarefa',
-      detalhe: t.resumo || t.titulo || t.entity_id ? `ligada a ${t.entity_id}` : 'acção externa à espera de OK',
+      detalhe: t.entity_id ? `ligada a ${t.entity_id}` : (t.resumo || t.titulo || 'acção externa à espera de OK'),
       quando: quandoDaTarefa(t), idade: idade(quandoDaTarefa(t), agora),
       urgencia: 'alta', atalho: 'tarefa',
     });
