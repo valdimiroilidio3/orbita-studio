@@ -363,3 +363,19 @@ test('a mesa mostra o trabalho da sala na lista de agentes (sem abrir nenhuma)',
   const css = fs.readFileSync(new URL('./src/mesa.html', import.meta.url), 'utf8');
   assert.match(css, /\.cc-ag-o \{/, 'o título tem estilo próprio (e corta com reticências, não empurra a coluna)');
 });
+
+/* «ligada a undefined» na fila de aprovações: a tarefa sem entidade
+   mostra o próprio título (ou a acção externa), nunca a palavra «undefined». */
+test('a fila de aprovações nunca escreve «undefined» numa tarefa sem entidade', () => {
+  const tarefas = [
+    { id: 'sem1', kind: 'briefing', state: 'awaiting_approval', created_at: hAtras(1), entity_id: '', titulo: 'Preparar três títulos' },
+    { id: 'sem2', kind: 'qa', state: 'awaiting_approval', created_at: hAtras(2) },
+    { id: 'com1', kind: 'mensagem', state: 'awaiting_approval', created_at: hAtras(3), entity_id: 'p9' },
+  ];
+  const fila = filaDeAprovacao({ tarefas, rotulos: {}, agora: AGORA });
+  const det = (id) => fila.find((i) => i.id === id).detalhe;
+  assert.equal(det('sem1'), 'Preparar três títulos');
+  assert.equal(det('sem2'), 'acção externa à espera de OK');
+  assert.equal(det('com1'), 'ligada a p9');
+  for (const i of fila) assert.doesNotMatch(i.detalhe, /undefined/);
+});
