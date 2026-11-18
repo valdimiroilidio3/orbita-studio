@@ -165,8 +165,10 @@ test('1.84.0 · /ops/agentes devolve o elenco de cada sala (era `agentes: []` em
 
 test('1.84.0 · o estúdio mostra a imagem real (Pollinations) e o OpenMontage, cada um com o seu estado', async () => {
   const repo = createMemRepo();
-  /* três gerações reais: duas fechadas, uma falhada */
-  for (const [estado, quando] of [['concluida', '2026-11-10T09:00:00.000Z'], ['concluida', '2026-11-09T09:00:00.000Z'], ['falhou', '2026-11-08T09:00:00.000Z']]) {
+  /* três gerações reais: duas fechadas, uma falhada. As datas são relativas a agora:
+     a janela do painel são os últimos sete dias, e datas fixas envelhecem. */
+  const diasAtras = (n) => new Date(Date.now() - n * 24 * 3600 * 1000).toISOString();
+  for (const [estado, quando] of [['concluida', diasAtras(1)], ['concluida', diasAtras(2)], ['falhou', diasAtras(3)]]) {
     await repo.geracoes.criar({
       chave: `k-${quando}`, projeto_id: 'p1', conta_id: 'mesa', tipo: 'imagem',
       fornecedor: 'pollinations', estado, criado: quando, prompt: 'x',
