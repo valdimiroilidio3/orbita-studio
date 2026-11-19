@@ -3662,6 +3662,23 @@
     /* ---------- a gaveta do posto: ecrã inteiro, com o ✕ sempre alcançável ---------- */
     #rail { top: 0; bottom: 0; width: 100%; max-width: 100%; z-index: 88; }
     #rail.left { box-shadow: none; } #rail.right { box-shadow: none; }
+    /* 1.90.1 · a folha do agente é uma folha de baixo, de altura limitada: a planta ou o 3D
+       continuam visíveis e tocáveis por cima dela; o ✕ fica no cimo da folha. Os controlos de
+       zoom sobem para cima da folha (no telemóvel tapavam-se, e o #mChat tapava #zIn/#zHome). */
+    #rail.agentOpen {
+      top: auto; bottom: 0; height: min(70vh, 640px); height: min(70dvh, calc(100dvh - 260px), 640px);
+      border-radius: 20px 20px 0 0; box-shadow: 0 -18px 40px -22px rgba(21,20,20,.35);
+    }
+    #rail.agentOpen #railHeader { display: none; }   /* o cartão do departamento fica na vista da sala, não na folha */
+    #rail.agentOpen #railAgent { border-radius: 20px 20px 0 0; border-bottom: 0; }
+    /* a descrição do agente tem rolagem própria: não empurra o compositor para fora da folha */
+    #rail.agentOpen .mh-tag { max-height: 4.1em; overflow-y: auto; overscroll-behavior: contain; }
+    /* o registo da conversa é quem cede espaço; o compositor fica sempre dentro da folha */
+    #rail.agentOpen #mMsgs.m-log { flex: 1 1 0; min-height: 0; }
+    #rail.agentOpen .m-foot { flex: 0 0 auto; }
+    /* com a folha aberta, os 12 controlos ficam em grelha de 4 colunas (3 linhas): cabem acima da folha */
+    body:has(#rail.agentOpen) #zoomCtl { top: 56px; bottom: auto; right: 10px; display: grid; grid-template-columns: repeat(4, 42px); gap: 4px; }
+    body:has(#rail.agentOpen) #zoomCtl button { width: 42px; height: 42px; }
     #railDept { padding: 56px 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
     #railHeader { padding-right: 44px; }
     #railClose { top: 8px; right: 10px; }
@@ -3669,6 +3686,8 @@
     #rail .mh { padding: 12px 12px 0; flex-wrap: wrap; }
     #rail .mh-name { font-size: 19px; }
     #rail .mh-tag { padding: 4px 12px 0; }
+    /* o papel do agente ocupa até duas linhas, sem reticências: quem lê no telemóvel não perde o cargo */
+    #rail .mh-role { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.4; letter-spacing: .08em; }
     #rail .m-log { overflow-y: auto; overscroll-behavior: contain; }
     #rail .m-foot { padding: 8px 10px; }
     #rail .mc textarea, #rail #mIn { font-size: 16px; }  /* o iOS não amplia ao tocar */
