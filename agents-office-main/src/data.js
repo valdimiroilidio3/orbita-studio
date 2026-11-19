@@ -1,4 +1,4 @@
-// Órbita — o elenco fixo (49 lugares, 6 salas), a cor de cada sala e os tokens de design.
+// Órbita — o elenco fixo (os lugares e as salas são AGENTS e DEPT_KEYS, abaixo), a cor de cada sala e os tokens de design.
 // Fonte estrutural: roster.mjs e os testes leem AGENTS daqui. office.agents.json é uma cópia com uma entrada por lugar;
 // roster-sincronia.test.mjs falha se as duas divergirem.
 // Os textos de exemplo (WORKLINES), os pedidos de aprovação fictícios (APPROVAL_ASKS) e as linhas

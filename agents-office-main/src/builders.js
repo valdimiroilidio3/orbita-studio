@@ -559,7 +559,7 @@ export function makeDesk(chip, live, opts = {}) {
   }
 
   /* as teclas: uma malha só, com 57 instâncias. É esta que o `main.js` afunda quando um dedo
-     pousa numa tecla — sem 57 malhas por posto (e são 35 postos). */
+     pousa numa tecla — sem 57 malhas por posto (e há um posto por agente). */
   const capGeo = GEO.box(1, 1, 1, 0.22);
   capGeo.translate(0, -0.5, 0);   // `GEO.box` cresce a partir da base: aqui quer-se centrada
   const caps = new THREE.InstancedMesh(capGeo, M.keycap, 57);

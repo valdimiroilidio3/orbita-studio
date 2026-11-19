@@ -1806,7 +1806,7 @@ export async function responder(repo, {
       if (porSala.has(id)) porSala.get(id).push(t);
     }
     /* 1.84.0 · `agentes: []` era o retrato de um escritório vazio. Agora vem o
-       elenco real da sala (49 lugares repartidos pelas seis), com `temRotina`
+       elenco real da sala (os lugares do elenco repartidos pelas salas), com `temRotina`
        por agente — é a prova que o A9 pede: quem tem trabalho próprio e quem é
        consultivo, dito pelo servidor e não pela interface. */
     const todos = elenco();

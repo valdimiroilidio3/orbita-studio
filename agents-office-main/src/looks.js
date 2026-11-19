@@ -126,7 +126,7 @@ function buildLook(agent, base, deptKey) {
     shoes: '#191A1E',
     hatColor: base.hat === 'fedora' ? '#2A2B31' : (base.hat === 'beret' ? mix(shade(chip, 0.42), '#1E1F24', 0.3) : shade(chip, 0.58)),
     // `null` para quem não usa óculos. Isto já foi `'#2B2C31'` para todos e a cena desenhava uma
-    // armação em cada um dos 35 — o teste contava 7 na tabela e passava, porque contava a tabela.
+    // armação em cada um dos agentes — o teste contava 7 na tabela e passava, porque contava a tabela.
     glasses: base.glasses ? '#2B2C31' : null,
     lip: base.female ? '#B0574F' : '#8A5750',
     signature: `${base.style}.${base.variant}${base.hat !== 'none' ? '+' + base.hat : ''}`,
