@@ -1,4 +1,4 @@
-## 1.89.7 — a fila sem «ligada a undefined» e o REMOTO a 110 px no telemóvel
+## 1.90.0 — a fila sem «ligada a undefined» e o REMOTO a 110 px no telemóvel
 
 Duas coisas que o dono viu e pediu, mais a limpeza de testes que as acompanha.
 
