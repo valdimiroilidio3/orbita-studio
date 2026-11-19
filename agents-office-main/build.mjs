@@ -7,6 +7,7 @@
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'fs';
 import { buildBrainGraph } from './graph-build.mjs';
+import { AGENTS, DEPT_KEYS } from './src/data.js';
 await buildBrainGraph(); // V3.6: bake the vault's wiki-link graph into src/braingraph.js
 
 const res = await build({
@@ -73,7 +74,8 @@ copyFileSync('assets/brand/og.png', 'dist/og.png');
 writeFileSync('dist/manifest.webmanifest', JSON.stringify({
   name: 'Órbita Agentes',
   short_name: 'Órbita',
-  description: 'Um escritório isométrico 3D com seis salas, 49 agentes e um Cérebro no centro.',
+  // a contagem vem dos dados (src/data.js), não de um número escrito aqui
+  description: `Um escritório isométrico 3D com ${DEPT_KEYS.length} salas, ${AGENTS.length} agentes e um Cérebro no centro.`,
   start_url: '/',
   scope: '/',
   display: 'standalone',
