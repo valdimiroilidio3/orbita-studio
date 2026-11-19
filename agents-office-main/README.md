@@ -10,7 +10,7 @@ Um escritório isométrico 3D onde agentes de IA fazem trabalho real no teu pró
 > servidor não há tarefas nem conectores, e a página di-lo em vez de os inventar: o trabalho real vive
 > na tua máquina (`npm start`). Ver [docs/LANCAMENTO.md](docs/LANCAMENTO.md).
 
-Seis salas, trinta e cinco agentes nas secretárias, uma barra de tarefas que encaminha o
+Seis salas, quarenta e nove agentes nas secretárias, uma barra de tarefas que encaminha o
 que escreves para a pessoa certa, e um Cérebro no centro que é a tua própria pasta de notas.
 Escreves uma tarefa, o escritório entrega-a a quem deve, essa pessoa lê as tuas notas, usa os
 conectores que já tens no Claude Code, faz o trabalho e arquiva o resultado de volta nas notas.
@@ -19,7 +19,7 @@ Tudo corre na tua máquina.
 ## O que precisas
 
 - macOS, Linux ou Windows (no Windows usa os comandos `npm` diretamente, o `./setup` é Bash)
-- Node.js 20+ — https://nodejs.org
+- Node.js 22.5+ — https://nodejs.org
 - git
 - **uma chave de IA** — qualquer uma destas serve:
   - `GEMINI_API_KEY` do Google AI Studio (aistudio.google.com/apikey): **não instala nada**, fala
@@ -38,7 +38,7 @@ npm start              # → http://localhost:4520
 ```
 
 Sem chave nenhuma o escritório abre e diz, em cada sítio, o que falta — não finge que trabalha.
-Com a chave do AI Studio, os 47 agentes encaminham, escrevem e conversam de imediato. Para Chrome,
+Com a chave do AI Studio, os 49 agentes encaminham, escrevem e conversam de imediato. Para Chrome,
 ficheiros e conectores MCP, precisa do Claude Code (uma API dá voz, não mãos): ver
 [AI.md](AI.md).
 
@@ -117,14 +117,14 @@ No terminal (tecla `F`): `:api` mostra o que está pronto e que chave falta; `:m
 sistema, a memória, o `node`, o `shell` e as ferramentas do PATH **com a versão que cada uma diz**.
 Guia completo, incluindo o que **não** é automático: [docs/PLATAFORMA.md](docs/PLATAFORMA.md).
 
-## Os 47 agentes
+## Os 49 agentes
 
-Sete na sala de comando, oito na prospecção, oito em vendas, seis no design,
-nove na engenharia e nove em media — 47 lugares fixos, um chefe por sala.
+Nove no comando, oito na prospeção, oito em vendas, seis no design, nove na engenharia e
+nove em media — 49 lugares fixos, um chefe por sala.
 
 | Sala | Quem lá está |
 |---|---|
-| **Comando** (7) | Orbita Director · Chefe de Gabinete · Analista de Resultados · Painel Central · Permissões e Conformidade · Atendimento e Triagem · Planeamento do Dia |
+| **Comando** (9) | Orbita Director · Chefe de Gabinete · Analista de Resultados · Painel Central · Permissões e Conformidade · Atendimento e Triagem · Planeamento do Dia · Atas de Reunião · Perguntas Frequentes |
 | **Prospeção** (8) | Lead Hunter · Enriquecedor · Qualificador · Inteligência de Mercado · Análise Competitiva · Auditor de Websites · Radar de Oportunidades · Parceiros e Alianças |
 | **Vendas** (8) | Sales Closer · Propostas · Seguimentos · Receção de Clientes · Contratos · Comunicação com Clientes · Renovações · Pacotes e Upsell |
 | **Design Lab** (6) | Creative Architect · UI e Design System · Direção de Arte · Pesquisa UX · Motion e Animação · Identidade e Marca |
