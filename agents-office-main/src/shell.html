@@ -3683,13 +3683,22 @@
     #rail.agentOpen .m-foot { flex: 0 0 auto; }
     #rail.agentOpen #railAgent { overflow-y: auto; overscroll-behavior: contain; }
     #rail.agentOpen .mc-pro { max-height: 56px; overflow-y: auto; overscroll-behavior: contain; }
+    /* ecrãs baixos (≤ 700 px de altura): a folha sobe e o zoom passa a 6 colunas (2 linhas), para
+       que a folha tenha altura suficiente para o registo e o compositor. A descrição e o estado
+       do agente saem da folha nestes ecrãs; o registo continua com 72 px de mínimo. */
     @media (max-height: 700px) {
+      #rail.agentOpen { height: calc(100dvh - 164px); height: calc(100vh - 164px); }
+      #rail.agentOpen #railDept { padding-top: 44px; }
       #rail.agentOpen .mh-tag, #rail.agentOpen #mhLive { display: none; }
       #rail.agentOpen .chat-fold { height: 26px; margin-top: 4px; }
+      #rail.agentOpen .m-foot { padding: 4px 10px 6px; }
+      #rail.agentOpen .chips-tog { margin-bottom: 4px; }
     }
     /* com a folha aberta, os 12 controlos ficam em grelha de 4 colunas (3 linhas): cabem acima da folha */
     body:has(#rail.agentOpen) #zoomCtl { top: 56px; bottom: auto; right: 10px; display: grid; grid-template-columns: repeat(4, 42px); gap: 4px; }
     body:has(#rail.agentOpen) #zoomCtl button { width: 42px; height: 42px; }
+    /* 12 controlos em 6 colunas = 2 linhas; o «entrega» (wide, 2 colunas) passa a quadrado para não criar uma 3.ª linha */
+    @media (max-height: 700px) { body:has(#rail.agentOpen) #zoomCtl { grid-template-columns: repeat(6, 44px); } body:has(#rail.agentOpen) #zoomCtl button { width: 44px; height: 44px; } body:has(#rail.agentOpen) #zoomCtl button.wide { grid-column: auto; } }
     #railDept { padding: 56px 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
     #railHeader { padding-right: 44px; }
     #railClose { top: 8px; right: 10px; }
