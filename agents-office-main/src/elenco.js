@@ -11,7 +11,7 @@
    haver duas cópias a divergir (o teste `elenco.test.mjs` compara-a com os tipos
    que o motor de tarefas realmente produz).
    =========================================================================== */
-import { AGENTS as LUGARES } from './data.js';
+import { AGENTS as LUGARES, NOME_SALA } from './data.js';
 import { IDENTITY } from './agentes.js';
 
 /* ⚠️ Duas línguas para o mesmo sítio.
@@ -60,11 +60,8 @@ export const DEPARTAMENTO_EN_DA_ROTINA = Object.fromEntries(
   Object.entries(ROTINA).map(([kind, r]) => [kind, r.dept]),
 );
 
-/** O nome de cada sala da cena, em português. */
-export const SALAS = {
-  emails: 'Comando', sales: 'Prospecção', ops: 'Vendas',
-  marketing: 'Marketing', fin: 'Design', delivery: 'Entrega',
-};
+/** O nome de cada sala, em português. Vem de data.js (NOME_SALA): não há uma segunda lista. */
+export const SALAS = NOME_SALA;
 
 /** Departamento da MESA (`api/_rotas.mjs`, em português) → sala da cena.
  *  Os dois mapas usam nomes diferentes para o mesmo sítio: `comando`≠`command`,
@@ -73,6 +70,9 @@ export const SALA_DO_DEPARTAMENTO_PT = {
   comando: 'emails', prospeccao: 'sales', vendas: 'ops',
   media: 'marketing', design: 'fin', engenharia: 'delivery',
 };
+
+/** Os departamentos da mesa, na ordem em que aparecem, com o nome da sala (o mesmo da cena). */
+export const DEPARTAMENTOS_MESA = Object.entries(SALA_DO_DEPARTAMENTO_PT).map(([id, sala]) => ({ id, nome: SALAS[sala] }));
 
 /** Os tipos de trabalho que caem num posto (vazio = posto sem rotina própria). */
 export function rotinasDoPosto(id) {

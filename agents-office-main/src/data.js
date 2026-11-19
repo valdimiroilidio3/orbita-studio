@@ -47,6 +47,17 @@ export const DEPTS = {
   brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', glass: '#AEB6AB', glassName: 'neutro' },
 };
 
+/* O nome de cada sala, em forma de título («Design Lab»), para a mesa, a API e as rotinas.
+   É DAQUI e de mais nenhum sítio: os mapas que existiam escritos à mão (elenco, rotinas, mesa,
+   painel, tarefas) já tinham divergido («Entrega», «Engenharia», «Contabilidade»). Deriva de DEPTS.name. */
+export const NOME_SALA = Object.fromEntries(
+  DEPT_KEYS.map((k) => [k, DEPTS[k].name.toLowerCase().replace(/(^|\s)(\S)/g, (_, b, c) => b + c.toUpperCase())]),
+);
+/* As salas que já aceitam rotinas. Quando uma sala ganhar rotinas, muda-se aqui: o servidor e a interface acompanham. */
+export const SALAS_COM_ROTINAS = ['emails', 'sales', 'ops'];
+/* «a, b e c» — para as frases que enumeram salas, sem repetir a regra em cada ficheiro. */
+export const listaE = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}`);
+
 // 49 agents (V3.4, 7 Sep 2026: every department has a lead; o elenco cresceu de 35 para 47 e, na 1.89.0, para 49). grid = [col,row] desk slot on the department plinth.
 export const AGENTS = [
   // COMANDO (5)

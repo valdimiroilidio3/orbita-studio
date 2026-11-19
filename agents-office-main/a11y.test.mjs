@@ -40,7 +40,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 const SALAS = ['emails', 'delivery', 'sales', 'marketing', 'fin', 'ops', 'brain'];
 const NOMES = {
-  emails: 'Comando', delivery: 'Engenharia', sales: 'Prospecção',
+  emails: 'Comando', delivery: 'Engenharia', sales: 'Prospeção',
   marketing: 'Media', fin: 'Design Lab', ops: 'Vendas', brain: 'Cérebro',
 };
 const AGENTES = AGENTS_REAIS.map((a) => ({

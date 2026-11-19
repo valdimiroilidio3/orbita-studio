@@ -44,14 +44,9 @@ export const DEPARTAMENTO_POR_TIPO = {
   seguranca: 'engenharia',
 };
 
-export const DEPARTAMENTO_LABEL = {
-  comando: 'Comando',
-  prospeccao: 'Prospecção',
-  vendas: 'Vendas',
-  media: 'Media',
-  design: 'Design',
-  engenharia: 'Engenharia',
-};
+import { DEPARTAMENTOS_MESA } from './elenco.js';
+// o nome de cada departamento vem de data.js (através de elenco.js): não há uma segunda lista
+export const DEPARTAMENTO_LABEL = Object.fromEntries(DEPARTAMENTOS_MESA.map((d) => [d.id, d.nome]));
 
 const MILISSEGUNDO = 1;
 const MINUTO = 60 * 1000;

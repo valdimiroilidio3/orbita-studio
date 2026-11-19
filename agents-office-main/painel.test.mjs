@@ -114,7 +114,7 @@ test('fila de aprovações: rascunhos, autonomia e tarefas, com a urgência do q
 test('agentes: o estado de cada sala sai das tarefas (a correr, bloqueada, na fila, em descanso)', () => {
   const departamentos = [
     { id: 'comando', nome: 'Comando' },
-    { id: 'prospeccao', nome: 'Prospecção' },
+    { id: 'prospeccao', nome: 'Prospeção' },
     { id: 'vendas', nome: 'Vendas' },
     { id: 'engenharia', nome: 'Engenharia' },
     { id: 'design', nome: 'Design' },
@@ -215,7 +215,7 @@ const MAPA = {
   '/ops/agentes': { departamentos: [
     { id: 'comando', nome: 'Comando', tarefas: { aCorrer: 0, naFila: 0, porAprovar: 1, concluidas: 2, falhadas: 0 } },
     { id: 'engenharia', nome: 'Engenharia', tarefas: { aCorrer: 1, naFila: 0, porAprovar: 0, concluidas: 5, falhadas: 0 } },
-    { id: 'prospeccao', nome: 'Prospecção', tarefas: { aCorrer: 0, naFila: 0, porAprovar: 0, concluidas: 1, falhadas: 1 } },
+    { id: 'prospeccao', nome: 'Prospeção', tarefas: { aCorrer: 0, naFila: 0, porAprovar: 0, concluidas: 1, falhadas: 1 } },
   ], resumo: { total: 5, running: 1, awaiting: 1 } },
 };
 
@@ -292,7 +292,7 @@ test('DOM: o estado das salas aparece sem abrir o escritório', async () => {
   assert.equal(salas.length, 3, 'uma linha por sala');
   const texto = salas.map((s) => s.textContent.replace(/\s+/g, ' ').trim()).join(' | ');
   assert.match(texto, /Engenharia.*A trabalhar/);
-  assert.match(texto, /Prospecção.*Bloqueado/);
+  assert.match(texto, /Prospeção.*Bloqueado/);
   assert.match(texto, /Comando.*Espera por ti/);
   assert.ok(doc.querySelector('.cc-dot.a-trabalhar'), 'o ponto azul de «a trabalhar» existe');
   assert.match(doc.querySelector('.cc-foot').textContent, /ver todas as salas/);

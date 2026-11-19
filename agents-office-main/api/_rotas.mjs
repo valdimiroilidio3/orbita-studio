@@ -65,15 +65,12 @@ const DEPARTAMENTOS_POR_TIPO = {
   /* 1.88.0 */
   oportunidade: 'prospeccao', triagem: 'comando', consentimento: 'comando', contrato: 'vendas', renovacao: 'vendas', crescimento: 'vendas', seo_pagina: 'media', caso_estudo: 'media', plano_projeto: 'engenharia', documentacao: 'engenharia', seguranca: 'engenharia',
 };
-const DEPARTAMENTOS = [
-  { id: 'comando', nome: 'Comando' }, { id: 'prospeccao', nome: 'Prospecção' },
-  { id: 'vendas', nome: 'Vendas' }, { id: 'media', nome: 'Media' },
-  { id: 'design', nome: 'Design' }, { id: 'engenharia', nome: 'Engenharia' },
-];
+const DEPARTAMENTOS = DEPARTAMENTOS_MESA; // nomes das salas vêm de data.js (via src/elenco.js)
 
 /* 1.84.0 · uma só verdade sobre o elenco: 49 lugares, quais têm trabalho
    próprio, e a ponte entre os tipos de tarefa e os postos. */
 import { elenco, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './_elenco.mjs';
+import { DEPARTAMENTOS_MESA } from '../src/elenco.js';
 
 const semAcentos = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const dedupe = (nome, cidade) => `${semAcentos(nome)}|${semAcentos(cidade)}`;

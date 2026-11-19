@@ -95,14 +95,7 @@ const DEPARTAMENTOS_POR_TIPO = {
   seguranca: 'engenharia',
 };
 
-const DEPARTAMENTOS = [
-  { id: 'comando', nome: 'Comando' },
-  { id: 'prospeccao', nome: 'Prospecção' },
-  { id: 'vendas', nome: 'Vendas' },
-  { id: 'media', nome: 'Media' },
-  { id: 'design', nome: 'Design' },
-  { id: 'engenharia', nome: 'Engenharia' },
-];
+const DEPARTAMENTOS = DEPARTAMENTOS_MESA; // nomes das salas vêm de data.js
 
 const vazio = () => ({
   v: 1,
@@ -134,7 +127,7 @@ import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca a
 import { NIVEIS_AUTONOMIA } from './motores.js';
 /* 1.84.0 · o elenco é dado puro (`src/elenco.js`): o mesmo no servidor e aqui,
    para o Control Center não dizer 49 lugares num modo e nada no outro. */
-import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './elenco.js';
+import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT, DEPARTAMENTOS_MESA } from './elenco.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
