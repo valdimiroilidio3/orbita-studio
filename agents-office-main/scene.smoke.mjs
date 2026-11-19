@@ -17,7 +17,7 @@
 //   node scene.smoke.mjs outro.html
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { familyOf } from './src/palette.js'; // o mesmo módulo puro que a cena usa para derivar o vidro
-import { AGENTS } from './src/data.js';      // 1.59.0: o elenco é a contagem verdadeira (47), não 35
+import { AGENTS } from './src/data.js';      // 1.59.0: o elenco é a contagem verdadeira (49), não os 35 do início
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -279,7 +279,7 @@ ok(Object.keys(LED_POR_SALA).length === 6, `esperava as 6 salas iluminadas, enco
 /* ---------- o espelho acessível: a mesma cena, por palavras (V8, 26 out 2026) ---------- */
 // A cena correu; agora exige-se que o escritório exista TAMBÉM fora dela. Não se testa a cor de
 // um anel de foco (isso é o olho), testa-se o que um leitor de ecrã e um teclado precisam: nome no
-// canvas, uma lista montada com as 7 salas e os 35 agentes, a tecla L a abrir e o Esc a fechar.
+// canvas, uma lista montada com as 7 salas e os 49 agentes, a tecla L a abrir e o Esc a fechar.
 const doc = win.document;
 const canvas = doc.getElementById('scene');
 ok(canvas && canvas.getAttribute('role') === 'img', 'o canvas não tem role="img"');

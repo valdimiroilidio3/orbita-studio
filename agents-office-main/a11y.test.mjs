@@ -300,7 +300,7 @@ test('a lista do escritório é alcançável sem saber atalhos: ligação de sal
   assert.match(main, /getElementById\('skipIndex'\)\s*\.addEventListener\('click'/, 'a ligação de salto não faz nada');
 });
 
-test('as 7 salas e os 35 agentes são a mesma lista dos dados reais', () => {
+test('as 7 salas e os 49 agentes são a mesma lista dos dados reais', () => {
   assert.match(main, /deptKeys: \[\.\.\.DEPT_KEYS, 'brain'\]/);
   assert.match(main, /agents: AGENTS/);
   // as duas acções do rato continuam a ser as do espelho — uma só implementação

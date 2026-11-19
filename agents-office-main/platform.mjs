@@ -484,7 +484,7 @@ export function createPlatform({
       routes: [
         { method: 'GET', path: '/api/platform', auth: 'nenhuma', why: 'o retrato: máquina, versões e APIs prontas' },
         { method: 'GET', path: '/api/health', auth: 'nenhuma', why: 'estado do escritório, modelos, integrações' },
-        { method: 'GET', path: '/api/agents', auth: 'nenhuma', why: 'os 35 agentes, funções e ferramentas' },
+        { method: 'GET', path: '/api/agents', auth: 'nenhuma', why: 'os 49 agentes, funções e ferramentas' },
         { method: 'GET', path: '/api/brain', auth: 'nenhuma', why: 'o grafo de notas do cérebro' },
         { method: 'GET', path: '/api/forge', auth: 'nenhuma', why: 'a oficina: ferramentas por sala' },
         { method: 'GET', path: '/api/forge/stream', auth: 'nenhuma', why: 'SSE: o terminal da oficina ao vivo' },

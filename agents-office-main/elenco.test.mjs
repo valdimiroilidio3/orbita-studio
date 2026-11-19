@@ -3,7 +3,7 @@
 
    O que estava incoerente, medido antes de ser corrigido:
 
-     · o escritório tem 47 lugares, o Orchestrator corre 8 motores, o motor de
+     · o escritório tem 49 lugares, o Orchestrator corre 8 motores, o motor de
        tarefas produz 6 tipos — e o mapa de postos falava `lead.pesquisar`,
        `projeto.gerar`, que o motor de produção nunca escreve. Resultado: no ao
        vivo, NENHUMA tarefa caía no seu posto;
@@ -85,7 +85,7 @@ test('1.84.0 · a ponte cobre todos os tipos de trabalho do motor — e não inv
   assert.equal(rotinasDoPosto('elead').includes('escritorio'), false);
 });
 
-test('1.84.0 · os 8 motores do Orchestrator são a segunda camada, não os 47 lugares', () => {
+test('1.84.0 · os 8 motores do Orchestrator são a segunda camada, não os 49 lugares', () => {
   const e = elenco();
   assert.equal(e.motores.length, 8);
   assert.equal(motores().length, 8);
@@ -235,7 +235,7 @@ test('1.84.0 · o Control Center pinta o «existe em…» e o elenco inteiro', a
 
 /* ---------- 6 · o modo local diz a mesma coisa ---------- */
 
-test('1.84.0 · no modo local o elenco é o mesmo (47 lugares) — muda o trabalho, não quem existe', async () => {
+test('1.84.0 · no modo local o elenco é o mesmo (49 lugares) — muda o trabalho, não quem existe', async () => {
   const { createLocalApi } = await import('./src/localapi.js');
   const memoria = new Map();
   const storage = { getItem: (k) => memoria.get(k) ?? null, setItem: (k, v) => memoria.set(k, v), removeItem: (k) => memoria.delete(k) };
