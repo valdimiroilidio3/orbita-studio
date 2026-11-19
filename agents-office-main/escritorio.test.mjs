@@ -26,12 +26,28 @@ test('2 · quem pediu menos movimento não leva uma cena animada por omissão', 
   assert.match(r.porque, /menos movimento/);
 });
 
-test('3 · no telemóvel a planta abre primeiro', () => {
+test('3 · no telemóvel o 3D abre primeiro (1.90.1); o tablet mantém a planta', () => {
   const r = modoInicial({ toque: true, estreito: true });
-  assert.equal(r.modo, 'planta');
+  assert.equal(r.modo, '3d');
+  assert.equal(r.decididoPor, 'telemovel');
   assert.match(r.porque, /telemóvel/);
   const tablet = modoInicial({ toque: true, estreito: false });
   assert.equal(tablet.modo, 'planta');
+});
+
+test('3b · sem WebGL a planta abre, em qualquer aparelho (alternativa acessível)', () => {
+  for (const caso of [{ toque: true, estreito: true }, { toque: false, estreito: false }, { guardado: '3d' }]) {
+    const r = modoInicial({ ...caso, semWebGL: true });
+    assert.equal(r.modo, 'planta', JSON.stringify(caso));
+    assert.equal(r.decididoPor, 'sem-3d');
+    assert.match(r.porque, /não mostra o 3D/);
+  }
+});
+
+test('3c · a escolha guardada de planta continua a mandar no telemóvel', () => {
+  const r = modoInicial({ guardado: 'planta', toque: true, estreito: true });
+  assert.equal(r.modo, 'planta');
+  assert.equal(r.decididoPor, 'dono');
 });
 
 test('4 · no computador o escritório abre em 3D, como sempre', () => {

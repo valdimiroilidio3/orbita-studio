@@ -59,6 +59,7 @@ import {
 /* 1.62.0 · o escritório é opcional no telemóvel: a planta abre primeiro e o 3D
    fica a um botão. A decisão é pura e está provada em `escritorio.test.mjs`. */
 import { modoInicial, lerModo, gravarModo, proximoModo, rotuloDoBotao, fraseDoModo } from './escritorio-modo.js';
+import { criarRenderer } from './gl.js'; // 1.90.1: sem WebGL a página continua (a planta é a alternativa)
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -164,7 +165,8 @@ try {
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+/* 1.90.1 · sem WebGL o renderer real não se cria (antes a página parava aqui) */
+const renderer = criarRenderer(canvas, (o) => new THREE.WebGLRenderer(o));
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
@@ -2770,6 +2772,7 @@ const decisaoDoModo = (() => {
     estreito: perguntar('(max-width: 820px)'),
     movimentoReduzido: perguntar('(prefers-reduced-motion: reduce)'),
     semArmazem: !armazemDoModo(),
+    semWebGL: !!renderer.isSemGL,
   });
 })();
 let modoOficina = decisaoDoModo.modo;
@@ -2777,6 +2780,16 @@ function syncModoBtn() {
   const b = document.getElementById('z2d');
   if (!b) return;
   const r = rotuloDoBotao(modoOficina);
+  /* sem WebGL não há 3D para voltar: o botão fica desligado e diz porquê */
+  if (renderer.isSemGL) {
+    b.disabled = true;
+    b.title = 'este aparelho não mostra o 3D — fica a planta 2D';
+    b.setAttribute('aria-label', 'planta 2D (o 3D não está disponível neste aparelho)');
+    b.setAttribute('aria-pressed', 'true');
+    b.classList.add('on');
+    b.dataset.modo = 'planta';
+    return;
+  }
   b.title = r.titulo;
   b.setAttribute('aria-label', r.aria);
   b.setAttribute('aria-pressed', modoOficina === 'planta' ? 'true' : 'false');
@@ -2791,6 +2804,7 @@ function aplicarModo({ guardar = true } = {}) {
   syncModoBtn();
 }
 function alternarVista() {
+  if (renderer.isSemGL) return; // 1.90.1: sem 3D, a planta é a única vista
   modoOficina = proximoModo(modoOficina);
   aplicarModo();
   /* a frase diz onde está a outra vista: um botão sem explicação é um mistério */

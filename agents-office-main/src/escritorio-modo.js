@@ -37,17 +37,26 @@ export function gravarModo(storage, modo) {
 
 /**
  * Que vista abrir no arranque.
- * @returns {{modo:'planta'|'3d', porque:string, decididoPor:'dono'|'movimento'|'toque'|'ecra'|'computador'|'armazem'}}
+ * @returns {{modo:'planta'|'3d', porque:string, decididoPor:'dono'|'movimento'|'toque'|'telemovel'|'sem-3d'|'ecra'|'computador'|'armazem'}}
  */
-export function modoInicial({ guardado = null, toque = false, estreito = false, movimentoReduzido = false, semArmazem = false } = {}) {
-  if (guardado === 'planta' || guardado === '3d') {
-    return { modo: guardado, decididoPor: 'dono', porque: guardado === 'planta' ? 'escolheste a planta uma vez — fica assim até mudares' : 'escolheste o 3D uma vez — fica assim até mudares' };
+export function modoInicial({ guardado = null, toque = false, estreito = false, movimentoReduzido = false, semArmazem = false, semWebGL = false } = {}) {
+  if (guardado === 'planta') {
+    return { modo: 'planta', decididoPor: 'dono', porque: 'escolheste a planta uma vez — fica assim até mudares' };
+  }
+  /* sem WebGL o 3D não existe neste aparelho, nem por escolha guardada: a planta é a alternativa acessível */
+  if (semWebGL) {
+    return { modo: 'planta', decididoPor: 'sem-3d', porque: 'este aparelho não mostra o 3D: fica a planta, com as mesmas salas e o mesmo estado' };
+  }
+  if (guardado === '3d') {
+    return { modo: '3d', decididoPor: 'dono', porque: 'escolheste o 3D uma vez — fica assim até mudares' };
   }
   if (movimentoReduzido) {
     return { modo: 'planta', decididoPor: 'movimento', porque: 'pediste menos movimento: a planta abre primeiro e o 3D fica a um toque' };
   }
+  /* 1.90.1 · no telemóvel a planta deixa de ser a vista por defeito: o 3D abre primeiro
+     (é a marca), desde que o aparelho o consiga desenhar. A planta fica a um toque. */
   if (toque && estreito) {
-    return { modo: 'planta', decididoPor: 'toque', porque: 'no telemóvel a planta abre primeiro — o 3D está no botão ao lado' };
+    return { modo: '3d', decididoPor: 'telemovel', porque: 'no telemóvel o escritório abre em 3D — a planta está no botão ao lado' };
   }
   if (toque) {
     return { modo: 'planta', decididoPor: 'toque', porque: 'com o dedo, a planta é mais rápida de ler; o 3D continua a um toque' };
