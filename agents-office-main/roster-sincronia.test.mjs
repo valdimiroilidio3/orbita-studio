@@ -215,3 +215,10 @@ test('10b · um brief com tipo errado (objeto) é avisado e ignorado, não passa
   assert.ok(r.problems.some(x => /brief tem de ser texto ou uma lista de linhas/.test(x)), 'aviso do brief');
   assert.equal(r.agents.find(a => a.id === 'elead').brief, 'Linha um\nLinha dois', 'lista de linhas continua a juntar-se');
 });
+
+test('11 · o total oficial é 49 lugares: se mudar, é uma decisão do proprietário e este teste avisa', () => {
+  // Guarda deliberada, não contagem derivada: AGENTS.length nunca falharia sozinho.
+  assert.equal(AGENTS.length, 49, 'o escritório tem 49 lugares; mudar este número exige rever as guardas de 49 nos outros testes');
+  assert.equal(lerJson(FILE).agents.length, 49, 'office.agents.json tem uma entrada por lugar');
+  assert.equal(LUGARES, 49, 'roster.mjs LUGARES');
+});
