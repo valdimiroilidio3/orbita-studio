@@ -1,7 +1,7 @@
 /* ===========================================================================
    1.84.0 · O ELENCO, EM DADOS PUROS (11 nov 2026)
 
-   Este ficheiro é a parte que o browser também consegue ler: as 47 identidades
+   Este ficheiro é a parte que o browser também consegue ler: as 49 identidades
    do escritório (`src/data.js` + `src/agentes.js`, ambos puros) e a tabela que
    liga os tipos de trabalho do motor aos postos da cena.
 

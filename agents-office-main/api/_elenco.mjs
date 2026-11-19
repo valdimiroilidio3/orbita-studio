@@ -1,7 +1,7 @@
 /* ===========================================================================
    1.84.0 · O ELENCO DO LADO DO SERVIDOR (11 nov 2026)
 
-   A parte pura está em `src/elenco.js` (as 47 identidades e a tabela que liga os
+   A parte pura está em `src/elenco.js` (as 49 identidades e a tabela que liga os
    tipos de trabalho aos postos) e o browser lê-a também. Aqui fica o que só o
    servidor sabe: os 8 motores do Orchestrator e a verificação de que cada tipo
    de trabalho da tabela existe REALMENTE no motor de tarefas.

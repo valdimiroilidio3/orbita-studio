@@ -57,7 +57,7 @@ deploy READY → uma linha honesta na conversa.
 | **A6** | A Cara (nome, página, preço, vídeo, domínio) | produto sem porta de entrada pública | 1.59 | 🟡 médio | 1 ciclo |
 | **A7** | Legal e RGPD | tratas dados de terceiros sem base escrita | 1.60 | 🟠 alto | 1 ciclo |
 | **A8** | Conectar mesmo às apps (WhatsApp, email, Google) | catálogo de 53, envio real a zero | 1.56b | 🟠 alto | 2 ciclos |
-| **A9** | Mais agentes e IAs (47 → 60+) com ofício próprio | salas cheias, nem todos com trabalho definido | 1.57b | 🟡 médio | 1 ciclo |
+| **A9** | Mais agentes e IAs (49 → 60+) com ofício próprio | salas cheias, nem todos com trabalho definido | 1.57b | 🟡 médio | 1 ciclo |
 | **A10** | Liquid glass e polimento da cena/mesa | vidro só em 16 regras; inconsistente | 1.58b | 🟡 médio | 1 ciclo |
 | **A11** | Mover/arrastar com scroll e ângulos de câmara | arrastar sem inércia; 4 vistas fixas | 1.59b | 🟢 baixo | 1 ciclo |
 | **A12** | Publicação (`1.0.0`) | — | 1.60 → **1.0.0** | — | — |
@@ -401,10 +401,10 @@ email real entregue; o estado de cada app dito com data e hora.
 
 ### A9 · Mais agentes e IAs — `1.57b` 🟡
 
-Há **47 agentes** com papel escrito. O que falta não é quantidade: é **ofício
+Há **49 agentes** com papel escrito. O que falta não é quantidade: é **ofício
 verificável** — cada agente com (a) uma rotina de tarefa real (como as 5 de
 `api/_tarefas.mjs`), (b) a sala e o departamento certos, (c) uma frase de «o que
-faz» que não seja decoração. Meta: 47 → **60**, todos com rotina ou declarados
+faz» que não seja decoração. Meta: 49 → **60**, todos com rotina ou declarados
 como consultivos (sem tarefa).
 
 **Estado (12 nov 2026, 1.89.0):** **49 lugares**, **18 com rotina própria**, 31

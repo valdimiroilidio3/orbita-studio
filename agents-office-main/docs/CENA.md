@@ -259,7 +259,7 @@ caseiro, sem browser). Sem emissão nem texturas: serve para julgar volumes e co
   **lê o material que ficou desenhado** (`window.CC.office.floors`): 7 pods, 4 camadas cada, a
   laje translúcida, e cada uma das seis famílias presente exactamente uma vez, com o centro em
   vidro fosco. Também as **7 plantas** (duas espécies, altura razoável, nenhuma folhagem a sair do
-  pod) e as **35 secretárias**: cada uma com LED na cor emissiva exacta do vidro da sua sala, corpo
+  pod) e as **49 secretárias**: cada uma com LED na cor emissiva exacta do vidro da sua sala, corpo
   preto, halo, e a costura da cadeira na mesma cor.
 - `npm run check` — o servidor, as rotas, a sessão, o SSE.
 

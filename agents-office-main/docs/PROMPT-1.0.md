@@ -52,7 +52,7 @@ Enquanto isto não acontecer com alguém que não és tu, não é 1.0. É a tua 
 
 | Peça | Estado |
 |---|---|
-| Escritório 3D | 6 salas, ~47 agentes, câmara por arrasto, liquid glass, monitores em direto |
+| Escritório 3D | 6 salas, 49 agentes, câmara por arrasto, liquid glass, monitores em direto |
 | Mesa (2D) | 11 vistas: hoje, leads, papel, cine, conversas, saldo, projetos, tarefas, agentes, contas, ia |
 | Motor de IA | cadeia com fallback, ~159 modelos, fornecedores sem chave, registo em `/ia/uso`, orçamento por chamada |
 | Tarefas | correm a sério desde a 1.53.2 (5 rotinas, contexto real, resultado gravado) |

@@ -328,7 +328,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         configurado: true, semChave: true, variavel: 'não precisa', chaveMascarada: '',
         estado: 'por_testar', limites: g.limites, desligado: false, ultimoTeste: null,
       }));
-      /* 1.84.0 · o elenco não depende do servidor: são 47 identidades escritas
+      /* 1.84.0 · o elenco não depende do servidor: são 49 identidades escritas
          em `src/data.js`. O que depende do servidor são os 8 motores, e isso
          diz-se na nota — em vez de deixar o cartão vazio no modo local. */
       const el = elencoBase();

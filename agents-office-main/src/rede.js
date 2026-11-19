@@ -104,7 +104,7 @@ export function construirRede({ agentes = [], tarefas = [], notas = [], limite =
       || (Date.parse(b.t.created_at || b.t.createdAt || 0) || 0) - (Date.parse(a.t.created_at || a.t.createdAt || 0) || 0))
     .slice(0, Math.max(0, Number(limite) || 0));
 
-  /* Só entra o agente que tem trabalho escolhido — os outros 35 ficariam a
+  /* Só entra o agente que tem trabalho escolhido — os outros ficariam a
      fazer peso no desenho sem uma única aresta para mostrar. */
   const idsDeAgente = [];
   for (const x of escolhidas) {

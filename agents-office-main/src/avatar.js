@@ -20,7 +20,7 @@
 //     dois ossos: a mão *vai* ao ponto que `deskmap.js` diz (a tecla que está a ser premida, o rato
 //     a deslizar no tapete) e o cotovelo resolve-se sozinho, para o lado de fora.
 //
-// NOTA DE CUSTO. São 35 avatares. Por isso a cabeça inteira (cara, cabelo, chapéu, barba, óculos)
+// NOTA DE CUSTO. São 49 avatares. Por isso a cabeça inteira (cara, cabelo, chapéu, barba, óculos)
 // é UMA malha fundida com cor por vértice, e o tronco (casaco, camisa, gravata, cinto) é outra. Um
 // avatar custa ~8 malhas sentado — menos do que o de 1.9.9 (9), com muito mais desenho.
 

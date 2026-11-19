@@ -8,9 +8,9 @@
 // desenho (`src/avatar.js`) e os testes podem ler a mesma verdade.
 //
 // Regras:
-//   · **35 assinaturas distintas.** Não 35 sortes: uma tabela escrita à mão, agente a agente, com
+//   · **49 assinaturas distintas.** Não 49 sortes: uma tabela escrita à mão, agente a agente, com
 //     estilo e variante. O teste `office.test.mjs` recusa dois agentes com o mesmo par.
-//   · **14 mulheres, 8 chapéus, 8 barbas, 7 óculos** — espalhados pelas seis salas, não todos na
+//   · **21 mulheres, 10 chapéus, 15 barbas, 11 óculos** (contagem da tabela atual) — espalhados pelas seis salas, não todos na
 //     mesma. Os testes verificam o equilíbrio, não só a existência.
 //   · **A cor da roupa é a da sala.** O casaco é o `chip` do departamento escurecido e dessaturado
 //     (um fato, não um bloco pastel); a gravata e o lenço são o `chip` vivo. Olhando a sala, lê-se

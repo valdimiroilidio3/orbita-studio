@@ -1,4 +1,4 @@
-// Órbita — quem é quem. Isto é **identidade**, não demonstração: o nome vem de `data.js` (os 35
+// Órbita — quem é quem. Isto é **identidade**, não demonstração: o nome vem de `data.js` (os 49
 // lugares da cena) e a função e a descrição vêm daqui, para o rail, o painel ao vivo e o servidor
 // (`roster.mjs`) dizerem a mesma coisa. Nada aqui é um número, um evento ou um resultado.
 //
