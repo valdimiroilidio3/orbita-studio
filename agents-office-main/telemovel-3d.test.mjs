@@ -160,21 +160,19 @@ test('browser · telemóvel com WebGL: abre em 3D, e a folha do agente cabe no e
 /* Um navegador e uma página para os três casos. Cada verificação é um teste à parte: se um falhar
    no CI, o nome do teste na anotação diz qual (o log do job não estava acessível). */
 describe('browser · telemóvel sem WebGL', { timeout: 170000 }, () => {
-  let browser, b2, ctx, page, erros, disponivel = false;
+  let browser, ctx, page, erros, disponivel = false;
+  /* o mesmo navegador de `abrirBrowser()` (no CI, o Google Chrome): o modo sem WebGL é por contexto,
+     por isso não é preciso lançar outro. Um segundo `launch()` sem canal falhava no CI e deitava
+     abaixo o bloco inteiro. */
   before(async () => {
     if (!chromium || !fs.existsSync(BUNDLE)) return;
     try { browser = await abrirBrowser(); } catch { return; }
-    const args = ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'];
-    b2 = process.env.CHROME_PATH
-      ? await chromium.launch({ executablePath: process.env.CHROME_PATH, args })
-      : await chromium.launch({ args });
-    ({ page, erros, ctx } = await telemovel(b2, { semGL: true }));
+    ({ page, erros, ctx } = await telemovel(browser, { semGL: true }));
     await page.waitForFunction(() => document.body.classList.contains('plantaAberta'), null, { timeout: 120000 });
     disponivel = true;
   });
   after(async () => {
     if (ctx) await ctx.close().catch(() => {});
-    if (b2) await b2.close().catch(() => {});
     if (browser) await browser.close().catch(() => {});
   });
 
