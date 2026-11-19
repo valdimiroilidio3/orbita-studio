@@ -26,7 +26,7 @@ test('2 · quem pediu menos movimento não leva uma cena animada por omissão', 
   assert.match(r.porque, /menos movimento/);
 });
 
-test('3 · no telemóvel o 3D abre primeiro (1.90.1); o tablet mantém a planta', () => {
+test('3 · no telemóvel o 3D abre primeiro; o tablet mantém a planta', () => {
   const r = modoInicial({ toque: true, estreito: true });
   assert.equal(r.modo, '3d');
   assert.equal(r.decididoPor, 'telemovel');

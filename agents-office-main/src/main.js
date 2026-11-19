@@ -59,7 +59,7 @@ import {
 /* 1.62.0 · o escritório é opcional no telemóvel: a planta abre primeiro e o 3D
    fica a um botão. A decisão é pura e está provada em `escritorio.test.mjs`. */
 import { modoInicial, lerModo, gravarModo, proximoModo, rotuloDoBotao, fraseDoModo } from './escritorio-modo.js';
-import { criarRenderer } from './gl.js'; // 1.90.1: sem WebGL a página continua (a planta é a alternativa)
+import { criarRenderer } from './gl.js'; // sem WebGL a página continua (a planta é a alternativa)
 import { lookFor, lookProblems, LOOK_STATS } from './looks.js';
 import {
   contact as deskContact, keyCells, nearestKey, mouseAt,
@@ -165,7 +165,7 @@ try {
 
 /* ---------- renderer / scene / camera ---------- */
 const canvas = document.getElementById('scene');
-/* 1.90.1 · sem WebGL o renderer real não se cria (antes a página parava aqui) */
+/* sem WebGL o renderer real não se cria (antes a página parava aqui) */
 const renderer = criarRenderer(canvas, (o) => new THREE.WebGLRenderer(o));
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
@@ -1644,6 +1644,21 @@ function flyBillboardIntoRail(k) {
     document.getElementById('railHeader').classList.add('show');
   }, 560);
 }
+/* As sugestões rápidas do telemóvel: recolhidas por defeito (uma linha), expandem-se a pedido.
+   O botão diz o que faz e quantas há; o estado vive na classe do #rail, que o CSS lê. */
+const SUGESTOES = ['O que estás a fazer?', 'O que tenho à espera?', 'Que ferramentas podes usar?'];
+function sincronizarSugestoes(aberto) {
+  const rail = document.getElementById('rail');
+  const b = document.getElementById('mChipsTog');
+  if (rail) rail.classList.toggle('chipsOpen', !!aberto);
+  if (!b) return;
+  b.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+  b.textContent = aberto ? 'Ocultar sugestões' : `Sugestões (${SUGESTOES.length})`;
+}
+document.getElementById('mChipsTog')?.addEventListener('click', () => {
+  const aberto = document.getElementById('rail')?.classList.contains('chipsOpen');
+  sincronizarSugestoes(!aberto);
+});
 function openAgentRail(id, tab = 'chat', fly = true) {
   const r = R[id];
   ensureChat(id);
@@ -1655,8 +1670,9 @@ function openAgentRail(id, tab = 'chat', fly = true) {
   const info = agentInfo(id);
   document.querySelector('#railAgent .mh-role').textContent = `${info.role} · ${dept.name}`;
   document.querySelector('#railAgent .mh-tag').textContent = info.tagline;
-  document.getElementById('mChips').innerHTML = ['O que estás a fazer?', 'O que tenho à espera?', 'Que ferramentas podes usar?'].map(c =>
+  document.getElementById('mChips').innerHTML = SUGESTOES.map(c =>
     `<button>${esc(c)}</button>`).join('');
+  sincronizarSugestoes(false);
   document.getElementById('mChips').querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => sendChat(b.textContent)));
   rail.classList.add('agentOpen');
@@ -2804,7 +2820,7 @@ function aplicarModo({ guardar = true } = {}) {
   syncModoBtn();
 }
 function alternarVista() {
-  if (renderer.isSemGL) return; // 1.90.1: sem 3D, a planta é a única vista
+  if (renderer.isSemGL) return; // sem 3D, a planta é a única vista
   modoOficina = proximoModo(modoOficina);
   aplicarModo();
   /* a frase diz onde está a outra vista: um botão sem explicação é um mistério */

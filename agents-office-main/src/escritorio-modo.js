@@ -53,7 +53,7 @@ export function modoInicial({ guardado = null, toque = false, estreito = false, 
   if (movimentoReduzido) {
     return { modo: 'planta', decididoPor: 'movimento', porque: 'pediste menos movimento: a planta abre primeiro e o 3D fica a um toque' };
   }
-  /* 1.90.1 · no telemóvel a planta deixa de ser a vista por defeito: o 3D abre primeiro
+  /* no telemóvel a planta deixa de ser a vista por defeito: o 3D abre primeiro
      (é a marca), desde que o aparelho o consiga desenhar. A planta fica a um toque. */
   if (toque && estreito) {
     return { modo: '3d', decididoPor: 'telemovel', porque: 'no telemóvel o escritório abre em 3D — a planta está no botão ao lado' };

@@ -1,5 +1,5 @@
 /* ===========================================================================
-   1.90.1 · SEM WEBGL, O ESCRITÓRIO CONTINUA A ABRIR
+   SEM WEBGL, O ESCRITÓRIO CONTINUA A ABRIR
 
    Antes: `new THREE.WebGLRenderer(...)` lançava quando o aparelho ou o browser
    não tinham WebGL (medido em Chromium com `--disable-webgl`: a página parava
