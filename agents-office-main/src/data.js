@@ -32,7 +32,7 @@ export const DEPT_KEYS = ['emails', 'sales', 'marketing', 'ops', 'fin', 'deliver
 // uma por sala (o teste `office.test.mjs` verifica-o, matiz a matiz):
 //
 //   emails    COMANDO      verde     #1FA36B        ops     VENDAS   roxo     #8B5AD6
-//   delivery  ENGENHARIA   azul céu  #41AEE4        fin     DESIGN   azul     #4A6DE0
+//   delivery  ENGENHARIA   azul céu  #41AEE4        fin     DESIGN LAB azul   #4A6DE0
 //   sales     PROSPEÇÃO    amarelo   #E3B93A        marketing MEDIA  vermelho #DC5348
 //
 // O Cérebro fica com vidro fosco (neutro, de propósito): é o centro, e o centro não compete
@@ -42,7 +42,7 @@ export const DEPTS = {
   delivery:  { name: 'ENGENHARIA',         short: 'ENGENHARIA', chip: '#8FD3F4', ink: '#2E86AB', glass: '#41AEE4', glassName: 'azul céu' },
   sales:     { name: 'PROSPEÇÃO',            short: 'PROSPEÇÃO',   chip: '#EADC8F', ink: '#A08A1E', glass: '#E3B93A', glassName: 'amarelo' },
   marketing: { name: 'MEDIA',        short: 'MEDIA', chip: '#E69393', ink: '#C46060', glass: '#DC5348', glassName: 'vermelho' },
-  fin:       { name: 'DESIGN LAB',          short: 'DESIGN', chip: '#98A5EF', ink: '#5B66CE', glass: '#4A6DE0', glassName: 'azul' },
+  fin:       { name: 'DESIGN LAB',          short: 'DESIGN LAB', chip: '#98A5EF', ink: '#5B66CE', glass: '#4A6DE0', glassName: 'azul' },
   ops:       { name: 'VENDAS',       short: 'VENDAS', chip: '#BFA2E3', ink: '#7449A9', glass: '#8B5AD6', glassName: 'roxo' },
   brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', glass: '#AEB6AB', glassName: 'neutro' },
 };

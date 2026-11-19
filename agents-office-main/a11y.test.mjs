@@ -32,17 +32,14 @@ import { initA11y } from './src/a11y.js';
 /* 1.53.0: o escritório falso tem de ser do TAMANHO do verdadeiro. Antes era um `Array.from(35)`
    escrito à mão; quando os agentes passaram a 47, este teste continuava a falar de 35 e a passar.
    Agora o espelho lê os dados reais e a contagem é conferida com um número explícito. */
-import { AGENTS as AGENTS_REAIS } from './src/data.js';
+import { AGENTS as AGENTS_REAIS, NOME_SALA } from './src/data.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 /* ---------- um escritório falso, do tamanho do verdadeiro ---------- */
 
 const SALAS = ['emails', 'delivery', 'sales', 'marketing', 'fin', 'ops', 'brain'];
-const NOMES = {
-  emails: 'Comando', delivery: 'Engenharia', sales: 'Prospeção',
-  marketing: 'Media', fin: 'Design Lab', ops: 'Vendas', brain: 'Cérebro',
-};
+const NOMES = { ...NOME_SALA, brain: 'Cérebro' }; // os nomes das salas vêm de src/data.js
 const AGENTES = AGENTS_REAIS.map((a) => ({
   id: a.id,
   name: a.name,
