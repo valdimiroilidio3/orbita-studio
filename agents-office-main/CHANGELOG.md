@@ -1,3 +1,20 @@
+## 1.90.0 — a fila sem «ligada a undefined» e o REMOTO a 110 px no telemóvel
+
+Duas coisas que o dono viu e pediu, mais a limpeza de testes que as acompanha.
+
+**1. A fila de aprovações deixa de escrever «ligada a undefined».** Uma ação sem
+entidade ligada mostrava «ligada a undefined». Agora: com entidade, «ligada a X»;
+sem ela, o resumo ou o título da tarefa; sem nada, «ação externa à espera de OK».
+Teste novo em `painel.test.mjs` (falha com a versão antiga).
+
+**2. O REMOTO fica a 110 px do fundo também no telemóvel.** No computador já estava
+a 110 px desde a 1.89.6. No telemóvel estava a 74 px. Só muda a posição; não tapa
+painéis nem o dock. Folga medida ao topo da licença: 42 px no computador
+(1280×800) e 58 px no telemóvel (390×844), antes 22 px.
+
+**3. Testes.** O teste do elenco usava datas fixas de novembro, e o painel conta os
+últimos sete dias; passa a usar datas relativas a hoje. Não muda nada para o dono.
+
 ## 1.89.4 — a IA no telemóvel, a empresa de agentes e o olhar parado
 
 Sai tudo o que está no ramo desde a 1.89.1, que é a versão em produção. A 1.89.2
