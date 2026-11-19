@@ -23,6 +23,10 @@ const EDITABLE = ['name', 'role', 'does', 'tools', 'brief', 'model', 'effort'];
 const BRIEF_MAX = 2000;
 const MODELS = ['sonnet', 'opus', 'fable']; // V3.6: an agent's model, by name; empty = the office default
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']; // V3.6.1: an agent's effort; empty = the office's, then the model's own
+/* O que o dono escreve: texto (ou número) aparado. Objetos e listas devolvem null — antes viravam
+   «[object Object]» em silêncio. */
+const texto = v => (typeof v === 'string' || typeof v === 'number') ? String(v).trim() : null;
+const ehTextoOuLinhas = v => typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string' || typeof x === 'number'));
 
 export function defaults() {
   return AGENTS.map(a => { const p = IDENTITY[a.id] || {}; return { id: a.id, department: a.dept, lead: !!a.lead, name: a.name, role: p.role || '', does: p.does || '', tools: [], brief: '', model: '', effort: '' }; });
@@ -35,29 +39,30 @@ export function validate(doc, base = defaults()) {
   const out = base.map(a => ({ ...a, tools: [...a.tools] }));
   const seen = new Set();
   for (const e of list) {
-    if (!e || typeof e !== 'object' || !e.id) { problems.push('uma entrada não tem "id" — skipped'); continue; }
+    if (!e || typeof e !== 'object' || !e.id) { problems.push('uma entrada não tem "id" — ignorada'); continue; }
     const a = out.find(x => x.id === e.id);
     if (!a) { problems.push(`"${e.id}" não é um dos ${LUGARES} lugares — ignorado (não se acrescentam agentes; renomeia um lugar)`); continue; }
     if (seen.has(e.id)) problems.push(`"${e.id}" aparece duas vezes — a última entrada ganha`);
     seen.add(e.id);
-    if (e.department !== undefined && e.department !== a.department) problems.push(`"${e.id}": department cannot change (${a.department} → ${e.department}) — ignored`);
-    if (e.lead !== undefined && !!e.lead !== a.lead) problems.push(`"${e.id}": lead cannot change — ignored`);
-    for (const k of Object.keys(e)) if (!['id', 'department', 'lead', ...EDITABLE].includes(k)) problems.push(`"${e.id}": unknown field "${k}" — ignored`);
-    if (e.name !== undefined) { const n = String(e.name).trim(); if (!n) problems.push(`"${e.id}": empty name — kept "${a.name}"`); else a.name = n.slice(0, 32).toUpperCase(); }
-    if (e.role !== undefined) a.role = String(e.role).trim().slice(0, 80);
-    if (e.does !== undefined) a.does = String(e.does).trim().slice(0, 400);
-    if (e.tools !== undefined) { if (!Array.isArray(e.tools)) problems.push(`"${e.id}": tools tem de ser uma lista — ignorado`); else a.tools = e.tools.map(String).map(s => s.trim()).filter(Boolean).slice(0, 12); }
+    if (e.department !== undefined && e.department !== a.department) problems.push(`"${e.id}": o departamento não se muda (${a.department} → ${e.department}) — ignorado`);
+    if (e.lead !== undefined && !!e.lead !== a.lead) problems.push(`"${e.id}": o líder não se muda — ignorado`);
+    for (const k of Object.keys(e)) if (!['id', 'department', 'lead', ...EDITABLE].includes(k)) problems.push(`"${e.id}": campo desconhecido "${k}" — ignorado`);
+    if (e.name !== undefined) { const n = texto(e.name); if (n === null) problems.push(`"${e.id}": o nome tem de ser texto — mantém "${a.name}"`); else if (!n) problems.push(`"${e.id}": nome vazio — mantém "${a.name}"`); else a.name = n.slice(0, 32).toUpperCase(); }
+    if (e.role !== undefined) { const r = texto(e.role); if (r === null) problems.push(`"${e.id}": a função tem de ser texto — ignorada`); else a.role = r.slice(0, 80); }
+    if (e.does !== undefined) { const d = texto(e.does); if (d === null) problems.push(`"${e.id}": o «faz» tem de ser texto — ignorado`); else a.does = d.slice(0, 400); }
+    if (e.tools !== undefined) { if (!Array.isArray(e.tools)) problems.push(`"${e.id}": tools tem de ser uma lista — ignorado`); else { const nomes = e.tools.map(texto); if (nomes.some(n => n === null)) problems.push(`"${e.id}": só se aceitam nomes de conectores (texto) — os outros são ignorados`); a.tools = nomes.filter(Boolean).slice(0, 12); } }
     if (e.model !== undefined) { // V3.6: sonnet · opus · fable, or empty for the office default
       const m = String(e.model || '').toLowerCase().trim();
-      if (!m) a.model = ''; else if (MODELS.includes(m)) a.model = m; else problems.push(`"${e.id}": model must be sonnet, opus or fable (got "${e.model}") — kept ${a.model || 'the office default'}`);
+      if (!m) a.model = ''; else if (MODELS.includes(m)) a.model = m; else problems.push(`"${e.id}": o modelo tem de ser sonnet, opus ou fable (recebido "${e.model}") — mantém ${a.model || 'o padrão do escritório'}`);
     }
     if (e.effort !== undefined) { // V3.6.1: low · medium · high · xhigh · max, or empty
       const v = String(e.effort || '').toLowerCase().trim();
-      if (!v) a.effort = ''; else if (EFFORTS.includes(v)) a.effort = v; else problems.push(`"${e.id}": effort must be low, medium, high, xhigh or max (got "${e.effort}") — kept ${a.effort || 'the default'}`);
+      if (!v) a.effort = ''; else if (EFFORTS.includes(v)) a.effort = v; else problems.push(`"${e.id}": o esforço tem de ser low, medium, high, xhigh ou max (recebido "${e.effort}") — mantém ${a.effort || 'o padrão'}`);
     }
-    if (e.brief !== undefined) { // a string, or a list of lines
+    if (e.brief !== undefined && !ehTextoOuLinhas(e.brief)) problems.push(`"${e.id}": brief tem de ser texto ou uma lista de linhas — ignorado`);
+    else if (e.brief !== undefined) { // a string, or a list of lines
       const b = (Array.isArray(e.brief) ? e.brief.map(String).join('\n') : String(e.brief)).trim();
-      if (b.length > BRIEF_MAX) problems.push(`"${e.id}": brief is over ${BRIEF_MAX} caracteres — cortado (põe a versão longa numa competência)`);
+      if (b.length > BRIEF_MAX) problems.push(`"${e.id}": o brief passa de ${BRIEF_MAX} caracteres — cortado (põe a versão longa numa competência)`);
       a.brief = b.slice(0, BRIEF_MAX);
     }
   }
@@ -72,7 +77,7 @@ export function montarPlantel(fontes, base = defaults()) {
     if (!fs.existsSync(p)) continue;
     files.push(label);
     const doc = read(p); if (!doc) continue;
-    if (doc.__error) { problems.push(`${label}: não é JSON válido (${doc.__error.split('\n')[0]}) — ignored`); continue; }
+    if (doc.__error) { problems.push(`${label}: não é JSON válido (${doc.__error.split('\n')[0]}) — ignorado`); continue; }
     const r = validate(doc, agents); agents = r.agents; problems.push(...r.problems.map(x => `${label}: ${x}`));
   }
   return { agents, problems, files };

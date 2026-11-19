@@ -149,11 +149,11 @@ test('7 · entradas inválidas geram avisos claros e não interrompem o carregam
     const txt = r.problems.join('\n');
     assert.match(txt, new RegExp(`"ghost" não é um dos ${LUGARES} lugares`));
     assert.match(txt, /aparece duas vezes/);
-    assert.match(txt, /department cannot change/);
-    assert.match(txt, /lead cannot change/);
-    assert.match(txt, /model must be/);
-    assert.match(txt, /effort must be/);
-    assert.match(txt, /brief is over/);
+    assert.match(txt, /o departamento não se muda/);
+    assert.match(txt, /o líder não se muda/);
+    assert.match(txt, /o modelo tem de ser/);
+    assert.match(txt, /o esforço tem de ser/);
+    assert.match(txt, /o brief passa de/);
     assert.match(txt, /não tem "id"/);
     assert.match(txt, /não é JSON válido/);
     assert.match(txt, /tem de ser/);
@@ -192,4 +192,26 @@ test('9 · «personalizado» conta também ferramentas, modelo e esforço', () =
     const r = loadRoster(cerebro);
     if (!fs.existsSync(LOCAL)) assert.equal(r.customised, ORIGINAIS.length, 'os 35 lugares com ferramentas configuradas');
   } finally { fs.rmSync(cerebro, { recursive: true, force: true }); }
+});
+
+// 10 · o que o dono escreve no ficheiro: objetos e listas não viram «[object Object]», e o brief com tipo errado avisa
+test('10 · campos de texto com objeto são recusados com aviso em PT-PT, nunca gravados como «[object Object]»', async () => {
+  const { validate } = await import('./roster.mjs');
+  const r = validate({ agents: [{ id: 'olead', name: { x: 1 }, role: ['a'], does: { y: 2 } }, { id: 'piper', tools: ['ok', { a: 1 }] }] });
+  const o = r.agents.find(a => a.id === 'olead');
+  const p = r.agents.find(a => a.id === 'piper');
+  for (const v of [o.name, o.role, o.does]) assert.doesNotMatch(String(v), /object Object/);
+  assert.equal(o.name, 'SALES CLOSER', 'o nome antigo mantém-se');
+  assert.ok(r.problems.some(x => /o nome tem de ser texto/.test(x)), 'aviso do nome');
+  assert.ok(r.problems.some(x => /a função tem de ser texto/.test(x)), 'aviso da função');
+  assert.ok(r.problems.some(x => /o «faz» tem de ser texto/.test(x)), 'aviso do «faz»');
+  assert.deepEqual(p.tools.filter(t => t !== 'ok'), [], 'o objeto não entra nas ferramentas');
+  assert.ok(r.problems.some(x => /só se aceitam nomes de conectores/.test(x)), 'aviso das ferramentas');
+});
+
+test('10b · um brief com tipo errado (objeto) é avisado e ignorado, não passa em silêncio', async () => {
+  const { validate } = await import('./roster.mjs');
+  const r = validate({ agents: [{ id: 'cmail', brief: { a: 1 } }, { id: 'elead', brief: ['Linha um', 'Linha dois'] }] });
+  assert.ok(r.problems.some(x => /brief tem de ser texto ou uma lista de linhas/.test(x)), 'aviso do brief');
+  assert.equal(r.agents.find(a => a.id === 'elead').brief, 'Linha um\nLinha dois', 'lista de linhas continua a juntar-se');
 });
