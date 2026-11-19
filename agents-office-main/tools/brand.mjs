@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { renderPNG, writePNG } from './raster.mjs';
 import { makePlinth, makeWalkway, DOOR, WALL, makeRoomWalls, makeRoomEntrance } from '../src/builders.js';
-import { DEPTS, DEPT_KEYS, LAYOUT } from '../src/data.js';
+import { DEPTS, DEPT_KEYS, LAYOUT, AGENTS } from '../src/data.js';
 import { doorPlan } from '../src/circulation.js';
 
 const OUT = path.resolve('assets/brand');
@@ -149,6 +149,15 @@ const GLYPHS = {
   U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
   '3': ['11110', '00001', '00001', '01110', '00001', '00001', '11110'],
   '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+  // os dígitos que faltavam (a marca escreve contagens): mesmo traço de 5×7 que o 3 e o 5
+  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
+  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
+  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
+  '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
+  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
+  '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
   ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'],
   '·': ['00000', '00000', '00000', '00100', '00000', '00000', '00000'],
 };
@@ -307,7 +316,7 @@ const r = renderPNG({ width: W, height: H, camera: cam, objects: [root], bg: [25
   acute(c, 74 + 0 * (5 * s1 + 3) + 3 * s1, 62, s1, tinta);          // o acento de ÓRBITA
   text(c, 'AGENTES', 74 + w1 + 26, 62, s1, cinza, 3);
   // o acento de CÉREBRO cai na última palavra: mede-se onde ela começa para o pôr no sítio
-  const antes = text(c, 'SEIS SALAS · 35 AGENTES · UM ', 76, 108, 2, cinza, 2);
+  const antes = text(c, `${DEPT_KEYS.length} SALAS · ${AGENTS.length} AGENTES · UM `, 76, 108, 2, cinza, 2);
   text(c, 'CEREBRO', 76 + antes + 2, 108, 2, cinza, 2);
   acute(c, 76 + antes + 2 + 3 * 2, 108, 2, cinza);
   // o traço da marca, por baixo do título
