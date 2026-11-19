@@ -868,6 +868,8 @@
     }
     .tabbar a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); padding: 4px 0; border-radius: var(--r-s); }
     .tabbar a.on { color: var(--blue); font-weight: 600; }
+    /* o rótulo fica numa linha: «Visão geral» em negrito partia-se em «Visão / geral» (82 px de barra) */
+    .tabbar a span { white-space: nowrap; }
     .tabbar .ic { width: 22px; height: 22px; }
     .row { grid-template-columns: 1fr auto; padding: var(--s3) var(--s4); }
     .row .cell, .row .cell.hide-m { display: none; }

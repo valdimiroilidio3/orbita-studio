@@ -1,0 +1,272 @@
+// Telemóvel: o 3D abre primeiro, a folha do agente é uma folha de baixo, o papel do
+// agente tem até duas linhas sem reticências, e sem WebGL o escritório abre na planta.
+//
+// 1 · unidade: gl.js escolhe o renderer real ou o substituto, sem rebentar.
+// 2 · estático: as regras do CSS e as ligações em main.js existem.
+// 3 · browser (salta com aviso sem Chrome; indicar CHROME_PATH, como o check.mjs):
+//     a) telemóvel 390×844 com WebGL: abre em 3D; a folha fica na metade de baixo, o compositor
+//        está inteiro dentro dela, os controlos de zoom estão acima dela; os 49 papéis têm ≤ 2 linhas.
+//     b) telemóvel 390×844 sem WebGL: abre na planta, sem erros de página, botão do 3D desligado.
+// Nota: os tempos de render são de GL por software; não medem desempenho em aparelho real.
+import { test, describe, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { temWebGL, rendererSemGL, criarRenderer } from './src/gl.js';
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const SHELL = fs.readFileSync(path.join(ROOT, 'src/shell.html'), 'utf8');
+const MAIN = fs.readFileSync(path.join(ROOT, 'src/main.js'), 'utf8');
+const BUNDLE = path.join(ROOT, 'dist/command-centre-v2.html');
+
+/* ---------- 1 · unidade ---------- */
+const docCom = (ok) => ({ createElement: () => ({ getContext: (t) => (ok ? {} : null) }) });
+
+test('1a · sem WebGL o renderer real não se chama e o substituto tem isSemGL', () => {
+  let chamado = false;
+  const r = criarRenderer({}, () => { chamado = true; return {}; }, docCom(false));
+  assert.equal(chamado, false);
+  assert.equal(r.isSemGL, true);
+  assert.equal(temWebGL(docCom(false)), false);
+});
+
+test('1b · com WebGL o renderer real é usado e marcado isSemGL = false', () => {
+  const real = { setPixelRatio() {} };
+  const r = criarRenderer({ id: 'c' }, (o) => { assert.equal(o.antialias, true); return real; }, docCom(true));
+  assert.equal(r, real);
+  assert.equal(r.isSemGL, false);
+});
+
+test('1c · se a criação do renderer real falhar, cai para o substituto (não rebenta)', () => {
+  const r = criarRenderer({}, () => { throw new Error('WebGL context lost'); }, docCom(true));
+  assert.equal(r.isSemGL, true);
+});
+
+test('1d · o substituto aceita as chamadas que main.js faz e não desenha nada', () => {
+  const r = rendererSemGL({ w: 1 });
+  r.setPixelRatio(2); r.setSize(10, 10); r.render({}, {});
+  r.shadowMap.enabled = true; r.shadowMap.needsUpdate = true;
+  assert.equal(r.getPixelRatio(), 1);
+  assert.equal(r.domElement.w, 1);
+  assert.equal(typeof r.info.render, 'object');
+});
+
+/* ---------- 2 · estático ---------- */
+test('2a · main.js cria o renderer pela ponte e liga o modo ao substituto', () => {
+  assert.match(MAIN, /import \{ criarRenderer \} from '\.\/gl\.js'/);
+  assert.match(MAIN, /const renderer = criarRenderer\(canvas, \(o\) => new THREE\.WebGLRenderer\(o\)\);/);
+  assert.match(MAIN, /semWebGL: !!renderer\.isSemGL/);
+  assert.match(MAIN, /if \(renderer\.isSemGL\) \{\s*b\.disabled = true;/);
+  assert.match(MAIN, /function alternarVista\(\) \{\s*if \(renderer\.isSemGL\) return;/);
+});
+
+test('2b · a folha do agente no telemóvel: de baixo, altura limitada, sem a secção do departamento', () => {
+  assert.match(SHELL, /#rail\.agentOpen \{\s*top: auto; bottom: 0; height: min\(70vh, 640px\); height: min\(70dvh, calc\(100dvh - 260px\), 640px\);/);
+  assert.match(SHELL, /#rail\.agentOpen #railHeader \{ display: none; \}/);
+  assert.match(SHELL, /body:has\(#rail\.agentOpen\) #zoomCtl \{ top: 56px; bottom: auto; right: 10px; display: grid; grid-template-columns: repeat\(4, 42px\); gap: 4px; \}/);
+  assert.match(SHELL, /#rail\.agentOpen \.mh-tag \{ max-height: 4\.1em; overflow-y: auto;/, 'a descrição tem rolagem própria');
+  assert.match(SHELL, /#rail\.agentOpen #mMsgs\.m-log \{ flex: 1 1 0; min-height: 72px; \}/, 'o registo tem um mínimo de 72 px (antes 0: ficava com 24 px)');
+  assert.match(SHELL, /#rail\.agentOpen \.mc-pro \{ max-height: 56px; overflow-y: auto;/, 'o aviso «vista publicada» tem altura máxima com rolagem própria');
+  assert.match(SHELL, /@media \(max-height: 700px\) \{[\s\S]*?#rail\.agentOpen \.mh-tag, #rail\.agentOpen #mhLive \{ display: none; \}/, 'em ecrãs baixos a descrição sai da folha');
+  assert.match(SHELL, /@media \(max-height: 700px\) \{ body:has\(#rail\.agentOpen\) #zoomCtl \{ grid-template-columns: repeat\(6, 44px\); \}/, 'em ecrãs baixos o zoom tem 6 colunas (2 linhas)');
+  assert.match(SHELL, /#rail\.agentOpen #railAgent \{ overflow-y: auto;/, 'a folha tem rolagem como último recurso');
+});
+
+test('2c · o papel do agente no telemóvel tem até duas linhas, sem reticências', () => {
+  assert.match(SHELL, /#rail \.mh-role \{ white-space: normal; overflow: visible; text-overflow: clip;/);
+});
+
+test('2d · as sugestões rápidas são recolhíveis no telemóvel e ficam fora do desktop', () => {
+  assert.match(SHELL, /<button id="mChipsTog" class="chips-tog" type="button" aria-expanded="false" aria-controls="mChips">/);
+  assert.match(SHELL, /#mChipsTog \{ display: none; \}/, 'no desktop o botão não aparece');
+  assert.match(SHELL, /#rail #mChips \{ display: none;/, 'no telemóvel as sugestões começam recolhidas');
+  assert.match(SHELL, /#rail\.chipsOpen #mChips \{ display: flex; \}/);
+  assert.match(MAIN, /function sincronizarSugestoes\(aberto\)/);
+  assert.match(MAIN, /getElementById\('mChipsTog'\)\?\.addEventListener\('click'/);
+});
+
+test('2e · movimento reduzido: rede global no fim da folha de estilos (duração e iterações)', () => {
+  const i = SHELL.lastIndexOf('@media (prefers-reduced-motion: reduce) {\n    *, *::before, *::after {');
+  assert.ok(i > 0, 'existe o bloco global de movimento reduzido');
+  const bloco = SHELL.slice(i, i + 400);
+  assert.match(bloco, /animation-duration: \.001ms !important/);
+  assert.match(bloco, /animation-iteration-count: 1 !important/);
+  assert.match(bloco, /transition-duration: \.001ms !important/);
+  assert.ok(SHELL.indexOf('</style>', i) > i, 'o bloco está dentro da folha principal');
+});
+
+/* ---------- 3 · browser ---------- */
+let chromium = null;
+try { ({ chromium } = await import('playwright-core')); } catch { chromium = null; }
+
+const abrirBrowser = async () => {
+  const args = ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'];
+  if (process.env.CHROME_PATH) return chromium.launch({ executablePath: process.env.CHROME_PATH, args });
+  try { return await chromium.launch({ args }); }
+  catch { return chromium.launch({ channel: 'chrome', args }); }
+};
+
+// semGL: o WebGL é desligado na própria página (getContext devolve null), em vez de depender de um
+// flag do Chrome, que varia entre o Chromium do Playwright e o Google Chrome (o do CI).
+const SEM_WEBGL = `(() => {
+  const ctx = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (tipo, ...r) { return /^webgl/.test(tipo) ? null : ctx.call(this, tipo, ...r); };
+})();`;
+/* Esperas por estado, não por tempo fixo: num runner lento (CPU partilhada pelas suites em paralelo)
+   o arranque pode demorar mais de 7 s. Medido com a CPU a x4: a 7 s o `plantaAberta` ainda não existia. */
+const esperarArranque = (page) => page.waitForFunction(() => window.CC && document.getElementById('z2d')?.dataset.modo, null, { timeout: 120000 });
+const esperarFolha = (page) => page.waitForFunction(() => document.getElementById('rail')?.classList.contains('agentOpen'), null, { timeout: 120000 });
+const telemovel = async (browser, { semGL = false, ...extra } = {}) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, ...extra });
+  if (semGL) await ctx.addInitScript(SEM_WEBGL);
+  const page = await ctx.newPage();
+  const erros = [];
+  page.on('pageerror', (e) => erros.push(e.message));
+  await page.goto(pathToFileURL(BUNDLE).href, { waitUntil: 'load', timeout: 90000 });
+  await esperarArranque(page);
+  return { page, erros, ctx };
+};
+
+test('browser · telemóvel com WebGL: abre em 3D, e a folha do agente cabe no ecrã', { timeout: 170000 }, async (t) => {
+  if (!chromium) return t.skip('playwright-core não instalado');
+  if (!fs.existsSync(BUNDLE)) return t.skip('dist/ por construir (node build.mjs)');
+  let browser;
+  try { browser = await abrirBrowser(); } catch { return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)'); }
+  try {
+    const { page, erros, ctx } = await telemovel(browser);
+    await page.waitForFunction(() => document.getElementById('z2d')?.dataset.modo === '3d', null, { timeout: 120000 });
+    const inicio = await page.evaluate(() => ({ planta: document.body.classList.contains('plantaAberta'), modo: document.getElementById('z2d')?.dataset.modo, gl: !document.querySelector('#z2d')?.disabled }));
+    assert.equal(inicio.planta, false, 'no telemóvel com WebGL o 3D abre primeiro');
+    assert.equal(inicio.modo, '3d');
+    await page.evaluate(() => window.CC.openAgent(Object.keys(window.CC.R)[0]));
+    await esperarFolha(page);
+    await page.waitForTimeout(1500);
+    const g = await page.evaluate(() => {
+      const r = (s) => { const b = document.querySelector(s)?.getBoundingClientRect(); return b ? { top: b.top, bottom: b.bottom, left: b.left, right: b.right } : null; };
+      const roles = [...document.querySelectorAll('#rail .mh-role')].map((e) => e.getBoundingClientRect().height);
+      return { rail: r('#rail'), mc: r('#rail .mc'), mIn: r('#mIn'), zoom: r('#zoomCtl'), close: r('#railClose'), vh: innerHeight, roleH: roles[0] };
+    });
+    await ctx.close();
+    assert.deepEqual(erros, [], 'sem erros de página');
+    assert.ok(g.rail && g.rail.bottom <= 844 + 1 && g.rail.top > 200, 'a folha fica na metade de baixo, com a cena por cima');
+    assert.ok(g.mIn && g.mIn.bottom <= g.vh && g.mIn.top >= g.rail.top, 'o campo de escrever está inteiro dentro da folha');
+    assert.ok(g.zoom && g.zoom.bottom < g.rail.top, 'os controlos de zoom estão acima da folha');
+    assert.ok(g.close && g.close.top >= g.rail.top, 'o ✕ está dentro da folha');
+    assert.ok(g.roleH < 2 * 16, 'o papel do agente ocupa no máximo duas linhas');
+  } finally { await browser.close(); }
+});
+
+/* Um navegador e uma página para os três casos. Cada verificação é um teste à parte: se um falhar
+   no CI, o nome do teste na anotação diz qual (o log do job não estava acessível). */
+describe('browser · telemóvel sem WebGL', { timeout: 170000 }, () => {
+  let browser, ctx, page, erros, disponivel = false;
+  /* o mesmo navegador de `abrirBrowser()` (no CI, o Google Chrome): o modo sem WebGL é por contexto,
+     por isso não é preciso lançar outro. Um segundo `launch()` sem canal falhava no CI e deitava
+     abaixo o bloco inteiro. */
+  before(async () => {
+    if (!chromium || !fs.existsSync(BUNDLE)) return;
+    try { browser = await abrirBrowser(); } catch { return; }
+    ({ page, erros, ctx } = await telemovel(browser, { semGL: true }));
+    await page.waitForFunction(() => document.body.classList.contains('plantaAberta'), null, { timeout: 120000 });
+    disponivel = true;
+  });
+  after(async () => {
+    if (ctx) await ctx.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  });
+
+  test('a) sem WebGL: o contexto webgl não existe na página', async (t) => {
+    if (!disponivel) return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)');
+    const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl'));
+    assert.equal(webgl, false, 'o cenário sem WebGL tem de estar mesmo sem WebGL');
+  });
+
+  test('b) sem WebGL: a planta é a vista e o botão do 3D fica desligado', async (t) => {
+    if (!disponivel) return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)');
+    const r = await page.evaluate(() => ({
+      planta: document.body.classList.contains('plantaAberta'),
+      btnDisabled: document.getElementById('z2d')?.disabled,
+      modo: document.getElementById('z2d')?.dataset.modo,
+    }));
+    assert.equal(r.planta, true, `sem WebGL a planta é a vista (modo: ${r.modo})`);
+    assert.equal(r.btnDisabled, true, 'o botão do 3D fica desligado');
+  });
+
+  test('c) sem WebGL: a página não tem erros', async (t) => {
+    if (!disponivel) return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)');
+    assert.deepEqual(erros, [], 'sem WebGL a página não pode rebentar');
+  });
+});
+
+test('browser · telemóvel: sugestões recolhidas por defeito e expansíveis; desktop sem o botão', { timeout: 170000 }, async (t) => {
+  if (!chromium) return t.skip('playwright-core não instalado');
+  if (!fs.existsSync(BUNDLE)) return t.skip('dist/ por construir (node build.mjs)');
+  let browser;
+  try { browser = await abrirBrowser(); } catch { return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)'); }
+  try {
+    const { page, erros, ctx } = await telemovel(browser, { reducedMotion: 'reduce', semGL: false });
+    await page.evaluate(() => window.CC.openAgent(Object.keys(window.CC.R)[0]));
+    await esperarFolha(page);
+    await page.waitForTimeout(1500);
+    const antes = await page.evaluate(() => ({
+      planta: document.body.classList.contains('plantaAberta'),
+      btn: getComputedStyle(document.getElementById('mChipsTog')).display,
+      chips: getComputedStyle(document.getElementById('mChips')).display,
+      aria: document.getElementById('mChipsTog').getAttribute('aria-expanded'),
+    }));
+    await page.click('#mChipsTog');
+    await page.waitForTimeout(300);
+    const depois = await page.evaluate(() => ({
+      chips: getComputedStyle(document.getElementById('mChips')).display,
+      aria: document.getElementById('mChipsTog').getAttribute('aria-expanded'),
+      rotulo: document.getElementById('mChipsTog').textContent,
+    }));
+    await ctx.close();
+    assert.equal(antes.planta, true, 'movimento reduzido no telemóvel abre na planta (sem 3D por omissão)');
+    assert.equal(antes.btn, 'inline-flex', 'o botão aparece no telemóvel');
+    assert.equal(antes.chips, 'none', 'as sugestões começam recolhidas');
+    assert.equal(antes.aria, 'false');
+    assert.equal(depois.chips, 'flex', 'o botão expande as sugestões');
+    assert.equal(depois.aria, 'true');
+    assert.equal(depois.rotulo, 'Ocultar sugestões');
+    assert.deepEqual(erros, [], 'sem erros de página');
+    const { page: pd, ctx: cd } = await (async () => { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const pg = await c.newPage(); await pg.goto(pathToFileURL(BUNDLE).href, { waitUntil: 'load', timeout: 90000 }); await pg.waitForTimeout(5000); return { page: pg, ctx: c }; })();
+    const desk = await pd.evaluate(() => getComputedStyle(document.getElementById('mChipsTog')).display);
+    await cd.close();
+    assert.equal(desk, 'none', 'no computador o botão não existe visualmente');
+  } finally { await browser.close(); }
+});
+
+test('browser · folha do agente em alturas diferentes: o registo tem área útil e o compositor fica alcançável', { timeout: 170000 }, async (t) => {
+  if (!chromium) return t.skip('playwright-core não instalado');
+  if (!fs.existsSync(BUNDLE)) return t.skip('dist/ por construir (node build.mjs)');
+  let browser;
+  try { browser = await abrirBrowser(); } catch { return t.skip('sem Chrome nesta máquina (indicar CHROME_PATH)'); }
+  try {
+    for (const altura of [844, 667]) {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: altura }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+      const page = await ctx.newPage();
+      const erros = []; page.on('pageerror', (e) => erros.push(e.message));
+      await page.goto(pathToFileURL(BUNDLE).href, { waitUntil: 'load', timeout: 90000 });
+      await esperarArranque(page);
+      await page.evaluate(() => window.CC.openAgent(Object.keys(window.CC.R).find((k) => window.CC.R[k].a.dept === 'emails')));
+      await esperarFolha(page);
+      await page.waitForTimeout(1500);
+      const r = await page.evaluate(() => {
+        const ra = document.getElementById('railAgent');
+        ra.scrollTop = ra.scrollHeight;
+        const rail = document.getElementById('rail').getBoundingClientRect();
+        const log = document.getElementById('mMsgs').getBoundingClientRect();
+        const mi = document.getElementById('mIn').getBoundingClientRect();
+        const zc = document.getElementById('zoomCtl').getBoundingClientRect();
+        return { log: Math.round(log.height), micabe: mi.bottom <= rail.bottom + 0.5 && mi.top >= rail.top, zoomAcima: zc.bottom <= rail.top + 0.5 };
+      });
+      await ctx.close();
+      assert.deepEqual(erros, [], `sem erros a ${altura} px`);
+      assert.ok(r.log >= 72, `registo com área útil a ${altura} px (${r.log} px)`);
+      assert.equal(r.micabe, true, `o compositor fica dentro da folha depois de rolar a ${altura} px`);
+      assert.equal(r.zoomAcima, true, `os controlos de zoom não se sobrepõem à folha a ${altura} px`);
+    }
+  } finally { await browser.close(); }
+});
