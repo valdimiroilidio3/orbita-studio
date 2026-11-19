@@ -3543,6 +3543,9 @@
   /* o papel do agente numa linha só — «DIRECÇÃO E COORDENAÇÃO DE AGENTES · COMANDO» */
   #rail .mh-role { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-size: 9.5px; letter-spacing: .09em; }
+  /* o bloco de texto do cartão encolhe até à largura do cartão (flex: min-width auto deixava-o
+     do tamanho da linha inteira e o papel saía pela direita, por cima da cena) */
+  #rail .mh-t { min-width: 0; }
 
   /* aprovações: um selo âmbar parado. Pulsar para sempre é ruído, não urgência. */
   .badge .b-appr, #topAppr, #railHeader .b-appr { animation: none; }
