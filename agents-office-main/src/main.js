@@ -2702,7 +2702,7 @@ function floorReport() {
 /* ---------- o espelho acessível (26 out 2026) ----------
    A cena é um canvas: para um leitor de ecrã não há lá nada dentro, e as salas e as pessoas só
    se abriam com o rato. `src/a11y.js` constrói o mesmo escritório por palavras — 6 salas, o
-   centro e os 47 agentes, cada um um botão a sério. Abre pela tecla L, pelo botão da lista (ao
+   centro e os 49 agentes, cada um um botão a sério. Abre pela tecla L, pelo botão da lista (ao
    lado do zoom) ou pela ligação «saltar para a lista», que é a primeira coisa no Tab. */
 function focusIntoRail() {
   requestAnimationFrame(() => {

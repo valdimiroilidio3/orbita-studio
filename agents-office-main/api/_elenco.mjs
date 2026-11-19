@@ -8,7 +8,7 @@
 
    O problema que isto resolve, e que se via no Control Center:
 
-     · o escritório tem **47 lugares** na cena, cada um com nome e papel;
+     · o escritório tem **49 lugares** na cena, cada um com nome e papel;
      · o Orchestrator corre **8 motores** com instruções, ferramentas e critérios;
      · o motor de tarefas produz **6 tipos de trabalho**;
      · e o mapa de postos falava uma **quarta** língua — `lead.pesquisar`,
@@ -34,7 +34,7 @@ export const DEPARTAMENTOS_DA_SALA = Object.fromEntries(
     .map(([dep, sala]) => [sala, dep]),
 );
 
-/** Os motores do Orchestrator, na forma curta (é a segunda camada, não os 47). */
+/** Os motores do Orchestrator, na forma curta (é a segunda camada, não os 49). */
 export function motores() {
   const lugares = new Set(elencoBase().agentes.map((a) => a.id));
   return Object.entries(MOTORES).map(([id, a]) => ({
@@ -47,7 +47,7 @@ export function motores() {
   }));
 }
 
-/** O elenco completo: os 47 lugares + os 8 motores + os tipos de trabalho. */
+/** O elenco completo: os 49 lugares + os 8 motores + os tipos de trabalho. */
 export function elenco() {
   const base = elencoBase();
   const m = motores();

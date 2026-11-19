@@ -411,7 +411,7 @@ como consultivos (sem tarefa).
 consultivos. A 1.88.0 deu rotina a 11 consultivos; a 1.89.0 acrescentou os 2
 lugares que faltavam (`ata` no Comando e `faq` no Comando) e cresceu a sala.
 Meta de 60 ainda por cumprir: faltam **11 lugares** (ou o dono aceita uma meta
-menor). `CLAUDE.md` e `roster.mjs` ainda dizem 35 lugares; estão desatualizados.
+menor). `CLAUDE.md`, `roster.mjs` e `office.agents.json` passaram a 49 lugares (19 nov; `roster-sincronia.test.mjs` verifica a correspondência com `src/data.js`).
 
 **Prova:** `GET /ops/agentes` devolve, por agente, `temRotina: true|false`; e não
 há dois agentes com a mesma rotina.

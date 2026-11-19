@@ -122,7 +122,7 @@ AO_AI=gemini-api            # opcional: força o motor (sem isto, é escolhido p
 AO_AI_MODEL=gemini-flash-latest
 ```
 
-Com isso, os 35 agentes encaminham, escrevem e conversam — sem instalar nada. Os agentes ficam sem
+Com isso, os 49 agentes encaminham, escrevem e conversam — sem instalar nada. Os agentes ficam sem
 ferramentas MCP (uma API dá voz, não mãos): para Chrome, ficheiros e conectores, o Claude Code
 continua a ser o único motor com mãos.
 

@@ -421,6 +421,132 @@
         "clarity",
         "meta"
       ]
+    },
+    {
+      "id": "atend",
+      "department": "emails",
+      "lead": false,
+      "name": "ATENDIMENTO E TRIAGEM",
+      "role": "Primeira resposta e triagem",
+      "does": "Lê o que chega — correio, formulários, mensagens —, classifica por urgência e por dono, e responde ao que é simples sem esperar por ninguém.",
+      "tools": []
+    },
+    {
+      "id": "plan",
+      "department": "emails",
+      "lead": false,
+      "name": "PLANEAMENTO DO DIA",
+      "role": "Agenda e prioridades do dia",
+      "does": "Monta o dia da casa: o que tem de sair hoje, quem está bloqueado, o que pode esperar, e o que já passou do prazo.",
+      "tools": []
+    },
+    {
+      "id": "ata",
+      "department": "emails",
+      "lead": false,
+      "name": "ATAS DE REUNIÃO",
+      "role": "Atas de reunião e decisões",
+      "does": "Transforma as notas de cada reunião numa ata: o que ficou decidido, o que ficou por decidir, quem faz o quê e até quando — só o que foi dito. Se a nota não diz, escreve «a confirmar», não completa.",
+      "tools": []
+    },
+    {
+      "id": "faq",
+      "department": "emails",
+      "lead": false,
+      "name": "PERGUNTAS FREQUENTES",
+      "role": "Perguntas frequentes do cliente",
+      "does": "Junta as perguntas que um cliente real faria sobre cada projeto e escreve as respostas que a página e a equipa podem usar, sem prometer nada que o contrato não diga. O que depende de dados em falta fica marcado.",
+      "tools": []
+    },
+    {
+      "id": "radar",
+      "department": "sales",
+      "lead": false,
+      "name": "RADAR DE OPORTUNIDADES",
+      "role": "Oportunidades no mercado",
+      "does": "Varre sinais de procura — concursos, pedidos públicos, empresas a crescer — e entrega oportunidades com contacto e motivo.",
+      "tools": []
+    },
+    {
+      "id": "partners",
+      "department": "sales",
+      "lead": false,
+      "name": "PARCEIROS E ALIANÇAS",
+      "role": "Parceiros e alianças",
+      "does": "Encontra quem pode vender ou entregar com a Órbita — agências, freelancers, fornecedores — e prepara a primeira conversa.",
+      "tools": []
+    },
+    {
+      "id": "renew",
+      "department": "ops",
+      "lead": false,
+      "name": "RENOVAÇÕES",
+      "role": "Renovações de contratos",
+      "does": "Sabe quando cada contrato acaba e o que é preciso para renovar: resultados provados, proposta de continuidade e datas.",
+      "tools": []
+    },
+    {
+      "id": "upsell",
+      "department": "ops",
+      "lead": false,
+      "name": "PACOTES E UPSELL",
+      "role": "Pacotes e crescimento de conta",
+      "does": "Lê o que cada cliente já usa e propõe o passo seguinte com número: manutenção, campanhas, novos módulos.",
+      "tools": []
+    },
+    {
+      "id": "motion",
+      "department": "fin",
+      "lead": false,
+      "name": "MOTION E ANIMAÇÃO",
+      "role": "Movimento e animação",
+      "does": "Dá movimento ao que está parado: transições de interface, animações de marca e vídeos curtos, sempre dentro do design system do projeto.",
+      "tools": []
+    },
+    {
+      "id": "brand",
+      "department": "fin",
+      "lead": false,
+      "name": "IDENTIDADE E MARCA",
+      "role": "Identidade e marca",
+      "does": "Guarda a marca: logótipo, cores, tipografia, tom e regras de uso, e verifica que cada peça que sai as cumpre.",
+      "tools": []
+    },
+    {
+      "id": "sec",
+      "department": "delivery",
+      "lead": false,
+      "name": "SEGURANÇA E ACESSOS",
+      "role": "Segurança e acessos",
+      "does": "Controla quem entra onde: chaves, permissões, acessos a repositórios e a base, e revoga o que deixou de ser preciso.",
+      "tools": []
+    },
+    {
+      "id": "perf",
+      "department": "delivery",
+      "lead": false,
+      "name": "DESEMPENHO E CUSTOS",
+      "role": "Desempenho e custos",
+      "does": "Vigia o que custa dinheiro: latência, erros, uso de API e de base de dados, e diz o que cortar antes de aparecer na fatura.",
+      "tools": []
+    },
+    {
+      "id": "seo",
+      "department": "marketing",
+      "lead": false,
+      "name": "SEO E PESQUISA",
+      "role": "Pesquisa e visibilidade",
+      "does": "Trabalha o que traz gente do Google: intenção de pesquisa, títulos, estrutura, ligações internas e páginas que já trazem tráfego.",
+      "tools": []
+    },
+    {
+      "id": "mailmkt",
+      "department": "marketing",
+      "lead": false,
+      "name": "EMAIL MARKETING",
+      "role": "Email marketing",
+      "does": "Escreve e envia as sequências de correio: boas-vindas, nutrição, reativação e oferta — com consentimento registado e métricas por envio.",
+      "tools": []
     }
   ]
 }

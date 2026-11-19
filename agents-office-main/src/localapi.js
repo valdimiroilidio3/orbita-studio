@@ -133,7 +133,7 @@ import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca a
   verificacao as verificacaoDoLead, proximaAccao, qualificacao as qualificacaoDoLead, nomeDoFicheiro } from './crm.js';
 import { NIVEIS_AUTONOMIA } from './motores.js';
 /* 1.84.0 · o elenco é dado puro (`src/elenco.js`): o mesmo no servidor e aqui,
-   para o Control Center não dizer 47 lugares num modo e nada no outro. */
+   para o Control Center não dizer 49 lugares num modo e nada no outro. */
 import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './elenco.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {

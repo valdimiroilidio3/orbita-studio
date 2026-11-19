@@ -128,9 +128,10 @@ await step('build: graph has linked notes', async () => {
 
 /* ---------- 1b. the roster + the connector parser ---------- */
 await step('roster: office.agents.json validates', async () => {
-  /* 1.59.0 · o número de agentes NÃO se escreve à mão: o elenco cresceu de 35
-     para 47 e o teste é que ficou velho, a falar de 35 lugares. A verdade está
-     em `src/data.js` — é de lá que a cena, o painel e o `/api/health` contam. */
+  /* 1.59.0 · o número de agentes NÃO se escreve à mão: o elenco cresceu (35 → 47 → 49)
+     e um teste com o número escrito ficava velho. A verdade está em `src/data.js` —
+     é de lá que a cena, o painel e o `/api/health` contam. O teste de sincronia
+     (roster-sincronia.test.mjs) confirma que o ficheiro cobre todos esses lugares. */
   const { loadRoster } = await import('./roster.mjs');
   const { AGENTS } = await import('./src/data.js');
   const r = loadRoster();

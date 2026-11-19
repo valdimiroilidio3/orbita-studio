@@ -221,7 +221,7 @@ export async function montarEstado(motor, { repo, env = process.env, fetchImpl =
     ...estado,
     memoria: resumoMemoria,
     estudio,
-    /* 1.84.0 · as duas camadas, ditas por inteiro: 47 lugares no escritório (com
+    /* 1.84.0 · as duas camadas, ditas por inteiro: 49 lugares no escritório (com
        ou sem trabalho próprio) e os 8 motores que o Orchestrator chama. */
     elenco: elenco(),
     agentes: LISTA.map((a) => {

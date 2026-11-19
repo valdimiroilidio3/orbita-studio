@@ -9,7 +9,7 @@ longe da causa — foi exactamente o que aconteceu em 1.9.2, e é o que os teste
 
 | Ficheiro | Sabe | **Não** sabe |
 |---|---|---|
-| `src/data.js` | as 7 salas, os 35 agentes, o `LAYOUT`, as cores (`chip`, `ink`, `glass`) | desenhar, three, DOM |
+| `src/data.js` | as 7 salas, os 49 agentes, o `LAYOUT`, as cores (`chip`, `ink`, `glass`) | desenhar, three, DOM |
 | `src/palette.js` | derivar tons de uma cor (base, aresta, poça), nomear famílias de matiz | salas, three, DOM |
 | `src/builders.js` | geometria procedural (pods, secretárias, paredes, pessoas) | que sala é qual |
 | `src/main.js` | montar o escritório, câmara, LOD, modo escuro, cartões | derivar tons à mão |
@@ -248,7 +248,7 @@ caseiro, sem browser). Sem emissão nem texturas: serve para julgar volumes e co
 ## O que prova o quê
 
 - `npm run test:office` — `office.test.mjs`, 31 testes puros: matemática de cor, famílias,
-  derivação das camadas, as invariantes dos dados (7 pods, 35 agentes, um chefe por sala,
+  derivação das camadas, as invariantes dos dados (7 pods, 49 agentes, um chefe por sala,
   duas pessoas na mesma secretária, `officeProblems()` vazio) e **a forma das plantas**: a folha
   estreita-engorda-acaba-em-bico, a dobra e a queda, a cor variável, o pecíolo que afina, a
   planta leve e determinística, e as duas espécies distintas — e **a secretária**: a tela e a
