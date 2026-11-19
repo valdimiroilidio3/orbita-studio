@@ -24,7 +24,7 @@ const SHELL = fs.readFileSync(path.join(HERE, 'src', 'shell.html'), 'utf8');
 const ROOMS = ['marketing', 'emails', 'sales', 'fin', 'ops', 'delivery'];
 
 /** O `#term` tal como está no shell, mais um `document`/`fetch` falsos e o módulo a sério. */
-async function montar({ respostas = {} } = {}) {
+async function montar({ respostas = {}, salas = ROOMS } = {}) {
   const start = SHELL.indexOf('<div id="term"');
   const end = SHELL.indexOf('<!--APP-->');
   assert.ok(start > 0 && end > start, 'o shell devia ter o painel #term');
@@ -64,7 +64,7 @@ async function montar({ respostas = {} } = {}) {
   globalThis.fetch = fetchFalso;
   globalThis.EventSource = undefined;   // sem SSE nos testes: o que se prova é o comando
   const { createForgeTerminal } = await import('./src/forge.js?' + Math.random());
-  const term = createForgeTerminal({ rooms: ROOMS });
+  const term = createForgeTerminal({ rooms: salas });
   return { term, dom, pedidos, doc: dom.window.document };
 }
 
@@ -163,4 +163,20 @@ test('ao abrir, o terminal diz em que máquina está (uma linha, uma vez)', asyn
   term.close(); term.open();
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(linhas(doc).length, antes, 'a linha da máquina não se repete a cada abertura');
+});
+
+// Os separadores do terminal são as salas reais: o nome vem de NOME_SALA (data.js), e o Cérebro do
+// `name` de DEPTS. Antes lia-se `DEPTS.short` — «DESIGN» em vez de «DESIGN LAB».
+test('os separadores do terminal mostram o nome completo de cada sala, Cérebro incluído', async () => {
+  const { DEPTS, NOME_SALA } = await import('./src/data.js');
+  const salas = Object.keys(DEPTS);
+  const { doc } = await montar({ salas });
+  const tabs = [...doc.querySelectorAll('.tm-tabs .tm-tab, .tm-tab')].map((b) => b.textContent.trim());
+  assert.ok(tabs.includes('DESIGN LAB'), 'falta DESIGN LAB: ' + JSON.stringify(tabs));
+  assert.ok(!tabs.includes('DESIGN'), 'o separador ficou com a abreviatura DESIGN');
+  assert.ok(tabs.includes('O CÉREBRO'), 'o Cérebro tem de ter separador: ' + JSON.stringify(tabs));
+  for (const k of salas) {
+    const esperado = (NOME_SALA[k] || DEPTS[k].name).toUpperCase();
+    assert.ok(tabs.includes(esperado), `separador de ${k} devia ser «${esperado}»: ${JSON.stringify(tabs)}`);
+  }
 });

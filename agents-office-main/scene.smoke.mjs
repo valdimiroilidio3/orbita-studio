@@ -238,7 +238,7 @@ for (const a of aderecos) ok(a.table.z > a.deskFront + 1, `${a.dept}: a mesa do 
   ok(win.CC.forge.isOpen() === false && win.document.getElementById('term').hidden, 'o terminal não fechou');
 }
 
-/* ---------- as 35 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
+/* ---------- as 49 secretárias: pretas, com a luz da sala (1.9.8) ---------- */
 // O pedido foi «mesa preta com LED na cor da sala». Aqui lê-se a cena MONTADA, posto a posto:
 // cada secretária tem de ter a malha do LED com a cor emissiva igual ao vidro daquela sala, e o
 // corpo tem de ser escuro. Se alguém trocar a cor ou voltar a pôr a madeira clara, cai aqui.

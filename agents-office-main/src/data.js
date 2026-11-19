@@ -1,4 +1,4 @@
-// Órbita — o elenco fixo (49 lugares, 6 salas), a cor de cada sala e os tokens de design.
+// Órbita — o elenco fixo (os lugares e as salas são AGENTS e DEPT_KEYS, abaixo), a cor de cada sala e os tokens de design.
 // Fonte estrutural: roster.mjs e os testes leem AGENTS daqui. office.agents.json é uma cópia com uma entrada por lugar;
 // roster-sincronia.test.mjs falha se as duas divergirem.
 // Os textos de exemplo (WORKLINES), os pedidos de aprovação fictícios (APPROVAL_ASKS) e as linhas
@@ -32,7 +32,7 @@ export const DEPT_KEYS = ['emails', 'sales', 'marketing', 'ops', 'fin', 'deliver
 // uma por sala (o teste `office.test.mjs` verifica-o, matiz a matiz):
 //
 //   emails    COMANDO      verde     #1FA36B        ops     VENDAS   roxo     #8B5AD6
-//   delivery  ENGENHARIA   azul céu  #41AEE4        fin     DESIGN   azul     #4A6DE0
+//   delivery  ENGENHARIA   azul céu  #41AEE4        fin     DESIGN LAB azul   #4A6DE0
 //   sales     PROSPEÇÃO    amarelo   #E3B93A        marketing MEDIA  vermelho #DC5348
 //
 // O Cérebro fica com vidro fosco (neutro, de propósito): é o centro, e o centro não compete
@@ -42,10 +42,21 @@ export const DEPTS = {
   delivery:  { name: 'ENGENHARIA',         short: 'ENGENHARIA', chip: '#8FD3F4', ink: '#2E86AB', glass: '#41AEE4', glassName: 'azul céu' },
   sales:     { name: 'PROSPEÇÃO',            short: 'PROSPEÇÃO',   chip: '#EADC8F', ink: '#A08A1E', glass: '#E3B93A', glassName: 'amarelo' },
   marketing: { name: 'MEDIA',        short: 'MEDIA', chip: '#E69393', ink: '#C46060', glass: '#DC5348', glassName: 'vermelho' },
-  fin:       { name: 'DESIGN LAB',          short: 'DESIGN', chip: '#98A5EF', ink: '#5B66CE', glass: '#4A6DE0', glassName: 'azul' },
+  fin:       { name: 'DESIGN LAB',          short: 'DESIGN LAB', chip: '#98A5EF', ink: '#5B66CE', glass: '#4A6DE0', glassName: 'azul' },
   ops:       { name: 'VENDAS',       short: 'VENDAS', chip: '#BFA2E3', ink: '#7449A9', glass: '#8B5AD6', glassName: 'roxo' },
   brain:     { name: 'O CÉREBRO',        short: 'O CÉREBRO', chip: '#D1DECD', ink: '#4C7A57', glass: '#AEB6AB', glassName: 'neutro' },
 };
+
+/* O nome de cada sala, em forma de título («Design Lab»), para a mesa, a API e as rotinas.
+   É DAQUI e de mais nenhum sítio: os mapas que existiam escritos à mão (elenco, rotinas, mesa,
+   painel, tarefas) já tinham divergido («Entrega», «Engenharia», «Contabilidade»). Deriva de DEPTS.name. */
+export const NOME_SALA = Object.fromEntries(
+  DEPT_KEYS.map((k) => [k, DEPTS[k].name.toLowerCase().replace(/(^|\s)(\S)/g, (_, b, c) => b + c.toUpperCase())]),
+);
+/* As salas que já aceitam rotinas. Quando uma sala ganhar rotinas, muda-se aqui: o servidor e a interface acompanham. */
+export const SALAS_COM_ROTINAS = ['emails', 'sales', 'ops'];
+/* «a, b e c» — para as frases que enumeram salas, sem repetir a regra em cada ficheiro. */
+export const listaE = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}`);
 
 // 49 agents (V3.4, 7 Sep 2026: every department has a lead; o elenco cresceu de 35 para 47 e, na 1.89.0, para 49). grid = [col,row] desk slot on the department plinth.
 export const AGENTS = [

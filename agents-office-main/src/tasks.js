@@ -20,7 +20,7 @@
 // walks back to the lead (📋), notes they leave each other pop as 💬, and the lead's card finishes
 // with the combined deliverable. Live: the server does it (serve.mjs runTeam, one Claude process per
 // desk); this page reads `task.team` off /api/tasks. Demo: the same theatre on a timer.
-import { DEPTS, AGENTS, DEPT_KEYS } from './data.js';
+import { DEPTS, AGENTS, DEPT_KEYS, NOME_SALA, SALAS_COM_ROTINAS, listaE } from './data.js';
 import { SEAT } from './agentes.js';
 import { parseWhen, describe, nextRun, fromPicker, untilText } from './when.js';
 import { initCalendar } from './calendar.js'; // V3.2.1 (16 Sep 2026): the calendar on P
@@ -108,8 +108,8 @@ export function initTasks(ctx) {
   // V3.5 routines. Live: the server's list (polled). Demo: session-only, fired by this tick.
   const routines = []; let rseq = 1, polling = false, railAgent = null, railExp = false;
   const RT_DEPTS = ['emails', 'fin', 'sales'];
-  const RT_NAMES = { emails: 'COMANDO', fin: 'DESIGN LAB', sales: 'PROSPEÇÃO', marketing: 'MEDIA', ops: 'VENDAS', delivery: 'ENGENHARIA' };
-  const rtRefuse = k => `As rotinas chegam a ${RT_NAMES[k] || k} numa versão futura. Nesta versão: E-mails, Contabilidade e Vendas.`;
+  const RT_NAMES = Object.fromEntries(DEPT_KEYS.map(k => [k, DEPTS[k].name])); // maiúsculas, como na cena
+  const rtRefuse = k => `As rotinas chegam a ${RT_NAMES[k] || k} numa versão futura. Nesta versão: ${listaE(SALAS_COM_ROTINAS.map(x => NOME_SALA[x]))}.`;
   const deptRoutines = k => routines.filter(r => r.dept === k);
   const agentRoutines = id => routines.filter(r => r.agent === id);
   const nextOf = list => list.filter(r => !r.paused && r.nextAt).sort((a, b) => a.nextAt - b.nextAt)[0];

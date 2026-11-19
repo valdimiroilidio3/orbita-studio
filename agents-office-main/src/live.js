@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 /* 29 out 2026: os nomes das salas vêm de `data.js`. Este ficheiro tinha o seu próprio mapa e era o
    terceiro sítio a escrever «DESIGN LAB» à mão — uma divergência à espera de acontecer. */
-import { DEPTS } from './data.js';
+import { NOME_SALA } from './data.js';
 
 export const W = 512, H = 320;
 const MONO = '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace';
@@ -146,7 +146,7 @@ export function drawScreen(x, w, h, view) {
     font(x, Math.round(w * 0.025));
     x.fillStyle = DIM;
     if (dep?.task) {
-      const DEPT_PT = Object.fromEntries(Object.entries(DEPTS).map(([k, d]) => [k, d.name]));
+      const DEPT_PT = NOME_SALA; // o nome da sala em PT-PT, o mesmo da mesa e da API
       let y = y0 + Math.round(h * 0.125);
       font(x, Math.round(w * 0.021), 600, true);
       x.fillStyle = WARN;

@@ -95,14 +95,7 @@ const DEPARTAMENTOS_POR_TIPO = {
   seguranca: 'engenharia',
 };
 
-const DEPARTAMENTOS = [
-  { id: 'comando', nome: 'Comando' },
-  { id: 'prospeccao', nome: 'Prospecção' },
-  { id: 'vendas', nome: 'Vendas' },
-  { id: 'media', nome: 'Media' },
-  { id: 'design', nome: 'Design' },
-  { id: 'engenharia', nome: 'Engenharia' },
-];
+const DEPARTAMENTOS = DEPARTAMENTOS_MESA; // nomes das salas vêm de data.js
 
 const vazio = () => ({
   v: 1,
@@ -134,7 +127,7 @@ import { csvDeLeads, duplicados as duplicadosDeLeads, resumoDoFunil, confianca a
 import { NIVEIS_AUTONOMIA } from './motores.js';
 /* 1.84.0 · o elenco é dado puro (`src/elenco.js`): o mesmo no servidor e aqui,
    para o Control Center não dizer 49 lugares num modo e nada no outro. */
-import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT } from './elenco.js';
+import { elencoBase, agentesDaSala, SALA_DO_DEPARTAMENTO_PT, DEPARTAMENTOS_MESA } from './elenco.js';
 
 export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
   const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
@@ -335,7 +328,7 @@ export function createLocalApi({ storage, agora = () => Date.now() } = {}) {
         configurado: true, semChave: true, variavel: 'não precisa', chaveMascarada: '',
         estado: 'por_testar', limites: g.limites, desligado: false, ultimoTeste: null,
       }));
-      /* 1.84.0 · o elenco não depende do servidor: são 47 identidades escritas
+      /* 1.84.0 · o elenco não depende do servidor: são 49 identidades escritas
          em `src/data.js`. O que depende do servidor são os 8 motores, e isso
          diz-se na nota — em vez de deixar o cartão vazio no modo local. */
       const el = elencoBase();

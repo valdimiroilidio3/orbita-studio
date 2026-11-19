@@ -340,7 +340,7 @@ every note they read, so your graph grows as the office works.
 
 | Key | Does |
 |---|---|
-| `1` to `6` | Marketing, Emails, Sales, Operations, Finance, Delivery |
+| `1` to `6` | Media, Comando, Prospeção, Vendas, Design Lab, Engenharia (the room names, in `src/data.js`) |
 | `B` | The company board: every department, scheduled to done |
 | `G` | The Brain graph |
 | `P` | The calendar: tasks and routines on their days; click a day to schedule |

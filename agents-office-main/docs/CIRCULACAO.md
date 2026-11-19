@@ -16,7 +16,7 @@ A ideia, arrumada como uma equipa sénior a arrumaria: **um único circuito, dua
 ```
         ┌──────────────┐          corredor          ┌───────────────────────────┐
         │   A SALA     │ ─────────────────────────► │        O CÉREBRO          │
-        │ 35 secretárias│ ◄───────────────────────── │  praça + anel de LED      │
+        │ 49 secretárias│ ◄───────────────────────── │  praça + anel de LED      │
         │ chefe + grupo │     o mesmo corredor       │  6 púlpitos (1 por sala)  │
         └──────────────┘                            │  o orbe no centro         │
               ▲                                     └───────────────────────────┘

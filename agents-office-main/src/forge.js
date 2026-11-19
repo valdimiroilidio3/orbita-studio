@@ -29,10 +29,13 @@ const PHASE_COLOR = {
   done: 't-done', run: 't-run', ok: 't-ok', sense: 't-sense', adopt: 't-adopt', deny: 't-fail',
   'tool-log': 't-muted', info: 't-muted', error: 't-fail',
 };
-import { DEPTS } from './data.js';
+import { DEPTS, NOME_SALA } from './data.js';
 /* 29 out 2026: os nomes das salas vêm de `data.js` e de mais nenhum sítio. Este mapa tinha-os
-   escritos à mão — e já divergia em duas salas (ENTREGA/DESIGN em vez de ENGENHARIA/DESIGN LAB). */
-const ROOM_LABEL = Object.fromEntries(Object.entries(DEPTS).map(([k, d]) => [k, d.short]));
+   escritos à mão — e já divergia em duas salas (ENTREGA/DESIGN em vez de ENGENHARIA/DESIGN LAB).
+   Lê `NOME_SALA` (o nome completo, «Design Lab»). `DEPTS.short` é uma abreviatura de desenho do 3D
+   e não entra aqui. O Cérebro não tem sala em `NOME_SALA`: cai no `name` de `DEPTS` (obrigatório,
+   validado em `officeProblems()`). Em maiúsculas, como os separadores do terminal sempre foram. */
+const ROOM_LABEL = Object.fromEntries(Object.entries(DEPTS).map(([k, d]) => [k, (NOME_SALA[k] || d.name).toUpperCase()]));
 
 const hhmmss = (ts) => {
   const d = new Date(ts || Date.now());

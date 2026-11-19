@@ -17,9 +17,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, nextRun, valid } from './src/when.js';
+import { NOME_SALA, SALAS_COM_ROTINAS, listaE } from './src/data.js';
 
-export const ALLOWED = ['emails', 'sales', 'ops']; // Comando, Prospeção e Vendas
-export const NAMES = { emails: 'Comando', sales: 'Prospeção', ops: 'Vendas', fin: 'Design Lab', delivery: 'Engenharia', marketing: 'Media' };
+export const ALLOWED = SALAS_COM_ROTINAS; // Comando, Prospeção e Vendas (lista única em data.js)
+export const NAMES = NOME_SALA;
 export const file = brainPath => path.join(brainPath, 'Órbita', 'routines.json');
 export const stateFile = dataDir => path.join(dataDir, 'routines.json');
 export const LATE_AFTER = 90 * 1000; // a run more than 90 s past its minute was missed (asleep, or the office was off) → runs once, marked LATE
@@ -27,9 +28,11 @@ export const LATE_AFTER = 90 * 1000; // a run more than 90 s past its minute was
 const slug = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 const readJSON = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
 
-/** "As rotinas chegam ao Marketing numa versão futura. Nesta versão: E-mails, Contabilidade, Vendas." */
+/* A lista de salas com rotinas sai de ALLOWED, não de um texto escrito à mão (a mensagem da
+   interface, em src/tasks.js, já tinha ficado com uma sala que não existe). */
+/** "As rotinas chegam a Media numa versão futura. Nesta versão: Comando, Prospeção e Vendas." */
 export function refusal(dept) {
-  return `As rotinas chegam ${NAMES[dept] ? 'a ' + NAMES[dept] : 'a este departamento'} numa versão futura. Nesta versão: Comando, Prospeção e Vendas.`;
+  return `As rotinas chegam ${NAMES[dept] ? 'a ' + NAMES[dept] : 'a este departamento'} numa versão futura. Nesta versão: ${listaE(ALLOWED.map(k => NAMES[k]))}.`;
 }
 
 /** Normalise + check one routine against the roster. Returns { routine, problems }. Fixed fields are kept as given; bad ones are named. */

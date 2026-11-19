@@ -2226,7 +2226,7 @@ function tickBaloes(now) {
       r.balao.material.opacity = op;
     }
     /* o anel: só para quem tem trabalho, e a mudar uma vez por segundo (o rótulo é o
-       tempo). O retrato é lido no máximo 4×/s por posto — 35 postos a cada fotograma
+       tempo). O retrato é lido no máximo 4×/s por posto — todos os postos a cada fotograma
        eram 2100 objectos por segundo no lixo do browser. */
     if (now - (r._andaAt || 0) > 250) {
       r._andaAt = now;

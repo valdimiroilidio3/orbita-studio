@@ -150,7 +150,7 @@ await step('roster: brief is accepted and trimmed', async () => {
   const { validate } = await import('./roster.mjs');
   const r = validate({ agents: [{ id: 'piper', brief: ['Three tiers.', 'Never discount.'] }, { id: 'lexi', brief: 'x'.repeat(2500) }] });
   if (r.agents.find(a => a.id === 'piper').brief !== 'Three tiers.\nNever discount.') throw new Error('list brief not joined');
-  if (r.agents.find(a => a.id === 'lexi').brief.length !== 2000 || !r.problems.some(p => /brief is over/.test(p))) throw new Error('long brief not trimmed with a warning');
+  if (r.agents.find(a => a.id === 'lexi').brief.length !== 2000 || !r.problems.some(p => /o brief passa de/.test(p))) throw new Error('long brief not trimmed with a warning');
 });
 await step('skills: shipped skills load and bind', async () => {
   const { loadSkills } = await import('./skills.mjs'); const { loadRoster } = await import('./roster.mjs');
@@ -304,8 +304,8 @@ await step('models: three names + five effort levels, one precedence, the right 
   if (m.modelArgs('sonnet', 'max').join(' ') !== '--model sonnet --effort max' || m.modelArgs('opus', 'low').join(' ') !== '--model opus --effort low' || m.modelArgs('opus', 'nonsense').join(' ') !== '--model opus --effort high') throw new Error('effort args');
   const { validate } = await import('./roster.mjs');
   const r = validate({ agents: [{ id: 'invo', model: 'OPUS', effort: 'High' }, { id: 'lexi', model: 'haiku', effort: 'turbo' }] });
-  if (r.agents.find(a => a.id === 'invo').model !== 'opus' || r.agents.find(a => a.id === 'lexi').model !== '' || !r.problems.some(x => /sonnet, opus or fable/.test(x))) throw new Error('roster model field');
-  if (r.agents.find(a => a.id === 'invo').effort !== 'high' || r.agents.find(a => a.id === 'lexi').effort !== '' || !r.problems.some(x => /low, medium, high, xhigh or max/.test(x))) throw new Error('roster effort field');
+  if (r.agents.find(a => a.id === 'invo').model !== 'opus' || r.agents.find(a => a.id === 'lexi').model !== '' || !r.problems.some(x => /sonnet, opus ou fable/.test(x))) throw new Error('roster model field');
+  if (r.agents.find(a => a.id === 'invo').effort !== 'high' || r.agents.find(a => a.id === 'lexi').effort !== '' || !r.problems.some(x => /low, medium, high, xhigh ou max/.test(x))) throw new Error('roster effort field');
   const rt = await import('./routines.mjs'); const { loadRoster } = await import('./roster.mjs');
   const v = rt.validate({ dept: 'ops', agent: 'piper', text: 'x', when: { kind: 'daily', at: '09:00' }, model: 'Fable', effort: 'xhigh' }, loadRoster().agents); if (v.problems.length || v.routine.model !== 'fable' || v.routine.effort !== 'xhigh') throw new Error('routine model/effort field');
   return 'sonnet · opus (effort high) · fable · task > routine > agent > office · roster and routines refuse anything else';
