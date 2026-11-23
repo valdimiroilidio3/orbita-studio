@@ -956,6 +956,7 @@
     background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--cream) 88%, transparent) 34%);
   }
   #mChips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px 9px; }
+  #mChipsTog { display: none; }   /* só no telemóvel (ver a camada ≤ 640 px) */
   #mChips button {
     font-family: var(--sf); font-size: 12px; font-weight: 500; letter-spacing: -.004em;
     color: var(--ink); background: rgba(21,20,20,.045); border: 1px solid transparent;
@@ -3543,6 +3544,9 @@
   /* o papel do agente numa linha só — «DIRECÇÃO E COORDENAÇÃO DE AGENTES · COMANDO» */
   #rail .mh-role { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     font-size: 9.5px; letter-spacing: .09em; }
+  /* o bloco de texto do cartão encolhe até à largura do cartão (flex: min-width auto deixava-o
+     do tamanho da linha inteira e o papel saía pela direita, por cima da cena) */
+  #rail .mh-t { min-width: 0; }
 
   /* aprovações: um selo âmbar parado. Pulsar para sempre é ruído, não urgência. */
   .badge .b-appr, #topAppr, #railHeader .b-appr { animation: none; }
@@ -3659,6 +3663,42 @@
     /* ---------- a gaveta do posto: ecrã inteiro, com o ✕ sempre alcançável ---------- */
     #rail { top: 0; bottom: 0; width: 100%; max-width: 100%; z-index: 88; }
     #rail.left { box-shadow: none; } #rail.right { box-shadow: none; }
+    /* a folha do agente é uma folha de baixo, de altura limitada: a planta ou o 3D
+       continuam visíveis e tocáveis por cima dela; o ✕ fica no cimo da folha. Os controlos de
+       zoom sobem para cima da folha (no telemóvel tapavam-se, e o #mChat tapava #zIn/#zHome). */
+    #rail.agentOpen {
+      top: auto; bottom: 0; height: min(70vh, 640px); height: min(70dvh, calc(100dvh - 260px), 640px);
+      border-radius: 20px 20px 0 0; box-shadow: 0 -18px 40px -22px rgba(21,20,20,.35);
+    }
+    #rail.agentOpen #railHeader { display: none; }   /* o cartão do departamento fica na vista da sala, não na folha */
+    #rail.agentOpen #railAgent { border-radius: 20px 20px 0 0; border-bottom: 0; }
+    /* a descrição do agente tem rolagem própria: não empurra o compositor para fora da folha */
+    #rail.agentOpen .mh-tag { max-height: 4.1em; overflow-y: auto; overscroll-behavior: contain; }
+    /* o registo da conversa é quem cede espaço; o compositor fica sempre dentro da folha */
+    /* o registo tem um mínimo de 72 px (antes ficava com 24 px: o cartão do agente e o
+       bloco de escrita ocupavam quase tudo). O aviso «vista publicada» tem altura máxima com rolagem
+       própria, e em ecrãs baixos (≤ 700 px) a descrição e o estado saem da folha: o resto da folha
+       rola, de modo que o compositor fica sempre alcançável. */
+    #rail.agentOpen #mMsgs.m-log { flex: 1 1 0; min-height: 72px; }
+    #rail.agentOpen .m-foot { flex: 0 0 auto; }
+    #rail.agentOpen #railAgent { overflow-y: auto; overscroll-behavior: contain; }
+    #rail.agentOpen .mc-pro { max-height: 56px; overflow-y: auto; overscroll-behavior: contain; }
+    /* ecrãs baixos (≤ 700 px de altura): a folha sobe e o zoom passa a 6 colunas (2 linhas), para
+       que a folha tenha altura suficiente para o registo e o compositor. A descrição e o estado
+       do agente saem da folha nestes ecrãs; o registo continua com 72 px de mínimo. */
+    @media (max-height: 700px) {
+      #rail.agentOpen { height: calc(100dvh - 164px); height: calc(100vh - 164px); }
+      #rail.agentOpen #railDept { padding-top: 44px; }
+      #rail.agentOpen .mh-tag, #rail.agentOpen #mhLive { display: none; }
+      #rail.agentOpen .chat-fold { height: 26px; margin-top: 4px; }
+      #rail.agentOpen .m-foot { padding: 4px 10px 6px; }
+      #rail.agentOpen .chips-tog { margin-bottom: 4px; }
+    }
+    /* com a folha aberta, os 12 controlos ficam em grelha de 4 colunas (3 linhas): cabem acima da folha */
+    body:has(#rail.agentOpen) #zoomCtl { top: 56px; bottom: auto; right: 10px; display: grid; grid-template-columns: repeat(4, 42px); gap: 4px; }
+    body:has(#rail.agentOpen) #zoomCtl button { width: 42px; height: 42px; }
+    /* 12 controlos em 6 colunas = 2 linhas; o «entrega» (wide, 2 colunas) passa a quadrado para não criar uma 3.ª linha */
+    @media (max-height: 700px) { body:has(#rail.agentOpen) #zoomCtl { grid-template-columns: repeat(6, 44px); } body:has(#rail.agentOpen) #zoomCtl button { width: 44px; height: 44px; } body:has(#rail.agentOpen) #zoomCtl button.wide { grid-column: auto; } }
     #railDept { padding: 56px 12px 14px; overflow-y: auto; overscroll-behavior: contain; }
     #railHeader { padding-right: 44px; }
     #railClose { top: 8px; right: 10px; }
@@ -3666,8 +3706,19 @@
     #rail .mh { padding: 12px 12px 0; flex-wrap: wrap; }
     #rail .mh-name { font-size: 19px; }
     #rail .mh-tag { padding: 4px 12px 0; }
+    /* o papel do agente ocupa até duas linhas, sem reticências: quem lê no telemóvel não perde o cargo */
+    #rail .mh-role { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.4; letter-spacing: .08em; }
     #rail .m-log { overflow-y: auto; overscroll-behavior: contain; }
     #rail .m-foot { padding: 8px 10px; }
+    /* as sugestões rápidas ocupam duas filas: no telemóvel ficam recolhidas (uma linha) e expandem-se
+       a pedido. Libertam espaço para o registo e para a planta; nada se perde (as três continuam lá). */
+    #rail .chips-tog { display: inline-flex; align-items: center; gap: 6px; margin: 0 2px 6px; padding: 5px 11px;
+      border-radius: 99px; border: 1px solid var(--hairline); background: transparent; color: var(--ink);
+      font-family: var(--ui); font-size: 11.5px; letter-spacing: .02em; cursor: pointer; min-height: 32px; }
+    #rail .chips-tog::after { content: '▾'; font-size: 10px; transition: transform .2s var(--ease); }
+    #rail .chips-tog[aria-expanded="true"]::after { transform: rotate(180deg); }
+    #rail #mChips { display: none; padding-bottom: 6px; }
+    #rail.chipsOpen #mChips { display: flex; }
     #rail .mc textarea, #rail #mIn { font-size: 16px; }  /* o iOS não amplia ao tocar */
 
     /* ---------- as outras gavetas: nunca mais largas do que o ecrã ---------- */
@@ -4050,6 +4101,7 @@
       <button class="chat-fold" type="button" aria-pressed="false" aria-controls="mc" title="afastar o campo de IA — a conversa fica, a caixa recolhe">recolher campo ▾</button>
       <div id="mMsgs" class="m-log"></div>
       <div class="m-foot">
+        <button id="mChipsTog" class="chips-tog" type="button" aria-expanded="false" aria-controls="mChips">Sugestões</button>
         <div id="mChips"></div>
         <!-- 27 out 2026 · O CONVERSADOR. O campo de uma linha deu lugar ao cartão do compositor que
              o dono mandou: modos (Planear · Perguntar · Construir), o modelo com o provedor e o
