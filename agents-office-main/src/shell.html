@@ -241,7 +241,7 @@
      o bastante para seis salas com nome e número, sem tapar o escritório.
      ========================================================================= */
   #remoto {
-    position: fixed; left: 18px; bottom: 110px; z-index: 61; /* 110: ~42 px acima da placa da licença (59 px de altura, bottom 9) */
+    position: fixed; left: 18px; bottom: 140px; z-index: 61; /* 140: ~72 px acima da placa da licença (59 px de altura, bottom 9); antes 110, muito colado à licença */
     display: flex; flex-direction: column-reverse; gap: 8px;
     font-family: var(--ui); color: var(--ink);
     transition: left .45s var(--ease);
@@ -369,7 +369,7 @@
   body.dark .rmt-ghost { border-color: rgba(255,255,255,.14); }
   @media (max-width: 640px) {
     /* no telemóvel o comando sobe acima do polegar e do dock da câmara */
-    #remoto { left: 12px; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+    #remoto { left: 12px; bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
     body.railLeft #remoto { left: 12px; }
     .rmt-toggle { height: 46px; }
     .rmt-painel { width: calc(100vw - 24px); max-height: 56vh; }
